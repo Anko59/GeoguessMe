@@ -19,6 +19,7 @@ func main() {
 	http.HandleFunc("/group/create", handlers.CreateGroup)
 	http.HandleFunc("/group/join", handlers.JoinGroup)
 	http.HandleFunc("/group/details", handlers.GetGroupDetails)
+	http.HandleFunc("/group/members", handlers.GetGroupMembers)
 	http.HandleFunc("/group/leaderboard", handlers.GetLeaderboard)
 	http.HandleFunc("/group/messages", handlers.GetGroupMessages)
 	http.HandleFunc("/photo/upload", handlers.UploadPhoto)

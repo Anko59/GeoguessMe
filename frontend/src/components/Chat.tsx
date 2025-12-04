@@ -72,6 +72,17 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
             const { photoId } = parsePhotoMessage(msg.content);
             const isCompleted = myGuesses.includes(photoId);
 
+            // Determine which icon to use
+            let challengeIcon = '/challenge_received_icon.png';
+            let challengeText = 'New Challenge!';
+            if (isMe) {
+                challengeIcon = '/challenge_sent_icon.png';
+                challengeText = 'Challenge Sent!';
+            } else if (isCompleted) {
+                challengeIcon = '/challenge_completed_icon.png';
+                challengeText = 'Challenge Completed!';
+            }
+
             return (
                 <div key={index} className={`message-container ${isMe ? 'own' : 'other'} slide-in-up`}>
                     {!isMe && showAvatar && (
@@ -84,8 +95,8 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
                         <div className="message-content photo-challenge">
                             <div className="challenge-card">
                                 <div className="challenge-header">
-                                    <span className="challenge-icon">📸</span>
-                                    <span>{isMe ? 'Challenge Sent!' : (isCompleted ? 'Challenge Completed!' : 'New Challenge!')}</span>
+                                    <img src={challengeIcon} alt="" className="challenge-icon" />
+                                    <span>{challengeText}</span>
                                 </div>
                                 {!isMe && !isCompleted && (
                                     <button

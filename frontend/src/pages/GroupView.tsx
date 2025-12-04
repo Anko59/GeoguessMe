@@ -113,7 +113,9 @@ export default function GroupView() {
             {/* Header */}
             <div className="group-header">
                 <div className="header-content">
-                    <Link to="/groups" className="back-btn">⬅</Link>
+                    <Link to="/groups" className="back-btn">
+                        <img src="/back_arrow.png" alt="Back" className="back-arrow-icon" />
+                    </Link>
                     <img src="/logo.png" alt="Logo" className="header-logo" />
                     <h1 className="group-name gradient-text">{groupName}</h1>
                     <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
@@ -128,6 +130,7 @@ export default function GroupView() {
                 onClose={() => setSettingsOpen(false)}
                 groupCode={groupCode}
                 groupName={groupName}
+                groupId={id}
             />
 
             {/* Tab Content */}

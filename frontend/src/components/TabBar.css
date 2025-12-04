@@ -30,7 +30,7 @@
 
 .tab {
     flex: 1;
-    padding: 1rem 0.5rem;
+    padding: 0.5rem 0.5rem;
     background: transparent;
     border: none;
     color: rgba(255, 255, 255, 0.6);
@@ -41,15 +41,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 0.25rem;
     position: relative;
 }
 
 .tab-icon {
-    width: 24px;
-    height: 24px;
+    width: 38px;
+    height: 38px;
     object-fit: contain;
-    opacity: 0.6;
+    opacity: 1;
     transition: opacity 0.3s ease;
 }
 

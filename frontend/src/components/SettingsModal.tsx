@@ -1,15 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../api';
 import './SettingsModal.css';
+
+interface Member {
+    id: string;
+    username: string;
+    avatar: string;
+}
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     groupCode: string;
     groupName: string;
+    groupId: string;
 }
 
-export default function SettingsModal({ isOpen, onClose, groupCode, groupName }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, groupCode, groupName, groupId }: SettingsModalProps) {
     const [copied, setCopied] = useState(false);
+    const [membersExpanded, setMembersExpanded] = useState(false);
+    const [members, setMembers] = useState<Member[]>([]);
+    const [loadingMembers, setLoadingMembers] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && membersExpanded && members.length === 0) {
+            fetchMembers();
+        }
+    }, [isOpen, membersExpanded]);
+
+    const fetchMembers = async () => {
+        setLoadingMembers(true);
+        try {
+            const res = await api.get(`/group/members?id=${groupId}`);
+            setMembers(res.data || []);
+        } catch (err) {
+            console.error('Failed to fetch members', err);
+        } finally {
+            setLoadingMembers(false);
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -32,11 +61,17 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName }:
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <button className="modal-close" onClick={onClose}>×</button>
 
-                <h2>⚙️ Group Settings</h2>
+                <h2 className="modal-title">
+                    <img src="/settings_gear_icon.png" alt="" className="modal-icon" />
+                    Group Settings
+                </h2>
                 <h3 className="group-name-display">{groupName}</h3>
 
                 <div className="settings-section">
-                    <h4>📤 Invite Link</h4>
+                    <h4 className="section-title">
+                        <img src="/invite_link_icon.png" alt="" className="section-icon" />
+                        Invite Link
+                    </h4>
                     <div className="invite-box">
                         <input
                             type="text"
@@ -45,19 +80,72 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName }:
                             className="invite-input"
                         />
                         <button onClick={copyInviteLink} className="copy-btn">
-                            {copied ? '✓ Copied!' : '📋 Copy'}
+                            {copied ? (
+                                <>
+                                    <img src="/check.png" alt="" className="copy-icon" />
+                                    Copied!
+                                </>
+                            ) : (
+                                <>
+                                    <img src="/copy_text_icon.png" alt="" className="copy-icon" />
+                                    Copy
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
 
                 <div className="settings-section">
-                    <h4>🔑 Group Code</h4>
+                    <h4 className="section-title">
+                        <img src="/group_code_icon.png" alt="" className="section-icon" />
+                        Group Code
+                    </h4>
                     <div className="code-box">
                         <span className="group-code">{groupCode}</span>
                         <button onClick={copyCode} className="copy-btn">
-                            {copied ? '✓ Copied!' : '📋 Copy'}
+                            {copied ? (
+                                <>
+                                    <img src="/check.png" alt="" className="copy-icon" />
+                                    Copied!
+                                </>
+                            ) : (
+                                <>
+                                    <img src="/copy_text_icon.png" alt="" className="copy-icon" />
+                                    Copy
+                                </>
+                            )}
                         </button>
                     </div>
+                </div>
+
+                <div className="settings-section">
+                    <h4
+                        className="section-title members-toggle"
+                        onClick={() => setMembersExpanded(!membersExpanded)}
+                    >
+                        <span className="toggle-icon">{membersExpanded ? '▼' : '▶'}</span>
+                        Group Members
+                    </h4>
+                    {membersExpanded && (
+                        <div className="members-list">
+                            {loadingMembers ? (
+                                <div className="members-loading">Loading...</div>
+                            ) : members.length > 0 ? (
+                                members.map((member) => (
+                                    <div key={member.id} className="member-item">
+                                        <img
+                                            src={`/avatars/${member.avatar || 'avatar.png'}`}
+                                            alt=""
+                                            className="member-avatar"
+                                        />
+                                        <span className="member-name">{member.username}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="members-empty">No members found</div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

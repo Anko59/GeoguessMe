@@ -134,7 +134,9 @@
 }
 
 .challenge-icon {
-    font-size: 1.3rem;
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
 }
 
 .start-challenge-btn {

@@ -1,0 +1,163 @@
+.group-join-container {
+    min-height: 100vh;
+    background-image: url('/app_background.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.group-join-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    backdrop-filter: blur(3px);
+    background: rgba(255, 255, 255, 0.15);
+    z-index: 0;
+}
+
+.group-join-container>* {
+    position: relative;
+    z-index: 1;
+}
+
+.back-btn-page {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    color: #1A237E;
+    text-decoration: none;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    width: fit-content;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.back-btn-page:hover {
+    background: white;
+    transform: translateX(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.back-arrow-page {
+    width: 20px;
+    height: 20px;
+}
+
+.group-join-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    background: white;
+    padding: 1.5rem 1.25rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.join-logo {
+    width: 70px;
+    height: 70px;
+    margin: 0 auto 0.75rem;
+    display: block;
+}
+
+.group-join-header h1 {
+    font-size: 1.75rem;
+    margin: 0;
+}
+
+.mode-selector {
+    display: flex;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 16px;
+    padding: 0.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 1rem;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(26, 35, 126, 0.6);
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #FFB600 0%, #FFD700 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.join-form {
+    background: white;
+    padding: 2rem;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.join-form h2 {
+    margin: 0 0 1.5rem 0;
+    text-align: center;
+    color: #1f2937;
+    font-size: 1.5rem;
+}
+
+.join-form input {
+    width: 100%;
+    padding: 1rem 1.25rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s;
+    box-sizing: border-box;
+}
+
+.join-form input:focus {
+    outline: none;
+    border-color: #00C0FF;
+    box-shadow: 0 0 0 3px rgba(0, 192, 255, 0.1);
+}
+
+.join-form button[type="submit"] {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(135deg, #00C0FF 0%, #00FF80 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.join-form button[type="submit"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 192, 255, 0.3);
+}
+
+.error-message {
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 1rem;
+    border-radius: 12px;
+    text-align: center;
+    margin-top: 1rem;
+    font-weight: 600;
+}
