@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getCurrentUserId } from '../utils/userUtils';
 import Map from './Map';
 import api from '../api';
 import './Game.css';
@@ -22,7 +23,7 @@ interface GameState {
 export default function Game({ gameMessage, onGameComplete }: GameProps) {
     const [state, setState] = useState<GameState>({ status: 'IDLE' });
     const [selectedLocation, setSelectedLocation] = useState<{ lat: number; long: number } | null>(null);
-    const currentUserId = JSON.parse(localStorage.getItem('user') || '{}').id;
+    const currentUserId = getCurrentUserId();
 
     // Listen for game messages from parent
     useEffect(() => {

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { getCurrentUserId } from '../utils/userUtils';
 import './Chat.css';
 
 interface Message {
@@ -24,7 +25,7 @@ interface ChatProps {
 export default function Chat({ groupID, onNewMessage, onChallengeMessage, messages, setMessages, wsRef, myGuesses }: ChatProps) {
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const currentUserId = JSON.parse(localStorage.getItem('user') || '{}').id;
+    const currentUserId = getCurrentUserId();
 
     // Get WebSocket from parent (GroupView manages the connection)
     useEffect(() => {

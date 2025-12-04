@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getCurrentUserId } from '../utils/userUtils';
 import api from '../api';
 import './Leaderboard.css';
 
@@ -15,7 +16,7 @@ interface LeaderboardProps {
 export default function Leaderboard({ groupID }: LeaderboardProps) {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
-    const currentUserId = JSON.parse(localStorage.getItem('user') || '{}').id;
+    const currentUserId = getCurrentUserId();
 
     useEffect(() => {
         fetchLeaderboard();

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"geoguessme/internal/auth"
 	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
@@ -33,17 +32,7 @@ func SubmitGuess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	claims, err := auth.ValidateToken(tokenString)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID := GetUserIDFromContext(r)
 
 	var req GuessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -62,7 +51,7 @@ func SubmitGuess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prevent users from guessing their own photos
-	if photo.UserID == claims.UserID {
+	if photo.UserID == userID {
 		http.Error(w, "Cannot guess your own photo", http.StatusBadRequest)
 		return
 	}
@@ -74,7 +63,7 @@ func SubmitGuess(w http.ResponseWriter, r *http.Request) {
 	guess := &models.Guess{
 		ID:        uuid.New().String(),
 		PhotoID:   req.PhotoID,
-		UserID:    claims.UserID,
+		UserID:    userID,
 		GroupID:   photo.GroupID,
 		Lat:       req.Lat,
 		Long:      req.Long,
@@ -88,7 +77,7 @@ func SubmitGuess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := repository.UpdateUserScore(claims.UserID, score); err != nil {
+	if err := repository.UpdateUserScore(userID, score); err != nil {
 		// Log error but don't fail request?
 	}
 

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"geoguessme/internal/auth"
 	"geoguessme/internal/database"
 	"net/http"
 )
@@ -14,17 +13,7 @@ type UserGroup struct {
 }
 
 func GetUserGroups(w http.ResponseWriter, r *http.Request) {
-	// Auth check
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	claims, err := auth.ValidateToken(tokenString)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID := GetUserIDFromContext(r)
 
 	query := `SELECT g.id, g.name, g.code 
               FROM groups g 
@@ -32,7 +21,7 @@ func GetUserGroups(w http.ResponseWriter, r *http.Request) {
               WHERE gm.user_id = $1
               ORDER BY gm.joined_at DESC`
 
-	rows, err := database.DB.Query(r.Context(), query, claims.UserID)
+	rows, err := database.DB.Query(r.Context(), query, userID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return

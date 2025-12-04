@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"geoguessme/internal/auth"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 
@@ -24,19 +23,7 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
-		fmt.Println("UploadPhoto: Missing token")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	claims, err := auth.ValidateToken(tokenString)
-	if err != nil {
-		fmt.Printf("UploadPhoto: Invalid token: %v\n", err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID := GetUserIDFromContext(r)
 
 	// Parse multipart form
 	// 10MB max memory
@@ -98,7 +85,7 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 
 	photo := &models.Photo{
 		ID:        uuid.New().String(),
-		UserID:    claims.UserID,
+		UserID:    userID,
 		GroupID:   groupID,
 		URL:       "/uploads/" + filename,
 		Lat:       lat,
@@ -117,7 +104,7 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	// Broadcast new photo message to group
 	msg := models.Message{
 		GroupID: groupID,
-		UserID:  claims.UserID, // Use the actual uploader's ID
+		UserID:  userID, // Use the actual uploader's ID
 		Content: fmt.Sprintf("NEW_PHOTO:%s:%s", photo.ID, photo.URL),
 	}
 	fmt.Println("UploadPhoto: Broadcasting message")

@@ -32,6 +32,19 @@ type AuthResponse struct {
 	} `json:"user"`
 }
 
+func buildAuthResponse(user *models.User, token string) AuthResponse {
+	return AuthResponse{
+		Token: token,
+		User: struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		}{
+			ID:       user.ID,
+			Username: user.Username,
+		},
+	}
+}
+
 func Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -92,16 +105,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AuthResponse{
-		Token: token,
-		User: struct {
-			ID       string `json:"id"`
-			Username string `json:"username"`
-		}{
-			ID:       user.ID,
-			Username: user.Username,
-		},
-	})
+	json.NewEncoder(w).Encode(buildAuthResponse(&user, token))
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
@@ -138,14 +142,5 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AuthResponse{
-		Token: token,
-		User: struct {
-			ID       string `json:"id"`
-			Username string `json:"username"`
-		}{
-			ID:       user.ID,
-			Username: user.Username,
-		},
-	})
+	json.NewEncoder(w).Encode(buildAuthResponse(user, token))
 }

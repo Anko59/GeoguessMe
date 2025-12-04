@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"geoguessme/internal/auth"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 
@@ -36,17 +35,7 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	claims, err := auth.ValidateToken(tokenString)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID := GetUserIDFromContext(r)
 
 	var req CreateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -77,7 +66,7 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 	// Add creator as member
 	member := &models.GroupMember{
 		GroupID:  group.ID,
-		UserID:   claims.UserID,
+		UserID:   userID,
 		JoinedAt: time.Now(),
 	}
 	if err := repository.AddGroupMember(member); err != nil {
@@ -95,17 +84,7 @@ func JoinGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check
-	tokenString := r.Header.Get("Authorization")
-	if tokenString == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	claims, err := auth.ValidateToken(tokenString)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID := GetUserIDFromContext(r)
 
 	var req JoinGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -123,7 +102,7 @@ func JoinGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isMember, err := repository.IsGroupMember(group.ID, claims.UserID)
+	isMember, err := repository.IsGroupMember(group.ID, userID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -135,7 +114,7 @@ func JoinGroup(w http.ResponseWriter, r *http.Request) {
 
 	member := &models.GroupMember{
 		GroupID:  group.ID,
-		UserID:   claims.UserID,
+		UserID:   userID,
 		JoinedAt: time.Now(),
 	}
 	if err := repository.AddGroupMember(member); err != nil {
