@@ -17,7 +17,8 @@ export default function Login() {
             localStorage.setItem('user', JSON.stringify(res.data.user));
             navigate('/group/join');
         } catch (err: any) {
-            setError(err.response?.data || 'Login failed');
+            const errorMessage = err.response?.data;
+            setError(typeof errorMessage === 'string' ? errorMessage : 'Login failed');
         }
     };
 

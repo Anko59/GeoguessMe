@@ -40,7 +40,8 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    const sendMessage = () => {
+    const sendMessage = (e: React.FormEvent) => {
+        e.preventDefault();
         if (!input.trim() || !wsRef.current) return;
 
         const message = {
@@ -73,6 +74,9 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
             const { photoId } = parsePhotoMessage(msg.content);
             const isCompleted = myGuesses.includes(photoId);
 
+            // Can view details if: sent by you OR completed by you
+            const canViewDetails = isMe || isCompleted;
+
             // Determine which icon to use
             let challengeIcon = '/challenge_received_icon.png';
             let challengeText = 'New Challenge!';
@@ -93,7 +97,10 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
                     )}
                     <div className="message-wrapper">
                         {!isMe && <div className="message-username">{msg.username || 'Unknown User'}</div>}
-                        <div className="message-content photo-challenge">
+                        <div
+                            className={`message-content photo-challenge ${canViewDetails ? 'clickable' : ''}`}
+                            onClick={() => canViewDetails && onChallengeMessage?.(msg)}
+                        >
                             <div className="challenge-card">
                                 <div className="challenge-header">
                                     <img src={challengeIcon} alt="" className="challenge-icon" />
@@ -102,7 +109,10 @@ export default function Chat({ groupID, onNewMessage, onChallengeMessage, messag
                                 {!isMe && !isCompleted && (
                                     <button
                                         className="start-challenge-btn"
-                                        onClick={() => onChallengeMessage?.(msg)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onChallengeMessage?.(msg);
+                                        }}
                                     >
                                         Accept Challenge
                                     </button>

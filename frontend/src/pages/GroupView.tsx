@@ -167,6 +167,8 @@ export default function GroupView() {
                     // Refresh guesses
                     setNewMessagesCount(prev => prev + 1); // Hack to trigger useEffect
                 }}
+                myGuesses={myGuesses}
+                onClose={() => setGameMessage(null)}
             />
 
             {/* Bottom Tab Bar */}

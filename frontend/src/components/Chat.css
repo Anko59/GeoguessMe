@@ -166,6 +166,16 @@
     border-radius: 12px;
 }
 
+.message-content.photo-challenge.clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.message-content.photo-challenge.clickable:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+}
+
 .message-container.own .message-wrapper {
     align-items: flex-end;
 }

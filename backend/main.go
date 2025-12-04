@@ -30,6 +30,7 @@ func main() {
 	http.HandleFunc("/group/leaderboard", handlers.GetLeaderboard) // No auth currently
 	http.HandleFunc("/group/messages", handlers.AuthMiddleware(handlers.GetGroupMessages))
 	http.HandleFunc("/photo/upload", handlers.AuthMiddleware(handlers.UploadPhoto))
+	http.HandleFunc("/photo/details", handlers.AuthMiddleware(handlers.GetPhotoDetails))
 	http.HandleFunc("/group/my_guesses", handlers.AuthMiddleware(handlers.GetMyGuesses))
 	http.HandleFunc("/guess", handlers.AuthMiddleware(handlers.SubmitGuess))
 	http.HandleFunc("/ws", handlers.HandleChat) // WebSocket has custom auth

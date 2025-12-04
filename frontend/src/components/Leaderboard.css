@@ -20,6 +20,13 @@
     font-size: 0.9rem;
 }
 
+.leaderboard-icon {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 0.5rem;
+    object-fit: contain;
+}
+
 .loading-state,
 .empty-state {
     display: flex;

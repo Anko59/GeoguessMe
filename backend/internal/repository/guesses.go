@@ -35,3 +35,38 @@ func UpdateUserScore(userID string, points int) error {
 	_, err := database.DB.Exec(context.Background(), query, points, userID)
 	return err
 }
+
+type GuessWithUser struct {
+	models.Guess
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+}
+
+func GetGuessesForPhoto(photoID string) ([]GuessWithUser, error) {
+	query := `
+		SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.created_at,
+		       u.username, u.avatar
+		FROM guesses g
+		JOIN users u ON g.user_id = u.id
+		WHERE g.photo_id = $1
+		ORDER BY g.score DESC
+	`
+	rows, err := database.DB.Query(context.Background(), query, photoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var guesses []GuessWithUser
+	for rows.Next() {
+		var g GuessWithUser
+		if err := rows.Scan(
+			&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.CreatedAt,
+			&g.Username, &g.Avatar,
+		); err != nil {
+			continue
+		}
+		guesses = append(guesses, g)
+	}
+	return guesses, nil
+}

@@ -2,8 +2,11 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"geoguessme/internal/database"
 	"geoguessme/internal/models"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func CreateUser(user *models.User) error {
@@ -17,6 +20,9 @@ func GetUserByUsername(username string) (*models.User, error) {
 	var user models.User
 	err := database.DB.QueryRow(context.Background(), query, username).Scan(&user.ID, &user.Username, &user.Password, &user.Avatar, &user.CreatedAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &user, nil

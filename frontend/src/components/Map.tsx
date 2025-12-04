@@ -15,10 +15,20 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+interface Guess {
+    user_id: string;
+    lat: number;
+    long: number;
+    username: string;
+    avatar: string;
+    score: number;
+}
+
 interface MapProps {
     onLocationSelect: (lat: number, long: number) => void;
     selectedLocation: { lat: number; long: number } | null;
     actualLocation?: { lat: number; long: number } | null;
+    guesses?: Guess[];
 }
 
 function LocationMarker({ onLocationSelect, position }: { onLocationSelect: (lat: number, long: number) => void, position: { lat: number; long: number } | null }) {
@@ -31,7 +41,14 @@ function LocationMarker({ onLocationSelect, position }: { onLocationSelect: (lat
     return position ? <Marker position={[position.lat, position.long]} /> : null;
 }
 
-export default function Map({ onLocationSelect, selectedLocation, actualLocation }: MapProps) {
+const GuessIcon = L.divIcon({
+    className: 'guess-marker',
+    html: `<div style="background-color: #f59e0b; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+});
+
+export default function Map({ onLocationSelect, selectedLocation, actualLocation, guesses }: MapProps) {
     return (
         <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
             <TileLayer
@@ -39,7 +56,33 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />
-            {actualLocation && <Marker position={[actualLocation.lat, actualLocation.long]} opacity={0.6} />}
+
+            {/* Actual Location (Flag/Green Marker) */}
+            {actualLocation && (
+                <Marker
+                    position={[actualLocation.lat, actualLocation.long]}
+                    opacity={1}
+                    icon={L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })}
+                />
+            )}
+
+            {/* User Guesses */}
+            {guesses?.map((guess, idx) => (
+                <Marker
+                    key={idx}
+                    position={[guess.lat, guess.long]}
+                    icon={GuessIcon}
+                    title={`${guess.username}: ${guess.score} pts`}
+                    opacity={0.8}
+                />
+            ))}
         </MapContainer>
     );
 }

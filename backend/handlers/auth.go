@@ -64,6 +64,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 
 	existingUser, err := repository.GetUserByUsername(req.Username)
 	if err != nil {
+		fmt.Printf("Signup error (GetUserByUsername): %v\n", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -74,6 +75,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		fmt.Printf("Signup error (bcrypt): %v\n", err)
 		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
@@ -94,12 +96,14 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := repository.CreateUser(&user); err != nil {
+		fmt.Printf("Signup error (CreateUser): %v\n", err)
 		http.Error(w, "Error creating user", http.StatusInternalServerError)
 		return
 	}
 
 	token, err := auth.GenerateToken(user.ID)
 	if err != nil {
+		fmt.Printf("Signup error (GenerateToken): %v\n", err)
 		http.Error(w, "Error generating token", http.StatusInternalServerError)
 		return
 	}

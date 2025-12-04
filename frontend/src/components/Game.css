@@ -39,6 +39,18 @@
     height: 80px;
 }
 
+.timer-container {
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.timer-icon {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+}
+
 .timer-ring {
     transform: scaleY(-1);
 }

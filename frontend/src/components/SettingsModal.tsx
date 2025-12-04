@@ -17,7 +17,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose, groupCode, groupName, groupId }: SettingsModalProps) {
-    const [copied, setCopied] = useState(false);
+    const [copiedItem, setCopiedItem] = useState<'link' | 'code' | null>(null);
     const [membersExpanded, setMembersExpanded] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [loadingMembers, setLoadingMembers] = useState(false);
@@ -46,14 +46,14 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
 
     const copyInviteLink = () => {
         navigator.clipboard.writeText(inviteLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setCopiedItem('link');
+        setTimeout(() => setCopiedItem(null), 2000);
     };
 
     const copyCode = () => {
         navigator.clipboard.writeText(groupCode);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setCopiedItem('code');
+        setTimeout(() => setCopiedItem(null), 2000);
     };
 
     return (
@@ -80,7 +80,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                             className="invite-input"
                         />
                         <button onClick={copyInviteLink} className="copy-btn">
-                            {copied ? (
+                            {copiedItem === 'link' ? (
                                 <>
                                     <img src="/check.png" alt="" className="copy-icon" />
                                     Copied!
@@ -103,7 +103,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                     <div className="code-box">
                         <span className="group-code">{groupCode}</span>
                         <button onClick={copyCode} className="copy-btn">
-                            {copied ? (
+                            {copiedItem === 'code' ? (
                                 <>
                                     <img src="/check.png" alt="" className="copy-icon" />
                                     Copied!
