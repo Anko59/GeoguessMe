@@ -1,0 +1,13 @@
+package models
+
+import "time"
+
+type Message struct {
+	ID        string    `json:"id"`
+	GroupID   string    `json:"group_id"`
+	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
+	Avatar    string    `json:"avatar"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}

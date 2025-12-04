@@ -1,0 +1,276 @@
+.leaderboard-container {
+    padding: 1.5rem;
+    min-height: 100%;
+    background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+}
+
+.leaderboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.leaderboard-title {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.leaderboard-subtitle {
+    color: var(--text-light);
+    font-size: 0.9rem;
+}
+
+.loading-state,
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    color: var(--text-light);
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-subtitle {
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+.leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.leaderboard-entry {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+    animation: scaleIn 0.3s ease-out;
+    animation-fill-mode: both;
+}
+
+.leaderboard-entry:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.leaderboard-entry.current-user {
+    background: linear-gradient(135deg, rgba(0, 192, 255, 0.1), rgba(0, 255, 128, 0.1));
+    border: 2px solid var(--primary-blue);
+}
+
+.leaderboard-entry.gold {
+    background: linear-gradient(135deg, #fff9e6, #ffffff);
+    border-left: 4px solid #FFD700;
+}
+
+.leaderboard-entry.silver {
+    background: linear-gradient(135deg, #f5f5f5, #ffffff);
+    border-left: 4px solid #C0C0C0;
+}
+
+.leaderboard-entry.bronze {
+    background: linear-gradient(135deg, #fff5f0, #ffffff);
+    border-left: 4px solid #CD7F32;
+}
+
+.entry-rank {
+    font-size: 1.5rem;
+    font-weight: 800;
+    min-width: 50px;
+    text-align: center;
+    color: var(--accent-dark);
+}
+
+.leaderboard-entry.gold .entry-rank {
+    font-size: 2rem;
+}
+
+.leaderboard-entry.silver .entry-rank,
+.leaderboard-entry.bronze .entry-rank {
+    font-size: 1.75rem;
+}
+
+.entry-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid white;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
+}
+
+.leaderboard-entry.gold .entry-avatar {
+    border-color: #FFD700;
+    box-shadow: 0 4px 16px rgba(255, 215, 0, 0.4);
+}
+
+.leaderboard-entry.silver .entry-avatar {
+    border-color: #C0C0C0;
+}
+
+.leaderboard-entry.bronze .entry-avatar {
+    border-color: #CD7F32;
+}
+
+.entry-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.entry-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.entry-username {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1a1a2e;
+    /* Explicit dark color */
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.you-badge {
+    background: var(--gradient-blue);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.5rem;
+}
+
+.entry-score-bar {
+    height: 6px;
+    background: rgba(26, 35, 126, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.score-fill {
+    height: 100%;
+    background: var(--gradient-blue);
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+
+.leaderboard-entry.gold .score-fill {
+    background: linear-gradient(90deg, #FFB600, #FFD700);
+}
+
+.entry-score {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #1a1a2e;
+    /* Explicit dark color */
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 60px;
+}
+
+.score-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #666;
+    /* Explicit gray */
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Chat.css updates */
+.photo-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--gradient-orange);
+    border-radius: 1.25rem 1.25rem 0 0;
+}
+
+.challenge-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.photo-caption-text {
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.message-photo {
+    border-radius: 0 0 1.25rem 1.25rem;
+    /* Updated radius */
+}
+
+/* Leaderboard.css updates */
+.leaderboard-icon {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 0.5rem;
+    object-fit: contain;
+}
+
+/* GroupView.css updates */
+.settings-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+/* Home.css updates */
+.home-banner {
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 1rem;
+    object-fit: contain;
+}
+
+/* Game.css updates */
+.timer-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+
+.timer-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    animation: pulse 1s infinite;
+}
+
+.timer-text {
+    /* Existing style is fine, just centering */
+    font-size: 2.5rem;
+}

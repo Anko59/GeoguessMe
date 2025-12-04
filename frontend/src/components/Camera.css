@@ -1,0 +1,181 @@
+.camera-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: black;
+    display: flex;
+    flex-direction: column;
+}
+
+.camera-view {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+.camera-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.camera-video.ready {
+    opacity: 1;
+}
+
+.camera-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: white;
+}
+
+.camera-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    background: rgba(244, 63, 94, 0.9);
+    padding: 2rem;
+    border-radius: 1rem;
+    max-width: 80%;
+    z-index: 10;
+}
+
+.camera-error p {
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.camera-controls {
+    position: absolute;
+    bottom: 4rem;
+    /* Raise it up */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+
+.capture-button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: white;
+    border: 6px solid rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.capture-button:active {
+    transform: scale(0.9);
+}
+
+.capture-inner {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.capture-button:active .capture-inner {
+    transform: scale(0.85);
+}
+
+.camera-flash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    z-index: 9999;
+    pointer-events: none;
+    animation: flash 0.3s ease-out;
+}
+
+@keyframes flash {
+    0% {
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+.photo-preview {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: black;
+}
+
+.preview-image {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    animation: scaleIn 0.3s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.preview-controls {
+    position: absolute;
+    bottom: 2rem;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 1rem;
+    padding: 0 2rem;
+    justify-content: center;
+}
+
+.preview-controls .btn {
+    flex: 1;
+    max-width: 150px;
+    font-size: 1rem;
+    padding: 1rem;
+}
+
+/* Safe area support for devices with notches */
+@supports (padding: max(0px)) {
+
+    .camera-controls,
+    .preview-controls {
+        bottom: max(2rem, env(safe-area-inset-bottom));
+    }
+}

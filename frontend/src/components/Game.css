@@ -1,0 +1,353 @@
+.game-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.game-photo {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.timer-overlay {
+    position: absolute;
+    bottom: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.circular-timer {
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.timer-ring {
+    transform: scaleY(-1);
+}
+
+.timer-progress {
+    transition: stroke-dashoffset 1s linear;
+}
+
+.timer-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.skipped-message {
+    text-align: center;
+    color: white;
+    padding: 2rem;
+}
+
+.skip-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: pulse 2s infinite;
+}
+
+.skipped-message p {
+    font-size: 1.25rem;
+    margin: 0.5rem 0;
+}
+
+.skip-subtitle {
+    font-size: 0.95rem;
+    opacity: 0.7;
+}
+
+.guessing-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 1rem;
+}
+
+.guessing-header {
+    text-align: center;
+    padding: 1rem;
+    background: var(--gradient-mixed);
+    color: white;
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
+.guessing-header h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+}
+
+.guessing-header p {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.guess-button {
+    margin-top: 1rem;
+    font-size: 1.1rem;
+    padding: 1.25rem;
+}
+
+.guess-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.result-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 1rem;
+    position: relative;
+}
+
+.result-header {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
+.result-header.good-score {
+    background: linear-gradient(135deg, #fff9e6, #ffffff);
+}
+
+.result-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+    animation: bounceIn 0.6s ease-out;
+}
+
+.result-header h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.75rem;
+    background: var(--gradient-blue);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.result-header.good-score h2 {
+    background: var(--gradient-orange);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.result-score {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.score-value {
+    font-size: 3rem;
+    font-weight: 800;
+    background: var(--gradient-mixed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.score-points {
+    font-size: 1rem;
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+.result-distance {
+    font-size: 1rem;
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+.next-button {
+    margin-top: 1rem;
+    font-size: 1.1rem;
+    padding: 1.25rem;
+}
+
+.confetti-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 20% 80%, #FFB600 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, #00C0FF 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, #00FF80 0%, transparent 50%);
+    opacity: 0;
+    animation: confetti 1s ease-out;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0);
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes confetti {
+    0% {
+        opacity: 0;
+        transform: translateY(-100%);
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(100%);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.scale-in {
+    animation: scaleIn 0.3s ease-out;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}/* Chat.css updates */
+.photo-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--gradient-orange);
+    border-radius: 1.25rem 1.25rem 0 0;
+}
+
+.challenge-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.photo-caption-text {
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.message-photo {
+    border-radius: 0 0 1.25rem 1.25rem; /* Updated radius */
+}
+
+/* Leaderboard.css updates */
+.leaderboard-icon {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 0.5rem;
+    object-fit: contain;
+}
+
+/* GroupView.css updates */
+.settings-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+/* Home.css updates */
+.home-banner {
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 1rem;
+    object-fit: contain;
+}
+
+/* Game.css updates */
+.timer-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+
+.timer-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    animation: pulse 1s infinite;
+}
+
+.timer-text {
+    /* Existing style is fine, just centering */
+    font-size: 2.5rem;
+}

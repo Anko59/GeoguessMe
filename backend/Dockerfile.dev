@@ -1,0 +1,12 @@
+FROM golang:1.23-alpine
+
+WORKDIR /app
+
+RUN go install github.com/cosmtrek/air@v1.49.0
+
+COPY go.mod ./
+RUN go mod download
+
+COPY . .
+
+CMD ["air"]
