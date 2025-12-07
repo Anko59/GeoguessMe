@@ -13,7 +13,7 @@ import (
 func TestWebSocketAndUpload(t *testing.T) {
 	// 1. Signup and Login
 	username := "testuser_" + fmt.Sprint(time.Now().UnixNano())
-	token, _ := signup(t, username, "password")
+	token, _ := signup(t, username, "TestPass123")
 
 	// 2. Create Group
 	groupID, _ := createGroup(t, token, "Test Group")

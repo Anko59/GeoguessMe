@@ -10,7 +10,7 @@ describe('Home Page', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('gueoguess.me')).toBeInTheDocument();
+        expect(screen.getByText('geoguess.me')).toBeInTheDocument();
         expect(screen.getByText('Snapchat meets Geoguessr')).toBeInTheDocument();
         expect(screen.getByText('Login')).toBeInTheDocument();
         expect(screen.getByText('Sign Up')).toBeInTheDocument();

@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
-	"math/rand"
+	"geoguessme/internal/validation"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -53,12 +55,19 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 
 	var req SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if req.Username == "" || req.Password == "" {
-		http.Error(w, "Username and password required", http.StatusBadRequest)
+	// Validate username
+	if err := validation.ValidateUsername(req.Username); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate password
+	if err := validation.ValidatePassword(req.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -76,15 +85,21 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		fmt.Printf("Signup error (bcrypt): %v\n", err)
-		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		http.Error(w, "Error processing request", http.StatusInternalServerError)
 		return
 	}
 
-	// Random avatar selection (avatar.png, avatar2.png ... avatar10.png)
-	avatarNum := (rand.Intn(10)) // 0-9
+	// Random avatar selection using crypto/rand (avatar.png, avatar2.png ... avatar10.png)
+	avatarNum, err := rand.Int(rand.Reader, big.NewInt(10))
+	if err != nil {
+		fmt.Printf("Signup error (rand): %v\n", err)
+		http.Error(w, "Error processing request", http.StatusInternalServerError)
+		return
+	}
+
 	avatarFile := "avatar.png"
-	if avatarNum > 0 {
-		avatarFile = fmt.Sprintf("avatar%d.png", avatarNum+1) // avatar2.png to avatar10.png
+	if avatarNum.Int64() > 0 {
+		avatarFile = fmt.Sprintf("avatar%d.png", avatarNum.Int64()+1) // avatar2.png to avatar10.png
 	}
 
 	user := models.User{
@@ -120,28 +135,28 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	user, err := repository.GetUserByUsername(req.Username)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 	if user == nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 
 	if !auth.CheckPasswordHash(req.Password, user.Password) {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 
 	token, err := auth.GenerateToken(user.ID)
 	if err != nil {
-		http.Error(w, "Error generating token", http.StatusInternalServerError)
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 

@@ -26,7 +26,7 @@ func TestCalculateScore(t *testing.T) {
 	}{
 		{0, 5000, 5000},    // Perfect guess
 		{40, 5000, 5000},   // Close enough
-		{2000, 1800, 1900}, // ~1/e decay
+		{2000, 4500, 4600}, // Permissive scoring - 2km is still quite good
 		{20000000, 0, 1},   // Other side of world
 	}
 

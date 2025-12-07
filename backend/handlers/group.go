@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"encoding/json"
-	"math/rand"
+	"geoguessme/internal/auth"
+	"math/big"
 	"net/http"
 	"time"
 
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
+	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
 )
@@ -20,13 +23,17 @@ type JoinGroupRequest struct {
 	Code string `json:"code"`
 }
 
-func generateGroupCode() string {
+func generateGroupCode() (string, error) {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 6)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", err
+		}
+		b[i] = charset[num.Int64()]
 	}
-	return string(b)
+	return string(b), nil
 }
 
 func CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -39,24 +46,49 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, "Group name required", http.StatusBadRequest)
+	// Validate group name
+	if err := validation.ValidateGroupName(req.Name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Generate unique code with retry logic
+	var code string
+	var err error
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		code, err = generateGroupCode()
+		if err != nil {
+			http.Error(w, "Error generating code", http.StatusInternalServerError)
+			return
+		}
+
+		// Check if code already exists
+		existingGroup, err := repository.GetGroupByCode(code)
+		if err != nil {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if existingGroup == nil {
+			break // Code is unique
+		}
+
+		if i == maxRetries-1 {
+			http.Error(w, "Failed to generate unique code", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	group := &models.Group{
 		ID:        uuid.New().String(),
 		Name:      req.Name,
-		Code:      generateGroupCode(),
+		Code:      code,
 		CreatedAt: time.Now(),
 	}
-
-	// Ensure code uniqueness (simple retry logic could be added here, but for now assume random is enough)
-	// In production, check if code exists loop.
 
 	if err := repository.CreateGroup(group); err != nil {
 		http.Error(w, "Error creating group", http.StatusInternalServerError)
@@ -88,7 +120,13 @@ func JoinGroup(w http.ResponseWriter, r *http.Request) {
 
 	var req JoinGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Validate group code
+	if err := validation.ValidateGroupCode(req.Code); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -132,13 +170,19 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := GetUserIDFromContext(r)
+
 	groupID := r.URL.Query().Get("group_id")
 	if groupID == "" {
 		http.Error(w, "Missing group_id", http.StatusBadRequest)
 		return
 	}
 
-	// Auth check (omitted for brevity, but should be here)
+	// Verify user is a member of the group
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
 
 	leaderboard, err := repository.GetGroupLeaderboard(groupID)
 	if err != nil {

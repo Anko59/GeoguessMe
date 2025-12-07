@@ -12,6 +12,7 @@ import (
 
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
+	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
 )
@@ -25,9 +26,8 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 
 	userID := GetUserIDFromContext(r)
 
-	// Parse multipart form
-	// 10MB max memory
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	// Parse multipart form (5MB max memory)
+	if err := r.ParseMultipartForm(validation.MaxFileSize); err != nil {
 		fmt.Printf("UploadPhoto: Error parsing form: %v\n", err)
 		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
@@ -38,21 +38,28 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	longStr := r.FormValue("long")
 
 	if groupID == "" || latStr == "" || longStr == "" {
-		fmt.Println("UploadPhoto: Missing fields")
-		http.Error(w, "Missing fields", http.StatusBadRequest)
+		fmt.Println("UploadPhoto: Missing required fields")
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
 
 	lat, err := strconv.ParseFloat(latStr, 64)
 	if err != nil {
-		fmt.Println("UploadPhoto: Invalid lat")
+		fmt.Println("UploadPhoto: Invalid latitude")
 		http.Error(w, "Invalid latitude", http.StatusBadRequest)
 		return
 	}
 	long, err := strconv.ParseFloat(longStr, 64)
 	if err != nil {
-		fmt.Println("UploadPhoto: Invalid long")
+		fmt.Println("UploadPhoto: Invalid longitude")
 		http.Error(w, "Invalid longitude", http.StatusBadRequest)
+		return
+	}
+
+	// Validate coordinates
+	if err := validation.ValidateCoordinates(lat, long); err != nil {
+		fmt.Printf("UploadPhoto: Invalid coordinates: %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -64,8 +71,16 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Save file
-	filename := uuid.New().String() + filepath.Ext(header.Filename)
+	// Validate file (type, size, content)
+	if err := validation.ValidateUploadedFile(file, header); err != nil {
+		fmt.Printf("UploadPhoto: File validation failed: %v\n", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Generate safe filename
+	ext := validation.GetSafeExtension(header.Filename)
+	filename := uuid.New().String() + ext
 	filePath := filepath.Join("uploads", filename)
 	fmt.Printf("UploadPhoto: Saving to %s\n", filePath)
 

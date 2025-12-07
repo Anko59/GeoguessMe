@@ -27,11 +27,11 @@ func TestFullGameFlow(t *testing.T) {
 
 	// 1. Signup User A
 	userA := "userA_" + fmt.Sprint(time.Now().UnixNano())
-	tokenA, _ := signup(t, userA, "password")
+	tokenA, _ := signup(t, userA, "TestPass123")
 
 	// 2. Signup User B
 	userB := "userB_" + fmt.Sprint(time.Now().UnixNano())
-	tokenB, _ := signup(t, userB, "password")
+	tokenB, _ := signup(t, userB, "TestPass123")
 
 	// 3. User A creates group
 	groupID, joinCode := createGroup(t, tokenA, "Test Group")
@@ -55,7 +55,14 @@ func TestFullGameFlow(t *testing.T) {
 func signup(t *testing.T, username, password string) (string, string) {
 	body := map[string]string{"username": username, "password": password}
 	jsonBody, _ := json.Marshal(body)
-	resp, err := http.Post(baseURL+"/signup", "application/json", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", baseURL+"/signup", bytes.NewBuffer(jsonBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	// Use random IP to avoid rate limiting collisions between tests
+	req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.%d.%d", time.Now().UnixNano()%255, time.Now().UnixNano()%255))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -106,6 +113,8 @@ func uploadPhoto(t *testing.T, token, groupID string) string {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("photo", "test.jpg")
+	// Use valid JPEG magic bytes
+	part.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01})
 	part.Write([]byte("fake image content"))
 	writer.WriteField("lat", "51.505")
 	writer.WriteField("long", "-0.09")

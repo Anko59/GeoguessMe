@@ -17,7 +17,7 @@ export default function Signup() {
             localStorage.setItem('user', JSON.stringify(res.data.user));
             navigate('/group/join');
         } catch (err: any) {
-            const errorMessage = err.response?.data;
+            const errorMessage = err.response?.data || err.message;
             setError(typeof errorMessage === 'string' ? errorMessage : 'Signup failed');
         }
     };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import LogoutButton from './LogoutButton';
 import './SettingsModal.css';
 
 interface Member {
@@ -146,6 +147,10 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                             )}
                         </div>
                     )}
+                </div>
+
+                <div className="settings-section logout-section">
+                    <LogoutButton />
                 </div>
             </div>
         </div>

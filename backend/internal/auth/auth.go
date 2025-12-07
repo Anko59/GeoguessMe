@@ -1,13 +1,30 @@
 package auth
 
 import (
+	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtKey = []byte("secret_key_change_me") // TODO: Move to env var
+var jwtKey []byte
+
+func init() {
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		// Check if we're in test mode
+		if os.Getenv("GO_TEST") == "1" || strings.Contains(os.Args[0], ".test") {
+			// Use a test secret for testing
+			jwtKey = []byte("test_secret_key_for_testing_only")
+			return
+		}
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	jwtKey = []byte(secretKey)
+}
 
 type Claims struct {
 	UserID string `json:"user_id"`
