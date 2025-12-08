@@ -11,8 +11,8 @@ describe('Home Page', () => {
         );
 
         expect(screen.getByText('geoguess.me')).toBeInTheDocument();
-        expect(screen.getByText('Snapchat meets Geoguessr')).toBeInTheDocument();
-        expect(screen.getByText('Login')).toBeInTheDocument();
-        expect(screen.getByText('Sign Up')).toBeInTheDocument();
+        expect(screen.getByText('Where Snapchat Meets Geoguessr')).toBeInTheDocument();
+        expect(screen.getByText('Already Playing? Login')).toBeInTheDocument();
+        expect(screen.getByText("Get Started - It's Free!")).toBeInTheDocument();
     });
 });

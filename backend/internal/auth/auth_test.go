@@ -5,14 +5,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestPasswordHashing(t *testing.T) {
 	password := "SecretPass123"
 
 	// Test Hash
-	hash, err := HashPassword(password)
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	assert.NoError(t, err)
+	hash := string(hashBytes)
 	assert.NotEmpty(t, hash)
 	assert.NotEqual(t, password, hash)
 

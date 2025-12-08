@@ -5,7 +5,6 @@ export type TabType = 'camera' | 'chat' | 'leaderboard';
 interface TabBarProps {
     activeTab: TabType;
     onTabChange: (tab: TabType) => void;
-    newMessagesCount?: number;
 }
 
 export default function TabBar({ activeTab, onTabChange }: TabBarProps) {

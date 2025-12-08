@@ -1,28 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
 import { getCurrentUserId } from '../utils/userUtils';
+import type { Message } from '../types';
 import './Chat.css';
-
-interface Message {
-    id: string;
-    group_id: string;
-    user_id: string;
-    username?: string;
-    avatar?: string;
-    content: string;
-    created_at: string;
-}
 
 interface ChatProps {
     groupID: string;
     onNewMessage?: () => void;
     onChallengeMessage?: (msg: Message) => void;
     messages: Message[];
-    setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
     wsRef: React.RefObject<WebSocket | null>;
     myGuesses: string[];
 }
 
-export default function Chat({ groupID, onNewMessage, onChallengeMessage, messages, setMessages, wsRef, myGuesses }: ChatProps) {
+export default function Chat({ groupID, onNewMessage, onChallengeMessage, messages, wsRef, myGuesses }: ChatProps) {
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const currentUserId = getCurrentUserId();

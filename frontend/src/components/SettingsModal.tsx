@@ -1,13 +1,8 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import type { Member } from '../types';
 import LogoutButton from './LogoutButton';
 import './SettingsModal.css';
-
-interface Member {
-    id: string;
-    username: string;
-    avatar: string;
-}
 
 interface SettingsModalProps {
     isOpen: boolean;

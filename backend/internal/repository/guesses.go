@@ -70,3 +70,22 @@ func GetGuessesForPhoto(photoID string) ([]GuessWithUser, error) {
 	}
 	return guesses, nil
 }
+
+func GetUserGuessedPhotoIDs(groupID, userID string) ([]string, error) {
+	query := `SELECT photo_id FROM guesses WHERE group_id = $1 AND user_id = $2`
+	rows, err := database.DB.Query(context.Background(), query, groupID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var photoIDs []string
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			continue
+		}
+		photoIDs = append(photoIDs, pid)
+	}
+	return photoIDs, nil
+}

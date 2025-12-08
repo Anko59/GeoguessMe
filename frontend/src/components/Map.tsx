@@ -33,7 +33,7 @@ interface MapProps {
 
 function LocationMarker({ onLocationSelect, position }: { onLocationSelect: (lat: number, long: number) => void, position: { lat: number; long: number } | null }) {
     useMapEvents({
-        click(e) {
+        click(e: L.LeafletMouseEvent) {
             onLocationSelect(e.latlng.lat, e.latlng.lng);
         },
     });

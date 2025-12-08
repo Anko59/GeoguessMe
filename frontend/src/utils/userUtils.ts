@@ -15,16 +15,3 @@ export const getCurrentUserId = (): string => {
         return '';
     }
 };
-
-/**
- * Gets the full current user object from localStorage
- * @returns The user object or empty object if not found
- */
-export const getCurrentUser = () => {
-    try {
-        return JSON.parse(localStorage.getItem('user') || '{}');
-    } catch (error) {
-        console.error('Error getting current user:', error);
-        return {};
-    }
-};

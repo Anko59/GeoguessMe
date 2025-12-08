@@ -97,22 +97,6 @@ func ValidateUploadedFile(file multipart.File, header *multipart.FileHeader) err
 	return nil
 }
 
-// SanitizeFilename removes dangerous characters from filename
-func SanitizeFilename(filename string) string {
-	// Remove path components
-	if idx := strings.LastIndex(filename, "/"); idx != -1 {
-		filename = filename[idx+1:]
-	}
-	if idx := strings.LastIndex(filename, "\\"); idx != -1 {
-		filename = filename[idx+1:]
-	}
-
-	// Replace spaces and special chars
-	filename = strings.ReplaceAll(filename, " ", "_")
-
-	return filename
-}
-
 // GetSafeExtension returns a safe file extension
 func GetSafeExtension(filename string) string {
 	ext := strings.ToLower(filename)

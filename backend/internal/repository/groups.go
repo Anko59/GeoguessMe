@@ -92,3 +92,27 @@ func GetGroupByID(groupID string) (*models.Group, error) {
 	}
 	return &group, nil
 }
+
+func GetUserGroups(userID string) ([]models.Group, error) {
+	query := `
+		SELECT g.id, g.name, g.code, g.created_at
+		FROM groups g
+		JOIN group_members gm ON g.id = gm.group_id
+		WHERE gm.user_id = $1
+	`
+	rows, err := database.DB.Query(context.Background(), query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []models.Group
+	for rows.Next() {
+		var group models.Group
+		if err := rows.Scan(&group.ID, &group.Name, &group.Code, &group.CreatedAt); err != nil {
+			continue
+		}
+		groups = append(groups, group)
+	}
+	return groups, nil
+}

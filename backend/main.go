@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"geoguessme/handlers"
@@ -51,8 +55,34 @@ func main() {
 	handler := middleware.SecurityHeaders(mux)
 	handler = middleware.CORS(handler)
 
-	fmt.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", handler); err != nil {
-		fmt.Printf("Server failed: %s\n", err)
+	// Create server with timeouts
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: handler,
 	}
+
+	// Start server in goroutine
+	go func() {
+		fmt.Println("Server starting on :8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Server failed: %s\n", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	fmt.Println("Shutting down server...")
+
+	// Give 30 seconds for connections to finish
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		fmt.Printf("Server forced to shutdown: %s\n", err)
+	}
+
+	fmt.Println("Server stopped")
 }

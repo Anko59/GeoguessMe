@@ -16,19 +16,49 @@ export default function Home() {
 
     return (
         <div className="home-container">
-            <div className="home-content">
-                <img src="/welcome_banner.png" alt="Welcome" className="home-banner" />
-                <h1 className="home-title gradient-text">geoguess.me</h1>
-                <p className="home-tagline">Snapchat meets Geoguessr</p>
-                <p className="home-description">
-                    📸 Share photos with friends<br />
-                    🌍 Guess the locations<br />
-                    🏆 Climb the leaderboard
-                </p>
+            <div className="home-hero">
+                <div className="home-banner-wrapper">
+                    <img src="/welcome_banner.png" alt="Welcome Banner" className="home-banner" />
+                </div>
 
-                <div className="home-actions">
-                    <Link to="/login" className="btn btn-primary">Login</Link>
-                    <Link to="/signup" className="btn btn-secondary">Sign Up</Link>
+                <div className="home-content">
+                    <div className="home-welcome-asset">
+                        <img src="/welcome_asset.png" alt="Welcome" className="welcome-asset-img" />
+                    </div>
+
+                    <h1 className="home-title gradient-text">geoguess.me</h1>
+                    <p className="home-tagline">Where Snapchat Meets Geoguessr</p>
+
+                    <div className="home-features">
+                        <div className="feature-card">
+                            <img src="/camera_icon.png" alt="Camera" className="feature-icon" />
+                            <h3>Share Photos</h3>
+                            <p>Capture moments with your friends</p>
+                        </div>
+                        <div className="feature-card">
+                            <img src="/globe_icon.png" alt="Globe" className="feature-icon" />
+                            <h3>Guess Locations</h3>
+                            <p>Challenge your geography skills</p>
+                        </div>
+                        <div className="feature-card">
+                            <img src="/cup_icon.png" alt="Trophy" className="feature-icon" />
+                            <h3>Compete</h3>
+                            <p>Climb the leaderboard and win</p>
+                        </div>
+                    </div>
+
+                    <div className="home-actions">
+                        <Link to="/signup" className="btn btn-primary btn-large">
+                            Get Started - It's Free!
+                        </Link>
+                        <Link to="/login" className="btn btn-secondary btn-large">
+                            Already Playing? Login
+                        </Link>
+                    </div>
+
+                    <p className="home-footer-text">
+                        Join thousands of players worldwide
+                    </p>
                 </div>
             </div>
         </div>

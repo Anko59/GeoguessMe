@@ -1,13 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api';
+import type { Group } from '../types';
 import './GroupsList.css';
-
-interface Group {
-    id: string;
-    name: string;
-    code: string;
-}
 
 export default function GroupsList() {
     const [groups, setGroups] = useState<Group[]>([]);

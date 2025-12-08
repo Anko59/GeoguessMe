@@ -1,13 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getCurrentUserId } from '../utils/userUtils';
 import api from '../api';
+import type { LeaderboardEntry } from '../types';
 import './Leaderboard.css';
-
-interface LeaderboardEntry {
-    user_id: string;
-    username: string;
-    score: number;
-}
 
 interface LeaderboardProps {
     groupID: string;

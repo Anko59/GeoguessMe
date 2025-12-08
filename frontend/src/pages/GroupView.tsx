@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../api';
+import type { Message } from '../types';
 import Chat from '../components/Chat';
 import Leaderboard from '../components/Leaderboard';
 import Camera from '../components/Camera';
@@ -8,15 +9,6 @@ import Game from '../components/Game';
 import SettingsModal from '../components/SettingsModal';
 import TabBar, { type TabType } from '../components/TabBar';
 import './GroupView.css';
-
-interface Message {
-    id: string;
-    group_id: string;
-    user_id: string;
-    username?: string;
-    content: string;
-    created_at: string;
-}
 
 export default function GroupView() {
     const { id } = useParams();
@@ -146,7 +138,6 @@ export default function GroupView() {
                             groupID={id}
                             onNewMessage={() => setNewMessagesCount(0)}
                             messages={messages}
-                            setMessages={setMessages}
                             wsRef={ws}
                             onChallengeMessage={handleStartChallenge}
                             myGuesses={myGuesses}
@@ -164,7 +155,6 @@ export default function GroupView() {
             <Game
                 gameMessage={gameMessage}
                 onGameComplete={() => {
-                    // Refresh guesses
                     setNewMessagesCount(prev => prev + 1); // Hack to trigger useEffect
                 }}
                 myGuesses={myGuesses}
@@ -175,7 +165,6 @@ export default function GroupView() {
             <TabBar
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                newMessagesCount={newMessagesCount}
             />
         </div>
     );

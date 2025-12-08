@@ -181,9 +181,8 @@ export default function Game({ gameMessage, onGameComplete, myGuesses, onClose }
                             src="/challenge_banner.png"
                             alt="Challenge"
                             style={{
-                                width: '100%',
-                                maxWidth: '280px',
-                                height: 'auto',
+                                width: 'auto',
+                                maxHeight: '180px',
                                 marginBottom: '1rem',
                                 display: 'block',
                                 margin: '0 auto 1rem auto'

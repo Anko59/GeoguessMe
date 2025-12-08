@@ -2,11 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
-	"geoguessme/internal/database"
+	"geoguessme/internal/auth"
+	"geoguessme/internal/repository"
 	"net/http"
 )
 
 func GetMyGuesses(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	userID := GetUserIDFromContext(r)
 
 	groupID := r.URL.Query().Get("group_id")
@@ -15,21 +21,16 @@ func GetMyGuesses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT photo_id FROM guesses WHERE group_id = $1 AND user_id = $2`
-	rows, err := database.DB.Query(r.Context(), query, groupID, userID)
+	// Verify user is a member of this group
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	photoIDs, err := repository.GetUserGuessedPhotoIDs(groupID, userID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	var photoIDs []string
-	for rows.Next() {
-		var pid string
-		if err := rows.Scan(&pid); err != nil {
-			continue
-		}
-		photoIDs = append(photoIDs, pid)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

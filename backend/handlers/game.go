@@ -19,11 +19,10 @@ type GuessRequest struct {
 }
 
 type GuessResponse struct {
-	Score          int     `json:"score"`
-	Distance       float64 `json:"distance"`
-	ActualLat      float64 `json:"actual_lat"`
-	ActualLong     float64 `json:"actual_long"`
-	TotalUserScore int     `json:"total_user_score"` // Optional: return updated total score
+	Score      int     `json:"score"`
+	Distance   float64 `json:"distance"`
+	ActualLat  float64 `json:"actual_lat"`
+	ActualLong float64 `json:"actual_long"`
 }
 
 func SubmitGuess(w http.ResponseWriter, r *http.Request) {
