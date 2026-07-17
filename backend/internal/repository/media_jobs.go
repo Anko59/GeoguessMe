@@ -19,7 +19,7 @@ func EnqueueMediaDeletion(ctx context.Context, source string, keys []string) err
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	for _, key := range keys {
 		if _, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, newID(), key, source); err != nil {
 			return err
@@ -43,7 +43,7 @@ func ClaimDeletionJobs(ctx context.Context, limit int, backoff time.Duration) ([
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `UPDATE media_deletion_jobs
 		SET attempts = attempts + 1, next_attempt_at = CURRENT_TIMESTAMP + $1
 		WHERE id IN (SELECT id FROM media_deletion_jobs WHERE completed_at IS NULL AND next_attempt_at <= CURRENT_TIMESTAMP ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)

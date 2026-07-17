@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -22,7 +24,33 @@ const migrationLockKey = 91734721
 // DB is retained as the repository seam while the application is migrated to
 // dependency-injected services. New code should pass request contexts through
 // repository calls.
-var DB *pgxpool.Pool
+type Pool interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+	Begin(context.Context) (pgx.Tx, error)
+	Acquire(context.Context) (*pgxpool.Conn, error)
+	Ping(context.Context) error
+	Close()
+}
+
+type migrationConnection interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	Begin(context.Context) (pgx.Tx, error)
+	Release()
+}
+
+var DB Pool
+
+var acquireMigrationConnection = func(ctx context.Context) (migrationConnection, error) {
+	if DB == nil {
+		return nil, errors.New("database is not connected")
+	}
+	return DB.Acquire(ctx)
+}
+
+var _ Pool = (*pgxpool.Pool)(nil)
 
 func Connect(dbURL string) error {
 	return ConnectWithLimits(dbURL, 2, 10)
@@ -109,7 +137,7 @@ func MigrateUp(ctx context.Context, logger *slog.Logger) error {
 	if err := ensureMigrationTable(ctx); err != nil {
 		return fmt.Errorf("create migration table: %w", err)
 	}
-	conn, err := DB.Acquire(ctx)
+	conn, err := acquireMigrationConnection(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
 	}

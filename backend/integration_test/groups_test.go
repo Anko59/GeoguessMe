@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"mime/multipart"
 	"net/http"
 	"strings"
@@ -22,7 +23,7 @@ func attemptUpload(t *testing.T, bearer, groupID string) int {
 	require.NoError(t, writer.WriteField("lat", "1"))
 	require.NoError(t, writer.WriteField("long", "1"))
 	require.NoError(t, writer.Close())
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/photo/upload", body)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/api/v1/photo/upload", body)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("Content-Type", writer.FormDataContentType())

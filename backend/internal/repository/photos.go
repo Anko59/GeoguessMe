@@ -65,7 +65,7 @@ func AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow tim
 	if err != nil {
 		return nil, nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
 	if err != nil {
 		return nil, nil, err
@@ -160,7 +160,7 @@ func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long floa
 	if err != nil {
 		return nil, false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
 	if err != nil {
 		return nil, isRetryable(err), err

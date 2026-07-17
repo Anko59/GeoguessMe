@@ -1,6 +1,10 @@
 package validation
 
 import (
+	"bytes"
+	"errors"
+	"io"
+	"mime/multipart"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,3 +85,61 @@ func TestValidateCoordinates(t *testing.T) {
 		})
 	}
 }
+
+func TestEmailGroupAndNameValidation(t *testing.T) {
+	for _, value := range []string{"alice@example.test", "a+b@example.test"} {
+		if err := ValidateEmail(value); err != nil {
+			t.Errorf("valid email %q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "missing-at", "alice@example.test ", string(bytes.Repeat([]byte{'a'}, 255))} {
+		if err := ValidateEmail(value); err == nil {
+			t.Errorf("invalid email %q accepted", value)
+		}
+	}
+	for _, value := range []string{"ABC123", "000000"} {
+		if err := ValidateGroupCode(value); err != nil {
+			t.Errorf("valid group code %q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"abc123", "ABC12", "ABC-12"} {
+		if err := ValidateGroupCode(value); err == nil {
+			t.Errorf("invalid group code %q accepted", value)
+		}
+	}
+	if ValidateGroupName("  Paris  ") != nil || ValidateGroupName(string(bytes.Repeat([]byte{'x'}, 101))) == nil {
+		t.Fatal("group name validation failed")
+	}
+	var validationError *ValidationError
+	if err := ValidateEmail("bad"); err == nil || !errors.As(err, &validationError) || validationError.Field != "email" {
+		t.Fatal("validation error did not expose its field")
+	}
+}
+
+func TestUploadedFileValidationAndExtensions(t *testing.T) {
+	file := &testMultipartFile{Reader: bytes.NewReader([]byte{0x89, 0x50, 0x4e, 0x47, 1})}
+	if err := ValidateUploadedFile(file, &multipart.FileHeader{Size: 5, Filename: "photo.png"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, header := range []*multipart.FileHeader{{Size: 0}, {Size: MaxFileSize + 1}} {
+		if err := ValidateUploadedFile(&testMultipartFile{Reader: bytes.NewReader([]byte("bad"))}, header); err == nil {
+			t.Fatal("invalid file size accepted")
+		}
+	}
+	if err := ValidateUploadedFile(&testMultipartFile{Reader: bytes.NewReader([]byte("bad"))}, &multipart.FileHeader{Size: 3}); err == nil {
+		t.Fatal("invalid magic bytes accepted")
+	}
+	if GetSafeExtension("image.JPEG") != ".jpeg" || GetSafeExtension("image.unknown") != ".jpg" {
+		t.Fatal("safe extension mapping failed")
+	}
+}
+
+type testMultipartFile struct{ *bytes.Reader }
+
+func (f *testMultipartFile) Close() error               { return nil }
+func (f *testMultipartFile) Read(p []byte) (int, error) { return f.Reader.Read(p) }
+func (f *testMultipartFile) Seek(offset int64, whence int) (int64, error) {
+	return f.Reader.Seek(offset, whence)
+}
+
+var _ io.ReadSeeker = (*testMultipartFile)(nil)

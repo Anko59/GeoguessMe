@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$REPO"
 
 PROJECT="${GEOGUESSME_TEST_PROJECT:-geoguessme-integration}"
 WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-8080}"
 MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-8025}"
-TEST_BASE_URL="http://localhost:${WEB_PORT}"
+PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
+COMPOSE_FILE="deployment/compose.test.yaml"
 
 cleanup() {
-    docker compose -f "$REPO/deployment/compose.test.yaml" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
+    status=$?
+    docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans
+    exit "$status"
 }
 trap cleanup EXIT
 
-export GEOGUESSME_TEST_WEB_PORT="$WEB_PORT" GEOGUESSME_TEST_MAILPIT_PORT="$MAILPIT_PORT"
-docker compose -f "$REPO/deployment/compose.test.yaml" --project-directory "$REPO" -p "$PROJECT" up -d --build --wait
-cd "$REPO/backend" && TEST_BASE_URL="$TEST_BASE_URL" go test ./integration_test -count=1
+export GEOGUESSME_TEST_WEB_PORT="$WEB_PORT"
+export GEOGUESSME_TEST_MAILPIT_PORT="$MAILPIT_PORT"
+export GEOGUESSME_TEST_PUBLIC_URL="$PUBLIC_URL"
+export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:${WEB_PORT}"
+
+docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --build --wait
+"$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
+
+docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+    run --rm --no-deps go-tools sh -c \
+    "cd /workspace/backend && TEST_BASE_URL=http://host.docker.internal:${WEB_PORT} MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT} go test ./integration_test -count=1"

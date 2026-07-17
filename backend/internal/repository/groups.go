@@ -19,7 +19,7 @@ func CreateGroupAndMembership(ctx context.Context, group *models.Group, userID s
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `INSERT INTO groups (id, name, code, created_at) VALUES ($1, $2, $3, $4)`, group.ID, group.Name, group.Code, group.CreatedAt); err != nil {
 		return err
 	}

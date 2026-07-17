@@ -162,3 +162,61 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 		t.Fatalf("expected valid production config, got %v", err)
 	}
 }
+
+func TestLoadValidatedAndInvalidEnvironmentValuesUseSafeDefaults(t *testing.T) {
+	t.Setenv("DB_MIN_CONNS", "bad")
+	t.Setenv("DB_MAX_CONNS", "bad")
+	t.Setenv("UPLOAD_MAX_BYTES", "bad")
+	t.Setenv("UPLOAD_MAX_PIXELS", "bad")
+	t.Setenv("S3_USE_PATH_STYLE", "bad")
+	t.Setenv("ACCESS_TOKEN_TTL", "bad")
+	t.Setenv("SMTP_DIAL_TIMEOUT", "bad")
+	if cfg := Load(); cfg.DatabaseMinConns != 2 || cfg.DatabaseMaxConns != 10 || cfg.UploadMaxBytes <= 0 || cfg.UploadMaxPixels == 0 || !cfg.S3UsePathStyle || cfg.AccessTokenTTL <= 0 || cfg.SMTPDialTimeout <= 0 {
+		t.Fatalf("invalid environment values were not replaced safely: %+v", cfg)
+	}
+
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost/db")
+	t.Setenv("JWT_SECRET", "a-valid-secret-that-is-at-least-32-bytes-long")
+	t.Setenv("SMTP_HOST", "localhost")
+	t.Setenv("SMTP_TLS", "off")
+	if cfg, err := LoadValidated(); err != nil || cfg == nil {
+		t.Fatalf("valid environment was rejected: %v", err)
+	}
+	t.Setenv("DATABASE_URL", "")
+	if cfg, err := LoadValidated(); err == nil || cfg != nil {
+		t.Fatal("invalid environment was accepted")
+	}
+}
+
+func TestValidateReportsBroadConfigurationFailures(t *testing.T) {
+	c := validConfig()
+	c.Port = "not-a-port"
+	c.DatabaseURL = ""
+	c.JWTSecret = "short"
+	c.AccessTokenTTL = 0
+	c.RefreshTokenTTL = 0
+	c.VerificationTTL = 0
+	c.ResetTTL = 0
+	c.PasswordHashCost = 3
+	c.DatabaseMinConns = -1
+	c.DatabaseMaxConns = 0
+	c.AllowedOrigins = []string{"not-an-origin"}
+	c.S3Endpoint = "ftp://"
+	c.S3Bucket = ""
+	c.S3AccessKey = ""
+	c.S3SecretKey = ""
+	c.UploadMaxBytes = 0
+	c.UploadMaxPixels = 0
+	c.ChallengeTTL = 0
+	c.ViewWindow = 0
+	c.PhotoRetention = time.Second
+	c.RateLimitRequests = 0
+	c.RateLimitWindow = 0
+	c.SMTPDialTimeout = 0
+	c.SMTPTimeout = 0
+	c.SMTPTLS = "ssl"
+	c.SMTPPort = 0
+	if err := c.Validate(); err == nil {
+		t.Fatal("broadly invalid configuration was accepted")
+	}
+}

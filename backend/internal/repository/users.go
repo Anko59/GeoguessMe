@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -106,7 +105,7 @@ func RotateRefreshSession(ctx context.Context, presentedHash, replacementID, rep
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var userID string
 	err = tx.QueryRow(ctx, `UPDATE refresh_sessions SET revoked_at = $1, last_used_at = $1 WHERE token_hash = $2 AND revoked_at IS NULL AND expires_at > $1 RETURNING user_id`, now, presentedHash).Scan(&userID)
@@ -173,7 +172,7 @@ func InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, exp
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, "DELETE FROM "+table+" WHERE user_id = $1 AND used_at IS NULL", userID); err != nil {
 		return err
 	}
@@ -191,7 +190,7 @@ func VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var userID string
 	err = tx.QueryRow(ctx, `UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id`, tokenHash).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -214,7 +213,7 @@ func ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash strin
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var userID string
 	err = tx.QueryRow(ctx, `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id`, tokenHash).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -254,7 +253,7 @@ func DeleteUserCascade(ctx context.Context, userID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := tx.Query(ctx, `SELECT storage_key FROM photos WHERE user_id = $1 AND storage_key IS NOT NULL`, userID)
 	if err != nil {
@@ -299,6 +298,3 @@ func CleanupAuthTokens(ctx context.Context) error {
 	_, err := database.DB.Exec(ctx, `DELETE FROM refresh_sessions WHERE expires_at < CURRENT_TIMESTAMP OR revoked_at < CURRENT_TIMESTAMP - interval '30 days'; DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM websocket_tickets WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'`)
 	return err
 }
-
-// Compile-time assertion documents that the repository remains pgxpool based.
-var _ *pgxpool.Pool = database.DB

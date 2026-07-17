@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,11 +38,14 @@ func waitForReady(base string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 2 * time.Second}
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(base + "/health/ready")
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/health/ready", nil)
 		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return true
+			resp, err := client.Do(req)
+			if err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return true
+				}
 			}
 		}
 		time.Sleep(time.Second)
@@ -59,7 +61,16 @@ type tokenPair struct {
 	userID  string
 }
 
-func doJSON(t *testing.T, method, path string, body any, bearer string, cookies []*http.Cookie) (*http.Response, []byte) {
+type jsonResponse struct {
+	StatusCode int
+	cookies    []*http.Cookie
+}
+
+func (r jsonResponse) Cookies() []*http.Cookie {
+	return r.cookies
+}
+
+func doJSON(t *testing.T, method, path string, body any, bearer string, cookies []*http.Cookie) (jsonResponse, []byte) {
 	t.Helper()
 	var reader io.Reader
 	if body != nil {
@@ -67,7 +78,7 @@ func doJSON(t *testing.T, method, path string, body any, bearer string, cookies 
 		require.NoError(t, err)
 		reader = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequest(method, baseURL+path, reader)
+	req, err := http.NewRequestWithContext(t.Context(), method, baseURL+path, reader)
 	require.NoError(t, err)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -83,7 +94,7 @@ func doJSON(t *testing.T, method, path string, body any, bearer string, cookies 
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return resp, data
+	return jsonResponse{StatusCode: resp.StatusCode, cookies: resp.Cookies()}, data
 }
 
 func signup(t *testing.T, username, email, password string) tokenPair {
@@ -142,7 +153,7 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 	require.NoError(t, writer.WriteField("group_id", groupID))
 	require.NoError(t, writer.Close())
 
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/photo/upload", body)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/photo/upload", body)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -162,7 +173,9 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 // time without relying on local clock drift.
 func serverNow(t *testing.T) time.Time {
 	t.Helper()
-	resp, err := http.Get(baseURL + "/health/ready")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/health/ready", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	tm, err := http.ParseTime(resp.Header.Get("Date"))
@@ -304,20 +317,6 @@ func indexOf(s, sub string) int {
 
 func isTokenChar(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_'
-}
-
-// mailpitLinks extracts all HTTP(S) URLs containing linkPath from a message
-// body (works for both plain-text and HTML bodies).
-func mailpitLinks(body, linkPath string) []string {
-	var out []string
-	for _, line := range strings.Split(body, "\n") {
-		for _, word := range strings.Fields(line) {
-			if (strings.HasPrefix(word, "http://") || strings.HasPrefix(word, "https://")) && strings.Contains(word, linkPath) {
-				out = append(out, word)
-			}
-		}
-	}
-	return out
 }
 
 func jsonUnmarshal(data []byte, v any) error {

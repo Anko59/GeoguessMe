@@ -3,6 +3,7 @@ package integration_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -19,8 +20,6 @@ func TestMessageCursorPagination(t *testing.T) {
 		ids = append(ids, uploadPhoto(t, alice.access, groupID))
 	}
 
-	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=2", nil, alice.access, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var page struct {
 		Items []struct {
 			ID      string `json:"id"`
@@ -28,11 +27,15 @@ func TestMessageCursorPagination(t *testing.T) {
 		} `json:"items"`
 		NextCursor string `json:"next_cursor"`
 	}
-	require.NoError(t, jsonUnmarshal(data, &page))
-	require.Len(t, page.Items, 2, "first page should be bounded by limit")
-	require.NotEmpty(t, page.NextCursor, "a second page must be available")
+	require.Eventually(t, func() bool {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=2", nil, alice.access, nil)
+		if resp.StatusCode != http.StatusOK || jsonUnmarshal(data, &page) != nil {
+			return false
+		}
+		return len(page.Items) == 2 && page.NextCursor != ""
+	}, 5*time.Second, 100*time.Millisecond, "uploaded challenge messages must become queryable")
 
-	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=2&cursor="+page.NextCursor, nil, alice.access, nil)
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=2&cursor="+page.NextCursor, nil, alice.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var page2 struct {
 		Items []struct {

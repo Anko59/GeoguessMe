@@ -40,7 +40,10 @@ func dialWS(t *testing.T, groupID, ticket, origin string) (*websocket.Conn, erro
 	} else {
 		header.Set("Origin", baseURL)
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(wsBase()+"/api/v1/ws?group_id="+url.QueryEscape(groupID)+"&ticket="+url.QueryEscape(ticket), header)
+	conn, response, err := websocket.DefaultDialer.Dial(wsBase()+"/api/v1/ws?group_id="+url.QueryEscape(groupID)+"&ticket="+url.QueryEscape(ticket), header)
+	if response != nil && response.Body != nil {
+		_ = response.Body.Close()
+	}
 	return conn, err
 }
 
