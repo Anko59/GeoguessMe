@@ -2,10 +2,23 @@ package validation
 
 import (
 	"fmt"
+	"math"
+	"net/mail"
 	"regexp"
 	"strings"
 	"unicode"
 )
+
+func ValidateEmail(email string) error {
+	if len(email) > 254 || strings.TrimSpace(email) == "" {
+		return &ValidationError{Field: "email", Message: "must be a valid email address"}
+	}
+	parsed, err := mail.ParseAddress(email)
+	if err != nil || parsed.Address != email || !strings.Contains(email, "@") {
+		return &ValidationError{Field: "email", Message: "must be a valid email address"}
+	}
+	return nil
+}
 
 // ValidationError represents a validation error
 type ValidationError struct {
@@ -71,11 +84,11 @@ func ValidatePassword(password string) error {
 
 // ValidateCoordinates validates latitude and longitude
 func ValidateCoordinates(lat, long float64) error {
-	if lat < -90 || lat > 90 {
+	if math.IsNaN(lat) || math.IsInf(lat, 0) || lat < -90 || lat > 90 {
 		return &ValidationError{Field: "latitude", Message: "must be between -90 and 90"}
 	}
 
-	if long < -180 || long > 180 {
+	if math.IsNaN(long) || math.IsInf(long, 0) || long < -180 || long > 180 {
 		return &ValidationError{Field: "longitude", Message: "must be between -180 and 180"}
 	}
 

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/repository"
 	"net/http"
@@ -9,29 +8,28 @@ import (
 
 func GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
 	userID := GetUserIDFromContext(r)
 	groupID := r.URL.Query().Get("id")
 	if groupID == "" {
-		http.Error(w, "Missing id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing_group_id", "id is required")
 		return
 	}
 
 	// Verify user is a member of this group
 	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		return
 	}
 
 	members, err := repository.GetGroupMembers(groupID)
 	if err != nil {
-		http.Error(w, "Failed to fetch members", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load members")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(members)
+	writeJSON(w, http.StatusOK, members)
 }

@@ -53,6 +53,19 @@
     font-weight: 500;
 }
 
+.auth-success {
+    color: #0f766e;
+    background: rgba(20, 184, 166, 0.12);
+    padding: 0.75rem;
+    border-radius: var(--border-radius-sm);
+}
+
+.auth-hint {
+    color: var(--text-light);
+    font-size: 0.78rem;
+    text-align: left;
+}
+
 .auth-footer {
     color: var(--text-light);
     font-size: 0.9rem;

@@ -1,56 +1,49 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
+import api, { getAPIErrorMessage } from '../api';
+import { useAuth } from '../context/AuthContext';
+import type { AuthResponse } from '../types';
 import './Auth.css';
 
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
+    const { login } = useAuth();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (event: React.FormEvent): Promise<void> => {
+        event.preventDefault();
+        setError('');
+        setSubmitting(true);
         try {
-            const res = await api.post('/login', { username, password });
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('user', JSON.stringify(res.data.user));
-            navigate('/group/join');
-        } catch (err: any) {
-            const errorMessage = err.response?.data || err.message;
-            setError(typeof errorMessage === 'string' ? errorMessage : 'Login failed');
+            const response = await api.post<AuthResponse>('/auth/login', { username, password });
+            login(response.data);
+            navigate('/groups');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Login failed'));
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
         <div className="auth-container">
             <div className="auth-card fade-in">
-                <img src="/logo.png" alt="Logo" className="auth-logo" />
+                <img src="/logo.png" alt="GeoGuessMe" className="auth-logo" />
                 <h2 className="auth-title gradient-text">Welcome Back!</h2>
                 <p className="auth-subtitle">Login to continue guessing</p>
-
                 <form onSubmit={handleSubmit} className="auth-form">
-                    <input
-                        type="text"
-                        placeholder="Username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        required
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
-                    {error && <div className="auth-error">{error}</div>}
-                    <button type="submit" className="btn btn-primary">Login</button>
+                    <label htmlFor="login-username">Username</label>
+                    <input id="login-username" type="text" placeholder="Username" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" />
+                    <label htmlFor="login-password">Password</label>
+                    <input id="login-password" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" />
+                    {error && <div className="auth-error" role="alert">{error}</div>}
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Logging in…' : 'Login'}</button>
                 </form>
-
-                <p className="auth-footer">
-                    Don't have an account? <Link to="/signup" className="auth-link">Sign up</Link>
-                </p>
+                <p className="auth-footer"><Link to="/forgot-password" className="auth-link">Forgot your password?</Link></p>
+                <p className="auth-footer">Don't have an account? <Link to="/signup" className="auth-link">Sign up</Link></p>
             </div>
         </div>
     );

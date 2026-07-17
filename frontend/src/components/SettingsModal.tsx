@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import type { Member } from '../types';
 import LogoutButton from './LogoutButton';
@@ -17,24 +17,24 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
     const [membersExpanded, setMembersExpanded] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [loadingMembers, setLoadingMembers] = useState(false);
+    const [memberError, setMemberError] = useState('');
 
-    useEffect(() => {
-        if (isOpen && membersExpanded && members.length === 0) {
-            fetchMembers();
-        }
-    }, [isOpen, membersExpanded]);
-
-    const fetchMembers = async () => {
+    const fetchMembers = useCallback(async () => {
         setLoadingMembers(true);
+        setMemberError('');
         try {
             const res = await api.get(`/group/members?id=${groupId}`);
             setMembers(res.data || []);
-        } catch (err) {
-            console.error('Failed to fetch members', err);
+        } catch {
+            setMemberError('Unable to load members. Try again.');
         } finally {
             setLoadingMembers(false);
         }
-    };
+    }, [groupId]);
+
+    useEffect(() => {
+        if (isOpen && membersExpanded && members.length === 0) void fetchMembers();
+    }, [fetchMembers, isOpen, members.length, membersExpanded]);
 
     if (!isOpen) return null;
 
@@ -54,12 +54,12 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                <button className="modal-close" onClick={onClose}>×</button>
+            <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="group-settings-title" onClick={(e) => e.stopPropagation()}>
+                <button className="modal-close" onClick={onClose} aria-label="Close settings">×</button>
 
                 <h2 className="modal-title">
                     <img src="/settings_gear_icon.png" alt="" className="modal-icon" />
-                    Group Settings
+                    <span id="group-settings-title">Group Settings</span>
                 </h2>
                 <h3 className="group-name-display">{groupName}</h3>
 
@@ -126,6 +126,8 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                         <div className="members-list">
                             {loadingMembers ? (
                                 <div className="members-loading">Loading...</div>
+                            ) : memberError ? (
+                                <div className="members-empty" role="alert">{memberError}</div>
                             ) : members.length > 0 ? (
                                 members.map((member) => (
                                     <div key={member.id} className="member-item">

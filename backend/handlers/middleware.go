@@ -2,40 +2,50 @@ package handlers
 
 import (
 	"context"
-	"geoguessme/internal/auth"
 	"net/http"
+	"strings"
+
+	"geoguessme/internal/auth"
+	"geoguessme/internal/repository"
 )
 
 type contextKey string
 
 const userIDKey contextKey = "userID"
 
-// AuthMiddleware validates the JWT token and adds the user ID to the request context
+// AuthMiddleware validates the access token and then confirms, against the
+// database, that the account is still active and that the token's auth version
+// matches the stored value. This is what makes password reset, account
+// deletion, and explicit logout-all invalidate access immediately, even before
+// the short-lived access JWT would have expired.
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tokenString := r.Header.Get("Authorization")
-		if tokenString == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		value := strings.TrimSpace(r.Header.Get("Authorization"))
+		parts := strings.SplitN(value, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
 			return
 		}
-
-		claims, err := auth.ValidateToken(tokenString)
+		claims, err := auth.ValidateAccessToken(strings.TrimSpace(parts[1]))
 		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
 			return
 		}
-
-		// Add user ID to context for downstream handlers
+		status, err := repository.GetUserAuthStatus(r.Context(), claims.UserID)
+		if err != nil || !status.Active {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
+			return
+		}
+		if claims.AuthVersion != status.AuthVersion {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Session revoked")
+			return
+		}
 		ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
-// GetUserIDFromContext extracts the user ID from the request context
 func GetUserIDFromContext(r *http.Request) string {
-	userID, ok := r.Context().Value(userIDKey).(string)
-	if !ok {
-		return ""
-	}
+	userID, _ := r.Context().Value(userIDKey).(string)
 	return userID
 }

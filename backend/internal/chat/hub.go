@@ -2,32 +2,38 @@ package chat
 
 import (
 	"context"
-	"geoguessme/internal/database"
-	"geoguessme/internal/models"
-	"geoguessme/internal/repository"
-	"log"
+	"sync"
 	"time"
+
+	"geoguessme/internal/models"
 
 	"github.com/google/uuid"
 )
 
-type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan models.Message
-	register   chan *Client
-	unregister chan *Client
+type PersistFunc func(context.Context, *models.Message) error
+
+type event struct {
+	message models.Message
+	sender  *Client
 }
 
-func NewHub() *Hub {
-	return &Hub{
-		broadcast:  make(chan models.Message),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
-	}
+type Hub struct {
+	clients    map[*Client]bool
+	broadcast  chan event
+	register   chan *Client
+	unregister chan *Client
+	stop       chan struct{}
+	stopped    chan struct{}
+	persist    PersistFunc
+	once       sync.Once
+}
+
+func NewHub(persist PersistFunc) *Hub {
+	return &Hub{broadcast: make(chan event, 128), register: make(chan *Client), unregister: make(chan *Client), clients: make(map[*Client]bool), stop: make(chan struct{}), stopped: make(chan struct{}), persist: persist}
 }
 
 func (h *Hub) Run() {
+	defer close(h.stopped)
 	for {
 		select {
 		case client := <-h.register:
@@ -37,50 +43,70 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 			}
-		case message := <-h.broadcast:
-			// Fetch username if not present (though it should be handled by the sender usually, but let's ensure it)
-			// Actually, for simplicity, let's just save and broadcast. The frontend might need the username.
-			// Fetch username and avatar from the database before broadcasting
-			var username, avatar string
-			query := `SELECT username, avatar FROM users WHERE id = $1`
-			err := database.DB.QueryRow(context.Background(), query, message.UserID).Scan(&username, &avatar)
-			if err != nil {
-				log.Printf("Failed to fetch user details for message broadcast: %v", err)
-				// Continue with default values or skip if user not found
+		case incoming := <-h.broadcast:
+			message := incoming.message
+			if message.ID == "" {
+				message.ID = newMessageID()
 			}
-
-			// Save message to DB with generated ID and timestamp
-			dbMsg := &models.Message{
-				ID:        uuid.New().String(),
-				GroupID:   message.GroupID,
-				UserID:    message.UserID,
-				Username:  username, // Use fetched username
-				Avatar:    avatar,   // Use fetched avatar
-				Content:   message.Content,
-				CreatedAt: time.Now(),
+			if message.CreatedAt.IsZero() {
+				message.CreatedAt = time.Now()
 			}
-			if err := repository.SaveMessage(dbMsg); err != nil {
-				log.Printf("Failed to save message: %v", err)
+			if message.Kind == "" {
+				message.Kind = "text"
 			}
-
-			// Update the message to broadcast with the username, avatar, and ID
-			msgToBroadcast := *dbMsg
-
-			// Broadcast to connected clients
-			for client := range h.clients {
-				if client.groupID == message.GroupID {
-					select {
-					case client.send <- msgToBroadcast:
-					default:
-						close(client.send)
-						delete(h.clients, client)
+			if h.persist != nil {
+				if err := h.persist(context.Background(), &message); err != nil {
+					if incoming.sender != nil {
+						sendSystem(incoming.sender, "message_not_saved", "Message could not be sent")
 					}
+					continue
 				}
 			}
+			for client := range h.clients {
+				if client.groupID != message.GroupID {
+					continue
+				}
+				select {
+				case client.send <- message:
+				default:
+					h.remove(client)
+				}
+			}
+		case <-h.stop:
+			for client := range h.clients {
+				close(client.send)
+				delete(h.clients, client)
+			}
+			return
 		}
 	}
 }
 
-func (h *Hub) Broadcast(msg models.Message) {
-	h.broadcast <- msg
+func (h *Hub) remove(client *Client) {
+	if _, ok := h.clients[client]; ok {
+		delete(h.clients, client)
+		close(client.send)
+	}
 }
+
+func (h *Hub) Broadcast(message models.Message) { h.broadcast <- event{message: message} }
+func (h *Hub) BroadcastFrom(client *Client, message models.Message) {
+	h.broadcast <- event{message: message, sender: client}
+}
+
+func (h *Hub) Stop() {
+	h.once.Do(func() { close(h.stop) })
+	select {
+	case <-h.stopped:
+	case <-time.After(5 * time.Second):
+	}
+}
+
+func sendSystem(client *Client, code, content string) {
+	select {
+	case client.send <- models.Message{Kind: "system", Content: content, ErrorCode: code}:
+	default:
+	}
+}
+
+func newMessageID() string { return uuid.NewString() }

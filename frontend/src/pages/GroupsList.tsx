@@ -7,6 +7,7 @@ import './GroupsList.css';
 export default function GroupsList() {
     const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         fetchGroups();
@@ -16,8 +17,8 @@ export default function GroupsList() {
         try {
             const res = await api.get('/user/groups');
             setGroups(res.data || []);
-        } catch (err) {
-            console.error('Failed to fetch groups', err);
+        } catch {
+            setError('Unable to load groups. Try again.');
         } finally {
             setLoading(false);
         }
@@ -30,6 +31,8 @@ export default function GroupsList() {
             </div>
         );
     }
+
+    if (error) return <div className="groups-list-container"><div className="error-message" role="alert">{error}<button className="btn btn-secondary" onClick={() => { setError(''); setLoading(true); void fetchGroups(); }}>Retry</button></div></div>;
 
     return (
         <div className="groups-list-container">

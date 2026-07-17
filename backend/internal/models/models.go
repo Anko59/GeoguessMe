@@ -5,12 +5,15 @@ import (
 )
 
 type User struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	Password  string    `json:"-"` // Hash
-	Avatar    string    `json:"avatar"`
-	Score     int       `json:"score"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string     `json:"id"`
+	Username        string     `json:"username"`
+	Email           string     `json:"email"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	Password        string     `json:"-"`
+	Avatar          string     `json:"avatar"`
+	AuthVersion     int        `json:"-"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type Group struct {
@@ -27,14 +30,19 @@ type GroupMember struct {
 }
 
 type Photo struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	GroupID   string    `json:"group_id"`
-	URL       string    `json:"url"`
-	Lat       float64   `json:"-"` // Hidden from client until guessed? Or sent but hidden by frontend? Better hidden.
-	Long      float64   `json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"` // For ephemeral nature? Or just 10s view?
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	GroupID         string    `json:"group_id"`
+	URL             string    `json:"-"`
+	StorageKey      string    `json:"-"`
+	MIMEType        string    `json:"mime_type"`
+	ByteSize        int64     `json:"byte_size"`
+	Lat             float64   `json:"-"`
+	Long            float64   `json:"-"`
+	LifecycleStatus string    `json:"lifecycle_status"`
+	CreatedAt       time.Time `json:"created_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	RetentionAt     time.Time `json:"-"`
 }
 
 type Guess struct {

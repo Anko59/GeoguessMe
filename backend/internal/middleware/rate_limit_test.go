@@ -40,7 +40,7 @@ func TestRateLimit(t *testing.T) {
 	rr3 := httptest.NewRecorder()
 	handler.ServeHTTP(rr3, req3)
 	assert.Equal(t, http.StatusTooManyRequests, rr3.Code)
-	assert.Equal(t, window.String(), rr3.Header().Get("Retry-After"))
+	assert.Equal(t, "1", rr3.Header().Get("Retry-After"))
 
 	// Test Request from different IP (Allowed)
 	req4 := httptest.NewRequest("GET", "/", nil)

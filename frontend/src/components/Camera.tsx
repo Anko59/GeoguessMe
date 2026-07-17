@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import api from '../api';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import api, { getAPIErrorMessage } from '../api';
 import './Camera.css';
 
 interface CameraProps {
@@ -8,7 +8,6 @@ interface CameraProps {
 }
 
 export default function Camera({ groupID, onUploadComplete }: CameraProps) {
-    const [stream, setStream] = useState<MediaStream | null>(null);
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
@@ -16,21 +15,20 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
 
-    useEffect(() => {
-        startCamera();
-        return () => {
-            stopCamera();
-        };
+    const stopCamera = useCallback(() => {
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
     }, []);
 
-    const startCamera = async () => {
+    const startCamera = useCallback(async () => {
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false
             });
-            setStream(mediaStream);
+            streamRef.current = mediaStream;
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream;
                 videoRef.current.onloadedmetadata = () => {
@@ -38,18 +36,12 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                 };
             }
             setError('');
-        } catch (err) {
+        } catch {
             setError('Camera access denied. Please allow camera permissions.');
-            console.error('Camera error:', err);
         }
-    };
+    }, []);
 
-    const stopCamera = () => {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            setStream(null);
-        }
-    };
+    useEffect(() => { void startCamera(); return stopCamera; }, [startCamera, stopCamera]);
 
     const capturePhoto = () => {
         if (!videoRef.current || !canvasRef.current) return;
@@ -107,17 +99,15 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
 
                     setCapturedPhoto(null);
                     onUploadComplete();
-                } catch (err: any) {
-                    setError('Upload failed. Please try again.');
-                    console.error('Upload error:', err);
+                } catch (requestError: unknown) {
+                    setError(getAPIErrorMessage(requestError, 'Upload failed. Please try again.'));
                 } finally {
                     setUploading(false);
                 }
             },
-            (err) => {
+            () => {
                 setError('Unable to retrieve location. Please enable location services.');
                 setUploading(false);
-                console.error('Geolocation error:', err);
             }
         );
     };

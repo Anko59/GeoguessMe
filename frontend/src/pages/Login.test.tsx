@@ -2,14 +2,18 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import Login from './Login';
+import { AuthContext } from '../context/AuthContext';
 
 // Mock the API module
 const mockPost = vi.fn();
 vi.mock('../api', () => ({
     default: {
-        post: (...args: any[]) => mockPost(...args),
+        post: (...args: unknown[]) => mockPost(...args),
     },
+    getAPIErrorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
 }));
+
+const authValue = { user: null, loading: false, isAuthenticated: false, login: vi.fn(), logout: vi.fn(async () => undefined), refresh: vi.fn(async () => false) };
 
 describe('Login Page', () => {
     beforeEach(() => {
@@ -18,9 +22,7 @@ describe('Login Page', () => {
 
     it('renders login form', () => {
         render(
-            <BrowserRouter>
-                <Login />
-            </BrowserRouter>
+            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
         );
 
         expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
@@ -30,9 +32,7 @@ describe('Login Page', () => {
 
     it('handles input changes', () => {
         render(
-            <BrowserRouter>
-                <Login />
-            </BrowserRouter>
+            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
         );
 
         const usernameInput = screen.getByPlaceholderText('Username') as HTMLInputElement;
@@ -54,9 +54,7 @@ describe('Login Page', () => {
         });
 
         render(
-            <BrowserRouter>
-                <Login />
-            </BrowserRouter>
+            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'testuser' } });
@@ -64,7 +62,7 @@ describe('Login Page', () => {
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
 
         await waitFor(() => {
-            expect(mockPost).toHaveBeenCalledWith('/login', { username: 'testuser', password: 'password123' });
+            expect(mockPost).toHaveBeenCalledWith('/auth/login', { username: 'testuser', password: 'password123' });
         });
     });
 
@@ -72,9 +70,7 @@ describe('Login Page', () => {
         mockPost.mockRejectedValue(new Error('Invalid credentials'));
 
         render(
-            <BrowserRouter>
-                <Login />
-            </BrowserRouter>
+            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'wrong' } });

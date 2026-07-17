@@ -1,43 +1,37 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import api from '../api';
+import { useState } from 'react';
+import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
+import api, { getAPIErrorMessage } from '../api';
 import './GroupJoin.css';
 
 export default function GroupJoin() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const [mode, setMode] = useState<'join' | 'create'>('join');
-    const [code, setCode] = useState('');
+    const location = useLocation();
+    const initialCode = searchParams.get('code') ?? '';
+    const [mode, setMode] = useState<'join' | 'create'>(location.pathname.endsWith('/create') ? 'create' : 'join');
+    const [code, setCode] = useState(initialCode);
     const [name, setName] = useState('');
     const [error, setError] = useState('');
 
-    // Auto-fill code from URL if present
-    useEffect(() => {
-        const codeFromUrl = searchParams.get('code');
-        if (codeFromUrl) {
-            setCode(codeFromUrl);
-        }
-    }, [searchParams]);
-
-    const handleJoin = async (e: React.FormEvent) => {
+    const handleJoin = async (e: React.FormEvent): Promise<void> => {
         e.preventDefault();
         setError('');
         try {
             const res = await api.post('/group/join', { code });
             navigate(`/group/${res.data.id}`);
-        } catch (err: any) {
-            setError(err.response?.data || 'Failed to join group');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Failed to join group'));
         }
     };
 
-    const handleCreate = async (e: React.FormEvent) => {
+    const handleCreate = async (e: React.FormEvent): Promise<void> => {
         e.preventDefault();
         setError('');
         try {
             const res = await api.post('/group/create', { name });
             navigate(`/group/${res.data.id}`);
-        } catch (err: any) {
-            setError(err.response?.data || 'Failed to create group');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Failed to create group'));
         }
     };
 

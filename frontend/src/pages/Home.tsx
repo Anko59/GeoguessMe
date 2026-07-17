@@ -1,18 +1,11 @@
-import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useContext } from 'react';
+import { Link, Navigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
 import './Home.css';
 
 export default function Home() {
-    const navigate = useNavigate();
-
-    useEffect(() => {
-        // Check if user is already logged in
-        const token = localStorage.getItem('token');
-        if (token) {
-            // Redirect to groups page if already authenticated
-            navigate('/groups');
-        }
-    }, [navigate]);
+    const auth = useContext(AuthContext);
+    if (auth?.isAuthenticated && !auth.loading) return <Navigate to="/groups" replace />;
 
     return (
         <div className="home-container">

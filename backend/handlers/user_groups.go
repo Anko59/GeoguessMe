@@ -1,14 +1,13 @@
 package handlers
 
 import (
-	"encoding/json"
 	"geoguessme/internal/repository"
 	"net/http"
 )
 
 func GetUserGroups(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
@@ -16,10 +15,9 @@ func GetUserGroups(w http.ResponseWriter, r *http.Request) {
 
 	groups, err := repository.GetUserGroups(userID)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load groups")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(groups)
+	writeJSON(w, http.StatusOK, groups)
 }

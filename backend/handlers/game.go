@@ -1,90 +1,91 @@
 package handlers
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
-	"geoguessme/internal/game"
-	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
-
-	"github.com/google/uuid"
 )
 
 type GuessRequest struct {
-	PhotoID string  `json:"photo_id"`
-	Lat     float64 `json:"lat"`
-	Long    float64 `json:"long"`
+	Lat  float64 `json:"lat"`
+	Long float64 `json:"long"`
 }
 
-type GuessResponse struct {
-	Score      int     `json:"score"`
-	Distance   float64 `json:"distance"`
-	ActualLat  float64 `json:"actual_lat"`
-	ActualLong float64 `json:"actual_long"`
-}
-
-func SubmitGuess(w http.ResponseWriter, r *http.Request) {
+func SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
-
-	userID := GetUserIDFromContext(r)
-
+	photoID := r.PathValue("photoID")
+	if err := validateID(photoID, "photo_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+		return
+	}
 	var req GuessRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-
-	photo, err := repository.GetPhoto(req.PhotoID)
+	result, err := repository.SubmitGuess(r.Context(), photoID, GetUserIDFromContext(r), req.Lat, req.Long, time.Now())
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		switch {
+		case errors.Is(err, repository.ErrForbidden):
+			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
+		case errors.Is(err, repository.ErrOwnPhoto):
+			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
+		case errors.Is(err, repository.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+		case errors.Is(err, repository.ErrChallengeExpired):
+			writeError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
+		case errors.Is(err, repository.ErrViewNotFinished):
+			writeError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+		case errors.Is(err, repository.ErrInvalidCoordinate):
+			writeError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
+		}
 		return
 	}
-	if photo == nil {
-		http.Error(w, "Photo not found", http.StatusNotFound)
+	status := http.StatusCreated
+	if result.Existing {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": time.Now()})
+}
+
+func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
 		return
 	}
-
-	// Prevent users from guessing their own photos
-	if photo.UserID == userID {
-		http.Error(w, "Cannot guess your own photo", http.StatusBadRequest)
+	photoID := r.PathValue("photoID")
+	photo, allowed, err := repository.CanViewResults(r.Context(), photoID, GetUserIDFromContext(r), time.Now())
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+		} else if errors.Is(err, repository.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden", "Results are not available")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
+		}
 		return
 	}
-
-	// Calculate distance and score
-	distance := game.CalculateDistance(req.Lat, req.Long, photo.Lat, photo.Long)
-	score := game.CalculateScore(distance)
-
-	guess := &models.Guess{
-		ID:        uuid.New().String(),
-		PhotoID:   req.PhotoID,
-		UserID:    userID,
-		GroupID:   photo.GroupID,
-		Lat:       req.Lat,
-		Long:      req.Long,
-		Score:     score,
-		Distance:  distance,
-		CreatedAt: time.Now(),
-	}
-
-	if err := repository.CreateGuess(guess); err != nil {
-		http.Error(w, "Error saving guess", http.StatusInternalServerError)
+	if !allowed {
+		writeError(w, http.StatusForbidden, "results_not_available", "Results are not available yet")
 		return
 	}
-
-	if err := repository.UpdateUserScore(userID, score); err != nil {
-		// Log error but don't fail request?
+	guesses, err := repository.GetGuessesForPhotoContext(r.Context(), photoID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
+		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(GuessResponse{
-		Score:      score,
-		Distance:   distance,
-		ActualLat:  photo.Lat,
-		ActualLong: photo.Long,
-	})
+	if guesses == nil {
+		guesses = []repository.GuessWithUser{}
+	}
+	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "actual_lat": photo.Lat, "actual_long": photo.Long, "guesses": guesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
+	if photo.LifecycleStatus != "removed" {
+		response["media_url"] = mediaURL(photo, true)
+	}
+	writeJSON(w, http.StatusOK, response)
 }

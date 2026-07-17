@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { getCurrentUserId } from '../utils/userUtils';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import type { LeaderboardEntry } from '../types';
 import './Leaderboard.css';
 
@@ -11,25 +11,27 @@ interface LeaderboardProps {
 export default function Leaderboard({ groupID }: LeaderboardProps) {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
-    const currentUserId = getCurrentUserId();
+    const [error, setError] = useState('');
+    const { user } = useAuth();
+    const currentUserId = user?.id;
 
-    useEffect(() => {
-        fetchLeaderboard();
-        // Refresh every 10 seconds
-        const interval = setInterval(fetchLeaderboard, 10000);
-        return () => clearInterval(interval);
-    }, [groupID]);
-
-    const fetchLeaderboard = async () => {
+    const fetchLeaderboard = useCallback(async () => {
+        setError('');
         try {
             const res = await api.get(`/group/leaderboard?group_id=${groupID}`);
             setLeaderboard(res.data || []);
-        } catch (err) {
-            console.error('Failed to fetch leaderboard', err);
+        } catch {
+            setError('Unable to load rankings. Try again.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [groupID]);
+
+    useEffect(() => {
+        void fetchLeaderboard();
+        const interval = setInterval(() => void fetchLeaderboard(), 10000);
+        return () => clearInterval(interval);
+    }, [fetchLeaderboard]);
 
     const getRankEmoji = (rank: number) => {
         switch (rank) {
@@ -59,6 +61,8 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
             </div>
         );
     }
+
+    if (error) return <div className="leaderboard-container"><div className="loading-state" role="alert"><p>{error}</p><button className="btn btn-secondary" onClick={() => void fetchLeaderboard()}>Retry</button></div></div>;
 
     if (leaderboard.length === 0) {
         return (

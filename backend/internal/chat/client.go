@@ -1,128 +1,80 @@
 package chat
 
 import (
-	"bytes"
 	"encoding/json"
-	"geoguessme/internal/models"
-	"log"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
+
+	"geoguessme/internal/models"
 
 	"github.com/gorilla/websocket"
 )
 
 const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = 9 * pongWait / 10
+	maxMessageSize = 4096
+	maxTextLength  = 1000
 )
 
-var (
-	newline = []byte{'\n'}
-	space   = []byte{' '}
-)
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for now
-	},
-}
-
-// Client is a middleman between the websocket connection and the hub.
 type Client struct {
-	hub *Hub
-
-	// The websocket connection.
-	conn *websocket.Conn
-
-	// Buffered channel of outbound messages.
-	send chan models.Message
-
+	hub     *Hub
+	conn    *websocket.Conn
+	send    chan models.Message
 	groupID string
 	userID  string
 }
 
-// readPump pumps messages from the websocket connection to the hub.
-//
-// The application runs readPump in a per-connection goroutine. The application
-// ensures that there is at most one reader on a connection by executing all
-// reads from this goroutine.
-func (c *Client) readPump() {
-	defer func() {
-		c.hub.unregister <- c
-		c.conn.Close()
-	}()
-	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	for {
-		_, message, err := c.conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
-			}
-			break
-		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+type incomingMessage struct {
+	Content string `json:"content"`
+}
 
-		// Parse message to get content
-		var msg models.Message
-		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("error parsing message: %v", err)
+func (c *Client) readPump() {
+	defer func() { c.hub.unregister <- c; _ = c.conn.Close() }()
+	c.conn.SetReadLimit(maxMessageSize)
+	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error { return c.conn.SetReadDeadline(time.Now().Add(pongWait)) })
+	for {
+		_, payload, err := c.conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		var input incomingMessage
+		decoder := json.NewDecoder(strings.NewReader(string(payload)))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || !utf8.ValidString(input.Content) {
+			sendSystem(c, "invalid_message", "Message must contain text")
 			continue
 		}
-
-		// Ensure groupID and userID are set from client context
-		msg.GroupID = c.groupID
-		msg.UserID = c.userID
-
-		c.hub.broadcast <- msg
+		input.Content = strings.TrimSpace(input.Content)
+		if input.Content == "" || utf8.RuneCountInString(input.Content) > maxTextLength {
+			sendSystem(c, "invalid_message", "Message is empty or too long")
+			continue
+		}
+		c.hub.BroadcastFrom(c, models.Message{GroupID: c.groupID, UserID: c.userID, Kind: "text", Content: input.Content, CreatedAt: time.Now()})
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection.
-//
-// A goroutine running writePump is started for each connection. The
-// application ensures that there is at most one writer to a connection by
-// executing all writes from this goroutine.
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		c.conn.Close()
-	}()
+	defer func() { ticker.Stop(); _ = c.conn.Close() }()
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// The hub closed the channel.
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
+			if err := c.conn.WriteJSON(message); err != nil {
 				return
 			}
-			json.NewEncoder(w).Encode(message)
-
-			if err := w.Close(); err != nil {
-				return
-			}
-
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -130,18 +82,28 @@ func (c *Client) writePump() {
 	}
 }
 
-// ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, groupID, userID string) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, groupID, userID string, allowedOrigins []string) {
+	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024, CheckOrigin: func(request *http.Request) bool { return OriginAllowed(request.Header.Get("Origin"), allowedOrigins) }}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		slog.Warn("websocket upgrade failed", "error", err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan models.Message, 256), groupID: groupID, userID: userID}
-	client.hub.register <- client
-
-	// Allow collection of memory referenced by the caller by doing all work in
-	// new goroutines.
+	client := &Client{hub: hub, conn: conn, send: make(chan models.Message, 64), groupID: groupID, userID: userID}
+	hub.register <- client
 	go client.writePump()
 	go client.readPump()
+}
+
+// OriginAllowed reports whether a WebSocket upgrade Origin is permitted.
+func OriginAllowed(origin string, allowed []string) bool {
+	if origin == "" {
+		return true
+	}
+	for _, candidate := range allowed {
+		if candidate == origin {
+			return true
+		}
+	}
+	return false
 }

@@ -6,21 +6,32 @@ import GroupsList from './pages/GroupsList';
 import GroupJoin from './pages/GroupJoin';
 import GroupView from './pages/GroupView';
 import ProtectedRoute from './components/ProtectedRoute';
+import AuthProvider from './context/AuthProvider';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
+import AccountSettings from './pages/AccountSettings';
 
 function App() {
   return (
     <Router>
-      <div className="container">
-        <Routes>
+      <AuthProvider>
+        <div className="container">
+          <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/groups" element={<ProtectedRoute><GroupsList /></ProtectedRoute>} />
           <Route path="/group/join" element={<ProtectedRoute><GroupJoin /></ProtectedRoute>} />
           <Route path="/group/create" element={<ProtectedRoute><GroupJoin /></ProtectedRoute>} />
           <Route path="/group/:id" element={<ProtectedRoute><GroupView /></ProtectedRoute>} />
-        </Routes>
-      </div>
+          <Route path="/settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+          </Routes>
+        </div>
+      </AuthProvider>
     </Router>
   );
 }

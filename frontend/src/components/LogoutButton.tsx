@@ -1,15 +1,13 @@
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import './LogoutButton.css';
 
 export default function LogoutButton() {
     const navigate = useNavigate();
+    const { logout } = useAuth();
 
-    const handleLogout = () => {
-        // Clear all authentication data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-
-        // Redirect to home page
+    const handleLogout = async (): Promise<void> => {
+        await logout();
         navigate('/');
     };
 

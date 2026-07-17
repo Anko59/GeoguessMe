@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: './src/setupTests.ts',
+    exclude: ['e2e/**', 'node_modules/**'],
   },
   server: {
     host: true,
@@ -16,15 +17,7 @@ export default defineConfig({
       '/api': {
         target: 'http://backend:8080', // Docker service name
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      '/ws': {
-        target: 'ws://backend:8080',
         ws: true,
-      },
-      '/uploads': {
-        target: 'http://backend:8080',
-        changeOrigin: true,
       }
     },
   },

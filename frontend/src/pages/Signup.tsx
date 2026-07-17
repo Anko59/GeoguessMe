@@ -1,56 +1,54 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
+import api, { getAPIErrorMessage } from '../api';
+import { useAuth } from '../context/AuthContext';
+import type { AuthResponse } from '../types';
 import './Auth.css';
 
 export default function Signup() {
     const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
+    const { login } = useAuth();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (event: React.FormEvent): Promise<void> => {
+        event.preventDefault();
+        setError('');
+        setSubmitting(true);
+        const payload: { username: string; password: string; email?: string } = { username, password };
+        if (email.trim()) payload.email = email.trim();
         try {
-            const res = await api.post('/signup', { username, password });
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('user', JSON.stringify(res.data.user));
-            navigate('/group/join');
-        } catch (err: any) {
-            const errorMessage = err.response?.data || err.message;
-            setError(typeof errorMessage === 'string' ? errorMessage : 'Signup failed');
+            const response = await api.post<AuthResponse>('/auth/signup', payload);
+            login(response.data);
+            navigate('/groups');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Signup failed'));
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
         <div className="auth-container">
             <div className="auth-card fade-in">
-                <img src="/logo.png" alt="Logo" className="auth-logo" />
+                <img src="/logo.png" alt="GeoGuessMe" className="auth-logo" />
                 <h2 className="auth-title gradient-text">Join the Fun!</h2>
                 <p className="auth-subtitle">Create your account to start</p>
-
                 <form onSubmit={handleSubmit} className="auth-form">
-                    <input
-                        type="text"
-                        placeholder="Username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        required
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
-                    {error && <div className="auth-error">{error}</div>}
-                    <button type="submit" className="btn btn-primary">Sign Up</button>
+                    <label htmlFor="signup-username">Username</label>
+                    <input id="signup-username" type="text" placeholder="Username" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" />
+                    <label htmlFor="signup-email">Email</label>
+                    <input id="signup-email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+                    <label htmlFor="signup-password">Password</label>
+                    <input id="signup-password" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" />
+                    <p className="auth-hint">Use at least 8 characters with uppercase, lowercase, and a number.</p>
+                    {error && <div className="auth-error" role="alert">{error}</div>}
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Creating account…' : 'Sign Up'}</button>
                 </form>
-
-                <p className="auth-footer">
-                    Already have an account? <Link to="/login" className="auth-link">Login</Link>
-                </p>
+                <p className="auth-footer">Already have an account? <Link to="/login" className="auth-link">Login</Link></p>
             </div>
         </div>
     );

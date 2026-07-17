@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"crypto/rand"
-	"encoding/json"
-	"geoguessme/internal/auth"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
+	"geoguessme/internal/auth"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/validation"
@@ -18,7 +18,6 @@ import (
 type CreateGroupRequest struct {
 	Name string `json:"name"`
 }
-
 type JoinGroupRequest struct {
 	Code string `json:"code"`
 }
@@ -27,169 +26,117 @@ func generateGroupCode() (string, error) {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 6)
 	for i := range b {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		value, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		if err != nil {
 			return "", err
 		}
-		b[i] = charset[num.Int64()]
+		b[i] = charset[value.Int64()]
 	}
 	return string(b), nil
 }
 
 func CreateGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
-
-	userID := GetUserIDFromContext(r)
-
 	var req CreateGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-
-	// Validate group name
+	req.Name = strings.TrimSpace(req.Name)
 	if err := validation.ValidateGroupName(req.Name); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_group_name", err.Error())
 		return
 	}
-
-	// Generate unique code with retry logic
 	var code string
 	var err error
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
+	for attempt := 0; attempt < 8; attempt++ {
 		code, err = generateGroupCode()
 		if err != nil {
-			http.Error(w, "Error generating code", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 			return
 		}
-
-		// Check if code already exists
-		existingGroup, err := repository.GetGroupByCode(code)
-		if err != nil {
-			http.Error(w, "Database error", http.StatusInternalServerError)
+		group, lookupErr := repository.GetGroupByCodeContext(r.Context(), code)
+		if lookupErr != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 			return
 		}
-		if existingGroup == nil {
-			break // Code is unique
-		}
-
-		if i == maxRetries-1 {
-			http.Error(w, "Failed to generate unique code", http.StatusInternalServerError)
-			return
+		if group == nil {
+			break
 		}
 	}
-
-	group := &models.Group{
-		ID:        uuid.New().String(),
-		Name:      req.Name,
-		Code:      code,
-		CreatedAt: time.Now(),
-	}
-
-	if err := repository.CreateGroup(group); err != nil {
-		http.Error(w, "Error creating group", http.StatusInternalServerError)
+	if code == "" {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 		return
 	}
-
-	// Add creator as member
-	member := &models.GroupMember{
-		GroupID:  group.ID,
-		UserID:   userID,
-		JoinedAt: time.Now(),
-	}
-	if err := repository.AddGroupMember(member); err != nil {
-		http.Error(w, "Error adding member", http.StatusInternalServerError)
+	now := time.Now()
+	group := &models.Group{ID: uuid.NewString(), Name: req.Name, Code: code, CreatedAt: now}
+	if err := repository.CreateGroupAndMembership(r.Context(), group, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusConflict, "group_exists", "Unable to create group")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(group)
+	writeJSON(w, http.StatusCreated, group)
 }
 
 func JoinGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
-
-	userID := GetUserIDFromContext(r)
-
 	var req JoinGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-
-	// Validate group code
+	req.Code = strings.ToUpper(strings.TrimSpace(req.Code))
 	if err := validation.ValidateGroupCode(req.Code); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_group_code", err.Error())
 		return
 	}
-
-	group, err := repository.GetGroupByCode(req.Code)
+	group, err := repository.GetGroupByCodeContext(r.Context(), req.Code)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
 	if group == nil {
-		http.Error(w, "Group not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
 		return
 	}
-
-	isMember, err := repository.IsGroupMember(group.ID, userID)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	if isMember, err := repository.IsGroupMemberContext(r.Context(), group.ID, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
+		return
+	} else if isMember {
+		writeError(w, http.StatusConflict, "already_member", "Already a member")
 		return
 	}
-	if isMember {
-		http.Error(w, "Already a member", http.StatusConflict)
+	if err := repository.AddGroupMemberContext(r.Context(), &models.GroupMember{GroupID: group.ID, UserID: GetUserIDFromContext(r), JoinedAt: time.Now()}); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
-
-	member := &models.GroupMember{
-		GroupID:  group.ID,
-		UserID:   userID,
-		JoinedAt: time.Now(),
-	}
-	if err := repository.AddGroupMember(member); err != nil {
-		http.Error(w, "Error joining group", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(group)
+	writeJSON(w, http.StatusOK, group)
 }
 
 func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
-
-	userID := GetUserIDFromContext(r)
-
 	groupID := r.URL.Query().Get("group_id")
 	if groupID == "" {
-		http.Error(w, "Missing group_id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
-
-	// Verify user is a member of the group
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		return
 	}
-
-	leaderboard, err := repository.GetGroupLeaderboard(groupID)
+	entries, err := repository.GetGroupLeaderboardContext(r.Context(), groupID)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load leaderboard")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(leaderboard)
+	if entries == nil {
+		entries = []repository.LeaderboardEntry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
 }

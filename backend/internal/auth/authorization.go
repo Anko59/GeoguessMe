@@ -7,7 +7,7 @@ import (
 
 // IsGroupMember checks if a user is a member of a group
 func IsGroupMember(ctx context.Context, groupID, userID string) (bool, error) {
-	return repository.IsGroupMember(groupID, userID)
+	return repository.IsGroupMemberContext(ctx, groupID, userID)
 }
 
 // VerifyGroupMembership returns an error if user is not a group member
