@@ -1,9 +1,11 @@
 package integration_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -105,6 +107,84 @@ func TestWebSocketBroadcastAndPersist(t *testing.T) {
 	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, bob.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.True(t, strings.Contains(string(data), "hello world"), "message must be persisted")
+}
+
+func TestWebSocketReconnectAndCatchUp(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Reconnect Group")
+	joinGroup(t, bob.access, code)
+
+	// ---- connect, send, remember cursor, disconnect ----
+	aliceTicket1 := wsTicket(t, alice.access, groupID)
+	aliceConn, err := dialWS(t, groupID, aliceTicket1, baseURL)
+	require.NoError(t, err)
+
+	require.NoError(t, aliceConn.WriteJSON(map[string]string{"content": "first"}))
+	require.NoError(t, aliceConn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, payload, err := aliceConn.ReadMessage()
+	require.NoError(t, err)
+	var firstMsg struct {
+		ID        string `json:"id"`
+		Content   string `json:"content"`
+		CreatedAt string `json:"created_at"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &firstMsg))
+	require.Equal(t, "first", firstMsg.Content)
+
+	createdAt, err := time.Parse(time.RFC3339Nano, firstMsg.CreatedAt)
+	require.NoError(t, err)
+	lastCursor := encodeMessageCursor(createdAt, firstMsg.ID)
+
+	aliceConn.Close()
+
+	// ---- create later messages while alice is disconnected ----
+	bobConn, err := dialWS(t, groupID, wsTicket(t, bob.access, groupID), baseURL)
+	require.NoError(t, err)
+	defer bobConn.Close()
+
+	require.NoError(t, bobConn.WriteJSON(map[string]string{"content": "second"}))
+	require.NoError(t, bobConn.WriteJSON(map[string]string{"content": "third"}))
+	for range 2 {
+		require.NoError(t, bobConn.SetReadDeadline(time.Now().Add(5*time.Second)))
+		_, _, err := bobConn.ReadMessage()
+		require.NoError(t, err)
+	}
+
+	// ---- expired (consumed) ticket cannot be reused ----
+	_, err = dialWS(t, groupID, aliceTicket1, baseURL)
+	require.Error(t, err, "consumed one-time ticket must be rejected")
+
+	// ---- renewed ticket connects successfully ----
+	aliceTicket2 := wsTicket(t, alice.access, groupID)
+	aliceConn2, err := dialWS(t, groupID, aliceTicket2, baseURL)
+	require.NoError(t, err)
+	defer aliceConn2.Close()
+
+	// ---- catch up on missed messages from the last cursor ----
+	resp, data := doJSON(t, http.MethodGet,
+		"/api/v1/group/messages?group_id="+groupID+"&cursor="+url.QueryEscape(lastCursor),
+		nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var page struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Content string `json:"content"`
+		} `json:"items"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &page))
+
+	require.Len(t, page.Items, 2, "catch-up must return exactly the two missed messages")
+	require.Equal(t, "second", page.Items[0].Content, "missed messages must be in chronological order")
+	require.Equal(t, "third", page.Items[1].Content, "missed messages must be in chronological order")
+	require.NotEqual(t, page.Items[0].ID, page.Items[1].ID, "each message must appear exactly once")
+}
+
+// encodeMessageCursor mirrors repository.encodeMessageCursor so integration
+// tests can construct a reconnect cursor from a previously received message.
+func encodeMessageCursor(createdAt time.Time, id string) string {
+	payload := strconv.FormatInt(createdAt.UnixNano(), 10) + "|" + id
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
 func TestWebSocketRejectsInvalidMessages(t *testing.T) {
