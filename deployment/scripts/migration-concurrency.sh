@@ -31,6 +31,6 @@ docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$
 
 migration_count="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-tools psql "$DB_URL" -Atc 'SELECT count(*) FROM schema_migrations')"
 legacy_email="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-tools psql "$DB_URL" -Atc "SELECT email_normalized FROM users WHERE id = 'legacy-user'")"
-test "$migration_count" = 2
+test "$migration_count" = 3
 test "$legacy_email" = legacy_user@legacy.invalid
 echo "migration-concurrency PASSED: concurrent and idempotent runs preserved legacy data"

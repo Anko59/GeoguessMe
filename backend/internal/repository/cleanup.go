@@ -109,10 +109,12 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 //
 // The deletion job is created first, using the storage key captured under the
 // row lock, and only then is the record marked removed with its key cleared.
-// If the job insert, the media update, or the commit fails the transaction is
-// rolled back, leaving no committed partial state. A record already marked
-// removed (or one that no longer exists) is an idempotent success and creates
-// no new deletion job.
+// If the deletion obligation for this key already exists (a partial unique
+// index conflict on an active job), the insert is a no-op and the media is still
+// marked removed. If the job insert, the media update, or the commit fails the
+// transaction is rolled back, leaving no committed partial state. A record
+// already marked removed (or one that no longer exists) is an idempotent success
+// and creates no new deletion job.
 func RetireRetainedMedia(ctx context.Context, id string) error {
 	tx, err := database.DB.Begin(ctx)
 	if err != nil {
@@ -136,7 +138,7 @@ func RetireRetainedMedia(ctx context.Context, id string) error {
 	}
 	if storageKey != "" {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, 'retention')`,
+			`INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, 'retention') ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`,
 			newID(), storageKey,
 		); err != nil {
 			return err

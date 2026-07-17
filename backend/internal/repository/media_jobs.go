@@ -21,7 +21,11 @@ func EnqueueMediaDeletion(ctx context.Context, source string, keys []string) err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	for _, key := range keys {
-		if _, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, newID(), key, source); err != nil {
+		// ON CONFLICT targets the partial unique index on active jobs
+		// (completed_at IS NULL): a duplicate active obligation for the same key is
+		// an idempotent success, while genuine errors still fail. A completed job
+		// is outside the partial index, so a new active job can still be created.
+		if _, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, $3) ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, newID(), key, source); err != nil {
 			return err
 		}
 	}

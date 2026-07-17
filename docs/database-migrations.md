@@ -71,6 +71,21 @@ Also adds foreign key constraints and indexes where missing.
 - Creates `media_deletion_jobs` table for durable async object storage cleanup,
   with a partial index on `(next_attempt_at) WHERE completed_at IS NULL`.
 
+## Migration 003: Unique active media-deletion job
+
+- Adds a partial unique index `media_deletion_jobs_active_storage_key_idx` on
+  `media_deletion_jobs(storage_key)` `WHERE completed_at IS NULL`, so at most
+  one active deletion job can exist per storage key. A completed job is outside
+  the index, so a later job for the same key is still allowed.
+- Collapses any duplicate active jobs accumulated before this guard (one
+  survivor per key; the stored object is still deleted exactly once) before
+  creating the index, so the migration succeeds on databases that already
+  contain duplicates.
+- Repository insertion uses
+  `ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, so a
+  duplicate active obligation is an idempotent success while genuine database
+  errors still fail.
+
 ## Status command
 
 `make migrate-status` prints each migration with its version, name, and applied

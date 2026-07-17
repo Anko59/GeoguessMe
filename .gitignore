@@ -35,6 +35,9 @@ dist/
 *.sql
 *.sql.gz
 *.dump
+# Database migrations are embedded into the backend binary and must be tracked.
+!backend/internal/database/migrations/
+!backend/internal/database/migrations/**
 /backups/
 
 # --- Docker / Compose local overrides ---
