@@ -2,177 +2,281 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const baseURL = "http://localhost:8080"
+// baseURL is the gateway the isolated test stack publishes. It can be overridden
+// with TEST_BASE_URL so the suite can target a developer-managed stack too.
+var baseURL string
 
-func TestFullGameFlow(t *testing.T) {
-	// Check if server is running
-	resp, err := http.Get(baseURL + "/health")
-	if err != nil {
-		t.Skip("Server not running, skipping integration test")
-		return
+func TestMain(m *testing.M) {
+	baseURL = os.Getenv("TEST_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
 	}
-	defer resp.Body.Close()
-
-	// 1. Signup User A
-	userA := "userA_" + fmt.Sprint(time.Now().UnixNano())
-	tokenA, _ := signup(t, userA, "TestPass123")
-
-	// 2. Signup User B
-	userB := "userB_" + fmt.Sprint(time.Now().UnixNano())
-	tokenB, _ := signup(t, userB, "TestPass123")
-
-	// 3. User A creates group
-	groupID, joinCode := createGroup(t, tokenA, "Test Group")
-	fmt.Printf("Group Created: %s, Code: %s\n", groupID, joinCode)
-
-	// 4. User B joins group
-	joinGroup(t, tokenB, joinCode)
-
-	// 5. User A uploads photo
-	photoID := uploadPhoto(t, tokenA, groupID)
-	fmt.Printf("Photo Uploaded: %s\n", photoID)
-
-	// 6. User B guesses
-	// We need to wait a bit for async processing if any (but here it's sync)
-	submitGuess(t, tokenB, photoID, 51.505, -0.09)
-
-	// 7. Verify Leaderboard
-	verifyLeaderboard(t, tokenA, groupID, userB)
-}
-
-func signup(t *testing.T, username, password string) (string, string) {
-	body := map[string]string{"username": username, "password": password}
-	jsonBody, _ := json.Marshal(body)
-	req, err := http.NewRequest("POST", baseURL+"/signup", bytes.NewBuffer(jsonBody))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	// Use random IP to avoid rate limiting collisions between tests
-	req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.%d.%d", time.Now().UnixNano()%255, time.Now().UnixNano()%255))
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var res map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&res)
-	return res["token"].(string), res["user"].(map[string]interface{})["id"].(string)
-}
-
-func createGroup(t *testing.T, token, name string) (string, string) {
-	body := map[string]string{"name": name}
-	jsonBody, _ := json.Marshal(body)
-	req, _ := http.NewRequest("POST", baseURL+"/group/create", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Create Group Response: %s\n", string(bodyBytes))
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var res map[string]interface{}
-	json.Unmarshal(bodyBytes, &res)
-	return res["id"].(string), res["code"].(string)
-}
-
-func joinGroup(t *testing.T, token, code string) {
-	body := map[string]string{"code": code}
-	jsonBody, _ := json.Marshal(body)
-	req, _ := http.NewRequest("POST", baseURL+"/group/join", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-}
-
-func uploadPhoto(t *testing.T, token, groupID string) string {
-	// Create a dummy image
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("photo", "test.jpg")
-	// Use valid JPEG magic bytes
-	part.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01})
-	part.Write([]byte("fake image content"))
-	writer.WriteField("lat", "51.505")
-	writer.WriteField("long", "-0.09")
-	writer.WriteField("group_id", groupID)
-	writer.Close()
-
-	req, _ := http.NewRequest("POST", baseURL+"/photo/upload", body)
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var res map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&res)
-	return res["id"].(string)
-}
-
-func submitGuess(t *testing.T, token, photoID string, lat, lng float64) {
-	body := map[string]interface{}{
-		"photo_id": photoID,
-		"lat":      lat,
-		"lng":      lng,
+	if !waitForReady(baseURL, 60*time.Second) {
+		fmt.Fprintf(os.Stderr, "integration suite requires a ready server at %s (set TEST_BASE_URL)\n", baseURL)
+		os.Exit(1)
 	}
-	jsonBody, _ := json.Marshal(body)
-	req, _ := http.NewRequest("POST", baseURL+"/guess", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	os.Exit(m.Run())
 }
 
-func verifyLeaderboard(t *testing.T, token, groupID, expectedUser string) {
-	req, _ := http.NewRequest("GET", baseURL+"/group/leaderboard?group_id="+groupID, nil)
-	req.Header.Set("Authorization", token)
+func waitForReady(base string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(base + "/health/ready")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return true
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return false
+}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+// --- HTTP helpers ---------------------------------------------------------
+
+type tokenPair struct {
+	access  string
+	refresh *http.Cookie
+	userID  string
+}
+
+func doJSON(t *testing.T, method, path string, body any, bearer string, cookies []*http.Cookie) (*http.Response, []byte) {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		require.NoError(t, err)
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, baseURL+path, reader)
+	require.NoError(t, err)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp, data
+}
 
-	var res []map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&res)
-
-	found := false
-	for _, entry := range res {
-		if entry["username"] == expectedUser {
-			found = true
-			require.GreaterOrEqual(t, entry["score"].(float64), 0.0)
+func signup(t *testing.T, username, email, password string) tokenPair {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/signup",
+		map[string]string{"username": username, "email": email, "password": password}, "", nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "signup status %d: %s", resp.StatusCode, data)
+	var result struct {
+		AccessToken string `json:"access_token"`
+		User        struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	require.NoError(t, json.Unmarshal(data, &result))
+	require.NotEmpty(t, result.AccessToken)
+	var refresh *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "refresh_token" {
+			refresh = c
 		}
 	}
-	assert.True(t, found, "User B should be in leaderboard")
+	return tokenPair{access: result.AccessToken, refresh: refresh, userID: result.User.ID}
+}
+
+func createGroup(t *testing.T, bearer string, name string) (id, code string) {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/create", map[string]string{"name": name}, bearer, nil)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "create group %d: %s", resp.StatusCode, data)
+	var result struct {
+		ID   string `json:"id"`
+		Code string `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(data, &result))
+	return result.ID, result.Code
+}
+
+func joinGroup(t *testing.T, bearer, code string) {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/join", map[string]string{"code": code}, bearer, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "join group %d: %s", resp.StatusCode, data)
+}
+
+// uploadPhoto uploads a 1x1 PNG and returns the new challenge id.
+func uploadPhoto(t *testing.T, bearer, groupID string) string {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("photo", "test.png")
+	require.NoError(t, err)
+	image, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	require.NoError(t, err)
+	_, err = part.Write(image)
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("lat", "51.505"))
+	require.NoError(t, writer.WriteField("long", "-0.09"))
+	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.Close())
+
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/photo/upload", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "upload %d: %s", resp.StatusCode, data)
+	var result struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(data, &result))
+	return result.ID
+}
+
+// waitUntilViewCloses polls the server clock until the viewing window for the
+// challenge has elapsed, avoiding fixed sleeps.
+func waitUntilViewCloses(t *testing.T, bearer, photoID string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, _ := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/guess",
+			map[string]float64{"lat": 0, "long": 0}, bearer, nil)
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+			return
+		}
+		if resp.StatusCode != http.StatusConflict {
+			require.Contains(t, []int{http.StatusConflict, http.StatusCreated, http.StatusOK}, resp.StatusCode)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("viewing window did not close in time")
+}
+
+func guess(t *testing.T, bearer, photoID string, lat, long float64) int {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/guess",
+		map[string]float64{"lat": lat, "long": long}, bearer, nil)
+	require.Containsf(t, []int{http.StatusCreated, http.StatusOK}, resp.StatusCode, "guess %d: %s", resp.StatusCode, data)
+	return resp.StatusCode
+}
+
+// --- Mailpit helper -------------------------------------------------------
+
+func mailpitBase() string {
+	if v := os.Getenv("MAILPIT_BASE_URL"); v != "" {
+		return v
+	}
+	// Default test stack publishes Mailpit API on :8025.
+	u, err := url.Parse(baseURL)
+	if err == nil {
+		return fmt.Sprintf("http://%s:8025", u.Hostname())
+	}
+	return "http://localhost:8025"
+}
+
+// tokenFromMailpit reads the most recent message to an address and extracts the
+// last path token from the link embedded in the body.
+func tokenFromMailpit(t *testing.T, email, linkPath string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, mailpitBase()+"/api/v1/search?query=to:"+email, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			var summary struct {
+				Messages []struct {
+					ID string `json:"ID"`
+				} `json:"messages"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&summary)
+			_ = resp.Body.Close()
+			if len(summary.Messages) > 0 {
+				id := summary.Messages[0].ID
+				req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, mailpitBase()+"/api/v1/message/"+id, nil)
+				r2, err := http.DefaultClient.Do(req2)
+				if err == nil {
+					var msg struct {
+						Body string `json:"Body"`
+					}
+					_ = json.NewDecoder(r2.Body).Decode(&msg)
+					_ = r2.Body.Close()
+					if tok := extractToken(msg.Body, linkPath); tok != "" {
+						return tok
+					}
+				}
+			}
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	t.Fatalf("no mailpit message for %s containing %s", email, linkPath)
+	return ""
+}
+
+func extractToken(body, linkPath string) string {
+	idx := indexOf(body, linkPath+"?token=")
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(linkPath) + len("?token=")
+	end := start
+	for end < len(body) && isTokenChar(body[end]) {
+		end++
+	}
+	return body[start:end]
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+func isTokenChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_'
+}
+
+func jsonUnmarshal(data []byte, v any) error {
+	return json.Unmarshal(data, v)
+}
+
+var uniqueMu sync.Mutex
+var uniqueCounter int64
+
+// unique returns a per-run unique handle to keep credentials from colliding
+// when the test suite runs repeatedly against a persistent stack.
+func unique(prefix string) string {
+	uniqueMu.Lock()
+	defer uniqueMu.Unlock()
+	uniqueCounter++
+	return fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), uniqueCounter)
 }

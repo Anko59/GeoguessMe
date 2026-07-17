@@ -1,0 +1,255 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.24"
+  NODE_VERSION: "22"
+
+jobs:
+  # ── Fast checks ──────────────────────────────────────────────────────────
+
+  backend-fast-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: fmt-check
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: unit tests with race detector
+        run: go test -race -coverprofile=coverage.out $(go list ./... | grep -v /integration_test)
+      - name: upload coverage
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: backend-coverage
+          path: backend/coverage.out
+          retention-days: 7
+
+  frontend-fast-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: lint
+        run: npm run lint -- --max-warnings=0
+      - name: unit tests (vitest)
+        run: npm test -- --run --coverage
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+  # ── Vulnerability scans ──────────────────────────────────────────────────
+
+  gosec-govulncheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: gosec
+        uses: securego/gosec@master
+        with:
+          args: -no-fail -fmt sarif -out results.sarif ./...
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: ${{ env.GO_VERSION }}
+          go-package: ./...
+
+  # ── OpenAPI validation ───────────────────────────────────────────────────
+
+  openapi-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate OpenAPI spec with redocly
+        if: hashFiles('docs/openapi.yaml') != ''
+        run: |
+          npx @redocly/cli lint docs/openapi.yaml
+      # docs/openapi.yaml is owned by another writer; the step is a no-op
+      # until the file lands.
+
+  # ── Markdown lint and link check ─────────────────────────────────────────
+
+  markdown-lint-and-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: |
+            *.md
+            deployment/*.md
+            docs/*.md
+      - name: lychee link checker
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress -- *.md deployment/*.md docs/*.md
+          fail: true
+
+  # ── Integration tests ────────────────────────────────────────────────────
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build and start test stack
+        run: docker compose -f deployment/compose.test.yaml --project-directory . up -d --build --wait
+      - name: run integration tests
+        working-directory: backend
+        run: >
+          go test ./integration_test -count=1 -v
+        env:
+          TEST_BASE_URL: http://localhost:8080
+        timeout-minutes: 10
+      - name: dump logs on failure
+        if: failure()
+        run: docker compose -f deployment/compose.test.yaml --project-directory . logs --no-color
+      - name: tear down (always)
+        if: always()
+        run: docker compose -f deployment/compose.test.yaml --project-directory . down -v --remove-orphans
+
+  # ── Playwright E2E ───────────────────────────────────────────────────────
+
+  playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: install chromium with system deps
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: build and start test stack
+        run: docker compose -f deployment/compose.test.yaml --project-directory . up -d --build --wait
+      - name: wait for readiness
+        run: deployment/scripts/wait-for-health.sh http://localhost:8080 120
+      - name: run Playwright (desktop + mobile)
+        working-directory: frontend
+        run: |
+          npx playwright test --project=desktop --project=mobile --reporter=list
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:8080
+        timeout-minutes: 10
+      - name: upload Playwright report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+      - name: upload test results and traces on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-test-results
+          path: |
+            frontend/test-results/
+            frontend/trace.zip
+          retention-days: 14
+      - name: tear down (always)
+        if: always()
+        run: docker compose -f deployment/compose.test.yaml --project-directory . down -v --remove-orphans
+
+  # ── Container image verification ─────────────────────────────────────────
+
+  container-verification:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: geoguessme_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d geoguessme_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build backend image
+        run: docker build -f deployment/docker/backend.Dockerfile -t geoguessme-backend:ci .
+      - name: run migrations
+        run: |
+          docker run --rm \
+            --network host \
+            -e DATABASE_URL=postgres://test:test@localhost:5432/geoguessme_test?sslmode=disable \
+            -e JWT_SECRET=ci_test_secret_at_least_32_chars!! \
+            geoguessme-backend:ci migrate up
+      - name: verify read-only non-root runtime + healthcheck + auth
+        run: |
+          set -e
+          docker run -d \
+            --name geoguessme-ci \
+            --network host \
+            --read-only \
+            --tmpfs /tmp \
+            -e APP_ENV=test -e PORT=8080 \
+            -e DATABASE_URL=postgres://test:test@localhost:5432/geoguessme_test?sslmode=disable \
+            -e JWT_SECRET=ci_test_secret_at_least_32_chars!! \
+            -e ALLOWED_ORIGINS=http://localhost:8080 \
+            -e S3_ENDPOINT=http://localhost:9000 -e S3_REGION=us-east-1 -e S3_BUCKET=ci-media \
+            -e S3_ACCESS_KEY=ci -e S3_SECRET_KEY=ci-secret -e S3_USE_PATH_STYLE=true \
+            -e SMTP_HOST= -e SMTP_TLS=off \
+            -e UPLOAD_MAX_BYTES=1048576 -e UPLOAD_MAX_PIXELS=1000000 \
+            -e PHOTO_VIEW_WINDOW=1s -e LOG_LEVEL=error \
+            geoguessme-backend:ci serve
+          # Inspect the configured user (no `id` — distroless has none).
+          user=$(docker inspect -f '{{.Config.User}}' geoguessme-ci)
+          echo "container user: $user"
+          test "$user" = "nonroot:nonroot" || test "$user" = "65532:65532" || { echo "FAIL: not non-root"; exit 1; }
+          # Read-only rootfs: verify via container config (distroless has no shell).
+          readonly=$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' geoguessme-ci)
+          echo "readonly rootfs: $readonly"
+          test "$readonly" = "true" || { echo "FAIL: root filesystem is not read-only"; exit 1; }
+          # The application's own healthcheck (DB ping) must pass now that a DB exists.
+          deployment/scripts/wait-for-health.sh http://localhost:8080 60
+          ticket=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000 || echo 000)
+          echo "ws/ticket status: $ticket"
+          test "$ticket" = "401" || { echo "FAIL: ws ticket auth"; exit 1; }
+          echo "container verification passed"
+      - name: cleanup
+        if: always()
+        run: |
+          docker stop geoguessme-ci 2>/dev/null || true
+          docker rm geoguessme-ci 2>/dev/null || true
