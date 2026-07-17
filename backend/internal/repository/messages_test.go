@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
-	"geoguessme/internal/database"
-	"github.com/pashagolub/pgxmock/v4"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
+
+	"geoguessme/internal/database"
+
+	"github.com/pashagolub/pgxmock/v4"
 )
 
 func TestMessageCursorRoundTrip(t *testing.T) {
@@ -109,6 +112,138 @@ func newMockPool(t *testing.T) pgxmock.PgxPoolIface {
 		database.DB = previous
 	})
 	return mock
+}
+
+// retainedMediaRow builds the row produced by the locked read inside
+// RetireRetainedMedia. pgxmock scans positionally, so the column names are only
+// for readability.
+func retainedMediaRow(lifecycleStatus, storageKey string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{"lifecycle_status", "storage_key"}).AddRow(lifecycleStatus, storageKey)
+}
+
+// TestRetireRetainedMediaSuccess verifies the ordered transaction: lock and
+// read the row, insert the deletion job with the original storage key, mark the
+// media removed and clear its key, then commit.
+func TestRetireRetainedMediaSuccess(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	const photoID = "photo-1"
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs(photoID).
+		WillReturnRows(retainedMediaRow("ready", "photos/original"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/original").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("UPDATE photos SET lifecycle_status").
+		WithArgs(photoID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	if err := RetireRetainedMedia(ctx, photoID); err != nil {
+		t.Fatalf("retire retained media: %v", err)
+	}
+}
+
+// TestRetireRetainedMediaRollsBackOnJobInsertFailure ensures a deletion-job
+// insert failure aborts the transaction: no media update and no commit occur.
+func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	const photoID = "photo-1"
+	jobErr := errors.New("job insert failed")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs(photoID).
+		WillReturnRows(retainedMediaRow("ready", "photos/original"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/original").
+		WillReturnError(jobErr)
+	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, jobErr) {
+		t.Fatalf("expected job insert error to propagate, got %v", err)
+	}
+}
+
+// TestRetireRetainedMediaRollsBackOnMediaUpdateFailure ensures a media-update
+// failure aborts the transaction after the job was inserted: nothing commits.
+func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	const photoID = "photo-1"
+	updateErr := errors.New("media update failed")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs(photoID).
+		WillReturnRows(retainedMediaRow("ready", "photos/original"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/original").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("UPDATE photos SET lifecycle_status").
+		WithArgs(photoID).
+		WillReturnError(updateErr)
+	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, updateErr) {
+		t.Fatalf("expected media update error to propagate, got %v", err)
+	}
+}
+
+// TestRetireRetainedMediaCommitFailure ensures a commit failure surfaces an
+// error after both writes succeeded within the transaction.
+func TestRetireRetainedMediaCommitFailure(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	const photoID = "photo-1"
+	commitErr := errors.New("commit failed")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs(photoID).
+		WillReturnRows(retainedMediaRow("ready", "photos/original"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/original").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("UPDATE photos SET lifecycle_status").
+		WithArgs(photoID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit().WillReturnError(commitErr)
+	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, commitErr) {
+		t.Fatalf("expected commit error to propagate, got %v", err)
+	}
+}
+
+// TestRetireRetainedMediaAlreadyRemovedIsIdempotent ensures an already-removed
+// record is a no-op success: no deletion job is enqueued and nothing is updated.
+func TestRetireRetainedMediaAlreadyRemovedIsIdempotent(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	const photoID = "photo-1"
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs(photoID).
+		WillReturnRows(retainedMediaRow("removed", ""))
+	if err := RetireRetainedMedia(ctx, photoID); err != nil {
+		t.Fatalf("already-removed media should retire idempotently, got %v", err)
+	}
+}
+
+// TestSweepRetainedMediaUsesAtomicOperationAndPropagatesError ensures the
+// cleanup service drives retained media through RetireRetainedMedia only and
+// surfaces its error instead of swallowing it.
+func TestSweepRetainedMediaUsesAtomicOperationAndPropagatesError(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	jobErr := errors.New("job insert failed")
+	mock.ExpectQuery("SELECT id, storage_key FROM photos").
+		WithArgs(100).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key"}).AddRow("photo-1", "photos/original"))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs("photo-1").
+		WillReturnRows(retainedMediaRow("ready", "photos/original"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/original").
+		WillReturnError(jobErr)
+	runner := CleanupRunner{Store: &recordingDeleter{}, Interval: time.Hour}
+	if err := runner.sweepRetainedMedia(ctx, slog.Default()); !errors.Is(err, jobErr) {
+		t.Fatalf("expected sweep to propagate retire error, got %v", err)
+	}
 }
 
 func TestMessageCursorRejectsMalformed(t *testing.T) {

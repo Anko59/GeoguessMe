@@ -2,10 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
 	"geoguessme/internal/database"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type RetainedMedia struct{ ID, StorageKey string }
@@ -99,24 +102,76 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 	}
 }
 
-// sweepRetainedMedia finds expired retained photos and enqueues durable
-// deletion jobs rather than deleting objects inline, so a transient storage
-// outage cannot lose the cleanup obligation.
+// RetireRetainedMedia atomically marks a retained media record removed and
+// enqueues a durable deletion job for its object-storage key within a single
+// database transaction. The target row is locked before any decision is made,
+// so two concurrent sweeps can never enqueue a second job for the same object.
+//
+// The deletion job is created first, using the storage key captured under the
+// row lock, and only then is the record marked removed with its key cleared.
+// If the job insert, the media update, or the commit fails the transaction is
+// rolled back, leaving no committed partial state. A record already marked
+// removed (or one that no longer exists) is an idempotent success and creates
+// no new deletion job.
+func RetireRetainedMedia(ctx context.Context, id string) error {
+	tx, err := database.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var lifecycleStatus, storageKey string
+	err = tx.QueryRow(ctx,
+		`SELECT lifecycle_status, COALESCE(storage_key, '') FROM photos WHERE id = $1 FOR UPDATE`,
+		id,
+	).Scan(&lifecycleStatus, &storageKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if lifecycleStatus == "removed" {
+		return nil
+	}
+	if storageKey != "" {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, 'retention')`,
+			newID(), storageKey,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE photos SET lifecycle_status = 'removed', storage_key = NULL WHERE id = $1`,
+		id,
+	); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// sweepRetainedMedia finds expired retained photos and retires each one through
+// the atomic RetireRetainedMedia operation, which enqueues a durable deletion
+// job and flips the record to removed in one transaction so a transient failure
+// can never orphan the stored object. A failing record is logged and remembered
+// while the remaining records are still processed; the first error propagates
+// so the caller can observe partial failures.
 func (r CleanupRunner) sweepRetainedMedia(ctx context.Context, logger *slog.Logger) error {
 	items, err := FindExpiredMedia(ctx, 100)
 	if err != nil {
 		return err
 	}
+	var firstErr error
 	for _, item := range items {
-		if err := MarkMediaRemoved(ctx, item.ID); err != nil {
-			logger.Warn("marking retained media removed failed", "photo_id", item.ID, "error", err)
-			continue
-		}
-		if err := EnqueueMediaDeletion(ctx, "retention", []string{item.StorageKey}); err != nil {
-			logger.Error("enqueuing retained media deletion failed", "photo_id", item.ID, "key", item.StorageKey, "error", err)
+		if err := RetireRetainedMedia(ctx, item.ID); err != nil {
+			logger.Error("retiring retained media failed", "photo_id", item.ID, "key", item.StorageKey, "error", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logger) {
