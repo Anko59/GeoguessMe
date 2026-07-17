@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 func TestLocalStoreLifecycleAndKeyValidation(t *testing.T) {
@@ -90,7 +92,17 @@ func TestS3ConfigurationAndNotFoundMapping(t *testing.T) {
 	if _, err := NewS3Store("http://", "us-east-1", "bucket", "key", "secret", true); err == nil {
 		t.Fatal("endpoint without host unexpectedly succeeded")
 	}
-	for _, err := range []error{errors.New("code:NoSuchKey"), errors.New("HTTP 404"), errors.New("permission denied")} {
+	// Real minio.ErrorResponse with Code="NoSuchKey" must be detected.
+	if !isS3NotFound(minio.ErrorResponse{Code: "NoSuchKey", Message: "The specified key does not exist."}) {
+		t.Fatal("minio ErrorResponse with NoSuchKey code was not detected")
+	}
+	// Non-NoSuchKey minio.ErrorResponse must not match.
+	if isS3NotFound(minio.ErrorResponse{Code: "AccessDenied", Message: "Access Denied"}) {
+		t.Fatal("AccessDenied code was incorrectly reported as not-found")
+	}
+	// Fallback: plain error messages containing "NoSuchKey" or "404" still
+	// match for compatibility with other S3-compatible stores.
+	for _, err := range []error{errors.New("NoSuchKey"), errors.New("HTTP 404"), errors.New("permission denied")} {
 		if got := isS3NotFound(err); got != (err.Error() != "permission denied") {
 			t.Errorf("isS3NotFound(%q) = %v", err, got)
 		}

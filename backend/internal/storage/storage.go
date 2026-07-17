@@ -200,6 +200,10 @@ func isS3NotFound(err error) bool {
 	if err == nil {
 		return false
 	}
+	var resp minio.ErrorResponse
+	if errors.As(err, &resp) {
+		return resp.Code == "NoSuchKey"
+	}
 	message := err.Error()
-	return strings.Contains(message, "NoSuchKey") || strings.Contains(message, "code:NoSuchKey") || strings.Contains(message, "404")
+	return strings.Contains(message, "NoSuchKey") || strings.Contains(message, "404")
 }
