@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,24 +158,59 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 	return result.ID
 }
 
-// waitUntilViewCloses polls the server clock until the viewing window for the
-// challenge has elapsed, avoiding fixed sleeps.
-func waitUntilViewCloses(t *testing.T, bearer, photoID string) {
+// serverNow reads the gateway's HTTP Date header so tests can wait on server
+// time without relying on local clock drift.
+func serverNow(t *testing.T) time.Time {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, _ := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/guess",
-			map[string]float64{"lat": 0, "long": 0}, bearer, nil)
-		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+	resp, err := http.Get(baseURL + "/health/ready")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	tm, err := http.ParseTime(resp.Header.Get("Date"))
+	require.NoError(t, err)
+	return tm
+}
+
+// acceptChallenge records the server-controlled viewing window returned by the
+// accept endpoint without mutating challenge state.
+type acceptance struct {
+	PhotoID       string
+	MediaURL      string
+	ViewExpiresAt time.Time
+	ServerTime    time.Time
+}
+
+func acceptChallenge(t *testing.T, bearer, photoID string) acceptance {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/accept", nil, bearer, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "accept %d: %s", resp.StatusCode, data)
+	var body struct {
+		PhotoID       string `json:"photo_id"`
+		MediaURL      string `json:"media_url"`
+		ViewExpiresAt string `json:"view_expires_at"`
+		ServerTime    string `json:"server_time"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &body))
+	viewExp, err := time.Parse(time.RFC3339Nano, body.ViewExpiresAt)
+	require.NoError(t, err)
+	serverT, err := time.Parse(time.RFC3339Nano, body.ServerTime)
+	require.NoError(t, err)
+	return acceptance{PhotoID: body.PhotoID, MediaURL: body.MediaURL, ViewExpiresAt: viewExp, ServerTime: serverT}
+}
+
+// waitUntilViewExpires blocks until the server clock passes the stored view
+// deadline (plus a small grace period) WITHOUT submitting a guess.
+func waitUntilViewExpires(t *testing.T, deadline time.Time) {
+	t.Helper()
+	grace := 300 * time.Millisecond
+	limit := time.Now().Add(30 * time.Second)
+	for time.Now().Before(limit) {
+		if serverNow(t).After(deadline.Add(-grace)) {
+			time.Sleep(grace)
 			return
 		}
-		if resp.StatusCode != http.StatusConflict {
-			require.Contains(t, []int{http.StatusConflict, http.StatusCreated, http.StatusOK}, resp.StatusCode)
-		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 	}
-	t.Fatal("viewing window did not close in time")
+	t.Fatal("viewing window did not close before the test deadline")
 }
 
 func guess(t *testing.T, bearer, photoID string, lat, long float64) int {
@@ -206,8 +242,13 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	deadline := time.Now().Add(10 * time.Second)
+	searchURL := mailpitBase() + "/api/v1/search"
+	queryURL, _ := url.Parse(searchURL)
+	queryVals := queryURL.Query()
+	queryVals.Set("query", "to:"+email)
+	queryURL.RawQuery = queryVals.Encode()
 	for time.Now().Before(deadline) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, mailpitBase()+"/api/v1/search?query=to:"+email, nil)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, queryURL.String(), nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			var summary struct {
@@ -223,11 +264,11 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 				r2, err := http.DefaultClient.Do(req2)
 				if err == nil {
 					var msg struct {
-						Body string `json:"Body"`
+						Text string `json:"Text"`
 					}
 					_ = json.NewDecoder(r2.Body).Decode(&msg)
 					_ = r2.Body.Close()
-					if tok := extractToken(msg.Body, linkPath); tok != "" {
+					if tok := extractToken(msg.Text, linkPath); tok != "" {
 						return tok
 					}
 				}
@@ -263,6 +304,20 @@ func indexOf(s, sub string) int {
 
 func isTokenChar(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_'
+}
+
+// mailpitLinks extracts all HTTP(S) URLs containing linkPath from a message
+// body (works for both plain-text and HTML bodies).
+func mailpitLinks(body, linkPath string) []string {
+	var out []string
+	for _, line := range strings.Split(body, "\n") {
+		for _, word := range strings.Fields(line) {
+			if (strings.HasPrefix(word, "http://") || strings.HasPrefix(word, "https://")) && strings.Contains(word, linkPath) {
+				out = append(out, word)
+			}
+		}
+	}
+	return out
 }
 
 func jsonUnmarshal(data []byte, v any) error {

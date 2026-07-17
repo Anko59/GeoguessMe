@@ -12,10 +12,13 @@
 GO            ?= go
 NODE          ?= npm
 BACKEND_PKGS  := $(shell cd backend && $(GO) list ./... | grep -v /integration_test)
-COMPOSE_DEV   := docker compose -f deployment/compose.dev.yaml --project-directory .
+COMPOSE_DEV   := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST  := docker compose -f deployment/compose.test.yaml --project-directory .
-COMPOSE_PROD  := docker compose -f deployment/compose.production.yaml --project-directory .
+COMPOSE_PROD  := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
 TEST_BASE_URL ?= http://localhost:8080
+GEOGUESSME_TEST_WEB_PORT    ?= 8080
+GEOGUESSME_TEST_MAILPIT_PORT ?= 8025
+TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT)
 
 ##@ Setup
 help: ## Show this help.
@@ -84,21 +87,22 @@ test-frontend: ## Run frontend unit tests.
 	cd frontend && $(NODE) test -- --run
 
 test-integration: ## Run backend integration tests against the isolated test stack.
-	$(COMPOSE_TEST) up -d --build --wait
-	@cd backend && TEST_BASE_URL=$(TEST_BASE_URL) $(GO) test ./integration_test -count=1; status=$$?; \
-	 $(COMPOSE_TEST) down -v --remove-orphans; exit $$status
+	@set -e; \
+	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-integration down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
+	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-integration up -d --build --wait; \
+	 cd backend && TEST_BASE_URL=$(TEST_BASE_URL) $(GO) test ./integration_test -count=1
 
 test-e2e: ## Run desktop + mobile Playwright suites against the isolated test stack.
 	@set -e; \
-	 trap 'rc=$$?; $(COMPOSE_TEST) down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
-	 $(COMPOSE_TEST) up -d --build --wait; \
+	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-e2e down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
+	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-e2e up -d --build --wait; \
 	 deployment/scripts/wait-for-health.sh $(TEST_BASE_URL) 120; \
 	 cd frontend && PLAYWRIGHT_BASE_URL=$(TEST_BASE_URL) $(NODE) exec playwright test --project=desktop --project=mobile
 
 test-e2e-ui: ## Run the Playwright UI mode against the isolated test stack.
 	@set -e; \
-	 trap 'rc=$$?; $(COMPOSE_TEST) down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
-	 $(COMPOSE_TEST) up -d --build --wait; \
+	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-e2e down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
+	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-e2e up -d --build --wait; \
 	 deployment/scripts/wait-for-health.sh $(TEST_BASE_URL) 120; \
 	 cd frontend && PLAYWRIGHT_BASE_URL=$(TEST_BASE_URL) $(NODE) exec playwright test --ui
 

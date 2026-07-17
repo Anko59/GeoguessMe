@@ -1,8 +1,7 @@
-# Isolated integration/E2E stack. Uses an ephemeral Compose project name and
-# dedicated volumes so it never touches development data. Builds the production
-# frontend gateway (not Vite preview) and exposes only the ports Playwright and
-# the Go integration suite need.
-name: geoguessme-test
+# Isolated integration/E2E stack. Project name and host ports are supplied by
+# the caller (Makefile uses geoguessme-integration / geoguessme-e2e) so the two
+# suites never collide. Builds the production frontend gateway (not Vite
+# preview) and exposes only the ports the suites need.
 
 services:
   db:
@@ -33,7 +32,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.21
-    ports: ["8025:8025"]
+    ports: ["${GEOGUESSME_TEST_MAILPIT_PORT:-8025}:8025"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8025/"]
       interval: 3s
@@ -42,7 +41,7 @@ services:
 
   migration:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/docker/backend.Dockerfile
     command: ["migrate", "up"]
     environment:
@@ -54,7 +53,7 @@ services:
 
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/docker/backend.Dockerfile
     command: ["serve"]
     environment:
@@ -87,9 +86,9 @@ services:
 
   web:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/docker/frontend.Dockerfile
-    ports: ["8080:80"]
+    ports: ["${GEOGUESSME_TEST_WEB_PORT:-8080}:80"]
     depends_on:
       backend: { condition: service_healthy }
 

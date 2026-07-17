@@ -37,7 +37,7 @@ services:
 
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/docker/backend.dev.Dockerfile
     command: ["sh", "-c", "go run . migrate up && air"]
     ports: ["8080:8080"]
@@ -61,7 +61,7 @@ services:
       db: { condition: service_healthy }
       minio: { condition: service_healthy }
       mailpit: { condition: service_started }
-    volumes: ["../backend:/app/backend"]
+    volumes: ["./backend:/app/backend"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health/ready"]
       interval: 5s
@@ -70,10 +70,10 @@ services:
 
   frontend:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/docker/frontend.dev.Dockerfile
     ports: ["5173:5173"]
-    volumes: ["../frontend:/app/frontend", "/app/frontend/node_modules"]
+    volumes: ["./frontend:/app/frontend", "/app/frontend/node_modules"]
     environment: { CHOKIDAR_USEPOLLING: "true" }
     depends_on:
       backend: { condition: service_healthy }

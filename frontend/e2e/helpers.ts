@@ -37,8 +37,6 @@ export async function signupViaUI(page: Page, creds?: Partial<Credentials>): Pro
     await page.fill('#signup-email', email);
     await page.fill('#signup-password', password);
     await page.click('button.btn-primary[type="submit"]');
-
-    // After successful signup the app redirects to /groups
     await page.waitForURL(/\/groups/, { timeout: 15000 });
 
     return { username, email, password };
@@ -57,80 +55,53 @@ export async function loginViaUI(page: Page, username: string, password: string)
 }
 
 /**
- * Create an isolated browser context for a second user (same browser instance).
+ * Create an isolated browser context for a second user, inheriting the base
+ * URL and (optionally) geolocation/permissions from the current project.
  */
-export async function newAuthContext(browser: Browser) {
-    return browser.newContext();
+export async function newAuthContext(browser: Browser): Promise<import('@playwright/test').BrowserContext> {
+    const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+    return browser.newContext({ baseURL });
 }
 
 /**
- * Extract a link (verification, password-reset) from Mailpit for a given recipient.
- *
- * @param email     – the recipient's email address
- * @param pathFragment – a string that appears in the target link (e.g. '/verify-email')
- * @returns the full URL from the email body, or throws if not found within the timeout.
+ * Extract a verification or password-reset link from a Mailpit-delivered plain-
+ * text email. The application sends plain-text (not HTML) messages, so the
+ * body is in the `Text` field and the URL is the entire body content.
  */
 export async function getMailpitLink(email: string, pathFragment: string): Promise<string> {
-    const mailpitHost = process.env.MAILPIT_HOST || 'http://localhost:8025';
+    const mailpitHost = process.env.MAILPIT_BASE_URL || 'http://localhost:8025';
+    const query = encodeURIComponent(`to:${email}`);
 
-    // Poll for the email (search by recipient)
-    const maxAttempts = 30;
-    for (let i = 0; i < maxAttempts; i++) {
-        const searchRes = await fetch(`${mailpitHost}/api/v1/search?query=to:${encodeURIComponent(email)}`);
+    for (let i = 0; i < 30; i++) {
+        const searchRes = await fetch(`${mailpitHost}/api/v1/search?query=${query}`);
         const searchBody = await searchRes.json() as { messages: Array<{ ID: string }> };
         const messages = searchBody.messages ?? [];
 
         if (messages.length > 0) {
-            // Fetch the most recent message
             const msgId = messages[messages.length - 1].ID;
             const msgRes = await fetch(`${mailpitHost}/api/v1/message/${msgId}`);
-            const msgBody = await msgRes.json() as { Body: string };
-            const html = msgBody.Body ?? '';
+            const msgBody = await msgRes.json() as { Text: string };
+            const text = msgBody.Text ?? '';
 
-            // Find every href in the email body
-            const hrefRegex = /href="([^"]+)"/g;
-            const matches = [...html.matchAll(hrefRegex)];
-
-            for (const match of matches) {
-                const href = match[1];
-                if (href.includes(pathFragment)) {
-                    // Mailpit sometimes uses raw http://localhost:8080; ensure it's usable
-                    return href;
-                }
+            // The plain-text body is a single URL (or contains one). Extract it
+            // by scanning for http(s) URLs containing the expected path.
+            const urlRegex = /https?:\/\/\S+/g;
+            for (const match of text.matchAll(urlRegex)) {
+                const url = match[0];
+                if (url.includes(pathFragment)) return url;
             }
         }
-
-        // Wait before polling again
         await new Promise((r) => setTimeout(r, 1000));
     }
-
     throw new Error(`Could not find Mailpit email with fragment "${pathFragment}" for "${email}"`);
 }
 
 /**
- * Return a deterministic 1×1 red PNG as a Buffer.
- * Useful for file-chooser uploads when the UI expects an image file.
+ * Return a 1×1 red PNG as a Buffer (valid image for file-chooser uploads).
  */
 export function deterministicTestImage(): Buffer {
-    // Minimal 1×1 red PNG (base64)
     return Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==',
         'base64',
     );
-}
-
-/**
- * Wait until the server-provided `server_time` has elapsed past a certain
- * duration.  Useful for waiting out the view window or guess-after delay.
- */
-export async function waitForServerTime(
-    page: Page,
-    deadlineIso: string,
-    extraMs = 500,
-): Promise<void> {
-    const deadline = Date.parse(deadlineIso);
-    const wait = Math.max(0, deadline - Date.now() + extraMs);
-    if (wait > 0) {
-        await new Promise((r) => setTimeout(r, wait));
-    }
 }
