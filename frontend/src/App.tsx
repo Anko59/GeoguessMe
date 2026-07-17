@@ -1,16 +1,16 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import GroupsList from './pages/GroupsList';
-import GroupJoin from './pages/GroupJoin';
-import GroupView from './pages/GroupView';
-import ProtectedRoute from './components/ProtectedRoute';
+import Home from './pages/home/Home';
+import Login from './pages/auth/Login';
+import Signup from './pages/auth/Signup';
+import GroupsList from './pages/groups/GroupsList';
+import GroupJoin from './pages/groups/GroupJoin';
+import GroupView from './pages/groups/GroupView';
+import ProtectedRoute from './components/navigation/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import VerifyEmail from './pages/VerifyEmail';
-import AccountSettings from './pages/AccountSettings';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import VerifyEmail from './pages/auth/VerifyEmail';
+import AccountSettings from './pages/account/AccountSettings';
 
 function App() {
   return (

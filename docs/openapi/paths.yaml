@@ -1,0 +1,623 @@
+paths:
+  /auth/signup:
+    post:
+      summary: Create an account
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 30
+                  pattern: "^[a-zA-Z0-9_-]+$"
+                  example: player1
+                email:
+                  type: string
+                  format: email
+                  example: player1@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+                  example: StrongPass123
+      responses:
+        "200":
+          description: Account created and session issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          description: Username or email taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+  /auth/login:
+    post:
+      summary: Log in
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: player1
+                password:
+                  type: string
+                  example: StrongPass123
+      responses:
+        "200":
+          description: Session issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /auth/refresh:
+    post:
+      summary: Rotate refresh session
+      tags: [Authentication]
+      parameters:
+        - name: Cookie
+          in: header
+          schema:
+            type: string
+          description: refresh_token cookie (HttpOnly, path /api/v1/auth)
+      responses:
+        "200":
+          description: Tokens rotated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /auth/logout:
+    post:
+      summary: Revoke session
+      tags: [Authentication]
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
+          description: Revoke all sessions and bump auth version
+      responses:
+        "204":
+          description: Logged out
+  /auth/verify/request:
+    post:
+      summary: Request email verification
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        "202":
+          description: Verification email sent if account can receive mail
+  /auth/verify:
+    post:
+      summary: Verify email with token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Email verified
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+  /auth/password/forgot:
+    post:
+      summary: Request password reset
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: Reset link sent if email is registered
+  /auth/password/reset:
+    post:
+      summary: Reset password with token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        "200":
+          description: Password reset
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+  /auth/account:
+    delete:
+      summary: Delete account
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        "204":
+          description: Account deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /user/groups:
+    get:
+      summary: List user's groups
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+  /group/create:
+    post:
+      summary: Create a group
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                  example: My Team
+      responses:
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+  /group/join:
+    post:
+      summary: Join a group by code
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: "^[A-Z0-9]{6}$"
+                  example: ABC123
+      responses:
+        "200":
+          description: Joined group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /group/details:
+    get:
+      summary: Get group details
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /group/members:
+    get:
+      summary: List group members
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    username:
+                      type: string
+                    avatar:
+                      type: string
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /group/leaderboard:
+    get:
+      summary: Get group leaderboard
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /group/messages:
+    get:
+      summary: Get group messages (cursor-paginated)
+      tags: [Groups]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Opaque cursor from previous response
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 500
+            default: 500
+        - name: after_id
+          in: query
+          schema:
+            type: string
+          description: Legacy message ID (mapped to cursor)
+      responses:
+        "200":
+          description: Paginated messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Message"
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /photo/upload:
+    post:
+      summary: Upload a photo challenge
+      tags: [Challenges]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo, group_id, lat, long]
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG, or WebP image
+                group_id:
+                  type: string
+                  format: uuid
+                lat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                long:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+      responses:
+        "201":
+          description: Challenge created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeCreated"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /challenges/{photoID}/accept:
+    post:
+      summary: Accept a challenge and start view window
+      tags: [Challenges]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Challenge accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeAccepted"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "410":
+          $ref: "#/components/responses/ErrorResponse"
+  /challenges/{photoID}/media:
+    get:
+      summary: Stream challenge media
+      tags: [Challenges]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: result
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
+          description: Access media as part of result view
+      responses:
+        "200":
+          description: Image bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "410":
+          $ref: "#/components/responses/ErrorResponse"
+  /challenges/{photoID}/guess:
+    post:
+      summary: Submit a guess
+      tags: [Challenges]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, long]
+              properties:
+                lat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                long:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+      responses:
+        "201":
+          description: Guess recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuessResponse"
+        "200":
+          description: Duplicate guess (original returned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuessResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          description: Viewing window still open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+        "410":
+          $ref: "#/components/responses/ErrorResponse"
+  /challenges/{photoID}/results:
+    get:
+      summary: Get challenge results
+      tags: [Challenges]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Challenge results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResults"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /ws/ticket:
+    post:
+      summary: Create a WebSocket ticket
+      tags: [WebSocket]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Ticket issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket:
+                    type: string
+                  expires_in:
+                    type: integer
+                    example: 60
+                  server_time:
+                    type: string
+                    format: date-time
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /ws:
+    get:
+      summary: WebSocket chat connection
+      tags: [WebSocket]
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ticket
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Upgraded to WebSocket
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"

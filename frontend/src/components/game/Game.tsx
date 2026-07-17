@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import api, { getAPIErrorMessage } from '../api';
-import { useAuth } from '../context/AuthContext';
-import type { ChallengeAcceptance, ChallengeResults, GuessResult, Message } from '../types';
-import Map from './Map';
+import api, { getAPIErrorMessage } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import type { ChallengeAcceptance, ChallengeResults, GuessResult, Message } from '../../types';
+import Map from '../map/Map';
 import './Game.css';
 
 type Status = 'idle' | 'accepting' | 'viewing' | 'waiting' | 'guessing' | 'submitting' | 'results' | 'expired' | 'error';

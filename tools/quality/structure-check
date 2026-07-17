@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Enforce structural rules on the repository:
+#   Max 500 lines per human-maintained CODE file (excludes docs/config).
+#   Max 14 direct code/diagram/config children per directory.
+# Exempt generated lockfiles, binary media, and vendored deps.
+set -euo pipefail; REPO="$(cd "$(dirname "$0")/../.." && pwd)"; fail=0
+
+exempt_pattern() { grep -vE 'package-lock\.json$|go\.sum$|\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot)$'; }
+
+# Code files (subject to line-length AND child-count limits).
+code_pattern()   { grep -E '\.(go|ts|tsx|js|jsx|css|html|sh|sql|Dockerfile|Makefile|Caddyfile)$'; }
+
+# All authored files (subject to child-count limit only).
+all_pattern()    { grep -E '\.(go|ts|tsx|js|jsx|css|html|sh|sql|ya?ml|json|md|Dockerfile|Makefile|Caddyfile)$'; }
+
+# --- line-length limit (code files only) --------------------------------
+while IFS= read -r file; do
+    lines=$(wc -l < "$file")
+    if [ "$lines" -gt 500 ]; then
+        printf "LINES: %4d > 500  %s\n" "$lines" "$file"; fail=1
+    fi
+done < <(git ls-files | exempt_pattern | code_pattern)
+
+# --- directory child limit (all authored files) ---------------------------
+while IFS= read -r entry; do
+    count=${entry%% *}
+    dir=${entry#* }
+    printf "CHILDREN: %3d > 14  %s\n" "$count" "$dir"; fail=1
+done < <(git ls-files | exempt_pattern | all_pattern | xargs -I{} dirname {} | sort | uniq -c | sort -rn | awk '$1 > 14 {print $1, $2}')
+
+if [ "$fail" -ne 0 ]; then
+    echo "structure-check FAILED"; exit 1
+fi
+echo "structure-check PASSED"

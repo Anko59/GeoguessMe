@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info:
+  title: GeoGuessMe API
+  version: 1.0.0
+  description: Real-time multiplayer location game API
+servers:
+  - url: /api/v1
+    description: All API endpoints are served under /api/v1
+paths:
+  $ref: "./paths.yaml"
+components:
+  $ref: "./components.yaml"

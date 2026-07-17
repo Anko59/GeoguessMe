@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api';
-import type { Member } from '../types';
-import LogoutButton from './LogoutButton';
+import api from '../../api';
+import type { Member } from '../../types';
+import LogoutButton from '../navigation/LogoutButton';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
