@@ -1,64 +1,49 @@
 # Contributing
 
-## Prerequisites
+GeoGuessMe uses Dockerized Make targets as its only project-tool interface.
+Install Git, Make, Docker, and Docker Compose on the host; do not install or
+invoke Go, Node, npm, Playwright, Python, or quality tools directly.
 
-- Go 1.24+
-- Node.js 22+
-- Docker Compose
+## Setup
 
-## Local setup
-
-```bash
-make bootstrap   # Go modules + npm ci + Playwright browsers
-make dev         # start dev infrastructure (PostgreSQL, MinIO, Mailpit, backend, frontend)
+```text
+make bootstrap
+make dev
+make hooks-install
+make hooks-check
 ```
 
-## Commit style
+The repository-wide structural limit is 500 lines per human-authored file and 14
+direct code/configuration children per directory. The tracked structural checker
+reports every violation with its observed value, limit, and classification.
 
-Use [Conventional Commits](https://www.conventionalcommits.org/). Examples:
+## Development and handoff
 
-```
-feat: add group leaderboard endpoint
-fix: validate challenge TTL bounds on startup
-docs: explain SMTP TLS modes in deployment README
-chore: bump golangci-lint to v1.62
-```
+Use make format, focused Dockerized test targets, and make quality during
+development. Before handoff, run make verify, confirm make hooks-check passes,
+commit all intended changes in coherent commits, and leave git status --short
+empty. Do not use --no-verify, remove hooks, weaken a gate, or suppress a
+failure.
 
-Five logical commits are preferred over one large squash.
+Report the exact targets and results. Do not claim production readiness unless
+the complete verification gate passes.
 
-## Before pushing
+## Test expectations
 
-Run the full CI check locally:
+Add regression coverage for every behavior change. Prefer role, label, and
+stable test-ID selectors. Synchronize on observable application state; do not
+use unconditional sleeps, positional selectors, or retries to conceal flaky
+behavior. See docs/testing.md.
 
-```bash
-make ci
-```
+## Repository map
 
-This runs `fmt-check`, `vet`, `test-backend`, `test-backend-race`,
-`test-frontend`, `lint`, and `audit`.
+- Backend and unit tests: backend/
+- Frontend and unit tests: frontend/
+- Isolated integration tests: backend/integration_test/
+- Playwright scenarios: frontend/e2e/
+- API contract: docs/openapi.yaml and docs/openapi/
+- Deployment: deployment/README.md
+- Operations: docs/operations.md
+- Repository rules: AGENTS.md
 
-For broader validation:
-
-```bash
-make test-all                 # unit, integration, and E2E
-make build-images             # verify Docker images build
-```
-
-## Code and docs organisation
-
-- **Backend:** `backend/` — Go HTTP handlers, services, repository, database
-  migrations in `backend/internal/database/migrations/`.
-- **Frontend:** `frontend/` — React + TypeScript + Vite. Tests with Vitest.
-- **Playwright E2E:** `frontend/e2e/`.
-- **Integration tests:** `backend/integration_test/`.
-- **API docs:** `docs/api.md`.
-- **Configuration docs:** `docs/configuration.md`.
-- **Deployment and ops:** `deployment/README.md` and `docs/operations.md`.
-
-## Testing guidelines
-
-- Keep authorization checks in services/handlers, not middleware defaults.
-- Add a negative test for every new protected operation.
-- Use request contexts throughout.
-- Do not commit credentials, generated binaries, build output, or uploaded
-  media.
+Use Conventional Commits and keep commits logically scoped.

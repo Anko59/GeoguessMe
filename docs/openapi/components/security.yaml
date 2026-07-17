@@ -1,0 +1,10 @@
+bearerAuth:
+  type: http
+  scheme: bearer
+  bearerFormat: JWT
+  description: Access token from signup, login, or refresh.
+cookieAuth:
+  type: apiKey
+  in: cookie
+  name: refresh_token
+  description: HttpOnly refresh cookie.

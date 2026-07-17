@@ -10,8 +10,8 @@
   `auth_version` as a claim. Password reset, account deletion, and "logout all"
   bump the version, immediately invalidating all outstanding access tokens for
   that account.
-- **SMTP TLS policy:** Authenticated SMTP credentials are never transmitted
-  over a plaintext link. The backend refuses `SMTP_TLS=off` when a username is
+- **SMTP TLS policy:** Authenticated SMTP credentials are never transmitted over
+  a plaintext link. The backend refuses `SMTP_TLS=off` when a username is
   present, and production enforces `SMTP_TLS=starttls` or `SMTP_TLS=tls`.
 - **Read-only rootfs:** Production backend runs non-root with a read-only root
   filesystem and only `/tmp` writable.

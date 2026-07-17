@@ -1,0 +1,139 @@
+APIError:
+  type: object
+  required: [error]
+  properties:
+    error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+AuthUser:
+  type: object
+  required: [id, username, email]
+  properties:
+    id: { type: string, format: uuid }
+    username: { type: string }
+    email: { type: string, format: email }
+    email_verified_at: { type: [string, "null"], format: date-time }
+    avatar: { type: string }
+
+AuthResponse:
+  type: object
+  required: [access_token, expires_in, user]
+  properties:
+    access_token: { type: string }
+    expires_in: { type: integer }
+    user: { $ref: "#/AuthUser" }
+
+Group:
+  type: object
+  required: [id, name, code, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    name: { type: string }
+    code: { type: string, pattern: "^[A-Z0-9]{6}$" }
+    created_at: { type: string, format: date-time }
+
+Member:
+  type: object
+  required: [id, username]
+  properties:
+    id: { type: string, format: uuid }
+    username: { type: string }
+    avatar: { type: string }
+
+LeaderboardEntry:
+  type: object
+  required: [user_id, username, score, guess_count, average_score]
+  properties:
+    user_id: { type: string, format: uuid }
+    username: { type: string }
+    score: { type: integer }
+    guess_count: { type: integer }
+    average_score: { type: number }
+
+Message:
+  type: object
+  required: [id, group_id, user_id, kind, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    user_id: { type: string, format: uuid }
+    username: { type: string }
+    avatar: { type: string }
+    kind: { type: string, enum: [text, challenge, system] }
+    photo_id: { type: [string, "null"], format: uuid }
+    content: { type: string }
+    created_at: { type: string, format: date-time }
+
+MessagesPage:
+  type: object
+  required: [items]
+  properties:
+    items: { type: array, items: { $ref: "#/Message" } }
+    next_cursor: { type: [string, "null"] }
+
+ChallengeCreated:
+  type: object
+  required: [id, group_id, expires_at, created_at, server_time]
+  properties:
+    id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    expires_at: { type: string, format: date-time }
+    created_at: { type: string, format: date-time }
+    server_time: { type: string, format: date-time }
+
+ChallengeAccepted:
+  type: object
+  required: [photo_id, media_url, accepted_at, view_expires_at, guess_after, challenge_expires_at, server_time]
+  properties:
+    photo_id: { type: string, format: uuid }
+    media_url: { type: string }
+    accepted_at: { type: string, format: date-time }
+    view_expires_at: { type: string, format: date-time }
+    guess_after: { type: string, format: date-time }
+    challenge_expires_at: { type: string, format: date-time }
+    server_time: { type: string, format: date-time }
+
+GuessResponse:
+  type: object
+  required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
+  properties:
+    guess_id: { type: string, format: uuid }
+    photo_id: { type: string, format: uuid }
+    score: { type: integer }
+    distance: { type: number }
+    created_at: { type: string, format: date-time }
+    duplicate: { type: boolean }
+    server_time: { type: string, format: date-time }
+
+ChallengeResults:
+  type: object
+  required: [photo_id, group_id, actual_lat, actual_long, guesses, media_available, server_time]
+  properties:
+    photo_id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    actual_lat: { type: number, format: double }
+    actual_long: { type: number, format: double }
+    guesses: { type: array, items: { $ref: "#/Guess" } }
+    media_available: { type: boolean }
+    media_url: { type: [string, "null"] }
+    server_time: { type: string, format: date-time }
+
+Guess:
+  type: object
+  required: [id, photo_id, user_id, group_id, lat, long, score, distance, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    photo_id: { type: string, format: uuid }
+    user_id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    lat: { type: number, format: double }
+    long: { type: number, format: double }
+    score: { type: integer }
+    distance: { type: number }
+    created_at: { type: string, format: date-time }
+    username: { type: string }
+    avatar: { type: string }

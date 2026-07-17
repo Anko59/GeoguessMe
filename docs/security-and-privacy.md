@@ -10,8 +10,8 @@
 - Every authenticated request checks the JWT's embedded `auth_version` against
   the database. This provides immediate revocation on password reset or
   `logout?all=1`.
-- WebSocket connections use a separate one-time ticket mechanism (60-second
-  TTL) — access tokens are never passed in WS URLs.
+- WebSocket connections use a separate one-time ticket mechanism (60-second TTL)
+  — access tokens are never passed in WS URLs.
 
 ### Group membership
 
@@ -20,8 +20,8 @@ upload, challenge accept) verify the requesting user is a current member of the
 target group. Non-members receive a 403 `forbidden` response.
 
 Membership checks are also enforced at the repository layer inside transactions
-(e.g., `AcceptChallenge` and `SubmitGuess` verify membership while holding a
-row lock on the photo).
+(e.g., `AcceptChallenge` and `SubmitGuess` verify membership while holding a row
+lock on the photo).
 
 ### Media access
 
@@ -44,15 +44,15 @@ through authenticated handlers:
 
 ## Data inventory
 
-| Data | Storage | Retention | Notes |
-|------|---------|-----------|-------|
-| Username, email, password hash | PostgreSQL (users) | Until account deletion | Password hashed with bcrypt (`BCRYPT_COST=12` default) |
-| Photos and locations | PostgreSQL + S3 | Until `PHOTO_RETENTION` (default 30 days) after upload | Actual coordinates stored only in DB; media stored in S3 |
-| Guesses and scores | PostgreSQL | Indefinitely | Aggregate leaderboard rows remain after media cleanup |
-| Messages | PostgreSQL | Indefinitely | |
-| Refresh sessions | PostgreSQL | 30 days after expiry/revocation | Hashed (SHA-256) |
-| One-time tokens | PostgreSQL | 1 day after use; at TTL otherwise | Hashed (SHA-256) |
-| WebSocket tickets | PostgreSQL | 1 day after use; 60s TTL otherwise | Hashed (SHA-256) |
+| Data                           | Storage            | Retention                                              | Notes                                                    |
+| ------------------------------ | ------------------ | ------------------------------------------------------ | -------------------------------------------------------- |
+| Username, email, password hash | PostgreSQL (users) | Until account deletion                                 | Password hashed with bcrypt (`BCRYPT_COST=12` default)   |
+| Photos and locations           | PostgreSQL + S3    | Until `PHOTO_RETENTION` (default 30 days) after upload | Actual coordinates stored only in DB; media stored in S3 |
+| Guesses and scores             | PostgreSQL         | Indefinitely                                           | Aggregate leaderboard rows remain after media cleanup    |
+| Messages                       | PostgreSQL         | Indefinitely                                           |                                                          |
+| Refresh sessions               | PostgreSQL         | 30 days after expiry/revocation                        | Hashed (SHA-256)                                         |
+| One-time tokens                | PostgreSQL         | 1 day after use; at TTL otherwise                      | Hashed (SHA-256)                                         |
+| WebSocket tickets              | PostgreSQL         | 1 day after use; 60s TTL otherwise                     | Hashed (SHA-256)                                         |
 
 ## Account deletion
 
@@ -72,8 +72,8 @@ through authenticated handlers:
 - Never commit `.env` files or production secrets to version control.
 - Configure `TRUSTED_PROXY_CIDRS` to the actual proxy network so client IP
   resolution is accurate for rate limiting.
-- Set `LOG_LEVEL` to `info` or `warn` in production (`debug` may leak
-  request details).
+- Set `LOG_LEVEL` to `info` or `warn` in production (`debug` may leak request
+  details).
 - Monitor the `geoguessme_storage_cleanup_backlog` metric — a growing backlog
   indicates object-store connectivity issues.
 

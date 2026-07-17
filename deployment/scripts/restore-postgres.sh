@@ -32,8 +32,11 @@ fi
 export PGPASSWORD="${PGPASSWORD:-}"
 echo "restoring $path"
 if [ -n "${DATABASE_URL:-}" ]; then
-    gunzip -c "$path" | psql "$DATABASE_URL"
+    # PostgreSQL 18's pg_dump emits transaction_timeout, which older servers
+    # do not recognize. It is a session-only setting, so remove that generated
+    # line to keep dumps portable across supported PostgreSQL major versions.
+    gunzip -c "$path" | sed '/^SET transaction_timeout = 0;$/d' | psql "$DATABASE_URL"
 else
-    gunzip -c "$path" | psql
+    gunzip -c "$path" | sed '/^SET transaction_timeout = 0;$/d' | psql
 fi
 echo "restore complete"

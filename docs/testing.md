@@ -1,104 +1,51 @@
 # Testing
 
-## Test pyramid
+All project test runners execute in Docker. The host invokes Make targets only;
+the tool stack supplies Go, Node, Vitest, Playwright, Axe, linters, and coverage
+tools from pinned images and named caches.
 
-```
-    ╱    E2E (Playwright desktop + mobile)    ╲
-   ╱          Integration (Go + live stack)      ╲
-  ╱           Unit (Go + Vitest)                    ╲
-```
+## Gates
 
-### Unit
+| Target                | Scope                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| make test-unit        | Backend unit tests and frontend Vitest                                                        |
+| make test-race        | Backend race detector                                                                         |
+| make coverage         | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
+| make test-integration | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                            |
+| make test-e2e         | Desktop and Pixel 5 Playwright projects                                                       |
+| make quality          | Structure, formatting, linting, type-check, audits, tests, coverage, builds                   |
+| make verify           | Quality plus live-stack, container, migration, backup/restore, restart, smoke, and load gates |
 
-- **Backend**: `go test ./...` (excludes `integration_test/`). Package tests
-  with `testing.T` and `testify/assert`. Race detection with `-race`.
-- **Frontend**: `npm test -- --run` (Vitest). Component and hook tests.
+Reports and traces are written to ignored repository output directories from
+inside containers.
 
-### Integration
+## Integration stack
 
-- **Backend integration**: Tests in `backend/integration_test/` run against an
-  isolated live stack managed by `deployment/compose.test.yaml`.
-- Run via `make test-integration`.
-- Tests cover: signup, login, token refresh, group create/join, photo upload,
-  challenge accept, guess submission, result visibility, WebSocket messaging,
-  cursor pagination, rate limiting, and negative cases (non-member access,
-  expired challenges, duplicate guesses).
+deployment/compose.test.yaml is disposable and uses dedicated database and media
+volumes. GEOGUESSME_TEST_WEB_PORT and GEOGUESSME_TEST_MAILPIT_PORT may be set to
+non-default ports. The runner derives one public URL and supplies it to
+PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket origins, and email-link
+assertions. Mailpit is addressed through the separately derived
+MAILPIT_BASE_URL.
 
-### E2E
+The suite covers authentication, group boundaries, challenge lifecycle and media
+visibility, transactions, rate limits, storage failures, cleanup retries,
+migration concurrency, refresh rotation, WebSocket rejection and cursor
+catch-up.
 
-- Playwright with two projects: `desktop` (Chromium) and `mobile` (Pixel).
-- Run via `make test-e2e` or `make test-e2e-ui` for the Playwright UI mode.
-- Tests start the test stack, wait for readiness, execute suites, then tear
-  down.
+## E2E policy
 
-## Make targets
+Every scenario owns and disposes its users, browser contexts, pages, and group
+state. Selectors use roles, labels, or stable attributes such as data-photo-id.
+Challenge camera mocks are installed with context.addInitScript before page
+creation. Camera and geolocation denial contexts assert recoverable UI errors.
 
-| Target | Description |
-|--------|-------------|
-| `test` | Backend unit + frontend unit |
-| `test-backend` | Go unit tests (excludes integration) |
-| `test-backend-race` | Go unit tests with race detector |
-| `test-frontend` | Frontend unit tests (Vitest) |
-| `test-integration` | Backend integration tests against isolated stack |
-| `test-e2e` | Playwright desktop + mobile against isolated stack |
-| `test-e2e-ui` | Playwright UI mode against isolated stack |
-| `test-all` | All test suites |
-| `coverage` | Go coverage report (func summary) |
+E2E style checks reject waitForTimeout, networkidle, positional selectors, and
+retry-based flake masking. Accessibility scenarios run real Axe scans and fail
+on serious or critical violations.
 
-## Isolated test stack
+## Local/CI equivalence
 
-`deployment/compose.test.yaml` provides:
-
-- PostgreSQL 15 (dedicated volume)
-- MinIO (dedicated volume)
-- Mailpit
-- Migration job (runs `migrate up`)
-- Backend (production image, `PHOTO_VIEW_WINDOW=1s`, `RATE_LIMIT_REQUESTS=1000`)
-- Web / Caddy gateway (port 8080)
-
-The stack uses the `geoguessme-test` Compose project name and dedicated volumes
-so it never touches development data. It is torn down automatically after each
-run (`down -v`).
-
-## Playwright configuration
-
-The frontend has `playwright.config.ts` defining projects:
-
-- **desktop**: Chromium, viewport 1280×720
-- **mobile**: Pixel 5, viewport 393×851
-
-`PLAYWRIGHT_BASE_URL` is set to the test stack gateway URL.
-
-## Debugging
-
-- `make test-e2e-ui` launches the Playwright UI mode with trace viewer.
-- The test stack stays up across runs when invoked manually.
-- Screenshots, traces, and test results are written to `frontend/test-results/`
-  and `frontend/playwright-report/`.
-
-## CI equivalence
-
-`make ci` runs the same checks as the CI pipeline:
-
-1. `fmt-check` — Go formatting (vet-style, no changes made)
-2. `vet` — `go vet`
-3. `test-backend` — Go unit tests
-4. `test-backend-race` — Go unit tests with race detector
-5. `test-frontend` — Frontend unit tests
-6. `lint` — Frontend lint
-7. `audit` — Go dependency vulnerability scan
-
-## Reports
-
-- Go coverage: `coverage.out` in the `backend/` directory.
-- Playwright report: `frontend/playwright-report/`.
-- Blob report: `frontend/blob-report/`.
-
-## CI release gate
-
-The release gate additionally:
-
-1. Builds production Docker images (`backend.Dockerfile`, `frontend.Dockerfile`)
-2. Checks non-root container startup
-3. Runs the health smoke test (`make smoke`)
-4. Verifies backup/restore in a separate database
+CI checks out the repository, enables Docker Buildx, and invokes the same make
+verify target used for local handoff. It does not install Go, Node, Python,
+Playwright, or linters on the runner.

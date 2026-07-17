@@ -9,7 +9,7 @@ browsers never see S3 URLs directly.
 
 ## Components
 
-```
+```text
 ┌──────────────┐       ┌──────────────┐
 │   Browser    │◄─────►│    Caddy     │  Production gateway (same-origin)
 │  (React SPA) │       │  :80/:443    │
@@ -35,8 +35,8 @@ browsers never see S3 URLs directly.
    security headers and a Content Security Policy. The SPA is served from `/`
    and the API is reverse-proxied from `/api/*`.
 
-2. **Caddy ↔ Backend**: Loopback (same Compose network). The backend trusts
-   the gateway only when `TRUSTED_PROXY_CIDRS` is configured.
+2. **Caddy ↔ Backend**: Loopback (same Compose network). The backend trusts the
+   gateway only when `TRUSTED_PROXY_CIDRS` is configured.
 
 3. **Backend ↔ PostgreSQL**: Configurable connection string (`DATABASE_URL`).
    SSL mode can be required in production.
@@ -68,14 +68,14 @@ All public endpoints are under `/api/v1`. Middleware stack (outer to inner):
 3. Client upgrades via `GET /api/v1/ws?group_id=...&ticket=...`
 4. Origin is checked **before** the ticket is consumed (one-time tickets cannot
    be burned by a prohibited origin).
-5. Messages are persisted, broadcast to all group members, and include
-   `id`, `group_id`, `user_id`, `username`, `avatar`, `kind`, `photo_id?`,
-   `content`, `created_at`.
+5. Messages are persisted, broadcast to all group members, and include `id`,
+   `group_id`, `user_id`, `username`, `avatar`, `kind`, `photo_id?`, `content`,
+   `created_at`.
 
 ### Media access
 
-Media is stored with private S3 keys under `photos/<uuid>`. The backend
-streams it through authenticated endpoints:
+Media is stored with private S3 keys under `photos/<uuid>`. The backend streams
+it through authenticated endpoints:
 
 - `GET /api/v1/challenges/{photoID}/media` — view window only
 - `GET /api/v1/challenges/{photoID}/media?result=1` — after results visible
@@ -85,12 +85,12 @@ short-lived `blob:` object URL.
 
 ## Storage
 
-| Data | Store | Notes |
-|------|-------|-------|
-| Users, groups, photos, guesses, messages | PostgreSQL | Relational, embedded migrations |
-| Media images | S3-compatible (MinIO in dev) | Private bucket, no public URLs |
-| Refresh sessions, tokens | PostgreSQL | Hashed tokens, one-time use |
-| Media deletion queue | PostgreSQL | Durable jobs for async object removal |
+| Data                                     | Store                        | Notes                                 |
+| ---------------------------------------- | ---------------------------- | ------------------------------------- |
+| Users, groups, photos, guesses, messages | PostgreSQL                   | Relational, embedded migrations       |
+| Media images                             | S3-compatible (MinIO in dev) | Private bucket, no public URLs        |
+| Refresh sessions, tokens                 | PostgreSQL                   | Hashed tokens, one-time use           |
+| Media deletion queue                     | PostgreSQL                   | Durable jobs for async object removal |
 
 ## Email
 

@@ -1,0 +1,40 @@
+ticket:
+  post:
+    operationId: createWebSocketTicket
+    summary: Create a one-time WebSocket ticket.
+    tags: [WebSocket]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "201":
+        description: Ticket issued.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, expires_in, server_time]
+              properties:
+                ticket: { type: string }
+                expires_in: { type: integer, example: 60 }
+                server_time: { type: string, format: date-time }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+chat:
+  get:
+    operationId: connectWebSocketChat
+    summary: Upgrade to the authenticated group chat WebSocket.
+    description: |
+      Request a ticket with POST /ws/ticket, then connect with the returned
+      ticket. The ticket is single-use, expires quickly, and the server rejects
+      origins that are not in ALLOWED_ORIGINS.
+    tags: [WebSocket]
+    security: []
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - { name: ticket, in: query, required: true, schema: { type: string } }
+    responses:
+      "101": { description: WebSocket protocol upgrade. }
+      "200": { description: A normal HTTP response when the upgrade is not requested. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }

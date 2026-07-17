@@ -4,7 +4,7 @@
 
 A photo challenge moves through these states:
 
-```
+```text
 ready → accepted → viewing window → guessable → expired → removed
 ```
 
@@ -12,26 +12,24 @@ ready → accepted → viewing window → guessable → expired → removed
 2. **accepted** — A member calls `POST /api/v1/challenges/{photoID}/accept`.
    This opens a per-member viewing window (default 10 seconds).
 3. **viewing window** — The media is available at
-   `GET /api/v1/challenges/{photoID}/media` only during this window. The
-   window is bounded by `PHOTO_VIEW_WINDOW` and `CHALLENGE_TTL` (whichever is
-   shorter).
+   `GET /api/v1/challenges/{photoID}/media` only during this window. The window
+   is bounded by `PHOTO_VIEW_WINDOW` and `CHALLENGE_TTL` (whichever is shorter).
 4. **guessable** — After the viewing window expires, the member may submit one
-   guess via `POST /api/v1/challenges/{photoID}/guess`. Guesses are
-   idempotent: a duplicate returns the original result.
-5. **expired** — The challenge reaches `expires_at` (created_at + CHALLENGE_TTL).
-   No more guesses can be submitted.
+   guess via `POST /api/v1/challenges/{photoID}/guess`. Guesses are idempotent:
+   a duplicate returns the original result.
+5. **expired** — The challenge reaches `expires_at` (created_at +
+   CHALLENGE_TTL). No more guesses can be submitted.
 6. **removed** — After `retention_at` (created_at + PHOTO_RETENTION), the
-   cleanup worker marks the photo `removed`, nulls the storage key, and
-   enqueues a durable object-deletion job. The media bytes are no longer
-   available.
+   cleanup worker marks the photo `removed`, nulls the storage key, and enqueues
+   a durable object-deletion job. The media bytes are no longer available.
 
 ## Timing
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `CHALLENGE_TTL` | 24h | Lifetime of the challenge from upload |
-| `PHOTO_VIEW_WINDOW` | 10s | Per-member window to view the photo |
-| `PHOTO_RETENTION` | 720h (30d) | Media retention period from upload |
+| Parameter           | Default    | Description                           |
+| ------------------- | ---------- | ------------------------------------- |
+| `CHALLENGE_TTL`     | 24h        | Lifetime of the challenge from upload |
+| `PHOTO_VIEW_WINDOW` | 10s        | Per-member window to view the photo   |
+| `PHOTO_RETENTION`   | 720h (30d) | Media retention period from upload    |
 
 The view window is capped at `CHALLENGE_TTL` even if `PHOTO_VIEW_WINDOW` is
 longer. A re-acceptance does not extend access beyond the original window.
@@ -43,16 +41,16 @@ longer. A re-acceptance does not extend access beyond the original window.
 - Distance < 50 m → **5000 points** (perfect)
 - Distance ≥ 50 m → `5000 × e^(-distance / 20000)` (rounded to integer)
 
-**Scale**: 0–5000. Points decrease rapidly for the first kilometres, then
-taper off.
+**Scale**: 0–5000. Points decrease rapidly for the first kilometres, then taper
+off.
 
 ## Result visibility
 
-| Who | When |
-|-----|------|
-| Uploader | Immediately after upload |
-| Member who guessed | Immediately after submitting their guess |
-| Any current group member | After `CHALLENGE_TTL` expires |
+| Who                      | When                                     |
+| ------------------------ | ---------------------------------------- |
+| Uploader                 | Immediately after upload                 |
+| Member who guessed       | Immediately after submitting their guess |
+| Any current group member | After `CHALLENGE_TTL` expires            |
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 `actual_lat`, `actual_long`, all guesses with `username`, `score`, `distance`,

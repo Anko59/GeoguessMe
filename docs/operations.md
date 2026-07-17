@@ -2,11 +2,11 @@
 
 ## Health endpoints
 
-| Endpoint | Expected status | Checks |
-|----------|----------------|--------|
-| `/health/live` | 200 OK | Always returns `ok\n`. No dependencies checked. |
-| `/health/ready` | 200 OK / 503 | PostgreSQL ping + object store `Health()` check. Returns `ready\n` or `not ready\n`. |
-| `/health` | Not available | No catch-all health endpoint. |
+| Endpoint        | Expected status | Checks                                                                               |
+| --------------- | --------------- | ------------------------------------------------------------------------------------ |
+| `/health/live`  | 200 OK          | Always returns `ok\n`. No dependencies checked.                                      |
+| `/health/ready` | 200 OK / 503    | PostgreSQL ping + object store `Health()` check. Returns `ready\n` or `not ready\n`. |
+| `/health`       | Not available   | No catch-all health endpoint.                                                        |
 
 Health check commands:
 
@@ -23,14 +23,14 @@ curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 
 OpenMetrics (Prometheus) format at `/metrics`:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `geoguessme_http_requests_total` | Counter | Total HTTP requests |
-| `geoguessme_http_errors_total` | Counter | HTTP 5xx responses |
-| `geoguessme_storage_cleanup_backlog` | Gauge | Pending object-deletion jobs |
+| Metric                               | Type    | Description                  |
+| ------------------------------------ | ------- | ---------------------------- |
+| `geoguessme_http_requests_total`     | Counter | Total HTTP requests          |
+| `geoguessme_http_errors_total`       | Counter | HTTP 5xx responses           |
+| `geoguessme_storage_cleanup_backlog` | Gauge   | Pending object-deletion jobs |
 
-The `/metrics` endpoint is unprotected. In production it should be restricted
-to internal networks or monitored through an authenticated scraping proxy.
+The `/metrics` endpoint is unprotected. In production it should be restricted to
+internal networks or monitored through an authenticated scraping proxy.
 
 ## Logging
 
@@ -51,7 +51,7 @@ email links in text form.
 
 ### Database
 
-Use `make db-backup` or the script directly:
+Use the Dockerized `make db-backup` target:
 
 ```bash
 DATABASE_URL=postgres://... make db-backup
@@ -63,8 +63,8 @@ Or with a custom backup directory:
 DATABASE_URL=postgres://... BACKUP_DIR=/mnt/backups make db-backup
 ```
 
-The backup is a gzipped `pg_dump` with `--clean --if-exists` to include DROP
-commands. Output file: `{BACKUP_DIR}/geoguessme-{timestamp}.sql.gz`.
+The backup is a gzipped PostgreSQL dump with clean/if-exists options. Output
+file: `{BACKUP_DIR}/geoguessme-{timestamp}.sql.gz`.
 
 The script refuses to overwrite an existing backup file. Set `DATABASE_URL` or
 the standard `PGHOST`/`PGPORT`/`PGUSER`/`PGDATABASE`/`PGPASSWORD` environment
@@ -79,16 +79,9 @@ integrity.
 
 ## Restore verification
 
-```bash
-# Restore into a separate database
-createdb geoguessme_restore
-DATABASE_URL=postgres://.../geoguessme_restore make db-restore FILE=backups/geoguessme-*.sql.gz
-
-# Verify migrations are at the expected version
-DATABASE_URL=postgres://.../geoguessme_restore make migrate-status
-
-# Run a two-user smoke test against the restored API before replacing production
-```
+Restore into a separate database through the Dockerized `make db-restore`
+target, verify with `make migrate-status`, and run a two-user smoke test before
+replacing production.
 
 The restore script requires interactive confirmation (type the target database
 name). It is destructive — existing objects are dropped by `pg_restore`.
@@ -135,11 +128,11 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 
 ## Incident response
 
-| Scenario | Response |
-|----------|----------|
-| Leaked JWT secret | Rotate secret, restart replicas, revoke refresh sessions |
-| SMTP compromise | Rotate credentials, inspect reset/verification delivery, revoke all user sessions if links may have leaked |
-| S3 compromise | Rotate keys, inspect access logs, invalidate exposed objects |
-| Abusive user | Revoke sessions, delete account via `DELETE /auth/account`, preserve request IDs |
-| Failed migration | Restore from backup — migrations are forward-only |
-| Storage outage | Backend returns 502/503 on media endpoints; gameplay continues without media |
+| Scenario          | Response                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| Leaked JWT secret | Rotate secret, restart replicas, revoke refresh sessions                                                   |
+| SMTP compromise   | Rotate credentials, inspect reset/verification delivery, revoke all user sessions if links may have leaked |
+| S3 compromise     | Rotate keys, inspect access logs, invalidate exposed objects                                               |
+| Abusive user      | Revoke sessions, delete account via `DELETE /auth/account`, preserve request IDs                           |
+| Failed migration  | Restore from backup — migrations are forward-only                                                          |
+| Storage outage    | Backend returns 502/503 on media endpoints; gameplay continues without media                               |

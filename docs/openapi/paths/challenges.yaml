@@ -1,0 +1,113 @@
+upload:
+  post:
+    operationId: uploadPhotoChallenge
+    summary: Upload a photo challenge.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [photo, group_id, lat, long]
+            properties:
+              photo: { type: string, format: binary }
+              group_id: { type: string, format: uuid }
+              lat: { type: number, format: double, minimum: -90, maximum: 90 }
+              long: { type: number, format: double, minimum: -180, maximum: 180 }
+    responses:
+      "201":
+        {
+          description: Challenge created.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeCreated" } } },
+        }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+accept:
+  post:
+    operationId: acceptChallenge
+    summary: Accept a challenge and start its private view window.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+    responses:
+      "200":
+        {
+          description: Challenge accepted.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeAccepted" } } },
+        }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+media:
+  get:
+    operationId: getChallengeMedia
+    summary: Stream challenge media during an authorized window or result view.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+      - { name: result, in: query, schema: { type: string, enum: ["1"] } }
+    responses:
+      "200":
+        description: Image bytes.
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+guess:
+  post:
+    operationId: submitChallengeGuess
+    summary: Submit one guess after the private view window.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [lat, long]
+            properties:
+              lat: { type: number, format: double, minimum: -90, maximum: 90 }
+              long: { type: number, format: double, minimum: -180, maximum: 180 }
+    responses:
+      "201":
+        {
+          description: Guess recorded.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+        }
+      "200":
+        {
+          description: Existing guess returned idempotently.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+        }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+results:
+  get:
+    operationId: getChallengeResults
+    summary: Get authorized challenge results.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+    responses:
+      "200":
+        {
+          description: Challenge results.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeResults" } } },
+        }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

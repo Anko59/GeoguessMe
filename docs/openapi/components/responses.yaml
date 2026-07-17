@@ -1,0 +1,6 @@
+ErrorResponse:
+  description: Structured API error.
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/APIError

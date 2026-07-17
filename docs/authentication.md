@@ -4,15 +4,15 @@
 
 GeoGuessMe uses a split-token authentication scheme:
 
-1. **Login** (`POST /api/v1/auth/login`) or **Signup** (`POST /api/v1/auth/signup`)
-   returns:
-   - `access_token` (JWT, short-lived) in the JSON response body
-   - `refresh_token` (opaque, long-lived) as an HttpOnly cookie
+1. **Login** (`POST /api/v1/auth/login`) or **Signup**
+   (`POST /api/v1/auth/signup`) returns:
+    - `access_token` (JWT, short-lived) in the JSON response body
+    - `refresh_token` (opaque, long-lived) as an HttpOnly cookie
 2. The access token is sent on every authenticated request as
    `Authorization: Bearer <token>`.
-3. When the access token expires, the client calls
-   `POST /api/v1/auth/refresh` — the backend reads the refresh cookie, rotates
-   the session, and issues new credentials.
+3. When the access token expires, the client calls `POST /api/v1/auth/refresh` —
+   the backend reads the refresh cookie, rotates the session, and issues new
+   credentials.
 
 ### Access token (JWT)
 
@@ -52,8 +52,8 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
 
 ## Password reset
 
-- `POST /api/v1/auth/password/forgot {email}` sends a reset link (always
-  returns 202 to prevent email enumeration).
+- `POST /api/v1/auth/password/forgot {email}` sends a reset link (always returns
+  202 to prevent email enumeration).
 - `POST /api/v1/auth/password/reset {token, password}` atomically consumes the
   token, updates the password hash, bumps `auth_version`, and revokes all
   refresh sessions.
@@ -74,6 +74,7 @@ request, `AuthMiddleware` compares the claim against the stored value from the
 database. If they differ, the request is rejected with 401.
 
 Auth version is bumped by:
+
 - Password reset
 - `logout?all=1`
 
@@ -86,24 +87,24 @@ tokens immediately, even before the short-lived JWT would have expired.
 
 1. Verifies the password.
 2. Calls `DeleteUserCascade` which removes:
-   - All owned media (queues durable deletion jobs for S3 objects)
-   - All refresh sessions, verification tokens, password-reset tokens,
-     WebSocket tickets
-   - Cascade-deletes memberships, messages, guesses, challenge_views
-3. Deletes the user row entirely (not a soft-delete), releasing the username
-   and email for reuse.
+    - All owned media (queues durable deletion jobs for S3 objects)
+    - All refresh sessions, verification tokens, password-reset tokens,
+      WebSocket tickets
+    - Cascade-deletes memberships, messages, guesses, challenge_views
+3. Deletes the user row entirely (not a soft-delete), releasing the username and
+   email for reuse.
 
 Returns 204 on success.
 
 ## Threat model
 
-| Threat | Mitigation |
-|--------|-----------|
-| Access token theft (XSS) | Token in memory only; server checks `auth_version` per request |
-| Refresh token theft | HttpOnly cookie, path-restricted to `/api/v1/auth`, rotated on use |
-| CSRF on refresh | SameSite=Lax, cookie not sent on cross-site POST |
-| Replay of refresh token | One-time rotation: consumed token is revoked atomically |
-| Brute-force login | Rate-limited by identity (`RateLimitByIdentity` on signup/login) |
-| Session after password change | Auth version bump revokes all tokens |
-| Email enumeration | Forgot password always returns 202 |
-| Stale leak via logs | Backend never logs tokens, signed URLs, passwords, or coordinates |
+| Threat                        | Mitigation                                                         |
+| ----------------------------- | ------------------------------------------------------------------ |
+| Access token theft (XSS)      | Token in memory only; server checks `auth_version` per request     |
+| Refresh token theft           | HttpOnly cookie, path-restricted to `/api/v1/auth`, rotated on use |
+| CSRF on refresh               | SameSite=Lax, cookie not sent on cross-site POST                   |
+| Replay of refresh token       | One-time rotation: consumed token is revoked atomically            |
+| Brute-force login             | Rate-limited by identity (`RateLimitByIdentity` on signup/login)   |
+| Session after password change | Auth version bump revokes all tokens                               |
+| Email enumeration             | Forgot password always returns 202                                 |
+| Stale leak via logs           | Backend never logs tokens, signed URLs, passwords, or coordinates  |

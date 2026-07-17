@@ -20,7 +20,7 @@
 
 Migrations are stored in `backend/internal/database/migrations/`:
 
-```
+```text
 001_initial.sql
 002_auth_version_and_object_deletion.sql
 ```
@@ -41,9 +41,8 @@ make migrate-up
 # Show applied and pending migrations
 make migrate-status
 
-# Equivalent direct invocation
-cd backend && go run . migrate up
-cd backend && go run . migrate status
+# There is no supported host-side direct invocation. Use the Make targets so
+# the migration binary runs in the Docker tool/application container.
 ```
 
 The server does NOT run migrations on startup. Deployments must run the
@@ -56,7 +55,8 @@ Creates all core tables with `IF NOT EXISTS` guards:
 - `users` — with email/group field backfill from legacy schema
 - `groups`, `group_members`
 - `photos` — with storage_key/mime_type/byte_size/retention_at backfill
-- `guesses` — with group_id backfill, dedupes before creating UNIQUE(photo_id, user_id)
+- `guesses` — with group_id backfill, dedupes before creating UNIQUE(photo_id,
+  user_id)
 - `messages` — with kind/photo_id backfill
 - `challenge_views`
 - `refresh_sessions`, `email_verification_tokens`, `password_reset_tokens`,

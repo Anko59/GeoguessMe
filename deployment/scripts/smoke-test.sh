@@ -5,26 +5,38 @@
 set -eu
 
 base="${1:-http://localhost}"
-fail=0
+case "$base" in
+    http://localhost*) container_base="http://host.docker.internal${base#http://localhost}" ;;
+    https://localhost*) container_base="https://host.docker.internal${base#https://localhost}" ;;
+    http://127.0.0.1*) container_base="http://host.docker.internal${base#http://127.0.0.1}" ;;
+    https://127.0.0.1*) container_base="https://host.docker.internal${base#https://127.0.0.1}" ;;
+    *) container_base="$base" ;;
+esac
 
-check() {
-    desc="$1"; expected="$2"; url="$3"; shift 3
-    code=$(curl -s -o /dev/null -w '%{http_code}' "$@" "$url" || echo 000)
-    if [ "$code" = "$expected" ]; then
-        echo "ok   $desc ($code)"
-    else
-        echo "FAIL $desc (got $code, want $expected)"
-        fail=1
-    fi
-}
-
-check "liveness" 200 "$base/health/live"
-check "readiness" 200 "$base/health/ready"
-check "protected route rejects anonymous" 401 "$base/api/v1/user/groups"
-check "websocket ticket requires auth" 401 "$base/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
-
-if [ "$fail" -ne 0 ]; then
-    echo "smoke test failed"
-    exit 1
-fi
-echo "smoke test passed"
+docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$(pwd)" \
+    run --rm --no-deps go-tools bash -c '
+        set -eu
+        base="$1"
+        fail=0
+        check() {
+            desc="$1"
+            expected="$2"
+            url="$3"
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo 000)
+            if [ "$code" = "$expected" ]; then
+                echo "ok   $desc ($code)"
+            else
+                echo "FAIL $desc (got $code, want $expected)"
+                fail=1
+            fi
+        }
+        check "liveness" 200 "$base/health/live"
+        check "readiness" 200 "$base/health/ready"
+        check "protected route rejects anonymous" 401 "$base/api/v1/user/groups"
+        check "websocket ticket requires auth" 401 "$base/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
+        if [ "$fail" -ne 0 ]; then
+            echo "smoke test failed"
+            exit 1
+        fi
+        echo "smoke test passed"
+    ' -- "$container_base"

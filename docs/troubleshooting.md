@@ -8,15 +8,9 @@ Database volume created by `postgres:15-alpine` and then started with
 
 **Solution**: Dump and restore.
 
-```bash
-# Start the old version to dump
-docker compose -f deployment/compose.dev.yaml run --rm -v geoguessme_dev_db:/var/lib/postgresql/data -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password postgres:15-alpine \
-  sh -c 'pg_dump -U user -d geoguessme > /tmp/dump.sql'
-
-# Provision new database (Compose will create the volume)
-docker compose -f deployment/compose.dev.yaml up -d db
-docker compose -f deployment/compose.dev.yaml exec db psql -U user -d geoguessme < /tmp/dump.sql
-```
+Use the Dockerized `make db-backup` target before changing the image, provision
+the new development volume with `make dev`, then use `make db-restore FILE=...`
+and `make migrate-status` to verify the restored schema.
 
 ## MinIO
 
@@ -35,7 +29,7 @@ docker compose -f deployment/compose.dev.yaml exec db psql -U user -d geoguessme
 
 **Symptom**: Verification/reset emails not received.
 
-- Open Mailpit UI: http://localhost:8025
+- Open Mailpit UI: <http://localhost:8025>
 - Check backend logs: `make logs-backend` — verify SMTP connection succeeded
 - In development, `SMTP_TLS=off` and `SMTP_HOST=mailpit` should work
 
@@ -63,8 +57,8 @@ docker compose -f deployment/compose.dev.yaml exec db psql -U user -d geoguessme
 - Check the ticket was obtained from `POST /api/v1/ws/ticket?group_id=...`
   (authentication required)
 - Verify the ticket is passed as a query parameter and is not expired
-- Origin is checked BEFORE the ticket is consumed. Ensure `Origin` matches
-  an allowed origin.
+- Origin is checked BEFORE the ticket is consumed. Ensure `Origin` matches an
+  allowed origin.
 - Check WebSocket upgrade logs: `make logs-backend`
 
 ## Camera / geolocation
@@ -92,10 +86,8 @@ docker compose -f deployment/compose.dev.yaml exec db psql -U user -d geoguessme
 - Advisory lock prevents concurrent runs — if a previous run was interrupted,
   the lock may still be held. Wait or terminate the stuck connection:
 
-  ```sql
-  SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-  WHERE query LIKE '%pg_advisory_lock%' AND pid <> pg_backend_pid();
-  ```
+    Re-run `make migrate-up` after the interrupted transaction has released its
+    session; the migration job owns the advisory-lock lifecycle.
 
 ## Playwright test failures
 

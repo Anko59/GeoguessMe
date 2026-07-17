@@ -21,8 +21,8 @@ fi
 export PGPASSWORD="${PGPASSWORD:-}"
 echo "writing $out"
 if [ -n "${DATABASE_URL:-}" ]; then
-    pg_dump --no-owner --clean --if-exists "$DATABASE_URL" | gzip > "$out"
+    pg_dump --no-owner --clean --if-exists "$DATABASE_URL" | gzip >"$out"
 else
-    pg_dump --no-owner --clean --if-exists | gzip > "$out"
+    pg_dump --no-owner --clean --if-exists | gzip >"$out"
 fi
 echo "backup complete: $out"

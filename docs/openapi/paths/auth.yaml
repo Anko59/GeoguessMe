@@ -1,0 +1,144 @@
+signup:
+  post:
+    operationId: signup
+    summary: Create an account
+    tags: [Authentication]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, email, password]
+            properties:
+              username: { type: string, minLength: 3, maxLength: 30, pattern: "^[a-zA-Z0-9_-]+$" }
+              email: { type: string, format: email }
+              password: { type: string, minLength: 8, maxLength: 128 }
+    responses:
+      "200":
+        description: Account created and session issued.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+login:
+  post:
+    operationId: login
+    summary: Log in
+    tags: [Authentication]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, password]
+            properties:
+              username: { type: string }
+              password: { type: string }
+    responses:
+      "200":
+        description: Session issued.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+refresh:
+  post:
+    operationId: refreshSession
+    summary: Rotate the refresh session.
+    tags: [Authentication]
+    security: [{ cookieAuth: [] }]
+    responses:
+      "200":
+        description: Tokens rotated.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+logout:
+  post:
+    operationId: logout
+    summary: Revoke a session.
+    tags: [Authentication]
+    security: []
+    parameters:
+      - { name: all, in: query, schema: { type: string, enum: ["1"] } }
+    responses:
+      "204": { description: Logged out. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+requestVerification:
+  post:
+    operationId: requestVerification
+    summary: Request email verification.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "202": { description: Verification email sent if the account can receive mail. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+verify:
+  post:
+    operationId: verifyEmail
+    summary: Verify an email address with a token.
+    tags: [Authentication]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [token], properties: { token: { type: string } } }
+    responses:
+      "200": { description: Email verified. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+forgotPassword:
+  post:
+    operationId: forgotPassword
+    summary: Request a password reset.
+    tags: [Authentication]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+    responses:
+      "202": { description: Reset link sent if the email is registered. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+resetPassword:
+  post:
+    operationId: resetPassword
+    summary: Reset a password with a token.
+    tags: [Authentication]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token, password]
+            properties:
+              token: { type: string }
+              password: { type: string, minLength: 8, maxLength: 128 }
+    responses:
+      "200": { description: Password reset. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+deleteAccount:
+  delete:
+    operationId: deleteAccount
+    summary: Delete the authenticated account.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [password], properties: { password: { type: string } } }
+    responses:
+      "204": { description: Account deleted. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
