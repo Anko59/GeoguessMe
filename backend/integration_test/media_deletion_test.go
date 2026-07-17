@@ -215,3 +215,187 @@ func TestPartialUniqueIndexRejectsDuplicateActiveJobs(t *testing.T) {
 	require.True(t, errors.As(err, &pgErr), "expected a Postgres error, got %v", err)
 	require.Equal(t, "23505", pgErr.Code, "expected a unique violation from the partial unique index")
 }
+
+// controlledDeleter implements repository.Deleter and can be programmed to fail
+// for specific keys. All calls are recorded so tests can verify which keys were
+// passed to the deleter across multiple drain cycles.
+type controlledDeleter struct {
+	mu     sync.Mutex
+	fail   map[string]error
+	called []string
+}
+
+func (d *controlledDeleter) Delete(_ context.Context, key string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.called = append(d.called, key)
+	return d.fail[key]
+}
+
+func (d *controlledDeleter) setFail(key string, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fail == nil {
+		d.fail = make(map[string]error)
+	}
+	d.fail[key] = err
+}
+
+func (d *controlledDeleter) clearFail(key string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.fail, key)
+}
+
+func (d *controlledDeleter) calls() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]string, len(d.called))
+	copy(out, d.called)
+	return out
+}
+
+// drainQueueOnce claims pending jobs one batch at a time, deleting each object
+// through the provided Deleter and completing or failing the job accordingly.
+// It mirrors CleanupRunner.drainDeletionQueue and exists so integration tests
+// can exercise the full claim-delete-complete/fail-retry lifecycle with a
+// controlled Deleter.
+func drainQueueOnce(ctx context.Context, store repository.Deleter) error {
+	jobs, err := repository.ClaimDeletionJobs(ctx, 25, 15*time.Minute)
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		if err := store.Delete(ctx, job.StorageKey); err != nil {
+			_ = repository.FailDeletionJob(ctx, job.ID, err.Error())
+			continue
+		}
+		if err := repository.CompleteDeletionJob(ctx, job.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TestDeletionWorkerRetryOnFailure proves that when object deletion fails the
+// job stays incomplete, the error is recorded, and next_attempt_at is moved
+// into the future so the job is scheduled for a later retry.
+func TestDeletionWorkerRetryOnFailure(t *testing.T) {
+	db := testDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	key := "retry-fail/" + unique("k")
+	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
+
+	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "manual", []string{key}))
+
+	del := &controlledDeleter{}
+	del.setFail(key, errors.New("transient storage error"))
+
+	require.NoError(t, drainQueueOnce(ctx, del))
+
+	// Verify the job was attempted.
+	require.Equal(t, []string{key}, del.calls(), "deleter must have been called for the key")
+
+	// Prove the job remains incomplete, with the error recorded and a future retry.
+	var completedAt *time.Time
+	var lastError *string
+	var nextAttemptAt time.Time
+	var attempts int
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT completed_at, last_error, next_attempt_at, attempts FROM media_deletion_jobs WHERE storage_key = $1`, key).
+		Scan(&completedAt, &lastError, &nextAttemptAt, &attempts))
+
+	require.Nil(t, completedAt, "job must remain incomplete after failure")
+	require.NotNil(t, lastError, "last_error must be recorded")
+	require.Contains(t, *lastError, "transient storage error")
+	require.Equal(t, 1, attempts, "attempt count must be 1")
+	require.True(t, nextAttemptAt.After(time.Now()), "next_attempt_at must be in the future")
+}
+
+// TestDeletionWorkerRetryAfterRecovery proves the same job is claimed again
+// after next_attempt_at elapses and completes successfully once the deleter
+// recovers. It uses explicit timestamp manipulation instead of sleeps so the
+// test is deterministic.
+func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
+	db := testDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	key := "retry-recover/" + unique("k")
+	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
+
+	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "manual", []string{key}))
+
+	del := &controlledDeleter{}
+	del.setFail(key, errors.New("transient storage error"))
+
+	// First attempt fails.
+	require.NoError(t, drainQueueOnce(ctx, del))
+	require.Equal(t, []string{key}, del.calls())
+
+	// Fetch the job ID from the failed attempt.
+	var jobID string
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT id FROM media_deletion_jobs WHERE storage_key = $1 AND completed_at IS NULL`, key).
+		Scan(&jobID))
+
+	// Advance next_attempt_at into the past so the job is eligible again.
+	_, err := db.Exec(ctx,
+		`UPDATE media_deletion_jobs SET next_attempt_at = CURRENT_TIMESTAMP - interval '1 hour' WHERE id = $1`,
+		jobID)
+	require.NoError(t, err)
+
+	// Recover the deleter: clear the transient failure.
+	del.clearFail(key)
+
+	// Second drain claims and completes the same job.
+	require.NoError(t, drainQueueOnce(ctx, del))
+
+	// The deleter must have been called with the key again (call count is now 2).
+	require.Equal(t, []string{key, key}, del.calls(), "deleter must have been called twice for the same key")
+
+	// Prove the job is now completed and the error was cleared.
+	var completedAt *time.Time
+	var lastError *string
+	var attempts int
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT completed_at, last_error, attempts FROM media_deletion_jobs WHERE id = $1`, jobID).
+		Scan(&completedAt, &lastError, &attempts))
+
+	require.NotNil(t, completedAt, "job must be completed after successful retry")
+	require.Nil(t, lastError, "last_error must be cleared on completion")
+	require.Equal(t, 2, attempts, "attempt count must be 2")
+}
+
+// TestCompletedJobNotClaimedAgain proves a completed job is invisible to
+// ClaimDeletionJobs, guarding against double-deletion.
+func TestCompletedJobNotClaimedAgain(t *testing.T) {
+	db := testDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	key := "already-done/" + unique("k")
+	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
+
+	// Directly insert a completed job.
+	jobID := "completed-job-" + unique("x")
+	_, err := db.Exec(ctx,
+		`INSERT INTO media_deletion_jobs (id, storage_key, source, next_attempt_at, completed_at) VALUES ($1, $2, 'manual', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+		jobID, key)
+	require.NoError(t, err)
+
+	del := &controlledDeleter{}
+	require.NoError(t, drainQueueOnce(ctx, del))
+
+	// The completed job must not be claimed.
+	require.Empty(t, del.calls(), "completed job must not be claimed for deletion")
+
+	// The job must still be completed.
+	var completedAt *time.Time
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT completed_at FROM media_deletion_jobs WHERE id = $1`, jobID).
+		Scan(&completedAt))
+	require.NotNil(t, completedAt, "completed job must remain completed")
+}
