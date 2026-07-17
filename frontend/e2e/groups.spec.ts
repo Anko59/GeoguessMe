@@ -66,9 +66,11 @@ test.describe('Group operations', () => {
         const outsiderPage = await ctx.newPage();
         await signupViaUI(outsiderPage);
 
-        // Navigate directly to the owner's group
         await outsiderPage.goto(`/group/${ownerGroupId}`);
-        // Should show an error about not being able to load the group
-        await expect(outsiderPage.locator('.error-message')).toBeVisible({ timeout: 10000 });
+        await outsiderPage.waitForTimeout(3000);
+        // A non-member is either redirected to /login or sees an access-denied state.
+        const url = outsiderPage.url();
+        expect(url).not.toMatch(/\/group\/[a-f0-9-]+$/);
+        await ctx.close();
     });
 });

@@ -78,7 +78,7 @@ export async function getMailpitLink(email: string, pathFragment: string): Promi
         const messages = searchBody.messages ?? [];
 
         if (messages.length > 0) {
-            const msgId = messages[messages.length - 1].ID;
+            const msgId = messages[0].ID;
             const msgRes = await fetch(`${mailpitHost}/api/v1/message/${msgId}`);
             const msgBody = await msgRes.json() as { Text: string };
             const text = msgBody.Text ?? '';

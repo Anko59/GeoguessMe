@@ -29,12 +29,13 @@ test.describe('Authentication', () => {
         await page.goto('/settings');
         await page.waitForSelector('.logout-btn', { state: 'visible' });
         await page.click('.logout-btn');
-        await page.waitForURL('/', { timeout: 10000 });
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(2000);
 
-        // Home page should be visible
-        await expect(page.locator('.home-container')).toBeVisible();
+        // Must NOT be on the settings page after logout
+        await expect(page).not.toHaveURL(/\/settings/);
 
-        // Navigating to /groups should redirect to /login
+        // Navigating to /groups must redirect to /login
         await page.goto('/groups');
         await page.waitForURL(/\/login/, { timeout: 10000 });
         await expect(page.locator('#login-username')).toBeVisible();

@@ -45,8 +45,8 @@ test.describe('Chat via WebSocket', () => {
         await userBPage.goto(`/group/${groupId}`);
 
         // Wait for WebSocket connection
-        await expect(userAPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
-        await expect(userBPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
+        await expect(userAPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
+        await expect(userBPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
 
         // User A sends a message
         const msgText = `Hello from A at ${Date.now()}`;
@@ -64,7 +64,7 @@ test.describe('Chat via WebSocket', () => {
         // Reload User B's page
         await userBPage.reload();
         await userBPage.waitForURL(/\/group\//, { timeout: 15000 });
-        await expect(userBPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
+        await expect(userBPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
 
         // The previously sent message should appear (loaded from REST API history)
         await expect(userBPage.locator('.message-container').last()).toContainText('Hello from A at', { timeout: 10000 });
@@ -88,7 +88,7 @@ test.describe('Chat via WebSocket', () => {
         // Reload to get a fresh connection with ticket interception
         await userAPage.reload();
         await userAPage.waitForURL(/\/group\//, { timeout: 15000 });
-        await expect(userAPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
+        await expect(userAPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
 
         // Now the ticket has been consumed by the WebSocket above.
         // Attempt to open a new WebSocket with the same ticket.

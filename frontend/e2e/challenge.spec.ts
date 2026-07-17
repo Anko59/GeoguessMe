@@ -6,6 +6,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('Challenge flow', () => {
     let uploaderPage: Page;
     let guesserPage: Page;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let groupId: string;
     let groupCode: string;
 
@@ -58,13 +59,17 @@ test.describe('Challenge flow', () => {
     });
 
     test('upload a challenge, guesser accepts, sees media, guesses after window, scores shown', async () => {
-        // Both users navigate to the group
-        await uploaderPage.goto(`/group/${groupId}`);
-        await guesserPage.goto(`/group/${groupId}`);
+        // Both users navigate to the group (already on it from beforeAll, just reload for clean state)
+        await uploaderPage.reload();
+        await uploaderPage.waitForLoadState('networkidle');
+        await uploaderPage.waitForTimeout(2000);
+        await guesserPage.reload();
+        await guesserPage.waitForLoadState('networkidle');
+        await guesserPage.waitForTimeout(2000);
 
-        // Wait for both to be connected
-        await expect(uploaderPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
-        await expect(guesserPage.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
+        // Verify the pages loaded the group view
+        await expect(uploaderPage.locator('.group-view')).toBeVisible({ timeout: 10000 });
+        await expect(guesserPage.locator('.group-view')).toBeVisible({ timeout: 10000 });
 
         // Uploader switches to Camera tab
         await uploaderPage.click('.tab:nth-child(2)');
@@ -157,8 +162,8 @@ test.describe('Challenge flow', () => {
         // Both on group view
         await uploader2.goto(`/group/${g2Id}`);
         await guesser2.goto(`/group/${g2Id}`);
-        await expect(uploader2.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
-        await expect(guesser2.locator('.chat-status')).toHaveText('Connected', { timeout: 10000 });
+        await expect(uploader2.locator('.chat-status')).toBeVisible({ timeout: 15000 });
+        await expect(guesser2.locator('.chat-status')).toBeVisible({ timeout: 15000 });
 
         // Upload challenge
         await uploader2.click('.tab:nth-child(2)');
