@@ -1,34 +1,52 @@
-# Binaries
+# --- Go ---
 /backend/bin/
 /backend/tmp/
+/backend/geoguessme
+*.bin
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
 go.work
+go.work.sum
+coverage.out
+coverage/
 
-# Node
+# --- Node / frontend ---
 node_modules/
 dist/
 .env
+.env.production
 .DS_Store
-coverage/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/frontend/test-results/
+/frontend/playwright-report/
+/frontend/coverage/
 
-# Docker
-.docker/
-
-# Uploads
+# --- Local storage, database dumps, backups ---
 /backend/uploads/*
 !/backend/uploads/.keep
+*.sql
+*.sql.gz
+*.dump
+/backups/
+
+# --- Docker / Compose local overrides ---
+docker-compose.override.yml
+docker-compose.override.yaml
+deployment/compose.*.override.yaml
+
+# --- Editor / OS ---
+.idea/
+.vscode/
+*.swp
+
+# Pi tooling session state
+.pi/
+.pi-subagents/

@@ -1,0 +1,98 @@
+# Isolated integration/E2E stack. Uses an ephemeral Compose project name and
+# dedicated volumes so it never touches development data. Builds the production
+# frontend gateway (not Vite preview) and exposes only the ports Playwright and
+# the Go integration suite need.
+name: geoguessme-test
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: geoguessme_test
+    volumes: ["geoguessme_test_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d geoguessme_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes: ["geoguessme_test_minio:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports: ["8025:8025"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8025/"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migration:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend.Dockerfile
+    command: ["migrate", "up"]
+    environment:
+      DATABASE_URL: postgres://test:test@db:5432/geoguessme_test?sslmode=disable
+      JWT_SECRET: test_secret_key_at_least_32_characters_long
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend.Dockerfile
+    command: ["serve"]
+    environment:
+      APP_ENV: test
+      DATABASE_URL: postgres://test:test@db:5432/geoguessme_test?sslmode=disable
+      JWT_SECRET: test_secret_key_at_least_32_characters_long
+      PUBLIC_URL: http://localhost:8080
+      ALLOWED_ORIGINS: http://localhost:8080
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: geoguessme-test-media
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_USE_PATH_STYLE: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: no-reply@test.local
+      SMTP_TLS: "off"
+      PHOTO_VIEW_WINDOW: 1s
+      RATE_LIMIT_REQUESTS: "1000"
+    depends_on:
+      migration: { condition: service_completed_successfully }
+      minio: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/geoguessme", "healthcheck"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: ..
+      dockerfile: deployment/docker/frontend.Dockerfile
+    ports: ["8080:80"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+volumes:
+  geoguessme_test_db:
+  geoguessme_test_minio:

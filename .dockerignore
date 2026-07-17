@@ -1,0 +1,35 @@
+# Shared by both deployment/docker/*.Dockerfiles (build context = repo root).
+# Excludes everything neither image needs to build.
+
+.git
+.github
+.pi
+docs
+backups
+*.log
+*.md
+!frontend/README.md
+
+# Secrets and local environment files (examples are tracked elsewhere).
+**/.env
+.env
+.env.*
+deployment/env/*.env
+
+# Go build/test artifacts.
+backend/geoguessme
+backend/tmp
+backend/bin
+backend/coverage.out
+backend/uploads/*
+!backend/uploads/.keep
+**/*_test.go
+**/*.test.go
+
+# Frontend build/test artifacts.
+**/node_modules
+**/dist
+frontend/test-results
+frontend/playwright-report
+frontend/coverage
+frontend/e2e/.auth
