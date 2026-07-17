@@ -163,6 +163,9 @@
     font-weight: 600;
     transition: all 0.2s;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .copy-btn:hover {
@@ -172,12 +175,6 @@
 
 .copy-btn:active {
     transform: translateY(0);
-}
-
-.copy-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
 }
 
 .copy-icon {

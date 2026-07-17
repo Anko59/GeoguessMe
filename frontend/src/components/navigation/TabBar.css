@@ -51,7 +51,9 @@
     height: 38px;
     object-fit: contain;
     opacity: 1;
-    transition: opacity 0.3s ease;
+    font-size: 1.75rem;
+    transition: all 0.3s ease;
+    position: relative;
 }
 
 .tab.active .tab-icon {
@@ -69,12 +71,6 @@
 .tab-button.active .tab-icon {
     transform: scale(1.1);
     filter: drop-shadow(0 2px 8px rgba(0, 192, 255, 0.3));
-}
-
-.tab-icon {
-    font-size: 1.75rem;
-    transition: all 0.3s ease;
-    position: relative;
 }
 
 .tab-label {
@@ -103,7 +99,6 @@
 }
 
 @keyframes pulse {
-
     0%,
     100% {
         transform: scale(1);

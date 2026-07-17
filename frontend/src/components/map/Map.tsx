@@ -10,7 +10,7 @@ const DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
     iconSize: [25, 41],
-    iconAnchor: [12, 41]
+    iconAnchor: [12, 41],
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
@@ -31,7 +31,13 @@ interface MapProps {
     guesses?: Guess[];
 }
 
-function LocationMarker({ onLocationSelect, position }: { onLocationSelect: (lat: number, long: number) => void, position: { lat: number; long: number } | null }) {
+function LocationMarker({
+    onLocationSelect,
+    position,
+}: {
+    onLocationSelect: (lat: number, long: number) => void;
+    position: { lat: number; long: number } | null;
+}) {
     useMapEvents({
         click(e: L.LeafletMouseEvent) {
             onLocationSelect(e.latlng.lat, e.latlng.lng);
@@ -45,7 +51,7 @@ const GuessIcon = L.divIcon({
     className: 'guess-marker',
     html: `<div style="background-color: #f59e0b; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
     iconSize: [16, 16],
-    iconAnchor: [8, 8]
+    iconAnchor: [8, 8],
 });
 
 export default function Map({ onLocationSelect, selectedLocation, actualLocation, guesses }: MapProps) {
@@ -68,7 +74,7 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                         iconSize: [25, 41],
                         iconAnchor: [12, 41],
                         popupAnchor: [1, -34],
-                        shadowSize: [41, 41]
+                        shadowSize: [41, 41],
                     })}
                 />
             )}

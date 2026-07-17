@@ -22,7 +22,7 @@
     z-index: 0;
 }
 
-.groups-list-container>* {
+.groups-list-container > * {
     position: relative;
     z-index: 1;
 }
@@ -88,7 +88,7 @@
 
 .btn-primary {
     background: white;
-    color: #1A237E;
+    color: #1a237e;
     border: 2px solid white;
 }
 
@@ -98,7 +98,7 @@
 }
 
 .btn-secondary {
-    background: linear-gradient(135deg, #00C0FF 0%, #00FF80 100%);
+    background: linear-gradient(135deg, #00c0ff 0%, #00ff80 100%);
     color: white;
     border: 2px solid transparent;
 }
@@ -219,6 +219,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1A237E;
+    color: #1a237e;
     font-size: 1.125rem;
 }

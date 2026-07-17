@@ -39,16 +39,50 @@ export default function Signup() {
                 <p className="auth-subtitle">Create your account to start</p>
                 <form onSubmit={handleSubmit} className="auth-form">
                     <label htmlFor="signup-username">Username</label>
-                    <input id="signup-username" type="text" placeholder="Username" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" />
+                    <input
+                        id="signup-username"
+                        type="text"
+                        placeholder="Username"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        required
+                        autoComplete="username"
+                    />
                     <label htmlFor="signup-email">Email</label>
-                    <input id="signup-email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+                    <input
+                        id="signup-email"
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        autoComplete="email"
+                    />
                     <label htmlFor="signup-password">Password</label>
-                    <input id="signup-password" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" />
+                    <input
+                        id="signup-password"
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                        autoComplete="new-password"
+                    />
                     <p className="auth-hint">Use at least 8 characters with uppercase, lowercase, and a number.</p>
-                    {error && <div className="auth-error" role="alert">{error}</div>}
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Creating account…' : 'Sign Up'}</button>
+                    {error && (
+                        <div className="auth-error" role="alert">
+                            {error}
+                        </div>
+                    )}
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? 'Creating account…' : 'Sign Up'}
+                    </button>
                 </form>
-                <p className="auth-footer">Already have an account? <Link to="/login" className="auth-link">Login</Link></p>
+                <p className="auth-footer">
+                    Already have an account?{' '}
+                    <Link to="/login" className="auth-link">
+                        Login
+                    </Link>
+                </p>
             </div>
         </div>
     );

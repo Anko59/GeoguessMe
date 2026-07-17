@@ -5,7 +5,7 @@
     justify-content: center;
     position: relative;
     overflow: hidden;
-    background: linear-gradient(135deg, #00C0FF 0%, #00FF80 100%);
+    background: linear-gradient(135deg, #00c0ff 0%, #00ff80 100%);
 }
 
 .home-hero {
@@ -71,7 +71,6 @@
 }
 
 @keyframes float {
-
     0%,
     100% {
         transform: translateY(0px);
@@ -87,7 +86,7 @@
     font-weight: 900;
     margin: 1rem 0 0.5rem 0;
     letter-spacing: -0.03em;
-    background: linear-gradient(135deg, #FFB600 0%, #FFD700 100%);
+    background: linear-gradient(135deg, #ffb600 0%, #ffd700 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -118,7 +117,7 @@
 .feature-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 25px rgba(0, 192, 255, 0.2);
-    border-color: #00C0FF;
+    border-color: #00c0ff;
 }
 
 .feature-icon {
@@ -158,24 +157,25 @@
     transition: all 0.3s ease;
 }
 
-.btn-primary {
-    background: linear-gradient(135deg, #FFB600 0%, #FFD700 100%);
+.home-container .btn-primary {
+    background: linear-gradient(135deg, #ffb600 0%, #ffd700 100%);
+    color: #1a237e;
     box-shadow: 0 8px 20px rgba(255, 182, 0, 0.4);
 }
 
-.btn-primary:hover {
+.home-container .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 30px rgba(255, 182, 0, 0.5);
 }
 
-.btn-secondary {
+.home-container .btn-secondary {
     background: transparent;
-    color: #1A237E;
-    border: 2px solid #1A237E;
+    color: #1a237e;
+    border: 2px solid #1a237e;
 }
 
-.btn-secondary:hover {
-    background: #1A237E;
+.home-container .btn-secondary:hover {
+    background: #1a237e;
     color: white;
     transform: translateY(-2px);
 }

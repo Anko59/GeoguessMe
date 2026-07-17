@@ -49,9 +49,7 @@ export default function Home() {
                         </Link>
                     </div>
 
-                    <p className="home-footer-text">
-                        Join thousands of players worldwide
-                    </p>
+                    <p className="home-footer-text">Join thousands of players worldwide</p>
                 </div>
             </div>
         </div>

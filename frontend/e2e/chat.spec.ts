@@ -1,122 +1,136 @@
-import { test, expect, type Page } from '@playwright/test';
-import { uniqueGroup, signupViaUI, newAuthContext } from './helpers';
+import { test, expect, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
+import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
 
-test.describe.configure({ mode: 'serial' });
+interface ChatScenario {
+    ownerContext: Awaited<ReturnType<typeof newAuthContext>>;
+    owner: Page;
+    groupId: string;
+    groupCode: string;
+}
+
+async function createScenario(browser: Browser, active: BrowserContextOptions): Promise<ChatScenario> {
+    const ownerContext = await newAuthContext(browser, active);
+    const owner = await ownerContext.newPage();
+    await signupViaUI(owner);
+    await owner.goto('/group/create');
+    await owner.getByPlaceholder('Group Name').fill(uniqueGroup());
+    await owner.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+    await owner.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+    const groupId = owner.url().split('/group/')[1];
+    await owner.getByRole('button', { name: 'Open group settings' }).click();
+    const settings = owner.getByRole('dialog');
+    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
+    await settings.getByRole('button', { name: 'Close settings' }).click();
+    await expect(owner.getByRole('status')).toHaveText('Connected');
+
+    return { ownerContext, owner, groupId, groupCode };
+}
+
+async function addMember(
+    browser: Browser,
+    active: BrowserContextOptions,
+    scenario: ChatScenario,
+): Promise<{ context: Awaited<ReturnType<typeof newAuthContext>>; page: Page }> {
+    const context = await newAuthContext(browser, active);
+    const page = await context.newPage();
+    await signupViaUI(page);
+    await page.goto('/group/join');
+    await page.getByPlaceholder('6-character code').fill(scenario.groupCode);
+    await page.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
+    await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+    await page.goto(`/group/${scenario.groupId}`);
+    await expect(page.getByRole('status')).toHaveText('Connected');
+    return { context, page };
+}
 
 test.describe('Chat via WebSocket', () => {
-    let userAPage: Page;
-    let userBPage: Page;
-    let groupId: string;
-    let groupCode: string;
+    test('chat connect, send message, receive in real-time', async ({ browser }, testInfo) => {
+        const active = testInfo.project.use as BrowserContextOptions;
+        const scenario = await createScenario(browser, active);
+        const member = await addMember(browser, active, scenario);
+        try {
+            await expect(scenario.owner.locator('.chat-container')).toBeVisible();
+            await expect(member.page.locator('.chat-container')).toBeVisible();
 
-    test.beforeAll(async ({ browser }) => {
-        // User A: signup, create group
-        const ctxA = await newAuthContext(browser);
-        userAPage = await ctxA.newPage();
-        await signupViaUI(userAPage);
+            const msgText = `Hello from A at ${Date.now()}`;
+            await scenario.owner.locator('#chat-message').fill(msgText);
+            await scenario.owner.locator('form.message-input-container').getByRole('button', { name: 'Send' }).click();
 
-        await userAPage.goto('/group/create');
-        await userAPage.fill('input[placeholder="Group Name"]', uniqueGroup());
-        await userAPage.click('button[type="submit"]');
-        await userAPage.waitForURL(/\/group\//, { timeout: 10000 });
-        const match = userAPage.url().match(/\/group\/(.+)/);
-        groupId = match![1];
-
-        // Read group code from settings
-        await userAPage.click('.settings-btn');
-        await userAPage.waitForSelector('.modal-content', { state: 'visible' });
-        groupCode = (await userAPage.locator('.modal-content .group-code').textContent()) ?? '';
-        await userAPage.click('.modal-close');
+            await expect(scenario.owner.locator('.message-container').filter({ hasText: msgText })).toBeVisible();
+            await expect(member.page.locator('.message-container').filter({ hasText: msgText })).toBeVisible();
+        } finally {
+            await member.context.close();
+            await scenario.ownerContext.close();
+        }
     });
 
-    test('chat connect, send message, receive in real-time', async ({ browser }) => {
-        // User B: signup and join
-        const ctxB = await newAuthContext(browser);
-        userBPage = await ctxB.newPage();
-        await signupViaUI(userBPage);
+    test('reload restores message history', async ({ browser }, testInfo) => {
+        const active = testInfo.project.use as BrowserContextOptions;
+        const scenario = await createScenario(browser, active);
+        const member = await addMember(browser, active, scenario);
+        try {
+            const msgText = `Hello before reload at ${Date.now()}`;
+            await scenario.owner.locator('#chat-message').fill(msgText);
+            await scenario.owner.locator('form.message-input-container').getByRole('button', { name: 'Send' }).click();
+            await expect(member.page.locator('.message-container').filter({ hasText: msgText })).toBeVisible();
 
-        await userBPage.goto('/group/join');
-        await userBPage.fill('input[placeholder="6-character code"]', groupCode);
-        await userBPage.click('button[type="submit"]');
-        await userBPage.waitForURL(/\/group\//, { timeout: 10000 });
-
-        // Both users are now on the group view page (from beforeAll or join).
-        // Reload for clean state and wait for the page to fully settle.
-        await userAPage.reload();
-        await userAPage.waitForLoadState('networkidle');
-        await userAPage.waitForTimeout(3000);
-        await userBPage.reload();
-        await userBPage.waitForLoadState('networkidle');
-        await userBPage.waitForTimeout(3000);
-
-        // Wait for the chat component to render (group page is loaded)
-        await expect(userAPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
-        await expect(userBPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
-
-        // User A sends a message
-        const msgText = `Hello from A at ${Date.now()}`;
-        await userAPage.fill('#chat-message', msgText);
-        await userAPage.click('button[type="submit"]');
-
-        // Verify User A sees the message (sent optimistically via WS)
-        await expect(userAPage.locator('.message-container').last()).toContainText(msgText, { timeout: 5000 });
-
-        // Verify User B receives the message
-        await expect(userBPage.locator('.message-container').last()).toContainText(msgText, { timeout: 5000 });
+            await member.page.reload();
+            await member.page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await expect(member.page.getByRole('status')).toHaveText('Connected');
+            await expect(member.page.locator('.message-container').filter({ hasText: msgText })).toBeVisible();
+        } finally {
+            await member.context.close();
+            await scenario.ownerContext.close();
+        }
     });
 
-    test('reload restores message history', async () => {
-        // Reload User B's page
-        await userBPage.reload();
-        await userBPage.waitForURL(/\/group\//, { timeout: 15000 });
-        await expect(userBPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
-
-        // The previously sent message should appear (loaded from REST API history)
-        await expect(userBPage.locator('.message-container').last()).toContainText('Hello from A at', { timeout: 10000 });
-    });
-
-    test.afterAll(async () => {
-        if (userAPage) await userAPage.close();
-        if (userBPage) await userBPage.close();
-    });
-
-    test('one-time WS ticket reuse is rejected', async () => {
-        // Intercept the WS ticket endpoint to capture the ticket value
-        let usedTicket = '';
-        await userAPage.route('**/ws/ticket', async (route) => {
-            const response = await route.fetch();
-            const body = await response.json() as { ticket: string };
-            usedTicket = body.ticket;
-            await route.fulfill({ response });
-        });
-
-        // Reload to get a fresh connection with ticket interception
-        await userAPage.reload();
-        await userAPage.waitForURL(/\/group\//, { timeout: 15000 });
-        await expect(userAPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
-
-        // Now the ticket has been consumed by the WebSocket above.
-        // Attempt to open a new WebSocket with the same ticket.
-        const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
-        const wsBase = baseUrl.replace(/^http/, 'ws');
-        const groupParam = `group_id=${encodeURIComponent(groupId)}`;
-        const ticketParam = `ticket=${encodeURIComponent(usedTicket)}`;
-
-        const rejected = await userAPage.evaluate(async ({ wsBase, groupParam, ticketParam }) => {
-            return new Promise<boolean>((resolve) => {
-                const ws = new WebSocket(`${wsBase}/api/v1/ws?${groupParam}&${ticketParam}`);
-                ws.onopen = () => { ws.close(); resolve(false); };
-                ws.onerror = () => resolve(true);
-                ws.onclose = (e: CloseEvent) => {
-                    // Reconnecting with a consumed ticket → should be closed/refused
-                    if (e.code !== 1000) resolve(true);
-                    else resolve(false);
-                };
-                // Timeout after 5s
-                setTimeout(() => resolve(true), 5000);
+    test('one-time WS ticket reuse is rejected', async ({ browser }, testInfo) => {
+        const active = testInfo.project.use as BrowserContextOptions;
+        const scenario = await createScenario(browser, active);
+        try {
+            let usedTicket = '';
+            await scenario.owner.route('**/api/v1/ws/ticket*', async (route) => {
+                const response = await route.fetch();
+                const body = (await response.json()) as { ticket: string };
+                usedTicket = body.ticket;
+                await route.fulfill({ response });
             });
-        }, { wsBase, groupParam, ticketParam });
 
-        expect(rejected).toBe(true);
+            await scenario.owner.reload();
+            await scenario.owner.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await expect(scenario.owner.getByRole('status')).toHaveText('Connected');
+            expect(usedTicket).toMatch(/^\S+$/);
+
+            const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+            const wsBase = baseUrl.replace(/^http/, 'ws');
+            const groupParam = `group_id=${encodeURIComponent(scenario.groupId)}`;
+            const ticketParam = `ticket=${encodeURIComponent(usedTicket)}`;
+            const rejected = await scenario.owner.evaluate(
+                async ({ wsBase, groupParam, ticketParam }) =>
+                    new Promise<boolean>((resolve) => {
+                        let settled = false;
+                        const finish = (value: boolean) => {
+                            if (!settled) {
+                                settled = true;
+                                resolve(value);
+                            }
+                        };
+                        const ws = new WebSocket(`${wsBase}/api/v1/ws?${groupParam}&${ticketParam}`);
+                        ws.onopen = () => {
+                            ws.close();
+                            finish(false);
+                        };
+                        ws.onerror = () => finish(true);
+                        ws.onclose = (event: CloseEvent) => finish(event.code !== 1000);
+                        setTimeout(() => finish(true), 5000);
+                    }),
+                { wsBase, groupParam, ticketParam },
+            );
+
+            expect(rejected).toBe(true);
+        } finally {
+            await scenario.ownerContext.close();
+        }
     });
 });

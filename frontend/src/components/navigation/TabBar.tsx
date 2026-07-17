@@ -10,17 +10,11 @@ interface TabBarProps {
 export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
     return (
         <div className="tab-bar">
-            <button
-                className={`tab ${activeTab === 'chat' ? 'active' : ''}`}
-                onClick={() => onTabChange('chat')}
-            >
+            <button className={`tab ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => onTabChange('chat')}>
                 <img src="/chat_bubbl_icon.png" alt="Chat" className="tab-icon" />
                 <span>Chat</span>
             </button>
-            <button
-                className={`tab ${activeTab === 'camera' ? 'active' : ''}`}
-                onClick={() => onTabChange('camera')}
-            >
+            <button className={`tab ${activeTab === 'camera' ? 'active' : ''}`} onClick={() => onTabChange('camera')}>
                 <img src="/camera_icon.png" alt="Camera" className="tab-icon" />
                 <span>Camera</span>
             </button>

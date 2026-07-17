@@ -1,201 +1,209 @@
-import { test, expect, type Page } from '@playwright/test';
-import { uniqueGroup, signupViaUI, newAuthContext } from './helpers';
+import { test, expect, type BrowserContextOptions, type Page } from '@playwright/test';
+import {
+    installDeterministicCamera,
+    installDeterministicGeolocation,
+    newAuthContext,
+    signupViaUI,
+    uniqueGroup,
+} from './helpers';
 
-test.describe.configure({ mode: 'serial' });
+interface Scenario {
+    uploader: Page;
+    guesser: Page;
+    uploaderContext: Awaited<ReturnType<typeof newAuthContext>>;
+    guesserContext: Awaited<ReturnType<typeof newAuthContext>>;
+}
+
+function cameraOptions(active: BrowserContextOptions): BrowserContextOptions {
+    return {
+        ...active,
+        permissions: ['camera', 'geolocation'],
+        geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
+    };
+}
+
+async function createScenario(
+    browser: Parameters<typeof newAuthContext>[0],
+    active: BrowserContextOptions,
+): Promise<Scenario> {
+    const options = cameraOptions(active);
+    const uploaderContext = await newAuthContext(browser, options);
+    const guesserContext = await newAuthContext(browser, options);
+    await installDeterministicCamera(uploaderContext);
+    await installDeterministicGeolocation(uploaderContext);
+
+    const uploader = await uploaderContext.newPage();
+    await signupViaUI(uploader);
+    await uploader.goto('/group/create');
+    await uploader.getByPlaceholder('Group Name').fill(uniqueGroup());
+    await uploader.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+    await uploader.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+    const groupId = uploader.url().split('/group/')[1];
+
+    await uploader.getByRole('button', { name: 'Open group settings' }).click();
+    const settings = uploader.getByRole('dialog');
+    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
+    await settings.getByRole('button', { name: 'Close settings' }).click();
+
+    const guesser = await guesserContext.newPage();
+    await signupViaUI(guesser);
+    await guesser.goto('/group/join');
+    await guesser.getByPlaceholder('6-character code').fill(groupCode);
+    await guesser.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
+    await guesser.waitForURL(/\/group\//);
+
+    await uploader.goto('/group/' + groupId);
+    await guesser.goto('/group/' + groupId);
+    await expect(uploader.getByRole('status')).toHaveText('Connected');
+    await expect(guesser.getByRole('status')).toHaveText('Connected');
+    return { uploader, guesser, uploaderContext, guesserContext };
+}
+
+async function closeScenario(scenario: Scenario): Promise<void> {
+    await scenario.uploaderContext.close();
+    await scenario.guesserContext.close();
+}
 
 test.describe('Challenge flow', () => {
-    let uploaderPage: Page;
-    let guesserPage: Page;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let groupId: string;
-    let groupCode: string;
+    test('uploads, accepts, hides media, records a guess, and reopens exact results', async ({ browser }, testInfo) => {
+        const scenario = await createScenario(browser, testInfo.project.use as BrowserContextOptions);
+        try {
+            const { uploader, guesser } = scenario;
+            await uploader.getByRole('button', { name: 'Camera' }).click();
+            await expect(uploader.locator('.capture-button')).toBeVisible();
+            await uploader.locator('.capture-button').click();
+            await expect(uploader.locator('.preview-image')).toBeVisible();
 
-    test.beforeAll(async ({ browser }) => {
-        // Uploader signs up, creates group
-        const ctxU = await newAuthContext(browser);
-        uploaderPage = await ctxU.newPage();
+            const uploadResponsePromise = uploader.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',
+            );
+            await uploader.getByRole('button', { name: /Send/ }).click();
+            const uploadResponse = await uploadResponsePromise;
+            expect(uploadResponse.status()).toBe(201);
+            const uploaded = (await uploadResponse.json()) as { id: string };
+            expect(uploaded.id).toMatch(/^[0-9a-f-]{36}$/);
+            await expect(uploader.locator('.chat-container')).toBeVisible();
 
-        // Camera mocking: replace getUserMedia with a canvas-based fake stream
-        await uploaderPage.addInitScript(() => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 320;
-            canvas.height = 240;
-            const ctx = canvas.getContext('2d')!;
-            ctx.fillStyle = '#4A90D9';
-            ctx.fillRect(0, 0, 320, 240);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '20px sans-serif';
-            ctx.fillText('TEST', 120, 120);
-            const stream = canvas.captureStream(30);
+            const exactChallenge = uploader.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
+            const receivedChallenge = guesser.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
+            await expect(receivedChallenge).toContainText('New challenge');
+            await expect(receivedChallenge).toContainText('Accept challenge');
+            const acceptResponsePromise = guesser.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/accept') &&
+                    response.request().method() === 'POST',
+            );
+            const mediaResponsePromise = guesser.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/media') &&
+                    response.request().method() === 'GET',
+            );
+            await receivedChallenge.click();
+            const acceptResponse = await acceptResponsePromise;
+            expect(acceptResponse.status()).toBe(200);
+            const mediaResponse = await mediaResponsePromise;
+            expect(mediaResponse.status()).toBe(200);
+            await expect(guesser.locator('.photo-view')).toBeVisible();
+            await expect(guesser.locator('.game-photo')).toBeVisible();
+            await expect(guesser.locator('.guessing-view')).toHaveCount(0);
+            await expect(guesser.locator('.game-photo')).toHaveCount(0, { timeout: 10000 });
+            await expect(guesser.locator('.guessing-view')).toBeVisible();
 
-            // Override getUserMedia at the instance level (writable in Chromium)
-            if (navigator.mediaDevices) {
-                navigator.mediaDevices.getUserMedia = () => Promise.resolve(stream);
-            }
-        });
+            await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
+            const guessResponsePromise = guesser.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/guess') &&
+                    response.request().method() === 'POST',
+            );
+            await guesser.getByRole('button', { name: /Submit guess/ }).click();
+            const guessResponse = await guessResponsePromise;
+            expect(guessResponse.status()).toBe(201);
+            await expect(guesser.locator('.result-view')).toContainText('Challenge results');
 
-        await signupViaUI(uploaderPage);
-
-        await uploaderPage.goto('/group/create');
-        await uploaderPage.fill('input[placeholder="Group Name"]', uniqueGroup());
-        await uploaderPage.click('button[type="submit"]');
-        await uploaderPage.waitForURL(/\/group\//, { timeout: 10000 });
-        groupId = uploaderPage.url().match(/\/group\/(.+)/)![1];
-
-        await uploaderPage.click('.settings-btn');
-        await uploaderPage.waitForSelector('.modal-content', { state: 'visible' });
-        groupCode = (await uploaderPage.locator('.modal-content .group-code').textContent()) ?? '';
-        await uploaderPage.click('.modal-close');
-
-        // Guesser signs up and joins
-        const ctxG = await newAuthContext(browser);
-        guesserPage = await ctxG.newPage();
-        await signupViaUI(guesserPage);
-
-        await guesserPage.goto('/group/join');
-        await guesserPage.fill('input[placeholder="6-character code"]', groupCode);
-        await guesserPage.click('button[type="submit"]');
-        await guesserPage.waitForURL(/\/group\//, { timeout: 10000 });
+            await expect(exactChallenge).toContainText('Challenge sent');
+            await exactChallenge.click();
+            await expect(uploader.locator('.result-view')).toContainText('Challenge results');
+        } finally {
+            await closeScenario(scenario);
+        }
     });
 
-    test('upload a challenge, guesser accepts, sees media, guesses after window, scores shown', async () => {
-        // Both users navigate to the group (already on it from beforeAll, just reload for clean state)
-        await uploaderPage.reload();
-        await uploaderPage.waitForLoadState('networkidle');
-        await uploaderPage.waitForTimeout(2000);
-        await guesserPage.reload();
-        await guesserPage.waitForLoadState('networkidle');
-        await guesserPage.waitForTimeout(2000);
-
-        // Verify the chat component rendered
-        await expect(uploaderPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
-        await expect(guesserPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
-
-        // Uploader switches to Camera tab
-        await uploaderPage.locator('.tab-bar .tab:nth-child(2)').click();
-        await uploaderPage.waitForSelector('.camera-container', { state: 'visible' });
-
-        // Wait for camera to be ready
-        await expect(uploaderPage.locator('.capture-button')).toBeVisible({ timeout: 10000 });
-
-        // Take a photo
-        await uploaderPage.click('.capture-button');
-        await expect(uploaderPage.locator('.preview-image')).toBeVisible({ timeout: 5000 });
-
-        // Send the photo (upload with geolocation)
-        await uploaderPage.click('button:has-text("Send")');
-        // After upload, the Camera unmounts and chat tab reappears.
-        await expect(uploaderPage.locator('.chat-container')).toBeVisible({ timeout: 15000 });
-
-        // Guesser should see the challenge message
-        await expect(guesserPage.locator('.message-content.photo-challenge')).toBeVisible({ timeout: 15000 });
-
-        // Guesser clicks to accept the challenge
-        await guesserPage.locator('.message-content.photo-challenge').click();
-
-        // Should see the viewing window (photo displayed with timer)
-        await expect(guesserPage.locator('.photo-view')).toBeVisible({ timeout: 10000 });
-        await expect(guesserPage.locator('.game-photo')).toBeVisible();
-
-        // Wait for the view window to expire (1s in test stack + buffer)
-        await guesserPage.waitForSelector('.guessing-view', { timeout: 10000 });
-
-        // Place a guess on the map
-        await guesserPage.waitForSelector('.guess-button', { state: 'visible' });
-
-        // Click on the map to place a marker (center of map)
-        const map = guesserPage.locator('.leaflet-container');
-        await map.click({ position: { x: 200, y: 150 } });
-
-        // Submit guess
-        await guesserPage.click('.guess-button:not([disabled])');
-        await expect(guesserPage.locator('.guess-button')).toBeDisabled({ timeout: 3000 });
-
-        // Should see the results view
-        await expect(guesserPage.locator('.result-view')).toBeVisible({ timeout: 15000 });
-        await expect(guesserPage.locator('.result-view')).toContainText('Challenge results');
-
-        // Uploader should also see results
-        // Uploader's own challenge message should now say "View results"
-        await expect(uploaderPage.locator('.message-container').last()).toContainText('View results', { timeout: 15000 });
+    test('completed challenge reopens existing results', async ({ browser }, testInfo) => {
+        const scenario = await createScenario(browser, testInfo.project.use as BrowserContextOptions);
+        try {
+            const { uploader, guesser } = scenario;
+            await uploader.getByRole('button', { name: 'Camera' }).click();
+            await uploader.locator('.capture-button').click();
+            await expect(uploader.locator('.preview-image')).toBeVisible();
+            const uploadResponsePromise = uploader.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',
+            );
+            await uploader.getByRole('button', { name: /Send/ }).click();
+            const uploadResponse = await uploadResponsePromise;
+            const photoID = ((await uploadResponse.json()) as { id: string }).id;
+            const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + photoID + '"]');
+            const acceptResponsePromise = guesser.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/challenges/' + photoID + '/accept') &&
+                    response.request().method() === 'POST',
+            );
+            const mediaResponsePromise = guesser.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/challenges/' + photoID + '/media') &&
+                    response.request().method() === 'GET',
+            );
+            await challenge.click();
+            const acceptResponse = await acceptResponsePromise;
+            expect(acceptResponse.status()).toBe(200);
+            const mediaResponse = await mediaResponsePromise;
+            expect(mediaResponse.status()).toBe(200);
+            await expect(guesser.locator('.photo-view')).toBeVisible();
+            await expect(guesser.locator('.guessing-view')).toBeVisible();
+            await guesser.locator('.leaflet-container').click({ position: { x: 250, y: 180 } });
+            await guesser.getByRole('button', { name: /Submit guess/ }).click();
+            await expect(guesser.locator('.result-view')).toBeVisible();
+            await guesser.getByRole('button', { name: 'Close' }).click();
+            await challenge.click();
+            await expect(guesser.locator('.result-view')).toContainText('Challenge results');
+        } finally {
+            await closeScenario(scenario);
+        }
     });
 
-    test('duplicate guess is idempotent', async ({ browser }) => {
-        // Create a fresh two-user setup for an isolated challenge
-        const ctxU2 = await newAuthContext(browser);
-        const uploader2 = await ctxU2.newPage();
-        await uploader2.addInitScript(() => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 320;
-            canvas.height = 240;
-            const ctx = canvas.getContext('2d')!;
-            ctx.fillStyle = '#E74C3C';
-            ctx.fillRect(0, 0, 320, 240);
-            const stream = canvas.captureStream(30);
-            if (navigator.mediaDevices) {
-                navigator.mediaDevices.getUserMedia = () => Promise.resolve(stream);
-            }
-        });
-        await signupViaUI(uploader2);
+    test('camera denial is recoverable and geolocation denial is reported', async ({ browser }, testInfo) => {
+        const active = testInfo.project.use as BrowserContextOptions;
+        const cameraDenied = await newAuthContext(browser, { ...active, permissions: [] });
+        const cameraPage = await cameraDenied.newPage();
+        try {
+            await signupViaUI(cameraPage);
+            await cameraPage.goto('/group/create');
+            await cameraPage.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await cameraPage.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await cameraPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await cameraPage.getByRole('button', { name: 'Camera' }).click();
+            await expect(cameraPage.locator('.camera-error')).toContainText('Camera access denied');
+            await expect(cameraPage.getByRole('button', { name: 'Try Again' })).toBeVisible();
+        } finally {
+            await cameraDenied.close();
+        }
 
-        const ctxG2 = await newAuthContext(browser);
-        const guesser2 = await ctxG2.newPage();
-        await signupViaUI(guesser2);
-
-        // Create fresh group for this test
-        await uploader2.goto('/group/create');
-        await uploader2.fill('input[placeholder="Group Name"]', uniqueGroup());
-        await uploader2.click('button[type="submit"]');
-        await uploader2.waitForURL(/\/group\//, { timeout: 10000 });
-        const g2Id = uploader2.url().match(/\/group\/(.+)/)![1];
-
-        await uploader2.click('.settings-btn');
-        await uploader2.waitForSelector('.modal-content', { state: 'visible' });
-        const g2Code = (await uploader2.locator('.modal-content .group-code').textContent()) ?? '';
-        await uploader2.click('.modal-close');
-
-        await guesser2.goto('/group/join');
-        await guesser2.fill('input[placeholder="6-character code"]', g2Code);
-        await guesser2.click('button[type="submit"]');
-        await guesser2.waitForURL(/\/group\//, { timeout: 10000 });
-
-        // Both on group view
-        await uploader2.goto(`/group/${g2Id}`);
-        await guesser2.goto(`/group/${g2Id}`);
-        await expect(uploader2.locator('.chat-status')).toBeVisible({ timeout: 15000 });
-        await expect(guesser2.locator('.chat-status')).toBeVisible({ timeout: 15000 });
-
-        // Upload challenge
-        await uploader2.click('.tab:nth-child(2)');
-        await expect(uploader2.locator('.capture-button')).toBeVisible({ timeout: 10000 });
-        await uploader2.click('.capture-button');
-        await expect(uploader2.locator('.preview-image')).toBeVisible({ timeout: 5000 });
-        await uploader2.click('button:has-text("Send")');
-        await expect(guesser2.locator('.message-content.photo-challenge')).toBeVisible({ timeout: 15000 });
-
-        // Accept
-        await guesser2.locator('.message-content.photo-challenge').click();
-        await expect(guesser2.locator('.photo-view')).toBeVisible({ timeout: 10000 });
-
-        // Wait for guessing view
-        await guesser2.waitForSelector('.guessing-view', { timeout: 10000 });
-
-        // Place guess and submit
-        const map = guesser2.locator('.leaflet-container');
-        await map.click({ position: { x: 250, y: 180 } });
-        await guesser2.click('.guess-button:not([disabled])');
-
-        // Wait for first guess to complete (results view)
-        await expect(guesser2.locator('.result-view')).toBeVisible({ timeout: 15000 });
-
-        // Close the results view
-        await guesser2.locator('.next-button').click();
-
-        // Wait for challenge message to reappear (now "View results")
-        await expect(guesser2.locator('.message-content.photo-challenge')).toBeVisible({ timeout: 10000 });
-
-        // Click it again — should show results without error (idempotent)
-        await guesser2.locator('.message-content.photo-challenge').click();
-        await expect(guesser2.locator('.result-view')).toBeVisible({ timeout: 15000 });
+        const locationDenied = await newAuthContext(browser, { ...active, permissions: ['camera'] });
+        await installDeterministicCamera(locationDenied);
+        const locationPage = await locationDenied.newPage();
+        try {
+            await signupViaUI(locationPage);
+            await locationPage.goto('/group/create');
+            await locationPage.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await locationPage.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await locationPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await locationPage.getByRole('button', { name: 'Camera' }).click();
+            await locationPage.locator('.capture-button').click();
+            await expect(locationPage.locator('.preview-image')).toBeVisible();
+            await locationPage.getByRole('button', { name: /Send/ }).click();
+            await expect(locationPage.locator('.camera-error')).toContainText('Unable to retrieve location');
+        } finally {
+            await locationDenied.close();
+        }
     });
 });

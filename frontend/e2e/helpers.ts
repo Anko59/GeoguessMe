@@ -1,4 +1,4 @@
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 /** Generate a unique username for test isolation. */
 export function uniqueUsername(): string {
@@ -58,9 +58,63 @@ export async function loginViaUI(page: Page, username: string, password: string)
  * Create an isolated browser context for a second user, inheriting the base
  * URL and (optionally) geolocation/permissions from the current project.
  */
-export async function newAuthContext(browser: Browser): Promise<import('@playwright/test').BrowserContext> {
+export async function newAuthContext(
+    browser: Browser,
+    contextOptions: BrowserContextOptions = {},
+): Promise<BrowserContext> {
     const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
-    return browser.newContext({ baseURL });
+    return browser.newContext({ ...contextOptions, baseURL: contextOptions.baseURL ?? baseURL });
+}
+
+/** Install a deterministic canvas camera before any page is created. */
+export async function installDeterministicCamera(context: BrowserContext): Promise<void> {
+    await context.addInitScript(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        const canvasContext = canvas.getContext('2d');
+        if (!canvasContext) return;
+        canvasContext.fillStyle = '#4A90D9';
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+        canvasContext.fillStyle = '#FFFFFF';
+        canvasContext.font = '20px sans-serif';
+        canvasContext.fillText('TEST', 120, 120);
+        const stream = canvas.captureStream(30);
+        const getUserMedia = async () => stream;
+        if (!navigator.mediaDevices) {
+            Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
+        }
+        Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+            configurable: true,
+            value: getUserMedia,
+            writable: true,
+        });
+    });
+}
+
+/** Install deterministic geolocation for scenarios that permit location access. */
+export async function installDeterministicGeolocation(context: BrowserContext): Promise<void> {
+    await context.addInitScript(() => {
+        const getCurrentPosition = (success: PositionCallback) => {
+            success({
+                coords: {
+                    accuracy: 1,
+                    altitude: null,
+                    altitudeAccuracy: null,
+                    heading: null,
+                    latitude: 48.8566,
+                    longitude: 2.3522,
+                    speed: null,
+                },
+                timestamp: Date.now(),
+            });
+        };
+        Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
+            configurable: true,
+            value: getCurrentPosition,
+            writable: true,
+        });
+    });
 }
 
 /**
@@ -74,13 +128,13 @@ export async function getMailpitLink(email: string, pathFragment: string): Promi
 
     for (let i = 0; i < 30; i++) {
         const searchRes = await fetch(`${mailpitHost}/api/v1/search?query=${query}`);
-        const searchBody = await searchRes.json() as { messages: Array<{ ID: string }> };
+        const searchBody = (await searchRes.json()) as { messages: Array<{ ID: string }> };
         const messages = searchBody.messages ?? [];
 
         if (messages.length > 0) {
             const msgId = messages[0].ID;
             const msgRes = await fetch(`${mailpitHost}/api/v1/message/${msgId}`);
-            const msgBody = await msgRes.json() as { Text: string };
+            const msgBody = (await msgRes.json()) as { Text: string };
             const text = msgBody.Text ?? '';
 
             // The plain-text body is a single URL (or contains one). Extract it
@@ -88,7 +142,15 @@ export async function getMailpitLink(email: string, pathFragment: string): Promi
             const urlRegex = /https?:\/\/\S+/g;
             for (const match of text.matchAll(urlRegex)) {
                 const url = match[0];
-                if (url.includes(pathFragment)) return url;
+                if (url.includes(pathFragment)) {
+                    const testBaseURL = process.env.PLAYWRIGHT_BASE_URL;
+                    if (!testBaseURL) return url;
+                    const link = new URL(url);
+                    const base = new URL(testBaseURL);
+                    link.protocol = base.protocol;
+                    link.host = base.host;
+                    return link.toString();
+                }
             }
         }
         await new Promise((r) => setTimeout(r, 1000));

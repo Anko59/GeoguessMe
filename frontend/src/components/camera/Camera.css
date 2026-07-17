@@ -173,7 +173,6 @@
 
 /* Safe area support for devices with notches */
 @supports (padding: max(0px)) {
-
     .camera-controls,
     .preview-controls {
         bottom: max(2rem, env(safe-area-inset-bottom));

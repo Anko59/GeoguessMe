@@ -10,10 +10,17 @@ vi.mock('../../api', () => ({
     default: {
         post: (...args: unknown[]) => mockPost(...args),
     },
-    getAPIErrorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
+    getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
-const authValue = { user: null, loading: false, isAuthenticated: false, login: vi.fn(), logout: vi.fn(async () => undefined), refresh: vi.fn(async () => false) };
+const authValue = {
+    user: null,
+    loading: false,
+    isAuthenticated: false,
+    login: vi.fn(),
+    logout: vi.fn(async () => undefined),
+    refresh: vi.fn(async () => false),
+};
 
 describe('Login Page', () => {
     beforeEach(() => {
@@ -22,7 +29,11 @@ describe('Login Page', () => {
 
     it('renders login form', () => {
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
@@ -32,7 +43,11 @@ describe('Login Page', () => {
 
     it('handles input changes', () => {
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         const usernameInput = screen.getByPlaceholderText('Username') as HTMLInputElement;
@@ -50,11 +65,15 @@ describe('Login Page', () => {
             data: {
                 token: 'fake-token',
                 user: { id: '1', username: 'testuser' },
-            }
+            },
         });
 
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'testuser' } });
@@ -70,7 +89,11 @@ describe('Login Page', () => {
         mockPost.mockRejectedValue(new Error('Invalid credentials'));
 
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Login /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'wrong' } });

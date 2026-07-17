@@ -32,7 +32,24 @@ export default function GroupsList() {
         );
     }
 
-    if (error) return <div className="groups-list-container"><div className="error-message" role="alert">{error}<button className="btn btn-secondary" onClick={() => { setError(''); setLoading(true); void fetchGroups(); }}>Retry</button></div></div>;
+    if (error)
+        return (
+            <div className="groups-list-container">
+                <div className="error-message" role="alert">
+                    {error}
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                            setError('');
+                            setLoading(true);
+                            void fetchGroups();
+                        }}
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
 
     return (
         <div className="groups-list-container">
@@ -65,11 +82,7 @@ export default function GroupsList() {
             ) : (
                 <div className="groups-grid">
                     {groups.map((group) => (
-                        <Link
-                            key={group.id}
-                            to={`/group/${group.id}`}
-                            className="group-card"
-                        >
+                        <Link key={group.id} to={`/group/${group.id}`} className="group-card">
                             <div className="group-card-content">
                                 <img src="/friends_group_icon.png" alt="" className="group-icon" />
                                 <div className="group-info">

@@ -36,14 +36,45 @@ export default function Login() {
                 <p className="auth-subtitle">Login to continue guessing</p>
                 <form onSubmit={handleSubmit} className="auth-form">
                     <label htmlFor="login-username">Username</label>
-                    <input id="login-username" type="text" placeholder="Username" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" />
+                    <input
+                        id="login-username"
+                        type="text"
+                        placeholder="Username"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        required
+                        autoComplete="username"
+                    />
                     <label htmlFor="login-password">Password</label>
-                    <input id="login-password" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" />
-                    {error && <div className="auth-error" role="alert">{error}</div>}
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Logging in…' : 'Login'}</button>
+                    <input
+                        id="login-password"
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                        autoComplete="current-password"
+                    />
+                    {error && (
+                        <div className="auth-error" role="alert">
+                            {error}
+                        </div>
+                    )}
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? 'Logging in…' : 'Login'}
+                    </button>
                 </form>
-                <p className="auth-footer"><Link to="/forgot-password" className="auth-link">Forgot your password?</Link></p>
-                <p className="auth-footer">Don't have an account? <Link to="/signup" className="auth-link">Sign up</Link></p>
+                <p className="auth-footer">
+                    <Link to="/forgot-password" className="auth-link">
+                        Forgot your password?
+                    </Link>
+                </p>
+                <p className="auth-footer">
+                    Don't have an account?{' '}
+                    <Link to="/signup" className="auth-link">
+                        Sign up
+                    </Link>
+                </p>
             </div>
         </div>
     );

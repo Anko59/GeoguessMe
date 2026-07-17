@@ -2,6 +2,14 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import './Camera.css';
 
+function dataURLToBlob(dataURL: string): Blob {
+    const [header, encoded] = dataURL.split(',', 2);
+    const binary = atob(encoded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const mimeType = header.match(/^data:([^;]+)/)?.[1] ?? 'image/jpeg';
+    return new Blob([bytes], { type: mimeType });
+}
+
 interface CameraProps {
     groupID: string;
     onUploadComplete: () => void;
@@ -26,14 +34,19 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-                audio: false
+                audio: false,
             });
             streamRef.current = mediaStream;
             if (videoRef.current) {
-                videoRef.current.srcObject = mediaStream;
-                videoRef.current.onloadedmetadata = () => {
-                    setCameraReady(true);
-                };
+                const video = videoRef.current;
+                const markCameraReady = () => setCameraReady(true);
+                video.onloadedmetadata = markCameraReady;
+                video.oncanplay = markCameraReady;
+                video.srcObject = mediaStream;
+                void video
+                    .play()
+                    .then(markCameraReady)
+                    .catch(() => undefined);
             }
             setError('');
         } catch {
@@ -41,7 +54,10 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
         }
     }, []);
 
-    useEffect(() => { void startCamera(); return stopCamera; }, [startCamera, stopCamera]);
+    useEffect(() => {
+        void startCamera();
+        return stopCamera;
+    }, [startCamera, stopCamera]);
 
     const capturePhoto = () => {
         if (!videoRef.current || !canvasRef.current) return;
@@ -86,8 +102,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
             async (position) => {
                 try {
                     // Convert base64 to blob
-                    const response = await fetch(capturedPhoto);
-                    const blob = await response.blob();
+                    const blob = dataURLToBlob(capturedPhoto);
 
                     const formData = new FormData();
                     formData.append('photo', blob, 'capture.jpg');
@@ -108,7 +123,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
             () => {
                 setError('Unable to retrieve location. Please enable location services.');
                 setUploading(false);
-            }
+            },
         );
     };
 
@@ -152,18 +167,10 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                 <div className="photo-preview">
                     <img src={capturedPhoto} alt="Captured" className="preview-image" />
                     <div className="preview-controls">
-                        <button
-                            className="btn btn-outline"
-                            onClick={retake}
-                            disabled={uploading}
-                        >
+                        <button className="btn btn-outline" onClick={retake} disabled={uploading}>
                             Retake
                         </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleUpload}
-                            disabled={uploading}
-                        >
+                        <button className="btn btn-primary" onClick={handleUpload} disabled={uploading}>
                             {uploading ? 'Sending...' : 'Send 📸'}
                         </button>
                     </div>

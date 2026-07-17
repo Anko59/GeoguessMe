@@ -48,16 +48,10 @@ export default function GroupJoin() {
             </div>
 
             <div className="mode-selector">
-                <button
-                    onClick={() => setMode('join')}
-                    className={`mode-btn ${mode === 'join' ? 'active' : ''}`}
-                >
+                <button onClick={() => setMode('join')} className={`mode-btn ${mode === 'join' ? 'active' : ''}`}>
                     Join Group
                 </button>
-                <button
-                    onClick={() => setMode('create')}
-                    className={`mode-btn ${mode === 'create' ? 'active' : ''}`}
-                >
+                <button onClick={() => setMode('create')} className={`mode-btn ${mode === 'create' ? 'active' : ''}`}>
                     Create Group
                 </button>
             </div>

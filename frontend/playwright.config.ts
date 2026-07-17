@@ -1,21 +1,27 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+const OUTPUT_DIR = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results';
+const REPORT_DIR = process.env.PLAYWRIGHT_REPORT_DIR || 'playwright-report';
+const baseOrigin = new URL(BASE_URL).origin;
+const launchArgs = baseOrigin.startsWith('http://') ? [`--unsafely-treat-insecure-origin-as-secure=${baseOrigin}`] : [];
 
 export default defineConfig({
     testDir: './e2e',
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
     workers: 1,
+    outputDir: OUTPUT_DIR,
     reporter: [
-        ['html'],
-        ['junit', { outputFile: 'test-results/junit.xml' }],
+        ['html', { outputFolder: REPORT_DIR }],
+        ['junit', { outputFile: `${OUTPUT_DIR}/junit.xml` }],
     ],
     use: {
         baseURL: BASE_URL,
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
+        launchOptions: { args: launchArgs },
     },
     projects: [
         {

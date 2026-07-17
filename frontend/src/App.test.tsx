@@ -7,7 +7,7 @@ describe('Home Page', () => {
         render(
             <BrowserRouter>
                 <Home />
-            </BrowserRouter>
+            </BrowserRouter>,
         );
 
         expect(screen.getByText('geoguess.me')).toBeInTheDocument();

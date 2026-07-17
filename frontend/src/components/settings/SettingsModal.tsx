@@ -54,8 +54,16 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="group-settings-title" onClick={(e) => e.stopPropagation()}>
-                <button className="modal-close" onClick={onClose} aria-label="Close settings">×</button>
+            <div
+                className="modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="group-settings-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button className="modal-close" onClick={onClose} aria-label="Close settings">
+                    ×
+                </button>
 
                 <h2 className="modal-title">
                     <img src="/settings_gear_icon.png" alt="" className="modal-icon" />
@@ -69,12 +77,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                         Invite Link
                     </h4>
                     <div className="invite-box">
-                        <input
-                            type="text"
-                            value={inviteLink}
-                            readOnly
-                            className="invite-input"
-                        />
+                        <input type="text" value={inviteLink} readOnly className="invite-input" />
                         <button onClick={copyInviteLink} className="copy-btn">
                             {copiedItem === 'link' ? (
                                 <>
@@ -115,10 +118,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                 </div>
 
                 <div className="settings-section">
-                    <h4
-                        className="section-title members-toggle"
-                        onClick={() => setMembersExpanded(!membersExpanded)}
-                    >
+                    <h4 className="section-title members-toggle" onClick={() => setMembersExpanded(!membersExpanded)}>
                         <span className="toggle-icon">{membersExpanded ? '▼' : '▶'}</span>
                         Group Members
                     </h4>
@@ -127,7 +127,9 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                             {loadingMembers ? (
                                 <div className="members-loading">Loading...</div>
                             ) : memberError ? (
-                                <div className="members-empty" role="alert">{memberError}</div>
+                                <div className="members-empty" role="alert">
+                                    {memberError}
+                                </div>
                             ) : members.length > 0 ? (
                                 members.map((member) => (
                                     <div key={member.id} className="member-item">

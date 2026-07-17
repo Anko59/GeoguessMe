@@ -10,10 +10,17 @@ vi.mock('../../api', () => ({
     default: {
         post: (...args: unknown[]) => mockPost(...args),
     },
-    getAPIErrorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
+    getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
-const authValue = { user: null, loading: false, isAuthenticated: false, login: vi.fn(), logout: vi.fn(async () => undefined), refresh: vi.fn(async () => false) };
+const authValue = {
+    user: null,
+    loading: false,
+    isAuthenticated: false,
+    login: vi.fn(),
+    logout: vi.fn(async () => undefined),
+    refresh: vi.fn(async () => false),
+};
 
 describe('Signup Page', () => {
     beforeEach(() => {
@@ -22,7 +29,11 @@ describe('Signup Page', () => {
 
     it('renders signup form', () => {
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Signup /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
@@ -35,11 +46,15 @@ describe('Signup Page', () => {
             data: {
                 token: 'fake-token',
                 user: { id: '1', username: 'newuser' },
-            }
+            },
         });
 
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Signup /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
@@ -48,7 +63,11 @@ describe('Signup Page', () => {
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
 
         await waitFor(() => {
-            expect(mockPost).toHaveBeenCalledWith('/auth/signup', { username: 'newuser', email: 'new@example.com', password: 'StrongPass123' });
+            expect(mockPost).toHaveBeenCalledWith('/auth/signup', {
+                username: 'newuser',
+                email: 'new@example.com',
+                password: 'StrongPass123',
+            });
         });
     });
 
@@ -56,7 +75,11 @@ describe('Signup Page', () => {
         mockPost.mockRejectedValue(new Error('Username taken'));
 
         render(
-            <AuthContext.Provider value={authValue}><BrowserRouter><Signup /></BrowserRouter></AuthContext.Provider>
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'taken' } });

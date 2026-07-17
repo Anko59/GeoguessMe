@@ -17,7 +17,8 @@ export const api = axios.create({
 
 const refresh = async (): Promise<string | null> => {
     if (!refreshPromise) {
-        refreshPromise = axios.post<AuthResponse>('/api/v1/auth/refresh', undefined, { withCredentials: true })
+        refreshPromise = axios
+            .post<AuthResponse>('/api/v1/auth/refresh', undefined, { withCredentials: true })
             .then((response) => {
                 setAccessToken(response.data.access_token);
                 return response.data.access_token;

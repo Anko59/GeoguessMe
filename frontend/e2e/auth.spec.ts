@@ -29,8 +29,7 @@ test.describe('Authentication', () => {
         await page.goto('/settings');
         await page.waitForSelector('.logout-btn', { state: 'visible' });
         await page.click('.logout-btn');
-        await page.waitForLoadState('networkidle');
-        await page.waitForTimeout(2000);
+        await page.waitForURL('/');
 
         // Must NOT be on the settings page after logout
         await expect(page).not.toHaveURL(/\/settings/);
