@@ -1,0 +1,20 @@
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - bodyclose
+    - noctx
+    - gosimple
+  disable:
+    - exhaustruct
+  linters-settings:
+    govet:
+      enable-all: true
+    staticcheck:
+      checks: ["all", "-SA1019"]
+  run:
+    tests: true
+    timeout: 3m

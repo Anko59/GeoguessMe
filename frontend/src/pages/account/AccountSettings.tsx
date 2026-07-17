@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../api';
-import { useAuth } from '../context/AuthContext';
-import LogoutButton from '../components/LogoutButton';
+import api, { getAPIErrorMessage } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import LogoutButton from '../../components/navigation/LogoutButton';
 
 export default function AccountSettings() {
     const { user, refresh } = useAuth(); const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [password, setPassword] = useState('');

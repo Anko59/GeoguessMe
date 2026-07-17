@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api';
-import type { Group } from '../types';
+import api from '../../api';
+import type { Group } from '../../types';
 import './GroupsList.css';
 
 export default function GroupsList() {

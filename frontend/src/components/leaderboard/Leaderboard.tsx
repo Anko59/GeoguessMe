@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api';
-import { useAuth } from '../context/AuthContext';
-import type { LeaderboardEntry } from '../types';
+import api from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import type { LeaderboardEntry } from '../../types';
 import './Leaderboard.css';
 
 interface LeaderboardProps {

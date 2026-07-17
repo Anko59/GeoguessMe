@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../../context/AuthContext';
 import './Home.css';
 
 export default function Home() {

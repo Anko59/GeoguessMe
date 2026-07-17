@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../api';
-import { useAuth } from '../context/AuthContext';
-import type { Group, Message, MessagesPage } from '../types';
-import Chat from '../components/Chat';
-import Leaderboard from '../components/Leaderboard';
-import Camera from '../components/Camera';
-import Game from '../components/Game';
-import SettingsModal from '../components/SettingsModal';
-import TabBar, { type TabType } from '../components/TabBar';
+import api, { getAPIErrorMessage } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import type { Group, Message, MessagesPage } from '../../types';
+import Chat from '../../components/chat/Chat';
+import Leaderboard from '../../components/leaderboard/Leaderboard';
+import Camera from '../../components/camera/Camera';
+import Game from '../../components/game/Game';
+import SettingsModal from '../../components/settings/SettingsModal';
+import TabBar, { type TabType } from '../../components/navigation/TabBar';
 import './GroupView.css';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'offline';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../api';
+import api, { getAPIErrorMessage } from '../../api';
 import './Auth.css';
 
 export default function ResetPassword() {

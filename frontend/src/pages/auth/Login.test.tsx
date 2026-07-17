@@ -2,11 +2,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import Login from './Login';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../../context/AuthContext';
 
 // Mock the API module
 const mockPost = vi.fn();
-vi.mock('../api', () => ({
+vi.mock('../../api', () => ({
     default: {
         post: (...args: unknown[]) => mockPost(...args),
     },

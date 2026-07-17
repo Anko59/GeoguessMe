@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../api';
-import { useAuth } from '../context/AuthContext';
-import type { AuthResponse } from '../types';
+import api, { getAPIErrorMessage } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import type { AuthResponse } from '../../types';
 import './Auth.css';
 
 export default function Signup() {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../api';
+import api, { getAPIErrorMessage } from '../../api';
 import './GroupJoin.css';
 
 export default function GroupJoin() {

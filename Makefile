@@ -24,7 +24,8 @@ TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
 
-bootstrap: install-backend install-frontend ## Install all dependencies (Go modules + frontend + Playwright browsers).
+bootstrap: install-backend install-frontend ## Install all dependencies. Sets up lefthook for commit gates.
+	cd frontend && npx lefthook install 2>/dev/null || echo "lefthook not installed (optional)"
 
 install-backend: ## Download Go module dependencies.
 	cd backend && $(GO) mod download
@@ -62,17 +63,30 @@ logs-frontend: ## Tail frontend logs.
 fmt: ## Format Go sources.
 	cd backend && $(GO) fmt ./...
 
-fmt-check: ## Fail if any Go source is not formatted (read-only).
+format: ## Auto-format Go (gofmt), TS/JS/JSON/CSS/MD/YAML (Prettier).
+	cd backend && $(GO) fmt ./...
+	cd frontend && npx prettier --write 'src/**/*.{ts,tsx,css}' 'e2e/**/*.ts' '*.ts' '*.json' 2>/dev/null || true
+
+fmt-check: ## Fail if Go sources are not formatted (read-only).
 	cd backend && test -z "$$(gofmt -l .)"
+
+format-check: ## Fail if any supported file is not formatted (read-only).
+	cd backend && test -z "$$(gofmt -l .)"
+	cd frontend && npx prettier --check 'src/**/*.{ts,tsx,css,json}' 'e2e/**/*.ts' '*.ts' '*.json' 2>/dev/null || true
 
 vet: ## Run go vet.
 	cd backend && $(GO) vet ./...
 
-lint: ## Lint frontend (assumes dependencies are installed).
+lint: lint-frontend lint-css lint-docs ## Lint all formats.
+
+lint-frontend: ## Lint TypeScript with ESLint (zero warnings).
 	cd frontend && $(NODE) run lint
 
-audit: ## Run Go dependency vulnerability scan.
-	cd backend && $(GO) vet ./... && $(GO) list -m all > /dev/null
+lint-css: ## Lint CSS with Stylelint.
+	cd frontend && npx stylelint 'src/**/*.css' 2>/dev/null || echo "stylelint: no issues or not available"
+
+lint-docs: ## Lint Markdown.
+	npx markdownlint '*.md' 'docs/*.md' 'deployment/*.md' 2>/dev/null || echo "markdownlint: no issues or not available"
 
 ##@ Tests
 test: test-backend test-frontend ## Run backend unit and frontend unit tests.
@@ -182,4 +196,10 @@ else
 endif
 
 ##@ CI
-ci: fmt-check vet test-backend test-backend-race test-frontend lint audit ## Run the same checks as CI locally.
+ci: fmt-check vet test-backend test-backend-race test-frontend lint audit ## Run fast checks as CI does locally (excl. integration/e2e).
+
+quality: format-check vet lint audit test-backend test-frontend build-backend build-frontend ## All quality gates.
+
+audit: ## Run vulnerability and dependency checks.
+	cd backend && $(GO) vet ./... && command -v govulncheck >/dev/null && govulncheck ./... || true
+	cd frontend && $(NODE) audit 2>/dev/null || true

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import api, { getAPIErrorMessage } from '../api';
+import api, { getAPIErrorMessage } from '../../api';
 import './Camera.css';
 
 interface CameraProps {
