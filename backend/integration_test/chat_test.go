@@ -107,16 +107,80 @@ func TestWebSocketBroadcastAndPersist(t *testing.T) {
 	require.True(t, strings.Contains(string(data), "hello world"), "message must be persisted")
 }
 
-func TestWebSocketRejectsEmptyAndOversized(t *testing.T) {
+func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
-	groupID, _ := createGroup(t, alice.access, "Limits Group")
-	conn, err := dialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)
-	require.NoError(t, err)
-	defer conn.Close()
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Limits Group")
+	joinGroup(t, bob.access, code)
 
-	// Empty message is ignored by the server; the connection stays open.
-	require.NoError(t, conn.WriteJSON(map[string]string{"content": "  "}))
-	// Oversized payload exceeds the read limit and closes the connection.
+	// Bob observes without sending so we can prove invalid messages are
+	// never broadcast to another connected participant.
+	bobConn, err := dialWS(t, groupID, wsTicket(t, bob.access, groupID), baseURL)
+	require.NoError(t, err)
+	defer bobConn.Close()
+	aliceConn, err := dialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)
+	require.NoError(t, err)
+	defer aliceConn.Close()
+
+	// readSystemError reads one text message from conn and asserts it
+	// carries the expected system error code and content.
+	readSystemError := func(conn *websocket.Conn, wantCode, wantContent string) {
+		t.Helper()
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+		_, payload, err := conn.ReadMessage()
+		require.NoError(t, err)
+		var msg struct {
+			Kind      string `json:"kind"`
+			Content   string `json:"content"`
+			ErrorCode string `json:"error_code"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &msg))
+		require.Equal(t, "system", msg.Kind)
+		require.Equal(t, wantCode, msg.ErrorCode)
+		require.Equal(t, wantContent, msg.Content)
+	}
+
+	// assertNoBroadcast verifies that the observer connection receives
+	// nothing within a short bounded window.
+	assertNoBroadcast := func(observer *websocket.Conn) {
+		t.Helper()
+		require.NoError(t, observer.SetReadDeadline(time.Now().Add(300*time.Millisecond)))
+		_, _, err := observer.ReadMessage()
+		require.Error(t, err, "observer must not receive broadcast of an invalid message")
+	}
+
+	// ---- whitespace-only content -------------------------------------------
+	require.NoError(t, aliceConn.WriteJSON(map[string]string{"content": "   "}))
+	readSystemError(aliceConn, "invalid_message", "Message is empty or too long")
+	assertNoBroadcast(bobConn)
+
+	// ---- content exceeding maxTextLength (1000 runes) ----------------------
+	longContent := strings.Repeat("é", 1001)
+	raw, err := json.Marshal(map[string]string{"content": longContent})
+	require.NoError(t, err)
+	require.NoError(t, aliceConn.WriteMessage(websocket.TextMessage, raw))
+	readSystemError(aliceConn, "invalid_message", "Message is empty or too long")
+	assertNoBroadcast(bobConn)
+
+	// ---- malformed JSON ----------------------------------------------------
+	require.NoError(t, aliceConn.WriteMessage(websocket.TextMessage, []byte(`{not json}`)))
+	readSystemError(aliceConn, "invalid_message", "Message must contain text")
+	assertNoBroadcast(bobConn)
+
+	// ---- oversized message exceeds 4096-byte read limit --------------------
 	big := strings.Repeat("x", 5000)
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"content":"`+big+`"}`))
+	_ = aliceConn.WriteMessage(websocket.TextMessage, []byte(`{"content":"`+big+`"}`))
+	// The server closes the connection after the read limit is exceeded.
+	require.NoError(t, aliceConn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, _, err = aliceConn.ReadMessage()
+	require.Error(t, err, "connection must close after oversized message")
+
+	// ---- prove nothing was persisted ---------------------------------------
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var page struct {
+		Items []struct{} `json:"items"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &page))
+	require.Empty(t, page.Items, "invalid messages must not be persisted")
 }
