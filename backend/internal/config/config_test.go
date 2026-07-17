@@ -158,6 +158,10 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 		t.Fatal("production must reject local MinIO endpoint")
 	}
 	c.S3Endpoint = "https://s3.example"
+	if err := c.Validate(); err == nil {
+		t.Fatal("production must reject missing METRICS_TOKEN")
+	}
+	c.MetricsToken = "metrics-secret-token"
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected valid production config, got %v", err)
 	}

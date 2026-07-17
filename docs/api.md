@@ -67,15 +67,20 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ### Health
 
-| Method | Path            | Description                                           |
-| ------ | --------------- | ----------------------------------------------------- |
-| GET    | `/health/live`  | Liveness (always 200)                                 |
-| GET    | `/health/ready` | Readiness (200 if DB + storage OK, 503 otherwise)     |
-| GET    | `/metrics`      | Prometheus metrics (internal, do not expose publicly) |
+| Method | Path            | Description                                             |
+| ------ | --------------- | ------------------------------------------------------- |
+| GET    | `/health/live`  | Liveness (always 200)                                   |
+| GET    | `/health/ready` | Readiness (200 if DB + storage OK, 503 otherwise)       |
+| GET    | `/metrics`      | Prometheus metrics (Bearer auth required in production) |
 
 ## Metrics
 
-Prometheus metrics are available at `/metrics`:
+Prometheus metrics are available at `/metrics`. The endpoint is public in
+development and test environments. In production (and any environment other than
+`development` or `test`) the endpoint requires
+`Authorization: Bearer <METRICS_TOKEN>`.
+
+Available metrics:
 
 - `geoguessme_http_requests_total` — total HTTP requests
 - `geoguessme_http_errors_total` — HTTP 5xx responses

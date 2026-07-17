@@ -45,6 +45,7 @@ validated. Never commit a real `.env` or production secret.
 | `RATE_LIMIT_WINDOW`      | duration | `1m`                                          | All        | Must be > 0                                                                                |
 | `LOG_LEVEL`              | string   | `info`                                        | All        | `debug`, `info`, `warn`, `error`                                                           |
 | `STORAGE_DRIVER`         | string   | — (uses S3)                                   | All        | Set to `local` to use local filesystem storage                                             |
+| `METRICS_TOKEN`          | string   | —                                             | All        | Required in production. Bearer token required to access the `/metrics` endpoint.           |
 
 ## Production validation
 
@@ -53,6 +54,7 @@ When `APP_ENV=production`, the following additional checks apply:
 - `SMTP_HOST` and `SMTP_FROM` are required
 - `SMTP_TLS` cannot be `off`
 - Authenticated SMTP (`SMTP_USERNAME` set) requires `starttls` or `tls`
+- `METRICS_TOKEN` is required
 - S3 endpoint must not be `http://localhost:*`
 
 ## Example `.env` for development

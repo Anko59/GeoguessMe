@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -31,6 +32,24 @@ func (m *Metrics) Observe(status int) {
 	m.requests.Add(1)
 	if status >= 500 {
 		m.errors.Add(1)
+	}
+}
+
+// MetricsAuth returns a handler that requires a Bearer token matching the
+// configured token before delegating to next. It is intended to protect the
+// /metrics endpoint in production while keeping the endpoint open in
+// development and test environments.
+func MetricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		value := strings.TrimSpace(r.Header.Get("Authorization"))
+		parts := strings.SplitN(value, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] != token {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"Metrics authentication required"}}`))
+			return
+		}
+		next(w, r)
 	}
 }
 

@@ -151,7 +151,11 @@ func main() {
 		}
 		writePlain(w, http.StatusOK, "ready\n")
 	})
-	mux.HandleFunc("/metrics", metrics.Handler)
+	metricsHandler := metrics.Handler
+	if !strings.EqualFold(cfg.Environment, "development") && !strings.EqualFold(cfg.Environment, "test") {
+		metricsHandler = middleware.MetricsAuth(cfg.MetricsToken, metrics.Handler)
+	}
+	mux.HandleFunc("/metrics", metricsHandler)
 
 	var handler http.Handler = mux
 	handler = middleware.SecurityHeaders(handler)

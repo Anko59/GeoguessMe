@@ -44,6 +44,49 @@ func TestMetricsAndRequestID(t *testing.T) {
 	}
 }
 
+func TestMetricsAuth(t *testing.T) {
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("metrics"))
+	})
+
+	// Without token, request is rejected.
+	handler := MetricsAuth("secret", okHandler)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without token, got %d", recorder.Code)
+	}
+
+	// Wrong token is rejected.
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Authorization", "Bearer wrong")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with wrong token, got %d", recorder.Code)
+	}
+
+	// Missing Bearer prefix.
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Authorization", "secret")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with bare token, got %d", recorder.Code)
+	}
+
+	// Correct token succeeds.
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "metrics" {
+		t.Fatalf("expected 200 with correct token, got %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestRecoverAndRequestLog(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	Recover(slog.Default(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))

@@ -58,6 +58,7 @@ type Config struct {
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
 	LogLevel          string
+	MetricsToken      string
 }
 
 // SMTP modes.
@@ -111,6 +112,7 @@ func Load() *Config {
 		RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 10),
 		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		MetricsToken:      os.Getenv("METRICS_TOKEN"),
 	}
 }
 
@@ -199,6 +201,9 @@ func (c *Config) Validate() error {
 		}
 		if strings.HasPrefix(c.S3Endpoint, "http://localhost") {
 			problems = append(problems, "production storage must not use local MinIO")
+		}
+		if c.MetricsToken == "" {
+			problems = append(problems, "METRICS_TOKEN is required in production")
 		}
 	}
 

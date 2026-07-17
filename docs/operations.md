@@ -29,8 +29,14 @@ OpenMetrics (Prometheus) format at `/metrics`:
 | `geoguessme_http_errors_total`       | Counter | HTTP 5xx responses           |
 | `geoguessme_storage_cleanup_backlog` | Gauge   | Pending object-deletion jobs |
 
-The `/metrics` endpoint is unprotected. In production it should be restricted to
-internal networks or monitored through an authenticated scraping proxy.
+The `/metrics` endpoint is unprotected in development and test. In production
+(and any environment other than `development` or `test`) it requires Bearer
+authentication with the `METRICS_TOKEN` value.
+
+```bash
+# Production metrics require the configured bearer token
+curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://backend:8080/metrics
+```
 
 ## Logging
 
