@@ -122,24 +122,13 @@ test-frontend: ## Run frontend unit tests.
 	cd frontend && $(NODE) test -- --run
 
 test-integration: ## Run backend integration tests against the isolated test stack.
-	@set -e; \
-	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-integration down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
-	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-integration up -d --build --wait; \
-	 cd backend && TEST_BASE_URL=$(TEST_BASE_URL) $(GO) test ./integration_test -count=1
+	tools/quality/run-integration.sh
 
 test-e2e: ## Run desktop + mobile Playwright suites against the isolated test stack.
-	@set -e; \
-	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-e2e down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
-	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-e2e up -d --build --wait; \
-	 deployment/scripts/wait-for-health.sh $(TEST_BASE_URL) 120; \
-	 cd frontend && PLAYWRIGHT_BASE_URL=$(TEST_BASE_URL) $(NODE) exec playwright test --project=desktop --project=mobile
+	tools/quality/run-e2e.sh
 
 test-e2e-ui: ## Run the Playwright UI mode against the isolated test stack.
-	@set -e; \
-	 trap 'rc=$$?; $(COMPOSE_TEST) -p geoguessme-e2e down -v --remove-orphans >/dev/null 2>&1 || true; exit $$rc' EXIT; \
-	 $(TEST_ENV) $(COMPOSE_TEST) -p geoguessme-e2e up -d --build --wait; \
-	 deployment/scripts/wait-for-health.sh $(TEST_BASE_URL) 120; \
-	 cd frontend && PLAYWRIGHT_BASE_URL=$(TEST_BASE_URL) $(NODE) exec playwright test --ui
+	GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
 test-all: test-backend test-frontend test-integration test-e2e ## Run unit, integration, and Playwright suites.
 
