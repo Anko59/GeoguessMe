@@ -1,0 +1,141 @@
+# Docker-only development and verification toolchain.
+#
+# Human-readable versions are next to immutable image digests. Tool services
+# have no application volumes, production env files, or Docker socket access.
+name: geoguessme-tools
+
+x-workspace: &workspace ./:/workspace:ro
+
+x-host-tools: &host-tools
+  working_dir: /workspace
+  stdin_open: true
+  tty: false
+  security_opt:
+    - no-new-privileges:true
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  go-tools:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/tools/go-tools.Dockerfile
+    image: geoguessme/go-tools:1.25.12
+    volumes:
+      - *workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+
+  go-tools-write:
+    <<: *host-tools
+    image: geoguessme/go-tools:1.25.12
+    volumes:
+      - ./:/workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+
+  node-tools:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/tools/node-tools.Dockerfile
+    image: geoguessme/node-tools:22.14.0
+    environment:
+      PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - *workspace
+      - frontend-node-modules:/workspace/frontend/node_modules
+      - npm-cache:/npm-cache
+
+  node-tools-write:
+    <<: *host-tools
+    image: geoguessme/node-tools:22.14.0
+    environment:
+      PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - ./:/workspace
+      - frontend-node-modules:/workspace/frontend/node_modules
+      - npm-cache:/npm-cache
+
+  # Playwright 1.61.1 with browser binaries and OS dependencies preinstalled.
+  playwright:
+    <<: *host-tools
+    image: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+    environment:
+      PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - *workspace
+      - frontend-node-modules:/workspace/frontend/node_modules
+      - playwright-cache:/ms-playwright
+      - npm-cache:/root/.npm
+
+  # ShellCheck 0.10.0 (linux/amd64 digest: 2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb)
+  shellcheck:
+    <<: *host-tools
+    image: koalaman/shellcheck:v0.10.0@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # shfmt 3.12.0 (linux/amd64 digest: 307d265ffd25ce832899ae17c93ed5062fc3375c514bba8f52cbf52792735c4d)
+  shfmt:
+    <<: *host-tools
+    image: mvdan/shfmt:v3.12.0@sha256:307d265ffd25ce832899ae17c93ed5062fc3375c514bba8f52cbf52792735c4d
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  shfmt-write:
+    <<: *host-tools
+    image: mvdan/shfmt:v3.12.0@sha256:307d265ffd25ce832899ae17c93ed5062fc3375c514bba8f52cbf52792735c4d
+    entrypoint: []
+    volumes:
+      - ./:/workspace
+
+  # Hadolint 2.12.0 (linux/amd64 digest: 3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199)
+  hadolint:
+    <<: *host-tools
+    image: hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # actionlint 1.7.7 (linux/amd64 digest: 887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9)
+  actionlint:
+    <<: *host-tools
+    image: rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # SQLFluff 3.4.1 (linux/amd64 digest: 7e70b3d1dd5aa071712699001dabf912abc0137b0aae96fc1db0d559a68818e0)
+  sqlfluff:
+    <<: *host-tools
+    image: sqlfluff/sqlfluff:3.4.1@sha256:7e70b3d1dd5aa071712699001dabf912abc0137b0aae96fc1db0d559a68818e0
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # Caddy 2.10-alpine (linux/amd64 digest: 4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d)
+  caddy:
+    <<: *host-tools
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # k6 0.55.0 (linux/amd64 digest: b24f418fc99a26dd57904c952c03bfaf79462be18508acc45aafa07ff68e7df2)
+  loadtest:
+    <<: *host-tools
+    image: grafana/k6:0.55.0@sha256:b24f418fc99a26dd57904c952c03bfaf79462be18508acc45aafa07ff68e7df2
+    entrypoint: []
+    volumes:
+      - *workspace
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:
+  npm-cache:
+  playwright-cache:

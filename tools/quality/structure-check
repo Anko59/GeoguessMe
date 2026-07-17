@@ -1,34 +1,73 @@
 #!/usr/bin/env bash
-# Enforce structural rules on the repository:
-#   Max 500 lines per human-maintained CODE file (excludes docs/config).
-#   Max 14 direct code/diagram/config children per directory.
-# Exempt generated lockfiles, binary media, and vendored deps.
-set -euo pipefail; REPO="$(cd "$(dirname "$0")/../.." && pwd)"; fail=0
+# Deterministic repository structure enforcement. The source list is always
+# git ls-files, so ignored host artifacts cannot weaken the check.
+set -euo pipefail
 
-exempt_pattern() { grep -vE 'package-lock\.json$|go\.sum$|\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot)$'; }
+REPO_ROOT="${STRUCTURE_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
+cd "$REPO_ROOT"
 
-# Code files (subject to line-length AND child-count limits).
-code_pattern()   { grep -E '\.(go|ts|tsx|js|jsx|css|html|sh|sql|Dockerfile|Makefile|Caddyfile)$'; }
+children_file=$(mktemp)
+violations_file=$(mktemp)
+trap 'rm -f "$children_file" "$violations_file"' EXIT
 
-# All authored files (subject to child-count limit only).
-all_pattern()    { grep -E '\.(go|ts|tsx|js|jsx|css|html|sh|sql|ya?ml|json|md|Dockerfile|Makefile|Caddyfile)$'; }
+is_binary_media() {
+    case "$1" in
+        *.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.ico|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.mov|*.webm) return 0 ;;
+    esac
+    return 1
+}
 
-# --- line-length limit (code files only) --------------------------------
-while IFS= read -r file; do
-    lines=$(wc -l < "$file")
-    if [ "$lines" -gt 500 ]; then
-        printf "LINES: %4d > 500  %s\n" "$lines" "$file"; fail=1
+is_generated() {
+    local path=$1
+    [ -f tools/quality/generated-files.allowlist ] && grep -Fqx "$path" tools/quality/generated-files.allowlist &&
+        [ "$(sed -n '1p' "$path")" = "GENERATED FILE" ]
+}
+
+is_excluded() {
+    local path=$1
+    case "$path" in
+        package-lock.json|*/package-lock.json|go.sum|*/go.sum|vendor/*|*/vendor/*) return 0 ;;
+    esac
+    is_binary_media "$path" && return 0
+    is_generated "$path" && return 0
+    return 1
+}
+
+is_code_or_config() {
+    case "$1" in
+        *.go|*.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.sh|*.sql|*.yaml|*.yml|*.json|*.toml|*.ini|*.conf|*.env|*.env.*|Dockerfile|Dockerfile.*|*/Dockerfile|*/Dockerfile.*|Makefile|Makefile.*|*/Makefile|*/Makefile.*|Caddyfile|Caddyfile.*|*/Caddyfile|*/Caddyfile.*) return 0 ;;
+    esac
+    return 1
+}
+
+while IFS= read -r -d '' path; do
+    is_excluded "$path" && continue
+    if [ -f "$path" ]; then
+        line_count=$(wc -l < "$path")
+        if [ "$line_count" -gt 500 ]; then
+            printf 'LINES\t%s\t%d\t500\thuman-authored text\n' "$path" "$line_count" >> "$violations_file"
+        fi
+        if is_code_or_config "$path"; then
+            dirname -- "$path" >> "$children_file"
+        fi
     fi
-done < <(git ls-files | exempt_pattern | code_pattern)
+done < <(git ls-files -z)
 
-# --- directory child limit (all authored files) ---------------------------
-while IFS= read -r entry; do
-    count=${entry%% *}
-    dir=${entry#* }
-    printf "CHILDREN: %3d > 14  %s\n" "$count" "$dir"; fail=1
-done < <(git ls-files | exempt_pattern | all_pattern | xargs -I{} dirname {} | sort | uniq -c | sort -rn | awk '$1 > 14 {print $1, $2}')
+while IFS=$'\t' read -r kind path observed limit classification; do
+    printf '%s: path=%s observed=%s limit=%s classification=%s\n' "$kind" "$path" "$observed" "$limit" "$classification"
+done < "$violations_file"
 
-if [ "$fail" -ne 0 ]; then
-    echo "structure-check FAILED"; exit 1
+while IFS= read -r directory; do
+    [ -n "$directory" ] || continue
+    count=$(grep -Fx "$directory" "$children_file" | wc -l)
+    if [ "$count" -gt 14 ]; then
+        printf 'CHILDREN: path=%s observed=%s limit=14 classification=direct-code-or-configuration-files\n' "$directory" "$count"
+        printf 'CHILDREN\t%s\t%d\t14\tdirect-code-or-configuration-files\n' "$directory" "$count" >> "$violations_file"
+    fi
+done < <(sort -u "$children_file")
+
+if [ -s "$violations_file" ]; then
+    echo "structure-check FAILED"
+    exit 1
 fi
 echo "structure-check PASSED"

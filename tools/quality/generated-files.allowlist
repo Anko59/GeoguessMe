@@ -1,0 +1,2 @@
+# One tracked generated path per line. The generated file must begin with the
+# marker "GENERATED FILE" before the structural checker will exempt it.
