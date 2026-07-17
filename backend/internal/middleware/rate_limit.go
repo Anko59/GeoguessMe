@@ -30,6 +30,8 @@ var (
 	}
 	// Cleanup old entries every 10 minutes
 	cleanupInterval = 10 * time.Minute
+	// clock is the time source; injected by tests that need deterministic time.
+	clock func() time.Time = time.Now
 )
 
 func init() {
@@ -46,7 +48,7 @@ func (rl *rateLimiter) cleanup() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := time.Now()
+	now := clock()
 	for key, client := range rl.requests {
 		client.mu.Lock()
 		if now.Sub(client.lastReset) > time.Minute*5 {
@@ -62,7 +64,7 @@ func (rl *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 	if !exists {
 		client = &clientRate{
 			count:     0,
-			lastReset: time.Now(),
+			lastReset: clock(),
 		}
 		rl.requests[key] = client
 	}
@@ -71,7 +73,7 @@ func (rl *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
-	now := time.Now()
+	now := clock()
 	if now.Sub(client.lastReset) > window {
 		client.count = 0
 		client.lastReset = now
@@ -191,6 +193,47 @@ func legacyClientKey(r *http.Request) string {
 	}
 	return key
 }
+
+// SetClock replaces the rate-limiter time source. A nil function restores
+// the default time.Now. Callers must ensure that concurrent rate-limit
+// evaluations are not in-flight while the clock is being changed.
+func SetClock(fn func() time.Time) {
+	if fn == nil {
+		clock = time.Now
+		return
+	}
+	clock = fn
+}
+
+// ResetRateLimiter clears every tracked client so tests can start from a
+// clean slate. This is a test seam; production code must not call it.
+func ResetRateLimiter() {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	limiter.requests = make(map[string]*clientRate)
+}
+
+// AdvanceTestClock moves an internal test clock forward by d. When the test
+// clock has never been set the call creates a clock starting at the current
+// wall-clock time and then advances it. Production code must not call this.
+func AdvanceTestClock(d time.Duration) {
+	// Capture the current wall-clock time once on first call so the
+	// simulated clock starts from a known reference point.
+	startOnce.Do(func() { testStart = time.Now() })
+	// Re-read the stored start under the lock for safety; the Do above
+	// guarantees it is set.
+	testMu.Lock()
+	defer testMu.Unlock()
+	testOffset += d
+	clock = func() time.Time { return testStart.Add(testOffset) }
+}
+
+var (
+	testStart  time.Time
+	testOffset time.Duration
+	testMu     sync.Mutex
+	startOnce  sync.Once
+)
 
 func trustedPeer(r *http.Request, cidrs []string) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

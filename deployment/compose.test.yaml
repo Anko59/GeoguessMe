@@ -74,7 +74,8 @@ services:
       SMTP_FROM: no-reply@test.local
       SMTP_TLS: "off"
       PHOTO_VIEW_WINDOW: 1s
-      RATE_LIMIT_REQUESTS: "1000"
+      RATE_LIMIT_REQUESTS: "3"
+      RATE_LIMIT_WINDOW: 10s
     depends_on:
       migration: { condition: service_completed_successfully }
       minio: { condition: service_healthy }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -121,6 +122,26 @@ func main() {
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
+
+	// Test-only control endpoints: available only when APP_ENV=test so the
+	// integration suite can manipulate rate-limiter state without restarts.
+	if strings.EqualFold(cfg.Environment, "test") {
+		mux.HandleFunc("POST /api/v1/test/rate-limit/reset", func(w http.ResponseWriter, _ *http.Request) {
+			middleware.ResetRateLimiter()
+			writePlain(w, http.StatusOK, "rate limiter state cleared\n")
+		})
+		mux.HandleFunc("POST /api/v1/test/rate-limit/clock/advance", func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Seconds int `json:"seconds"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Seconds <= 0 {
+				writePlain(w, http.StatusBadRequest, "invalid seconds\n")
+				return
+			}
+			middleware.AdvanceTestClock(time.Duration(body.Seconds) * time.Second)
+			writePlain(w, http.StatusOK, "clock advanced\n")
+		})
+	}
 
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) { writePlain(w, http.StatusOK, "ok\n") })
 	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {

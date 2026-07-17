@@ -27,6 +27,7 @@ func TestProtectedRouteRequiresAuth(t *testing.T) {
 }
 
 func TestSignupLoginAndDuplicate(t *testing.T) {
+	resetRateLimiter(t)
 	user := unique("alice")
 	email := user + "@example.test"
 	first := signup(t, user, email, "StrongPassword123")
@@ -38,6 +39,10 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/signup",
 		map[string]string{"username": user + "2", "email": email, "password": "StrongPassword123"}, "", nil)
 	require.Equalf(t, http.StatusConflict, resp.StatusCode, "duplicate email: %s", data)
+
+	// Reset rate limiter so login requests aren't throttled by the preceding
+	// signup calls that shared the same identity key.
+	resetRateLimiter(t)
 
 	// Login with correct credentials succeeds; wrong password does not.
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/login",
@@ -54,6 +59,7 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 }
 
 func TestPasswordResetRevokesSessions(t *testing.T) {
+	resetRateLimiter(t)
 	user := unique("resetter")
 	email := user + "@example.test"
 	const pass = "StrongPassword123"
@@ -79,6 +85,7 @@ func TestPasswordResetRevokesSessions(t *testing.T) {
 }
 
 func TestAccountDeletionImmediateLossAndReuse(t *testing.T) {
+	resetRateLimiter(t)
 	user := unique("deleter")
 	email := user + "@example.test"
 	const pass = "StrongPassword123"
@@ -99,6 +106,7 @@ func TestAccountDeletionImmediateLossAndReuse(t *testing.T) {
 }
 
 func TestRefreshRotationSingleUse(t *testing.T) {
+	resetRateLimiter(t)
 	user := unique("rotate")
 	email := user + "@example.test"
 	session := signup(t, user, email, "StrongPassword123")

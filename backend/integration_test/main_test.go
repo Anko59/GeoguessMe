@@ -63,6 +63,7 @@ type tokenPair struct {
 
 type jsonResponse struct {
 	StatusCode int
+	Header     http.Header
 	cookies    []*http.Cookie
 }
 
@@ -94,7 +95,7 @@ func doJSON(t *testing.T, method, path string, body any, bearer string, cookies 
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return jsonResponse{StatusCode: resp.StatusCode, cookies: resp.Cookies()}, data
+	return jsonResponse{StatusCode: resp.StatusCode, Header: resp.Header, cookies: resp.Cookies()}, data
 }
 
 func signup(t *testing.T, username, email, password string) tokenPair {
