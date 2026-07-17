@@ -9,7 +9,7 @@ const launchArgs = baseOrigin.startsWith('http://') ? [`--unsafely-treat-insecur
 export default defineConfig({
     testDir: './e2e',
     forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 2 : 0,
+    retries: 0,
     workers: 1,
     outputDir: OUTPUT_DIR,
     reporter: [
@@ -18,7 +18,7 @@ export default defineConfig({
     ],
     use: {
         baseURL: BASE_URL,
-        trace: 'on-first-retry',
+        trace: 'retain-on-first-failure',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
         launchOptions: { args: launchArgs },

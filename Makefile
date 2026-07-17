@@ -164,6 +164,15 @@ test-e2e: ## Run all Playwright projects in the isolated stack.
 test-e2e-ui: ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
+test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5
+	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be a positive integer"; exit 2;; 0) echo "COUNT must be a positive integer"; exit 2;; esac
+	@i=1; while [ $$i -le $(COUNT) ]; do \
+		echo "=== E2E run $$i of $(COUNT) ==="; \
+		$(TEST_ENV) tools/quality/run-e2e.sh || { echo "E2E run $$i failed"; exit 1; }; \
+		i=$$((i+1)); \
+	done
+	@echo "All $(COUNT) E2E runs passed"
+
 test-all: test-unit test-integration test-e2e ## Run unit, integration, and E2E suites.
 
 coverage: ## Enforce and report backend/frontend coverage thresholds.
