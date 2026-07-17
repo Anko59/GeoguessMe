@@ -27,6 +27,9 @@ help: ## Show this help.
 bootstrap: install-backend install-frontend ## Install all dependencies. Sets up lefthook for commit gates.
 	cd frontend && npx lefthook install 2>/dev/null || echo "lefthook not installed (optional)"
 
+install-tools: ## Run the tool installation helper.
+	tools/quality/install-tools.sh
+
 install-backend: ## Download Go module dependencies.
 	cd backend && $(GO) mod download
 
@@ -77,7 +80,7 @@ format-check: ## Fail if any supported file is not formatted (read-only).
 vet: ## Run go vet.
 	cd backend && $(GO) vet ./...
 
-lint: lint-frontend lint-css lint-docs ## Lint all formats.
+lint: lint-frontend lint-css lint-docs lint-shell lint-docker lint-openapi ## Lint all available formats.
 
 lint-frontend: ## Lint TypeScript with ESLint (zero warnings).
 	cd frontend && $(NODE) run lint
@@ -87,6 +90,24 @@ lint-css: ## Lint CSS with Stylelint.
 
 lint-docs: ## Lint Markdown.
 	npx markdownlint '*.md' 'docs/*.md' 'deployment/*.md' 2>/dev/null || echo "markdownlint: no issues or not available"
+
+lint-shell: ## Lint shell scripts.
+	tools/quality/lint-shell.sh
+
+lint-docker: ## Lint Dockerfiles.
+	tools/quality/lint-docker.sh
+
+lint-actions: ## Lint GitHub Actions workflows.
+	tools/quality/lint-actions.sh
+
+lint-sql: ## Lint SQL migrations.
+	tools/quality/lint-sql.sh
+
+lint-caddy: ## Lint Caddy configuration.
+	tools/quality/lint-caddy.sh
+
+lint-openapi: ## Validate OpenAPI schema.
+	npx @redocly/cli lint docs/openapi.yaml 2>/dev/null || echo "redocly: skip"
 
 ##@ Tests
 test: test-backend test-frontend ## Run backend unit and frontend unit tests.
@@ -196,9 +217,11 @@ else
 endif
 
 ##@ CI
-ci: fmt-check vet test-backend test-backend-race test-frontend lint audit ## Run fast checks as CI does locally (excl. integration/e2e).
+ci: fmt-check vet test-backend test-backend-race test-frontend lint audit build-backend build-frontend ## Run fast checks as CI does locally (excl. integration/e2e).
+	tools/quality/structure-check
 
-quality: format-check vet lint audit test-backend test-frontend build-backend build-frontend ## All quality gates.
+quality: format-check vet lint audit test-backend test-frontend build-backend build-frontend ## All quality gates (fmt + lint + audit + build + tests).
+	tools/quality/structure-check
 
 audit: ## Run vulnerability and dependency checks.
 	cd backend && $(GO) vet ./... && command -v govulncheck >/dev/null && govulncheck ./... || true

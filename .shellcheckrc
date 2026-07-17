@@ -1,0 +1,2 @@
+# ShellCheck configuration for GeoGuessMe
+disable=SC1090,SC2155

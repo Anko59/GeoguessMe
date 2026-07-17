@@ -97,3 +97,17 @@ func TestAccountDeletionImmediateLossAndReuse(t *testing.T) {
 		map[string]string{"username": user, "email": email, "password": pass}, "", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+func TestRefreshRotationSingleUse(t *testing.T) {
+	user := unique("rotate")
+	email := user + "@example.test"
+	session := signup(t, user, email, "StrongPassword123")
+
+	// First refresh consumes the old session, issues a new one.
+	resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/refresh", nil, "", []*http.Cookie{session.refresh})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// The old refresh token is now consumed. Second attempt fails.
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/refresh", nil, "", []*http.Cookie{session.refresh})
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}

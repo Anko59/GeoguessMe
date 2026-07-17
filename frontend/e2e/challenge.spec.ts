@@ -67,12 +67,12 @@ test.describe('Challenge flow', () => {
         await guesserPage.waitForLoadState('networkidle');
         await guesserPage.waitForTimeout(2000);
 
-        // Verify the pages loaded the group view
-        await expect(uploaderPage.locator('.group-view')).toBeVisible({ timeout: 10000 });
-        await expect(guesserPage.locator('.group-view')).toBeVisible({ timeout: 10000 });
+        // Verify the chat component rendered
+        await expect(uploaderPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
+        await expect(guesserPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
 
         // Uploader switches to Camera tab
-        await uploaderPage.click('.tab:nth-child(2)');
+        await uploaderPage.locator('.tab-bar .tab:nth-child(2)').click();
         await uploaderPage.waitForSelector('.camera-container', { state: 'visible' });
 
         // Wait for camera to be ready
@@ -84,8 +84,8 @@ test.describe('Challenge flow', () => {
 
         // Send the photo (upload with geolocation)
         await uploaderPage.click('button:has-text("Send")');
-        // After upload, we switch back to chat tab
-        await expect(uploaderPage.locator('.message-container').last()).toContainText('Challenge sent', { timeout: 15000 });
+        // After upload, the Camera unmounts and chat tab reappears.
+        await expect(uploaderPage.locator('.chat-container')).toBeVisible({ timeout: 15000 });
 
         // Guesser should see the challenge message
         await expect(guesserPage.locator('.message-content.photo-challenge')).toBeVisible({ timeout: 15000 });

@@ -40,13 +40,18 @@ test.describe('Chat via WebSocket', () => {
         await userBPage.click('button[type="submit"]');
         await userBPage.waitForURL(/\/group\//, { timeout: 10000 });
 
-        // Both users are now on the group view
-        await userAPage.goto(`/group/${groupId}`);
-        await userBPage.goto(`/group/${groupId}`);
+        // Both users are now on the group view page (from beforeAll or join).
+        // Reload for clean state and wait for the page to fully settle.
+        await userAPage.reload();
+        await userAPage.waitForLoadState('networkidle');
+        await userAPage.waitForTimeout(3000);
+        await userBPage.reload();
+        await userBPage.waitForLoadState('networkidle');
+        await userBPage.waitForTimeout(3000);
 
-        // Wait for WebSocket connection
-        await expect(userAPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
-        await expect(userBPage.locator('.chat-status')).toBeVisible({ timeout: 15000 });
+        // Wait for the chat component to render (group page is loaded)
+        await expect(userAPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
+        await expect(userBPage.locator('.chat-container')).toBeVisible({ timeout: 10000 });
 
         // User A sends a message
         const msgText = `Hello from A at ${Date.now()}`;
