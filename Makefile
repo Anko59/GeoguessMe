@@ -28,7 +28,7 @@ help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
 
 bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
-	$(COMPOSE_TOOLS) build go-tools node-tools
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
 	$(MAKE) hooks-install
@@ -48,7 +48,8 @@ hooks-check: ## Verify tracked hooks, Docker prerequisites, and canonical target
 	@echo "hooks-check PASSED"
 
 tools-self-test: ## Run a short self-test inside each tool image.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version && govulncheck -version'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'go version && govulncheck -version && psql --version && gcc --version'
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'node --version && npm --version && prettier --version && eslint --version && tsc --version'
 	$(COMPOSE_TOOLS) run --rm --no-deps playwright node --version
 	$(COMPOSE_TOOLS) run --rm --no-deps shellcheck shellcheck --version
@@ -57,6 +58,7 @@ tools-self-test: ## Run a short self-test inside each tool image.
 	$(COMPOSE_TOOLS) run --rm --no-deps actionlint actionlint -version
 	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff --version
 	$(COMPOSE_TOOLS) run --rm --no-deps caddy caddy version
+	tools/quality/test/check-tool-image-split.sh
 
 tools-clean: ## Remove only project-specific tool containers, networks, and caches.
 	$(COMPOSE_TOOLS) down --volumes --remove-orphans
@@ -166,7 +168,7 @@ test-frontend: ## Run frontend unit tests.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
 test-race: ## Run Go unit tests with the race detector.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
 
 test-backend-race: test-race ## Compatibility alias for test-race.
 
@@ -196,7 +198,7 @@ coverage: ## Enforce and report backend/frontend coverage thresholds.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
 
 audit: ## Run dependency vulnerability audits in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && govulncheck ./...'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
 ##@ Build
@@ -231,12 +233,12 @@ migration-new: ## Create a migration file after checking NAME.
 
 db-backup: ## Create a PostgreSQL backup through the tool container.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" -e BACKUP_DIR=/workspace/backups go-tools /workspace/deployment/scripts/backup-postgres.sh
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" -e BACKUP_DIR=/workspace/backups go-security /workspace/deployment/scripts/backup-postgres.sh
 
 db-restore: ## Restore a PostgreSQL backup through the tool container.
 	@test -n "$(FILE)" || { echo "usage: make db-restore FILE=backups/file.sql.gz"; exit 2; }
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-tools /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-security /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
 
 backup-rehearsal: ## Run the disposable backup/restore rehearsal.
 	deployment/scripts/backup-restore-rehearsal.sh

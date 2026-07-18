@@ -17,7 +17,7 @@ trap cleanup EXIT
 export GEOGUESSME_TEST_DB_PORT="$DB_PORT"
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d db --wait
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
-    run --rm --no-deps go-tools psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+    run --rm --no-deps go-security psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
     "CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'avatar.png', score INTEGER NOT NULL DEFAULT 0); INSERT INTO users (id, username, password) VALUES ('legacy-user', 'legacy_user', 'legacy-password');"
 
 first="$(docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run -d --no-deps --quiet-pull migration | tail -n 1)"
@@ -29,8 +29,8 @@ test "$second_status" = 0
 docker rm "$first" "$second" >/dev/null
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run --rm migration
 
-migration_count="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-tools psql "$DB_URL" -Atc 'SELECT count(*) FROM schema_migrations')"
-legacy_email="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-tools psql "$DB_URL" -Atc "SELECT email_normalized FROM users WHERE id = 'legacy-user'")"
+migration_count="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-security psql "$DB_URL" -Atc 'SELECT count(*) FROM schema_migrations')"
+legacy_email="$(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" run --rm --no-deps go-security psql "$DB_URL" -Atc "SELECT email_normalized FROM users WHERE id = 'legacy-user'")"
 test "$migration_count" = 3
 test "$legacy_email" = legacy_user@legacy.invalid
 echo "migration-concurrency PASSED: concurrent and idempotent runs preserved legacy data"
