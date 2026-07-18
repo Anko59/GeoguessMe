@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"geoguessme/internal/models"
+
 	"github.com/pashagolub/pgxmock/v4"
 )
 
