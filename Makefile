@@ -12,7 +12,7 @@
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
-	backup-rehearsal restore-rehearsal restart-rehearsal migration-test load-test \
+	backup-rehearsal restore-rehearsal restart-rehearsal test-restart-regression migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
 	quality verify pre-commit pre-push ci clean reset-dev
@@ -179,6 +179,9 @@ test-ci-retention-regression: ## Verify CI workflow has bounded retention and ca
 test-cache-status-regression: ## Run cache-status regression tests.
 	bash tools/quality/test/check-cache-status-regression.sh
 
+test-restart-regression: ## Run restart-rehearsal regression tests.
+	bash tools/quality/test/check-restart-regression.sh
+
 cache-status: ## Report project-only Docker images, build cache, volumes, and artifacts (read-only).
 	bash tools/quality/cache-status.sh
 
@@ -317,7 +320,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 ##@ Gates
 quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
-verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal smoke load-test ## Run the complete release gate.
+verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal test-restart-regression smoke load-test ## Run the complete release gate.
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh

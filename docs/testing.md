@@ -13,6 +13,7 @@ tools from pinned images and named caches.
 | make test-structure-regression    | Structure-check regression tests in disposable Git repos                                      |
 | make test-ci-retention-regression | Verify CI workflow has bounded artifact retention and cache scopes                            |
 | make test-cache-status-regression | Cache-status regression tests for Docker resource reporting                                   |
+| make test-restart-regression      | Restart-rehearsal regression tests for structural correctness                                 |
 | make test-build-caching           | Verify build-images uses layer caching and clean-build does not                               |
 | make cache-status                 | Report project-only Docker images, build cache, volumes, and artifacts (read-only)            |
 | make coverage                     | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
