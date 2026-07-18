@@ -20,10 +20,12 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [cameraReady, setCameraReady] = useState(false);
+    const [fileMode, setFileMode] = useState(false);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const stopCamera = useCallback(() => {
         streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -31,6 +33,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     }, []);
 
     const startCamera = useCallback(async () => {
+        setFileMode(false);
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -84,7 +87,48 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
 
     const retake = () => {
         setCapturedPhoto(null);
-        startCamera();
+        if (fileMode) {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        } else {
+            startCamera();
+        }
+    };
+
+    const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                setCapturedPhoto(reader.result);
+                setError('');
+            }
+        };
+        reader.onerror = () => setError('Failed to read the selected file.');
+        reader.readAsDataURL(file);
+    };
+
+    const openFilePicker = () => {
+        setError('');
+        setFileMode(true);
+    };
+
+    const uploadBlob = async (blob: Blob, filename: string) => {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocation is not supported by your browser'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+
+        const formData = new FormData();
+        formData.append('photo', blob, filename);
+        formData.append('group_id', groupID);
+        formData.append('lat', position.coords.latitude.toString());
+        formData.append('long', position.coords.longitude.toString());
+
+        await api.post('/photo/upload', formData);
     };
 
     const handleUpload = async () => {
@@ -92,39 +136,30 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
         setUploading(true);
         setError('');
 
-        if (!navigator.geolocation) {
-            setError('Geolocation is not supported by your browser');
-            setUploading(false);
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                try {
-                    // Convert base64 to blob
-                    const blob = dataURLToBlob(capturedPhoto);
-
-                    const formData = new FormData();
-                    formData.append('photo', blob, 'capture.jpg');
-                    formData.append('group_id', groupID);
-                    formData.append('lat', position.coords.latitude.toString());
-                    formData.append('long', position.coords.longitude.toString());
-
-                    await api.post('/photo/upload', formData);
-
-                    setCapturedPhoto(null);
-                    onUploadComplete();
-                } catch (requestError: unknown) {
-                    setError(getAPIErrorMessage(requestError, 'Upload failed. Please try again.'));
-                } finally {
-                    setUploading(false);
-                }
-            },
-            () => {
+        try {
+            if (capturedPhoto.startsWith('data:')) {
+                const blob = dataURLToBlob(capturedPhoto);
+                const filename = fileMode ? 'upload' : 'capture.jpg';
+                await uploadBlob(blob, filename);
+            } else {
+                // File directly from input — use fetch to get blob.
+                const response = await fetch(capturedPhoto);
+                const blob = await response.blob();
+                await uploadBlob(blob, 'upload');
+            }
+            setCapturedPhoto(null);
+            setFileMode(false);
+            onUploadComplete();
+        } catch (requestError: unknown) {
+            const msg = requestError instanceof Error ? requestError.message : String(requestError);
+            if (msg.includes('location') || msg.includes('Geolocation') || msg.includes('denied')) {
                 setError('Unable to retrieve location. Please enable location services.');
-                setUploading(false);
-            },
-        );
+            } else {
+                setError(getAPIErrorMessage(requestError, 'Upload failed. Please try again.'));
+            }
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -133,9 +168,14 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                 <div className="camera-error">
                     <p>{error}</p>
                     {error.includes('Camera') && (
-                        <button className="btn btn-primary" onClick={startCamera}>
-                            Try Again
-                        </button>
+                        <>
+                            <button className="btn btn-primary" onClick={startCamera}>
+                                Try Again
+                            </button>
+                            <button className="btn btn-outline file-fallback-btn" onClick={openFilePicker}>
+                                Upload from device
+                            </button>
+                        </>
                     )}
                 </div>
             )}
@@ -160,6 +200,21 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                         <div className="camera-loading">
                             <div className="spinner"></div>
                             <p>Loading camera...</p>
+                        </div>
+                    )}
+                    {fileMode && (
+                        <div className="camera-file-fallback">
+                            <label className="btn btn-outline file-fallback-label" htmlFor="camera-file-input">
+                                Choose photo from device
+                            </label>
+                            <input
+                                id="camera-file-input"
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="camera-file-input"
+                                onChange={handleFileSelected}
+                            />
                         </div>
                     )}
                 </div>

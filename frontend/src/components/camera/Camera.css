@@ -57,6 +57,43 @@
     font-size: 1rem;
 }
 
+.camera-error .btn {
+    display: block;
+    margin: 0.5rem auto;
+    width: 100%;
+    max-width: 220px;
+}
+
+.file-fallback-btn {
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    color: white !important;
+}
+
+.camera-file-fallback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    z-index: 5;
+}
+
+.file-fallback-label {
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    color: white !important;
+    cursor: pointer;
+}
+
+.camera-file-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
 .camera-controls {
     position: absolute;
     bottom: 4rem;

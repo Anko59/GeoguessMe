@@ -167,3 +167,23 @@ export function deterministicTestImage(): Buffer {
         'base64',
     );
 }
+
+/** Bytes that are not a valid image — triggers "invalid image" from the backend. */
+export function malformedFileBytes(): Buffer {
+    return Buffer.from('this is not a valid image file');
+}
+
+/** Minimal 1×1 GIF — the backend rejects GIF as an unsupported format. */
+export function unsupportedFormatBytes(): Buffer {
+    // Base64-encoded 1×1 transparent GIF.
+    return Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+}
+
+/**
+ * Buffer that slightly exceeds the default UPLOAD_MAX_BYTES (5 MiB). The
+ * backend rejects the file in NormalizeUpload before image decoding.
+ */
+export function oversizedUploadBytes(): Buffer {
+    // 5 MiB + 1 byte — guaranteed to exceed the 5 MiB limit.
+    return Buffer.alloc(5 * 1024 * 1024 + 1);
+}
