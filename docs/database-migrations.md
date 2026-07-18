@@ -23,13 +23,14 @@ Migrations are stored in `backend/internal/database/migrations/`:
 ```text
 001_initial.sql
 002_auth_version_and_object_deletion.sql
+003_unique_active_media_deletion_job.sql
 ```
 
 New migrations:
 
 ```bash
 make migration-new NAME=add_thing
-# Creates backend/internal/database/migrations/003_add_thing.sql
+# Creates backend/internal/database/migrations/004_add_thing.sql
 ```
 
 ## Migration commands
@@ -41,12 +42,34 @@ make migrate-up
 # Show applied and pending migrations
 make migrate-status
 
+# Run deterministic concurrent, idempotent, and legacy-fixture migration tests
+make migration-test
+
 # There is no supported host-side direct invocation. Use the Make targets so
 # the migration binary runs in the Docker tool/application container.
 ```
 
 The server does NOT run migrations on startup. Deployments must run the
 migration job explicitly before starting API processes.
+
+## Migration test target
+
+`make migration-test` starts from a representative legacy database state
+(pre-migration 001), runs two concurrent migration processes to verify advisory
+locking, then re-runs to prove idempotency.  It verifies every backfill
+path and column addition for every legacy row, then validates the migration 003
+duplicate-survivor ORDER BY logic with a direct SQL replay.
+
+The legacy fixture lives at `deployment/scripts/legacy-migration-fixture.sql`
+and models the exact pre-migration schema: users without email/auth_version
+columns (but with `score` which 001 drops), photos without
+storage_key/retention_at, guesses without group_id, and messages without
+kind/photo_id.  Edge cases include NULL URLs, NULL expires_at, whitespace-heavy
+usernames, and multi-row backfill paths.
+
+The test is fully Dockerized (no host DB tools, no sleeps or retries).  It
+uses the same test Compose stack as the integration suite but with an
+elevated `GEOGUESSME_MIGRATION_DB_PORT` to avoid port collisions.
 
 ## Migration 001: Initial schema
 

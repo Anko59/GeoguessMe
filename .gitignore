@@ -38,6 +38,8 @@ dist/
 # Database migrations are embedded into the backend binary and must be tracked.
 !backend/internal/database/migrations/
 !backend/internal/database/migrations/**
+# Legacy migration fixture for deterministic migration testing.
+!deployment/scripts/legacy-migration-fixture.sql
 /backups/
 
 # --- Docker / Compose local overrides ---
