@@ -13,7 +13,10 @@ SCRIPT="deployment/scripts/migration-concurrency.sh"
 
 failures=0
 pass() { echo "PASS: $*"; }
-fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
+fail() {
+    echo "FAIL: $*"
+    failures=$((failures + 1))
+}
 
 # -- fixture file exists and is non-empty ------------------------------------
 if [ -s "$FIXTURE" ]; then
@@ -96,7 +99,7 @@ else
 fi
 
 # -- structure: fixture line count within limit -------------------------------
-fixture_lines=$(wc -l < "$FIXTURE")
+fixture_lines=$(wc -l <"$FIXTURE")
 if [ "$fixture_lines" -le 500 ]; then
     pass "fixture is $fixture_lines lines (≤ 500)"
 else
@@ -104,7 +107,7 @@ else
 fi
 
 # -- structure: script line count within limit --------------------------------
-script_lines=$(wc -l < "$SCRIPT")
+script_lines=$(wc -l <"$SCRIPT")
 if [ "$script_lines" -le 500 ]; then
     pass "test script is $script_lines lines (≤ 500)"
 else

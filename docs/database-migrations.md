@@ -56,20 +56,20 @@ migration job explicitly before starting API processes.
 
 `make migration-test` starts from a representative legacy database state
 (pre-migration 001), runs two concurrent migration processes to verify advisory
-locking, then re-runs to prove idempotency.  It verifies every backfill
-path and column addition for every legacy row, then validates the migration 003
+locking, then re-runs to prove idempotency. It verifies every backfill path and
+column addition for every legacy row, then validates the migration 003
 duplicate-survivor ORDER BY logic with a direct SQL replay.
 
 The legacy fixture lives at `deployment/scripts/legacy-migration-fixture.sql`
 and models the exact pre-migration schema: users without email/auth_version
 columns (but with `score` which 001 drops), photos without
 storage_key/retention_at, guesses without group_id, and messages without
-kind/photo_id.  Edge cases include NULL URLs, NULL expires_at, whitespace-heavy
+kind/photo_id. Edge cases include NULL URLs, NULL expires_at, whitespace-heavy
 usernames, and multi-row backfill paths.
 
-The test is fully Dockerized (no host DB tools, no sleeps or retries).  It
-uses the same test Compose stack as the integration suite but with an
-elevated `GEOGUESSME_MIGRATION_DB_PORT` to avoid port collisions.
+The test is fully Dockerized (no host DB tools, no sleeps or retries). It uses
+the same test Compose stack as the integration suite but with an elevated
+`GEOGUESSME_MIGRATION_DB_PORT` to avoid port collisions.
 
 ## Migration 001: Initial schema
 
