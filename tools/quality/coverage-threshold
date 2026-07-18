@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Enforce backend package coverage floors and the global statement threshold.
+#
+# Reads stdin that combines:
+#   1. go test -coverprofile output (per-package "ok  pkg  ...  coverage: N%" lines)
+#   2. go tool cover -func output (function-level lines + "total:" line)
+#
+# Exits 0 when every required package floor and the global threshold are met.
+# Exits 1 with diagnostic messages otherwise.
+set -euo pipefail
+
+GLOBAL_THRESHOLD=${COVERAGE_GLOBAL_THRESHOLD:-70}
+PACKAGE_FLOOR=${COVERAGE_PACKAGE_FLOOR:-70}
+
+REQUIRED_PACKAGES="geoguessme/handlers geoguessme/internal/auth geoguessme/internal/middleware geoguessme/internal/repository geoguessme/internal/storage geoguessme/internal/chat geoguessme/internal/media"
+
+violations=0
+checked_packages=""
+global_cov=""
+
+# Accumulate all input so we can process it in two passes.
+input=$(cat)
+
+# ── Per-package floor enforcement ────────────────────────────────────────────
+# Lines look like:
+#   ok  	geoguessme/handlers	0.048s	coverage: 70.1% of statements
+#   ok  	geoguessme/handlers	(cached)	coverage: 70.1% of statements
+while IFS= read -r line; do
+    case "$line" in
+        "ok"*"coverage:"*)
+            pkg=$(echo "$line" | awk '{print $2}')
+            cov_raw=$(echo "$line" | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p')
+            if [ -z "$cov_raw" ]; then
+                continue
+            fi
+            for req in $REQUIRED_PACKAGES; do
+                if [ "$pkg" = "$req" ]; then
+                    checked_packages="${checked_packages} ${pkg}=${cov_raw}%"
+                    if awk -v cov="$cov_raw" -v floor="$PACKAGE_FLOOR" 'BEGIN { if (cov < floor) exit 1; exit 0 }'; then
+                        :
+                    else
+                        echo "FAIL: ${pkg} coverage ${cov_raw}% is below required floor of ${PACKAGE_FLOOR}%"
+                        violations=$((violations + 1))
+                    fi
+                fi
+            done
+            ;;
+    esac
+done <<INPUT
+$input
+INPUT
+
+# ── Global threshold enforcement ─────────────────────────────────────────────
+# The total line in go tool cover -func looks like:
+#   total:							(statements)			71.2%
+global_cov=$(echo "$input" | awk '/^total:/ { gsub(/%/, "", $NF); print $NF }')
+if [ -n "$global_cov" ]; then
+    if awk -v cov="$global_cov" -v thr="$GLOBAL_THRESHOLD" 'BEGIN { if (cov < thr) exit 1; exit 0 }'; then
+        :
+    else
+        echo "FAIL: global coverage ${global_cov}% is below required threshold of ${GLOBAL_THRESHOLD}%"
+        violations=$((violations + 1))
+    fi
+else
+    echo "FAIL: could not determine global coverage from input"
+    violations=$((violations + 1))
+fi
+
+# ── Verify all required packages were found ──────────────────────────────────
+for req in $REQUIRED_PACKAGES; do
+    found=0
+    for chk in $checked_packages; do
+        case "$chk" in
+            "${req}="*) found=1; break ;;
+        esac
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "FAIL: required package ${req} not found in coverage report (no test files?)"
+        violations=$((violations + 1))
+    fi
+done
+
+# ── Report ───────────────────────────────────────────────────────────────────
+if [ "$violations" -gt 0 ]; then
+    echo "coverage-threshold FAILED (${violations} violation(s))"
+    exit 1
+fi
+
+echo "coverage-threshold PASSED (global ${global_cov}%, all package floors met)"
