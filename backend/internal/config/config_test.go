@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -161,9 +162,84 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 	if err := c.Validate(); err == nil {
 		t.Fatal("production must reject missing METRICS_TOKEN")
 	}
-	c.MetricsToken = "metrics-secret-token"
+	c.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected valid production config, got %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownEnvironment(t *testing.T) {
+	c := validConfig()
+	c.Environment = "staging"
+	if err := c.Validate(); err == nil {
+		t.Fatal("unknown APP_ENV must be rejected")
+	}
+}
+
+func TestLoadNormalizesEnvironment(t *testing.T) {
+	t.Setenv("APP_ENV", "  Production ")
+	cfg := Load()
+	if cfg.Environment != EnvProduction {
+		t.Fatalf("expected normalized %q, got %q", EnvProduction, cfg.Environment)
+	}
+	if !cfg.MetricsAuthRequired() {
+		t.Fatal("production environment must require metrics authentication")
+	}
+}
+
+func TestMetricsAuthRequiredAndIsTestDecisions(t *testing.T) {
+	cases := map[string]struct {
+		env          string
+		authRequired bool
+		isTest       bool
+	}{
+		EnvDevelopment: {env: EnvDevelopment, authRequired: false, isTest: false},
+		EnvProduction:  {env: EnvProduction, authRequired: true, isTest: false},
+		EnvTest:        {env: EnvTest, authRequired: false, isTest: true},
+	}
+	for name, want := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := validConfig()
+			c.Environment = want.env
+			if got := c.MetricsAuthRequired(); got != want.authRequired {
+				t.Fatalf("MetricsAuthRequired() = %v, want %v", got, want.authRequired)
+			}
+			if got := c.IsTest(); got != want.isTest {
+				t.Fatalf("IsTest() = %v, want %v", got, want.isTest)
+			}
+		})
+	}
+}
+
+func TestValidateProductionRequiresStrongMetricsToken(t *testing.T) {
+	base := validConfig()
+	base.Environment = EnvProduction
+	base.SMTPTLS = SMTPStartTLS
+	base.SMTPHost = "smtp.example"
+	base.SMTPFrom = "no-reply@example.test"
+	base.S3Endpoint = "https://s3.example"
+
+	// A token shorter than the minimum is rejected. Load already trims the
+	// value before it reaches Validate, so the stored field has no padding.
+	base.MetricsToken = strings.Repeat("x", minMetricsTokenBytes-1)
+	if err := base.Validate(); err == nil {
+		t.Fatal("production must reject METRICS_TOKEN shorter than 32 bytes")
+	}
+
+	base.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	if err := base.Validate(); err != nil {
+		t.Fatalf("expected valid production config with 32-byte token, got %v", err)
+	}
+}
+
+func TestLoadTrimsMetricsToken(t *testing.T) {
+	// Whitespace around the configured token is removed on load so the value
+	// used for constant-time comparison matches what a correct client sends.
+	trimmed := strings.Repeat("t", minMetricsTokenBytes)
+	t.Setenv("METRICS_TOKEN", "  \n"+trimmed+"  ")
+	cfg := Load()
+	if cfg.MetricsToken != trimmed {
+		t.Fatalf("METRICS_TOKEN was not trimmed: %q", cfg.MetricsToken)
 	}
 }
 

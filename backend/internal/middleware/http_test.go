@@ -49,43 +49,59 @@ func TestMetricsAuth(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("metrics"))
 	})
+	token := strings.Repeat("s", minMetricsTokenBytesForTest)
 
-	// Without token, request is rejected.
-	handler := MetricsAuth("secret", okHandler)
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 without token, got %d", recorder.Code)
+	assertRejection := func(t *testing.T, name string, request *http.Request) {
+		t.Helper()
+		handler := MetricsAuth(token, okHandler)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("%s: expected 401, got %d", name, recorder.Code)
+		}
+		if got := recorder.Header().Get("WWW-Authenticate"); got != "Bearer" {
+			t.Fatalf("%s: WWW-Authenticate = %q, want Bearer", name, got)
+		}
+		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("%s: Cache-Control = %q, want no-store", name, got)
+		}
+		if !strings.Contains(recorder.Body.String(), "unauthorized") {
+			t.Fatalf("%s: body = %q", name, recorder.Body.String())
+		}
 	}
 
-	// Wrong token is rejected.
-	recorder = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	request.Header.Set("Authorization", "Bearer wrong")
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 with wrong token, got %d", recorder.Code)
-	}
+	// Without token, request is rejected with protection headers.
+	assertRejection(t, "no token", httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	// Wrong token (same length, differs in content) is rejected in constant time.
+	wrong := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	wrong.Header.Set("Authorization", "Bearer "+strings.Repeat("x", len(token)))
+	assertRejection(t, "wrong token", wrong)
+
+	// Wrong-length token is rejected.
+	short := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	short.Header.Set("Authorization", "Bearer short")
+	assertRejection(t, "short token", short)
 
 	// Missing Bearer prefix.
-	recorder = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	request.Header.Set("Authorization", "secret")
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 with bare token, got %d", recorder.Code)
-	}
+	bare := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	bare.Header.Set("Authorization", token)
+	assertRejection(t, "bare token", bare)
 
-	// Correct token succeeds.
-	recorder = httptest.NewRecorder()
-	request = httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	request.Header.Set("Authorization", "Bearer secret")
+	// Case-insensitive scheme, correct token succeeds and reaches the handler.
+	handler := MetricsAuth(token, okHandler)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Authorization", "bearer "+token)
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "metrics" {
 		t.Fatalf("expected 200 with correct token, got %d %q", recorder.Code, recorder.Body.String())
 	}
 }
+
+// minMetricsTokenBytesForTest is independent of the config constant so this
+// package does not import config just for a length.
+const minMetricsTokenBytesForTest = 32
 
 func TestRecoverAndRequestLog(t *testing.T) {
 	recorder := httptest.NewRecorder()

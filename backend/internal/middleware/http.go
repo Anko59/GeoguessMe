@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -36,21 +37,38 @@ func (m *Metrics) Observe(status int) {
 }
 
 // MetricsAuth returns a handler that requires a Bearer token matching the
-// configured token before delegating to next. It is intended to protect the
-// /metrics endpoint in production while keeping the endpoint open in
-// development and test environments.
+// configured token before delegating to next. The presented token is compared
+// to the configured value in constant time so a caller cannot learn the token
+// through timing side channels. Rejected responses carry WWW-Authenticate and
+// Cache-Control headers so intermediaries treat the endpoint as protected and
+// non-cacheable. The handler is intended to protect /metrics in production
+// while leaving the endpoint open in development and test environments.
 func MetricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		value := strings.TrimSpace(r.Header.Get("Authorization"))
-		parts := strings.SplitN(value, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] != token {
+		presented := bearerFromHeader(r.Header.Get("Authorization"))
+		if subtle.ConstantTimeCompare([]byte(presented), []byte(token)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"Metrics authentication required"}}`))
 			return
 		}
 		next(w, r)
 	}
+}
+
+// bearerFromHeader returns the token following a case-insensitive "Bearer"
+// scheme in an Authorization header, or the empty string when the header is
+// absent or malformed. Returning an empty value lets the caller feed it to a
+// constant-time comparison without an early, length-leaking branch.
+func bearerFromHeader(value string) string {
+	trimmed := strings.TrimSpace(value)
+	parts := strings.SplitN(trimmed, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return parts[1]
 }
 
 // SetCleanupBacklog records the number of pending object-deletion jobs.

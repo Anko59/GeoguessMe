@@ -68,9 +68,23 @@ const (
 	SMTPTLS      = "tls"
 )
 
+// Supported APP_ENV values. Environment is normalized to one of these before
+// validation, so every downstream comparison can be exact instead of relying
+// on case-insensitive matching scattered across the codebase.
+const (
+	EnvDevelopment = "development"
+	EnvProduction  = "production"
+	EnvTest        = "test"
+)
+
+// minMetricsTokenBytes is the minimum accepted length for a production
+// metrics bearer token. 32 bytes resists brute force while staying compact
+// enough for an HTTP header.
+const minMetricsTokenBytes = 32
+
 func Load() *Config {
 	return &Config{
-		Environment:      getEnv("APP_ENV", "development"),
+		Environment:      normalizeEnvironment(getEnv("APP_ENV", EnvDevelopment)),
 		Port:             getEnv("PORT", "8080"),
 		PublicURL:        getEnv("PUBLIC_URL", "http://localhost:5173"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
@@ -112,7 +126,7 @@ func Load() *Config {
 		RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 10),
 		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
-		MetricsToken:      os.Getenv("METRICS_TOKEN"),
+		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 	}
 }
 
@@ -121,6 +135,11 @@ func Load() *Config {
 func (c *Config) Validate() error {
 	var problems []string
 
+	switch c.Environment {
+	case EnvDevelopment, EnvProduction, EnvTest:
+	default:
+		problems = append(problems, "APP_ENV must be one of development, production, test")
+	}
 	if port, err := strconv.Atoi(strings.TrimSpace(c.Port)); err != nil || port < 1 || port > 65535 {
 		problems = append(problems, "PORT must be an integer between 1 and 65535")
 	}
@@ -204,6 +223,8 @@ func (c *Config) Validate() error {
 		}
 		if c.MetricsToken == "" {
 			problems = append(problems, "METRICS_TOKEN is required in production")
+		} else if len(c.MetricsToken) < minMetricsTokenBytes {
+			problems = append(problems, "METRICS_TOKEN must be at least 32 bytes in production")
 		}
 	}
 
@@ -211,6 +232,19 @@ func (c *Config) Validate() error {
 		return errors.New(strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// IsTest reports whether the validated environment is the test environment.
+// Test-only control endpoints are registered only when this is true, keeping
+// them behind the validated environment gate.
+func (c *Config) IsTest() bool { return c.Environment == EnvTest }
+
+// MetricsAuthRequired reports whether the /metrics endpoint must authenticate
+// callers. Authentication is required unless the environment is explicitly
+// development or test, so production (and any value that survives validation
+// other than those two) is protected by default.
+func (c *Config) MetricsAuthRequired() bool {
+	return c.Environment != EnvDevelopment && c.Environment != EnvTest
 }
 
 func LoadValidated() (*Config, error) {
@@ -226,6 +260,12 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// normalizeEnvironment trims surrounding whitespace and lower-cases the value
+// so APP_ENV comparisons can be exact and case-insensitive at the same time.
+func normalizeEnvironment(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func getEnvAsInt(key string, fallback int) int {
