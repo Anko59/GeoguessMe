@@ -35,8 +35,10 @@ function stubGeolocation() {
                 altitudeAccuracy: null,
                 heading: null,
                 speed: null,
+                toJSON: () => ({}),
             },
             timestamp: Date.now(),
+            toJSON: () => ({}),
         }),
     );
 }
@@ -191,7 +193,7 @@ describe('Camera component', () => {
                 POSITION_UNAVAILABLE: 2,
                 TIMEOUT: 3,
             });
-            reject?.(err as GeolocationPositionError);
+            reject?.(err as unknown as GeolocationPositionError);
         });
 
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);

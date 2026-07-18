@@ -6,7 +6,7 @@
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
-	build build-backend build-frontend build-images \
+	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal \
@@ -210,9 +210,19 @@ build-backend: ## Build the backend binary in Docker.
 build-frontend: ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
-build-images: ## Build production images without cache.
+build-images: ## Build production images with normal Docker layer caching.
+	docker build --pull -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
+	docker build --pull -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+
+clean-build: ## Build production images from scratch without any layer cache.
 	docker build --pull --no-cache -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull --no-cache -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+
+build-cache-prune: ## Remove dangling build cache to prevent unbounded growth.
+	docker builder prune --force
+
+test-build-caching: ## Run build-caching regression self-tests.
+	tools/quality/test/check-build-caching.sh
 
 ##@ Database and deployment
 compose-validate: ## Validate every Compose file.
@@ -298,7 +308,7 @@ ci: ## Run the same Dockerized quality and verification targets used locally.
 	$(MAKE) verify
 
 ##@ Maintenance
-clean: ## Remove generated artifacts without touching Docker/application volumes.
+clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 

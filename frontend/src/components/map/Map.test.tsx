@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Map from './Map';
@@ -6,10 +7,7 @@ import Map from './Map';
 // leaflet-heavy parts so we can still exercise the component's prop-driven
 // rendering and the LocationMarker logic.
 function createComponent(displayName: string) {
-    const Comp = (props: Record<string, unknown>) =>
-        // Use a simple wrapper to avoid importing React just for createElement.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('react').createElement('div', { 'data-testid': displayName, ...props });
+    const Comp = (props: Record<string, unknown>) => createElement('div', { 'data-testid': displayName, ...props });
     Comp.displayName = displayName;
     return Comp;
 }

@@ -31,11 +31,15 @@ development server.
 | make verify                           | Run the complete integration, E2E, deployment, and rehearsal gate |
 | make test-unit / make test-race       | Run unit or race tests                                            |
 | make test-integration / make test-e2e | Run isolated live-stack suites                                    |
-| make build-images                     | Build production images without cache                             |
+| make build-images                     | Build production images with normal Docker layer caching          |
+| make clean-build                      | Build production images from scratch without layer cache          |
 | make tools-clean                      | Remove only tool caches and containers                            |
+| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth           |
 
-Run make help for the full target list. Hooks use make pre-commit and make
-pre-push; they fail when Docker is unavailable and cannot be bypassed.
+Run make help for the full target list. Use make build-images for normal
+development; reserve make clean-build for reproducible CI or cache-invalidation
+scenarios. Hooks use make pre-commit and make pre-push; they fail when Docker is
+unavailable and cannot be bypassed.
 
 ## Architecture
 
