@@ -40,47 +40,45 @@ type MessagesPage struct {
 	NextCursor string           `json:"next_cursor"`
 }
 
-// GetGroupMessagesPage returns messages strictly after the opaque cursor,
-// ordered by the stable tuple (created_at, id). An empty cursor returns the
-// most recent page. The returned next_cursor is empty when no more pages exist.
+// GetGroupMessagesPage returns a page of group messages.
+//
+// An empty cursor selects the most recent page: the newest `limit` messages,
+// returned in chronological (ascending) order, with an empty next_cursor
+// because no newer pages exist. A non-empty opaque cursor returns the messages
+// strictly after that cursor in ascending order; next_cursor is set when more
+// pages remain and empty otherwise. Ordering always follows the stable tuple
+// (created_at, id) so reconnect catch-up cannot skip or duplicate a message.
 func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int) (MessagesPage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
-	args := []any{groupID}
-	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id WHERE m.group_id = $1`
-	if cursor != "" {
-		createdAt, id, err := decodeMessageCursor(cursor)
-		if err != nil {
-			return MessagesPage{}, fmt.Errorf("invalid message cursor: %w", err)
-		}
-		args = append(args, createdAt, id)
-		query += ` AND ROW(m.created_at, m.id) > ROW($2, $3)`
-	}
-	args = append(args, limit+1)
-	query += fmt.Sprintf(` ORDER BY m.created_at ASC, m.id ASC LIMIT $%d`, len(args))
 
-	rows, err := database.DB.Query(ctx, query, args...)
+	if cursor == "" {
+		query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id WHERE m.group_id = $1 ORDER BY m.created_at DESC, m.id DESC LIMIT $2`
+		rows, err := database.DB.Query(ctx, query, groupID, limit)
+		if err != nil {
+			return MessagesPage{}, err
+		}
+		messages, err := scanMessageRows(rows)
+		if err != nil {
+			return MessagesPage{}, err
+		}
+		// Fetch newest-first but expose the page in chronological order.
+		reverseMessages(messages)
+		return MessagesPage{Items: messages}, nil
+	}
+
+	createdAt, id, err := decodeMessageCursor(cursor)
+	if err != nil {
+		return MessagesPage{}, fmt.Errorf("invalid message cursor: %w", err)
+	}
+	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) > ROW($2, $3) ORDER BY m.created_at ASC, m.id ASC LIMIT $4`
+	rows, err := database.DB.Query(ctx, query, groupID, createdAt, id, limit+1)
 	if err != nil {
 		return MessagesPage{}, err
 	}
-	defer rows.Close()
-	messages := make([]models.Message, 0, limit)
-	for rows.Next() {
-		var msg models.Message
-		var username, avatar sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &msg.Content, &msg.CreatedAt); err != nil {
-			return MessagesPage{}, err
-		}
-		if username.Valid {
-			msg.Username = username.String
-		}
-		if avatar.Valid {
-			msg.Avatar = avatar.String
-		}
-		messages = append(messages, msg)
-	}
-	if err := rows.Err(); err != nil {
+	messages, err := scanMessageRows(rows)
+	if err != nil {
 		return MessagesPage{}, err
 	}
 
@@ -93,19 +91,63 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 	return page, nil
 }
 
+// scanMessageRows drains a message result set (closing it) into a slice in the
+// order the database returned it.
+func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {
+	defer rows.Close()
+	messages := make([]models.Message, 0)
+	for rows.Next() {
+		var msg models.Message
+		var username, avatar sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &msg.Content, &msg.CreatedAt); err != nil {
+			return nil, err
+		}
+		if username.Valid {
+			msg.Username = username.String
+		}
+		if avatar.Valid {
+			msg.Avatar = avatar.String
+		}
+		messages = append(messages, msg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
+// reverseMessages reverses the slice in place.
+func reverseMessages(messages []models.Message) {
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+}
+
+// CursorAfterMessage resolves a legacy message id into the opaque cursor that
+// positions pagination immediately after it. An empty or unknown message id
+// yields an empty cursor so the caller falls back to the latest page instead
+// of failing the whole request.
+func CursorAfterMessage(ctx context.Context, messageID string) (string, error) {
+	if messageID == "" {
+		return "", nil
+	}
+	var createdAt time.Time
+	err := database.DB.QueryRow(ctx, `SELECT created_at FROM messages WHERE id = $1`, messageID).Scan(&createdAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return encodeMessageCursor(createdAt, messageID), nil
+}
+
 // GetGroupMessagesContext remains as a thin cursor wrapper for any caller that
 // still passes a legacy message id. New callers should use the page API.
 func GetGroupMessagesContext(ctx context.Context, groupID, afterID string) ([]models.Message, error) {
-	cursor := ""
-	if afterID != "" {
-		var createdAt time.Time
-		err := database.DB.QueryRow(ctx, `SELECT created_at FROM messages WHERE id = $1`, afterID).Scan(&createdAt)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
-		}
-		if err == nil {
-			cursor = encodeMessageCursor(createdAt, afterID)
-		}
+	cursor, err := CursorAfterMessage(ctx, afterID)
+	if err != nil {
+		return nil, err
 	}
 	page, err := GetGroupMessagesPage(ctx, groupID, cursor, 500)
 	if err != nil {

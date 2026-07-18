@@ -16,8 +16,12 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - **Rate limits**: When exceeded, the response includes a `Retry-After` header
   with an integer number of seconds.
 - **Cursor pagination**: Used for group messages. Response includes `items` and
-  `next_cursor` (opaque base64-encoded). An empty `next_cursor` means no more
-  pages.
+  `next_cursor` (opaque base64-encoded). An empty `cursor` selects the most
+  recent page (the newest messages, in chronological order, with no forward
+  cursor); a non-empty `cursor` returns messages strictly after it. An empty
+  `next_cursor` in the response means no more pages. The legacy `after_id`
+  message id is resolved onto the cursor so reconnect callers that only know the
+  last received message id keep working.
 
 ## Endpoint overview
 

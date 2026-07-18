@@ -27,11 +27,18 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stable cursor takes precedence; the legacy after_id message id is mapped
-	// onto the same cursor so existing reconnect callers keep working.
+	// Stable cursor takes precedence; the legacy after_id message id is
+	// resolved onto the same opaque cursor so reconnect callers that only know
+	// the last message id keep working. A raw id must never reach the cursor
+	// decoder, which expects an opaque base64 value.
 	cursor := r.URL.Query().Get("cursor")
 	if cursor == "" {
-		cursor = r.URL.Query().Get("after_id")
+		resolved, err := repository.CursorAfterMessage(r.Context(), r.URL.Query().Get("after_id"))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			return
+		}
+		cursor = resolved
 	}
 	limit := 0
 	if raw := r.URL.Query().Get("limit"); raw != "" {
