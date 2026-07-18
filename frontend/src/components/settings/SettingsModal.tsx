@@ -77,7 +77,13 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                         Invite Link
                     </h4>
                     <div className="invite-box">
-                        <input type="text" value={inviteLink} readOnly className="invite-input" />
+                        <input
+                            type="text"
+                            value={inviteLink}
+                            readOnly
+                            className="invite-input"
+                            aria-label="Invite link"
+                        />
                         <button onClick={copyInviteLink} className="copy-btn">
                             {copiedItem === 'link' ? (
                                 <>

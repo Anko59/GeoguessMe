@@ -161,13 +161,20 @@ test.describe('Keyboard navigation', () => {
             const backLink = page.locator('.back-btn');
             const settingsBtn = page.getByRole('button', { name: /settings/i });
 
-            // Back link is first focusable element; Tab moves to settings, then tab bar
+            // Back link → Tab → settings button are the first focusable elements.
             await backLink.focus();
             await page.keyboard.press('Tab');
             await expect(settingsBtn).toBeFocused();
 
-            await page.keyboard.press('Tab');
+            // After settings, continued tabbing eventually reaches the tab bar
+            // at the bottom of the page (intermediate stops depend on WebSocket
+            // connection status and viewport).
             const chatTab = page.locator('.tab-bar .tab').first();
+            for (let i = 0; i < 8; i++) {
+                await page.keyboard.press('Tab');
+                const focused = await chatTab.evaluate((el) => el === document.activeElement);
+                if (focused) break;
+            }
             await expect(chatTab).toBeFocused();
         } finally {
             await ctx.context.close();
