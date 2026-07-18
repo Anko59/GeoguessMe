@@ -151,6 +151,77 @@ territory. Always run `make prune-report` first.
 | `make tools-clean`           | Remove tool containers, networks, and caches           |
 | `make test-prune-regression` | Run pruning regression tests                           |
 
+## Project disk cleanup
+
+Guarded project filesystem cleanup is available through
+`tools/quality/disk-cleanup.sh` and the `make disk-cleanup-report` /
+`make disk-cleanup` targets. This is separate from Docker cache pruning and only
+touches workspace artifact files, not Docker resources.
+
+### Disk cleanup safety guarantees
+
+- **Dry-run by default**: `disk-cleanup-report` (and
+  `disk-cleanup.sh --dry-run`) only report what would be removed.
+- **Explicit confirmation**: `make disk-cleanup` requires `CONFIRM=disk-cleanup`
+  to execute.
+- **Git-tracked preservation**: files tracked by Git are never removed.
+- **Path allowlist**: only known artifact paths (build outputs, coverage
+  reports, test results, E2E reports) are eligible for cleanup.
+- **Dangerous path refusal**: the script refuses to operate on `/`, `/home`,
+  `/root`, `/etc`, and other system directories. Ambiguous paths containing `..`
+  are rejected.
+- **Age bounds**: only files older than `--min-age-days` (default: 7) are
+  eligible. Refuses non-numeric, zero, or negative values.
+- **Size bounds**: refuses if the total eligible size exceeds `--max-total-mb`
+  (default: 1024). This prevents accidental bulk deletion.
+- **Unrelated project safety**: only paths under the validated allowlist are
+  touched. Other project directories, source files, configuration, and
+  documentation are never affected.
+
+### Disk cleanup usage
+
+```bash
+# Preview what would be cleaned (safe, read-only)
+make disk-cleanup-report
+
+# Preview with custom age threshold
+make disk-cleanup-report ARGS="--min-age-days 14"
+
+# Execute cleanup (requires explicit confirmation)
+CONFIRM=disk-cleanup make disk-cleanup
+
+# Execute with custom bounds
+CONFIRM=disk-cleanup make disk-cleanup ARGS="--min-age-days 30 --max-total-mb 500"
+```
+
+### What is cleaned
+
+| Path                          | Type        | Git-tracked | Age filter |
+| ----------------------------- | ----------- | ----------- | ---------- |
+| `backend/bin/`                | Directory   | Preserved   | Yes        |
+| `backend/tmp/`                | Recursive   | Preserved   | Yes        |
+| `backend/coverage.out`        | Single file | Preserved   | Yes        |
+| `frontend/dist/`              | Directory   | Preserved   | Yes        |
+| `frontend/coverage/`          | Recursive   | Preserved   | Yes        |
+| `frontend/test-results/`      | Recursive   | Preserved   | Yes        |
+| `frontend/playwright-report/` | Recursive   | Preserved   | Yes        |
+| `frontend/blob-report/`       | Recursive   | Preserved   | Yes        |
+
+Files tracked by Git within these paths are always skipped. For recursive paths
+(tmp, coverage, test-results, playwright-report, blob-report), each individual
+file is checked against the age threshold and git-tracked status. Non-recursive
+paths (bin, dist) are reported as a single unit.
+
+### Disk cleanup related targets
+
+| Target                              | Description                                           |
+| ----------------------------------- | ----------------------------------------------------- |
+| `make disk-cleanup-report`          | Dry-run preview of project disk cleanup               |
+| `make disk-cleanup`                 | Execute disk cleanup (needs `CONFIRM=disk-cleanup`)   |
+| `make test-disk-cleanup-regression` | Run disk-cleanup regression tests                     |
+| `make clean`                        | Remove build artifacts and dangling build cache       |
+| `make prune-report`                 | Dry-run preview of Docker resource pruning (separate) |
+
 ## Storage cleanup worker
 
 A background goroutine runs immediately on startup and then every hour:

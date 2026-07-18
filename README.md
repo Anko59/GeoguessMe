@@ -37,6 +37,8 @@ development server.
 | make cache-status                     | Report project-only Docker images, build cache, volumes, and artifacts (read-only) |
 | make test-cache-status-regression     | Run cache-status regression tests                                                  |
 | make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                            |
+| make disk-cleanup-report              | Preview project disk artifact cleanup (dry-run, read-only)                         |
+| make disk-cleanup                     | Clean project disk artifacts; requires CONFIRM=disk-cleanup                        |
 
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation

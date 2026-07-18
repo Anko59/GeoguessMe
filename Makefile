@@ -7,6 +7,7 @@
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-cache-status-regression cache-status \
 	test-prune-regression prune-report prune \
+	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
@@ -325,6 +326,16 @@ prune: ## Prune project-scoped Docker artifacts and cache; requires CONFIRM=prun
 
 test-prune-regression: ## Run prune.sh regression tests.
 	bash tools/quality/test/check-prune-regression.sh
+
+disk-cleanup-report: ## Preview project disk cleanup (dry-run, no changes).
+	bash tools/quality/disk-cleanup.sh --dry-run
+
+disk-cleanup: ## Clean project disk artifacts; requires CONFIRM=disk-cleanup.
+	@test "$(CONFIRM)" = "disk-cleanup" || { echo 'Refusing to clean without CONFIRM=disk-cleanup. Use make disk-cleanup-report to preview, then CONFIRM=disk-cleanup make disk-cleanup to execute.' >&2; exit 2; }
+	CONFIRM=disk-cleanup bash tools/quality/disk-cleanup.sh --force
+
+test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
+	bash tools/quality/test/check-disk-cleanup-regression.sh
 
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
