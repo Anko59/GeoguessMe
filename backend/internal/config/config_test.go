@@ -171,6 +171,20 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 	}
 }
 
+func TestValidateProductionRequiresHTTPSStorage(t *testing.T) {
+	c := validConfig()
+	c.Environment = EnvProduction
+	c.PublicURL = "https://app.example.test"
+	c.SMTPHost = "smtp.example"
+	c.SMTPFrom = "no-reply@example.test"
+	c.SMTPTLS = SMTPStartTLS
+	c.S3Endpoint = "http://s3.example"
+	c.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "S3_ENDPOINT must use HTTPS") {
+		t.Fatalf("expected production HTTP storage rejection, got %v", err)
+	}
+}
+
 func TestValidateRejectsUnknownEnvironment(t *testing.T) {
 	c := validConfig()
 	c.Environment = "staging"

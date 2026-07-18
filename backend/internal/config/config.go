@@ -229,6 +229,9 @@ func (c *Config) Validate() error {
 		if strings.HasPrefix(c.S3Endpoint, "http://localhost") {
 			problems = append(problems, "production storage must not use local MinIO")
 		}
+		if s3URL.Scheme != "https" {
+			problems = append(problems, "S3_ENDPOINT must use HTTPS in production")
+		}
 		if publicURL.Scheme != "https" {
 			problems = append(problems, "PUBLIC_URL must use HTTPS in production")
 		}

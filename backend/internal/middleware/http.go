@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
@@ -46,7 +47,7 @@ func (m *Metrics) Observe(status int) {
 func MetricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		presented := bearerFromHeader(r.Header.Get("Authorization"))
-		if subtle.ConstantTimeCompare([]byte(presented), []byte(token)) != 1 {
+		if !constantTimeTokenEqual(presented, token) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			w.Header().Set("Cache-Control", "no-store")
@@ -56,6 +57,15 @@ func MetricsAuth(token string, next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// constantTimeTokenEqual hashes both values first so ConstantTimeCompare
+// always receives fixed-size inputs. This avoids the early length-mismatch
+// return of comparing variable-length bearer strings directly.
+func constantTimeTokenEqual(presented, expected string) bool {
+	presentedHash := sha256.Sum256([]byte(presented))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(presentedHash[:], expectedHash[:]) == 1
 }
 
 // bearerFromHeader returns the token following a case-insensitive "Bearer"

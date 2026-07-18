@@ -99,6 +99,15 @@ func TestMetricsAuth(t *testing.T) {
 	}
 }
 
+func TestConstantTimeTokenEqualHandlesDifferentLengths(t *testing.T) {
+	if !constantTimeTokenEqual("same-token", "same-token") {
+		t.Fatal("equal tokens were rejected")
+	}
+	if constantTimeTokenEqual("short", "a much longer token") {
+		t.Fatal("different-length tokens were accepted")
+	}
+}
+
 // minMetricsTokenBytesForTest is independent of the config constant so this
 // package does not import config just for a length.
 const minMetricsTokenBytesForTest = 32
