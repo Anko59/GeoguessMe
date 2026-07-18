@@ -70,17 +70,20 @@ echo "--- Phase 3: Start production-like local stack ---"
 
 TMPDIR="$(mktemp -d)"
 
-# Generate a complete test production environment. Every variable required by
-# the production backend is supplied. Values are explicitly local/test;
-# production credentials are never invented.
+# Generate a complete test runtime environment. Every variable required by
+# the production image is supplied, but APP_ENV=test is intentional: the
+# disposable local MinIO fixture only serves plain HTTP. Production-only
+# validation (including HTTPS S3 and metrics authentication) is exercised by
+# the config tests and real production configuration checks; this rehearsal
+# must not weaken those rules just to accommodate a local fixture.
 #
 # SMTP is configured as an unauthenticated local fixture (Mailpit). No
 # credentials are set because Mailpit accepts plain delivery on port 1025.
-# SMTP_TLS=starttls satisfies the production validation rule that TLS cannot
-# be off, but no emails are sent during verification smoke tests so the
-# STARTTLS negotiation with Mailpit is never triggered.
+# SMTP_TLS=starttls keeps the fixture production-compatible, but no emails are
+# sent during verification smoke tests so the STARTTLS negotiation with
+# Mailpit is never triggered.
 cat >"$TMPDIR/production.env" <<'ENVEOF'
-APP_ENV=production
+APP_ENV=test
 PORT=8080
 PUBLIC_URL=__PUBLIC_URL__
 LOG_LEVEL=info

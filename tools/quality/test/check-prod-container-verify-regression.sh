@@ -122,7 +122,14 @@ for indicator in "${prod_indicators[@]}"; do
         pass "no production indicator: '$indicator'"
     fi
 done
-# Verify test-only env markers exist.
+# Verify test-only env markers exist. The local stack deliberately runs the
+# application in APP_ENV=test because its disposable MinIO endpoint is HTTP;
+# production-only HTTPS validation is covered separately by config tests.
+if grep -q '^APP_ENV=test$' "$SCRIPT"; then
+    pass "local verification uses APP_ENV=test"
+else
+    fail "local verification must use APP_ENV=test with HTTP MinIO"
+fi
 if grep -q 'sslmode=disable' "$SCRIPT"; then
     pass "uses sslmode=disable (test-only)"
 else
