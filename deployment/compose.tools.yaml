@@ -24,6 +24,7 @@ services:
     image: geoguessme/go-tools:1.25.12
     volumes:
       - *workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
 
@@ -32,6 +33,7 @@ services:
     image: geoguessme/go-tools:1.25.12
     volumes:
       - ./:/workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
 
@@ -45,6 +47,7 @@ services:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - *workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
       - frontend-node-modules:/workspace/frontend/node_modules
       - npm-cache:/npm-cache
 
@@ -55,6 +58,7 @@ services:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ./:/workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
       - frontend-node-modules:/workspace/frontend/node_modules
       - npm-cache:/npm-cache
 
@@ -85,6 +89,7 @@ services:
     entrypoint: []
     volumes:
       - *workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
 
   shfmt-write:
     <<: *host-tools
@@ -92,6 +97,7 @@ services:
     entrypoint: []
     volumes:
       - ./:/workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
 
   # Hadolint 2.12.0 (linux/amd64 digest: 3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199)
   hadolint:
@@ -108,6 +114,7 @@ services:
     entrypoint: []
     volumes:
       - *workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
 
   # SQLFluff 3.4.1 (linux/amd64 digest: 7e70b3d1dd5aa071712699001dabf912abc0137b0aae96fc1db0d559a68818e0)
   sqlfluff:
