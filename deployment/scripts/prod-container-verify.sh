@@ -18,7 +18,10 @@ web_image="${WEB_IMAGE:-geoguessme-web:local}"
 
 PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify}"
 WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-18083}"
-PUBLIC_URL="http://localhost:${WEB_PORT}"
+# The production config requires an HTTPS public origin. The disposable local
+# gateway is intentionally plain HTTP, so probes use a separate URL.
+PUBLIC_URL="https://localhost:${WEB_PORT}"
+PROBE_URL="http://localhost:${WEB_PORT}"
 
 # ---------------------------------------------------------------------------
 # Phase 1: Image hardening checks
@@ -177,7 +180,7 @@ echo "--- Phase 4: Health, readiness, and HTTP verification ---"
 deadline=$((SECONDS + 120))
 ready=0
 while [ "$SECONDS" -lt "$deadline" ]; do
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$PUBLIC_URL/health/ready" 2>/dev/null || echo 000)
+    code=$(curl -s -o /dev/null -w "%{http_code}" "$PROBE_URL/health/ready" 2>/dev/null || echo 000)
     if [ "$code" = "200" ]; then
         echo "  ok   gateway ready at $PUBLIC_URL"
         ready=1
@@ -186,7 +189,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     sleep 2
 done
 if [ "$ready" -eq 0 ]; then
-    echo "FAIL: timed out waiting for $PUBLIC_URL/health/ready" >&2
+    echo "FAIL: timed out waiting for $PROBE_URL/health/ready" >&2
     exit 1
 fi
 
@@ -205,10 +208,10 @@ check() {
     fi
 }
 
-check "liveness" 200 "$PUBLIC_URL/health/live"
-check "readiness" 200 "$PUBLIC_URL/health/ready"
-check "protected route (401)" 401 "$PUBLIC_URL/api/v1/user/groups"
-check "websocket ticket (401)" 401 "$PUBLIC_URL/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
+check "liveness" 200 "$PROBE_URL/health/live"
+check "readiness" 200 "$PROBE_URL/health/ready"
+check "protected route (401)" 401 "$PROBE_URL/api/v1/user/groups"
+check "websocket ticket (401)" 401 "$PROBE_URL/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
 
 if [ "$fail" -ne 0 ]; then
     echo "prod-container-verify FAILED: HTTP smoke checks did not pass" >&2
