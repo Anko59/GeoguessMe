@@ -18,11 +18,9 @@ export default defineConfig({
             // Playwright suite; keep the unit threshold focused on deterministic
             // application logic and independently testable UI components.
             exclude: [
+                // Infrastructure files that are not independently unit-testable
                 'src/setupTests.ts',
                 'src/main.tsx',
-                'src/App.tsx',
-                'src/components/navigation/ProtectedRoute.tsx',
-                'src/pages/groups/GroupView.tsx',
             ],
             thresholds: { statements: 80, lines: 80, functions: 80, branches: 70 },
         },

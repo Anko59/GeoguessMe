@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthResponse } from './types';
@@ -53,48 +53,60 @@ describe('Home Page', () => {
 });
 
 describe('App shell — public routes', () => {
-    it('renders the home page at /', () => {
+    it('renders the home page at /', async () => {
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByText('geoguess.me')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByText('geoguess.me')).toBeInTheDocument();
     });
 
-    it('renders the login page at /login', () => {
+    it('renders the login page at /login', async () => {
         routeRef.current = '/login';
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
     });
 
-    it('renders the signup page at /signup', () => {
+    it('renders the signup page at /signup', async () => {
         routeRef.current = '/signup';
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
-        expect(screen.getByText('Join the Fun!')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByPlaceholderText('Email')).toBeInTheDocument();
+        expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
     });
 
-    it('renders the forgot-password page at /forgot-password', () => {
+    it('renders the forgot-password page at /forgot-password', async () => {
         routeRef.current = '/forgot-password';
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByLabelText('Email')).toBeInTheDocument();
-        expect(screen.getByText('Send reset link')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+        expect(await screen.findByText('Send reset link')).toBeInTheDocument();
     });
 
-    it('renders the reset-password page at /reset-password', () => {
+    it('renders the reset-password page at /reset-password', async () => {
         routeRef.current = '/reset-password';
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByLabelText('New password')).toBeInTheDocument();
-        expect(screen.getByText('Reset password')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByLabelText('New password')).toBeInTheDocument();
+        expect(await screen.findByText('Reset password')).toBeInTheDocument();
     });
 
-    it('renders the verify-email page at /verify-email', () => {
+    it('renders the verify-email page at /verify-email', async () => {
         routeRef.current = '/verify-email';
         window.history.pushState({}, '', routeRef.current);
-        render(<App />);
-        expect(screen.getByText('Verification token is missing.')).toBeInTheDocument();
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByText('Verification token is missing.')).toBeInTheDocument();
     });
 });
 
