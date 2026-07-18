@@ -6,7 +6,7 @@
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-cache-status-regression cache-status \
-	test-prod-container-verify-regression \
+	test-prod-container-verify-regression test-migration-fixture-regression \
 	test-prune-regression prune-report prune \
 	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
@@ -182,6 +182,9 @@ test-cache-status-regression: ## Run cache-status regression tests.
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh
 
+test-migration-fixture-regression: ## Run migration fixture regression tests.
+	bash tools/quality/test/check-migration-fixture-regression.sh
+
 cache-status: ## Report project-only Docker images, build cache, volumes, and artifacts (read-only).
 	bash tools/quality/cache-status.sh
 
@@ -318,7 +321,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal test-restart-regression smoke load-test ## Run the complete release gate.
 
