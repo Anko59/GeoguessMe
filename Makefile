@@ -26,6 +26,11 @@ GEOGUESSME_TEST_MAILPIT_PORT ?= 8025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 
+# Optional Docker build flags for CI cache integration (type=local or type=gha).
+# Unset locally so that builds use the default Docker daemon cache.
+DOCKER_BUILD_FLAGS ?=
+DOCKER_COMPOSE_BUILD_FLAGS ?=
+
 ##@ Setup
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
@@ -167,6 +172,9 @@ test-structure-regression: ## Run structure-check regression tests in Docker.
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/test/check-structure-regression.sh
 
+test-ci-retention-regression: ## Verify CI workflow has bounded retention and cache scopes.
+	bash tools/quality/test/check-ci-retention-regression.sh
+
 test-cache-status-regression: ## Run cache-status regression tests.
 	bash tools/quality/test/check-cache-status-regression.sh
 
@@ -220,12 +228,12 @@ build-frontend: ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
 build-images: ## Build production images with normal Docker layer caching.
-	docker build --pull -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
-	docker build --pull -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
+	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
 
 clean-build: ## Build production images from scratch without any layer cache.
-	docker build --pull --no-cache -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
-	docker build --pull --no-cache -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
 
 build-cache-prune: ## Remove dangling build cache to prevent unbounded growth.
 	docker builder prune --force
@@ -303,7 +311,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate migration-test backup-rehearsal restart-rehearsal smoke load-test ## Run the complete release gate.
 

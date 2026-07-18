@@ -11,6 +11,7 @@ tools from pinned images and named caches.
 | make test-unit                    | Backend unit tests and frontend Vitest                                                        |
 | make test-race                    | Backend race detector                                                                         |
 | make test-structure-regression    | Structure-check regression tests in disposable Git repos                                      |
+| make test-ci-retention-regression | Verify CI workflow has bounded artifact retention and cache scopes                            |
 | make test-cache-status-regression | Cache-status regression tests for Docker resource reporting                                   |
 | make test-build-caching           | Verify build-images uses layer caching and clean-build does not                               |
 | make cache-status                 | Report project-only Docker images, build cache, volumes, and artifacts (read-only)            |
@@ -54,3 +55,9 @@ on serious or critical violations.
 CI checks out the repository, enables Docker Buildx, and invokes the same make
 verify target used for local handoff. It does not install Go, Node, Python,
 Playwright, or linters on the runner.
+
+The CI workflow uses scoped Docker layer caching (bounded by branch and lockfile
+hash), explicit artifact retention-days: 7 for failure diagnostics, and BuildKit
+GC limits to prevent unbounded cache growth. No secrets or .env files are cached
+or uploaded. The check-ci-retention-regression target validates these properties
+deterministically.
