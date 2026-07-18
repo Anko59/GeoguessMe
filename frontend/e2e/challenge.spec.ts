@@ -1,11 +1,15 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
 import {
+    deterministicTestImage,
     installDeterministicCamera,
     installDeterministicGeolocation,
+    malformedFileBytes,
     newAuthContext,
+    oversizedUploadBytes,
     signupViaUI,
     uniqueGroup,
+    unsupportedFormatBytes,
 } from './helpers';
 
 interface Scenario {
@@ -204,6 +208,232 @@ test.describe('Challenge flow', () => {
             await expect(locationPage.locator('.camera-error')).toContainText('Unable to retrieve location');
         } finally {
             await locationDenied.close();
+        }
+    });
+
+    test('file fallback uploads a valid image when camera is denied', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.camera-error')).toContainText('Camera access denied');
+            await expect(page.getByRole('button', { name: 'Upload from device' })).toBeVisible();
+            await page.getByRole('button', { name: 'Upload from device' }).click();
+
+            const fileInput = page.locator('#camera-file-input');
+            await expect(fileInput).toBeAttached();
+            await fileInput.setInputFiles({
+                name: 'valid.png',
+                mimeType: 'image/png',
+                buffer: deterministicTestImage(),
+            });
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            const uploadResponsePromise = page.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',
+            );
+            await page.getByRole('button', { name: /Send/ }).click();
+            const uploadResponse = await uploadResponsePromise;
+            expect(uploadResponse.status()).toBe(201);
+            await expect(page.locator('.chat-container')).toBeVisible();
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('retake discards the captured photo and reactivates camera', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['camera', 'geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicCamera(ctx);
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.capture-button')).toBeVisible();
+            await page.locator('.capture-button').click();
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            await page.getByRole('button', { name: 'Retake' }).click();
+            await expect(page.locator('.capture-button')).toBeVisible();
+            await expect(page.locator('.preview-image')).not.toBeAttached();
+
+            await page.locator('.capture-button').click();
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            const uploadResponsePromise = page.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',
+            );
+            await page.getByRole('button', { name: /Send/ }).click();
+            const uploadResponse = await uploadResponsePromise;
+            expect(uploadResponse.status()).toBe(201);
+            await expect(page.locator('.chat-container')).toBeVisible();
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('upload API failure shows an error and leaves preview visible', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['camera', 'geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicCamera(ctx);
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.capture-button')).toBeVisible();
+            await page.locator('.capture-button').click();
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            await page.route('**/api/v1/photo/upload', async (route) => {
+                await route.fulfill({
+                    status: 502,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        error: { code: 'storage_error', message: 'Unable to store image' },
+                    }),
+                });
+            });
+
+            await page.getByRole('button', { name: /Send/ }).click();
+            await expect(page.locator('.camera-error')).toContainText('Unable to store image');
+            await expect(page.locator('.preview-image')).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Retake' })).toBeVisible();
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('malformed file from fallback is rejected by the backend', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.camera-error')).toContainText('Camera access denied');
+            await page.getByRole('button', { name: 'Upload from device' }).click();
+
+            const fileInput = page.locator('#camera-file-input');
+            await expect(fileInput).toBeAttached();
+            await fileInput.setInputFiles({
+                name: 'malformed.png',
+                mimeType: 'image/png',
+                buffer: malformedFileBytes(),
+            });
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            await page.getByRole('button', { name: /Send/ }).click();
+            await expect(page.locator('.camera-error')).toContainText('invalid image');
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('unsupported image format from fallback is rejected by the backend', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.camera-error')).toContainText('Camera access denied');
+            await page.getByRole('button', { name: 'Upload from device' }).click();
+
+            const fileInput = page.locator('#camera-file-input');
+            await expect(fileInput).toBeAttached();
+            await fileInput.setInputFiles({
+                name: 'animated.gif',
+                mimeType: 'image/gif',
+                buffer: unsupportedFormatBytes(),
+            });
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            await page.getByRole('button', { name: /Send/ }).click();
+            await expect(page.locator('.camera-error')).toContainText('unknown format');
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('oversized upload from fallback is rejected by the backend', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, {
+            ...contextOptions,
+            permissions: ['geolocation'],
+            geolocation: { latitude: 48.8566, longitude: 2.3522 },
+        });
+        await installDeterministicGeolocation(ctx);
+        const page = await ctx.newPage();
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+
+            await page.getByRole('button', { name: 'Camera' }).click();
+            await expect(page.locator('.camera-error')).toContainText('Camera access denied');
+            await page.getByRole('button', { name: 'Upload from device' }).click();
+
+            const fileInput = page.locator('#camera-file-input');
+            await expect(fileInput).toBeAttached();
+            await fileInput.setInputFiles({
+                name: 'oversized.png',
+                mimeType: 'image/png',
+                buffer: oversizedUploadBytes(),
+            });
+            await expect(page.locator('.preview-image')).toBeVisible();
+
+            await page.getByRole('button', { name: /Send/ }).click();
+            await expect(page.locator('.camera-error')).toBeVisible();
+        } finally {
+            await ctx.close();
         }
     });
 });
