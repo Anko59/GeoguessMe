@@ -324,9 +324,9 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
-verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression smoke load-test ## Run the complete release gate.
+verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh
@@ -360,6 +360,13 @@ test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
 
 test-prod-container-verify-regression: ## Run prod-container-verify.sh regression tests.
 	bash tools/quality/test/check-prod-container-verify-regression.sh
+
+test-artifacts-clean-regression: ## Verify artifacts-clean target structure and safety.
+	bash tools/quality/test/check-cache-status-regression.sh
+
+artifacts-clean: ## Remove generated workspace artifacts without touching Docker caches or volumes.
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
