@@ -22,19 +22,21 @@ development server.
 
 ## Canonical commands
 
-| Command                               | Purpose                                                           |
-| ------------------------------------- | ----------------------------------------------------------------- |
-| make bootstrap                        | Prepare the Docker-only toolchain and hooks                       |
-| make dev                              | Start the development stack                                       |
-| make format / make format-check       | Format or check tracked files                                     |
-| make quality                          | Run strict quality, coverage, audit, and build gates              |
-| make verify                           | Run the complete integration, E2E, deployment, and rehearsal gate |
-| make test-unit / make test-race       | Run unit or race tests                                            |
-| make test-integration / make test-e2e | Run isolated live-stack suites                                    |
-| make build-images                     | Build production images with normal Docker layer caching          |
-| make clean-build                      | Build production images from scratch without layer cache          |
-| make tools-clean                      | Remove only tool caches and containers                            |
-| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth           |
+| Command                               | Purpose                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| make bootstrap                        | Prepare the Docker-only toolchain and hooks                                        |
+| make dev                              | Start the development stack                                                        |
+| make format / make format-check       | Format or check tracked files                                                      |
+| make quality                          | Run strict quality, coverage, audit, and build gates                               |
+| make verify                           | Run the complete integration, E2E, deployment, and rehearsal gate                  |
+| make test-unit / make test-race       | Run unit or race tests                                                             |
+| make test-integration / make test-e2e | Run isolated live-stack suites                                                     |
+| make build-images                     | Build production images with normal Docker layer caching                           |
+| make clean-build                      | Build production images from scratch without layer cache                           |
+| make tools-clean                      | Remove only tool caches and containers                                             |
+| make cache-status                     | Report project-only Docker images, build cache, volumes, and artifacts (read-only) |
+| make test-cache-status-regression     | Run cache-status regression tests                                                  |
+| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                            |
 
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation

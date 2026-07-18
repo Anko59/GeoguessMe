@@ -6,18 +6,20 @@ tools from pinned images and named caches.
 
 ## Gates
 
-| Target                         | Scope                                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------- |
-| make test-unit                 | Backend unit tests and frontend Vitest                                                        |
-| make test-race                 | Backend race detector                                                                         |
-| make test-structure-regression | Structure-check regression tests in disposable Git repos                                      |
-| make test-build-caching        | Verify build-images uses layer caching and clean-build does not                               |
-| make coverage                  | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
-| make test-integration          | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                            |
-| make test-e2e                  | Desktop and Pixel 5 Playwright projects                                                       |
-| make quality                   | Structure, formatting, linting, type-check, audits, regression tests, tests, coverage, builds |
-| make clean-build               | Rebuild production images without any layer cache                                             |
-| make verify                    | Quality plus live-stack, container, migration, backup/restore, restart, smoke, and load gates |
+| Target                            | Scope                                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| make test-unit                    | Backend unit tests and frontend Vitest                                                        |
+| make test-race                    | Backend race detector                                                                         |
+| make test-structure-regression    | Structure-check regression tests in disposable Git repos                                      |
+| make test-cache-status-regression | Cache-status regression tests for Docker resource reporting                                   |
+| make test-build-caching           | Verify build-images uses layer caching and clean-build does not                               |
+| make cache-status                 | Report project-only Docker images, build cache, volumes, and artifacts (read-only)            |
+| make coverage                     | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
+| make test-integration             | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                            |
+| make test-e2e                     | Desktop and Pixel 5 Playwright projects                                                       |
+| make quality                      | Structure, formatting, linting, type-check, audits, regression tests, tests, coverage, builds |
+| make clean-build                  | Rebuild production images without any layer cache                                             |
+| make verify                       | Quality plus live-stack, container, migration, backup/restore, restart, smoke, and load gates |
 
 Reports and traces are written to ignored repository output directories from
 inside containers.

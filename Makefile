@@ -5,6 +5,7 @@
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
+	test-cache-status-regression cache-status \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
@@ -163,6 +164,12 @@ test-structure-regression: ## Run structure-check regression tests in Docker.
 		$(if $(GIT_COMMON_DIR),-v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro) \
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/test/check-structure-regression.sh
+
+test-cache-status-regression: ## Run cache-status regression tests.
+	bash tools/quality/test/check-cache-status-regression.sh
+
+cache-status: ## Report project-only Docker images, build cache, volumes, and artifacts (read-only).
+	bash tools/quality/cache-status.sh
 
 test-frontend: ## Run frontend unit tests.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
