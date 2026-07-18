@@ -9,6 +9,7 @@ WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-8080}"
 MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-8025}"
 PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
 COMPOSE_FILE="deployment/compose.test.yaml"
+STAGING_DIR="$REPO/frontend/.playwright-run"
 
 # Clear stale artifacts so only the current invocation's output is retained.
 if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-report" ]; then
@@ -18,6 +19,8 @@ if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-repor
     }
 fi
 mkdir -p "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
 
 # shellcheck disable=SC2317 # Invoked indirectly by EXIT trap below.
 cleanup() {
@@ -46,14 +49,29 @@ fi
 # Run Playwright inside the pinned image without unsafe sh -c interpolation.
 # Environment variables and arguments are passed directly; output directories
 # are host-mounted so artifacts land deterministically.
+run_status=0
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
     -e "MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT}" \
-    -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright-results" \
-    -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/playwright-report" \
-    -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright-results/.last-run.json" \
-    -v "$REPO/frontend/test-results:/tmp/playwright-results" \
-    -v "$REPO/frontend/playwright-report:/tmp/playwright/playwright-report" \
-    playwright node node_modules/.bin/playwright "${test_args[@]}"
+    -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results" \
+    -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/report" \
+    -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json" \
+    -v "$STAGING_DIR:/tmp/playwright" \
+    playwright node node_modules/.bin/playwright "${test_args[@]}" || run_status=$?
+
+rm -rf "$REPO/frontend/test-results"
+if [ -d "$STAGING_DIR/test-results" ]; then
+    mv "$STAGING_DIR/test-results" "$REPO/frontend/test-results"
+else
+    mkdir -p "$REPO/frontend/test-results"
+fi
+rm -rf "$REPO/frontend/playwright-report"
+if [ -d "$STAGING_DIR/report" ]; then
+    mv "$STAGING_DIR/report" "$REPO/frontend/playwright-report"
+else
+    mkdir -p "$REPO/frontend/playwright-report"
+fi
+rm -rf "$STAGING_DIR"
+exit "$run_status"
