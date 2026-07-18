@@ -15,24 +15,24 @@ import (
 
 type rateLimiter struct {
 	requests map[string]*clientRate
-	mu       sync.RWMutex
+	mu       sync.Mutex // protects all fields below
+	clock    func() time.Time
+	offset   time.Duration
+	start    time.Time
 }
 
 type clientRate struct {
 	count     int
 	lastReset time.Time
-	mu        sync.Mutex
 }
 
-var (
-	limiter = &rateLimiter{
-		requests: make(map[string]*clientRate),
-	}
-	// Cleanup old entries every 10 minutes
-	cleanupInterval = 10 * time.Minute
-	// clock is the time source; injected by tests that need deterministic time.
-	clock func() time.Time = time.Now
-)
+var limiter = &rateLimiter{
+	requests: make(map[string]*clientRate),
+	clock:    time.Now,
+}
+
+// cleanupInterval is how often stale entries are pruned.
+const cleanupInterval = 10 * time.Minute
 
 func init() {
 	go func() {
@@ -48,32 +48,28 @@ func (rl *rateLimiter) cleanup() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := clock()
+	now := rl.clock()
 	for key, client := range rl.requests {
-		client.mu.Lock()
-		if now.Sub(client.lastReset) > time.Minute*5 {
+		if now.Sub(client.lastReset) > 5*time.Minute {
 			delete(rl.requests, key)
 		}
-		client.mu.Unlock()
 	}
 }
 
 func (rl *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := rl.clock()
 	client, exists := rl.requests[key]
 	if !exists {
 		client = &clientRate{
 			count:     0,
-			lastReset: clock(),
+			lastReset: now,
 		}
 		rl.requests[key] = client
 	}
-	rl.mu.Unlock()
 
-	client.mu.Lock()
-	defer client.mu.Unlock()
-
-	now := clock()
 	if now.Sub(client.lastReset) > window {
 		client.count = 0
 		client.lastReset = now
@@ -87,9 +83,9 @@ func (rl *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 	return true
 }
 
-// RateLimit creates a rate limiting middleware
-// limit: maximum number of requests
-// window: time window for the limit
+// RateLimit creates a rate limiting middleware that uses the client IP
+// address (including X-Forwarded-For without proxy validation for legacy
+// callers) as the rate-limit key.
 func RateLimit(limit int, window time.Duration) func(http.Handler) http.Handler {
 	return rateLimit(limit, window, nil, true)
 }
@@ -100,6 +96,9 @@ func RateLimitWithTrustedProxies(limit int, window time.Duration, trustedCIDRs [
 	return rateLimit(limit, window, trustedCIDRs, false)
 }
 
+// RateLimitByIdentity rate-limits by client IP combined with the identity
+// field (username or email) extracted from the JSON request body (up to
+// 64 KiB). The body is replaced so downstream handlers can still read it.
 func RateLimitByIdentity(limit int, window time.Duration, trustedCIDRs []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +131,6 @@ func RateLimitByIdentity(limit int, window time.Duration, trustedCIDRs []string)
 func rateLimit(limit int, window time.Duration, trustedCIDRs []string, legacyForwarded bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Use IP address as key
 			key := clientKey(r, trustedCIDRs)
 			if legacyForwarded {
 				key = legacyClientKey(r)
@@ -195,45 +193,44 @@ func legacyClientKey(r *http.Request) string {
 }
 
 // SetClock replaces the rate-limiter time source. A nil function restores
-// the default time.Now. Callers must ensure that concurrent rate-limit
-// evaluations are not in-flight while the clock is being changed.
+// the default time.Now. The caller must not hold the limiter lock.
 func SetClock(fn func() time.Time) {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
 	if fn == nil {
-		clock = time.Now
+		limiter.clock = time.Now
+		limiter.offset = 0
 		return
 	}
-	clock = fn
+	limiter.clock = fn
 }
 
-// ResetRateLimiter clears every tracked client so tests can start from a
-// clean slate. This is a test seam; production code must not call it.
+// ResetRateLimiter clears every tracked client and restores the real-time
+// clock so tests can start from a clean slate. Production code must not
+// call it.
 func ResetRateLimiter() {
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
 	limiter.requests = make(map[string]*clientRate)
+	limiter.clock = time.Now
+	limiter.offset = 0
 }
 
-// AdvanceTestClock moves an internal test clock forward by d. When the test
-// clock has never been set the call creates a clock starting at the current
-// wall-clock time and then advances it. Production code must not call this.
+// AdvanceTestClock moves the rate-limiter clock forward by d. When the test
+// clock has never been set the call anchors the simulated clock at the
+// current wall-clock time and then advances it. Production code must not
+// call this.
 func AdvanceTestClock(d time.Duration) {
-	// Capture the current wall-clock time once on first call so the
-	// simulated clock starts from a known reference point.
-	startOnce.Do(func() { testStart = time.Now() })
-	// Re-read the stored start under the lock for safety; the Do above
-	// guarantees it is set.
-	testMu.Lock()
-	defer testMu.Unlock()
-	testOffset += d
-	clock = func() time.Time { return testStart.Add(testOffset) }
-}
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
 
-var (
-	testStart  time.Time
-	testOffset time.Duration
-	testMu     sync.Mutex
-	startOnce  sync.Once
-)
+	// On the first call (or first after reset), anchor to wall-clock time.
+	if limiter.offset == 0 {
+		limiter.start = time.Now()
+	}
+	limiter.offset += d
+	limiter.clock = func() time.Time { return limiter.start.Add(limiter.offset) }
+}
 
 func trustedPeer(r *http.Request, cidrs []string) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

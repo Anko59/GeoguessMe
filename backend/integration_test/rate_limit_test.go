@@ -36,10 +36,12 @@ func TestRateLimitRequestsSucceedBelowLimit(t *testing.T) {
 	body := rateLimitLoginBody(identity)
 
 	// Three requests at the configured limit of 3 must not be rate-limited.
+	// The login endpoint returns 401 for wrong credentials, which is the
+	// expected application-level response below the rate limit.
 	for i := range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqualf(t, http.StatusTooManyRequests, resp.StatusCode,
-			"request %d should not be rate-limited", i+1)
+		require.Equalf(t, http.StatusUnauthorized, resp.StatusCode,
+			"request %d must return 401 (wrong password), got %d", i+1, resp.StatusCode)
 	}
 }
 
@@ -48,10 +50,11 @@ func TestRateLimitExceededReturns429(t *testing.T) {
 	identity := unique("ratelimit")
 	body := rateLimitLoginBody(identity)
 
-	// Exhaust the quota.
+	// Exhaust the quota — each returns 401 (wrong password).
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"below-limit request must return 401, got %d", resp.StatusCode)
 	}
 
 	// Next request must be rejected.
@@ -84,10 +87,11 @@ func TestRateLimitIsolationBetweenIdentities(t *testing.T) {
 	aliceBody := rateLimitLoginBody(alice)
 	bobBody := rateLimitLoginBody(bob)
 
-	// Exhaust Alice's quota.
+	// Exhaust Alice's quota — each returns 401.
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", aliceBody, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"alice below-limit must return 401, got %d", resp.StatusCode)
 	}
 
 	// Alice is now rate-limited.
@@ -98,8 +102,8 @@ func TestRateLimitIsolationBetweenIdentities(t *testing.T) {
 	// Bob still has his full quota.
 	for range 3 {
 		resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/login", bobBody, "", nil)
-		require.NotEqualf(t, http.StatusTooManyRequests, resp.StatusCode,
-			"bob should not be rate-limited by alice's exhaustion")
+		require.Equalf(t, http.StatusUnauthorized, resp.StatusCode,
+			"bob below-limit must return 401, got %d", resp.StatusCode)
 	}
 
 	// Bob's 4th request is rate-limited independently.
@@ -113,10 +117,11 @@ func TestRateLimitWindowReset(t *testing.T) {
 	identity := unique("ratelimit")
 	body := rateLimitLoginBody(identity)
 
-	// Exhaust the quota.
+	// Exhaust the quota — each returns 401.
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"below-limit must return 401, got %d", resp.StatusCode)
 	}
 
 	// Confirm limit is hit.
@@ -128,8 +133,8 @@ func TestRateLimitWindowReset(t *testing.T) {
 
 	// Requests should be allowed again after the window resets.
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-	require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode,
-		"request should succeed after window reset via clock advance")
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+		"request after window reset must return 401 (wrong password), got %d", resp.StatusCode)
 }
 
 func TestRateLimitResetClearsAllState(t *testing.T) {
@@ -137,10 +142,11 @@ func TestRateLimitResetClearsAllState(t *testing.T) {
 	identity := unique("ratelimit")
 	body := rateLimitLoginBody(identity)
 
-	// Exhaust the quota.
+	// Exhaust the quota — each returns 401.
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"below-limit must return 401, got %d", resp.StatusCode)
 	}
 
 	// Confirm limit is hit.
@@ -153,7 +159,8 @@ func TestRateLimitResetClearsAllState(t *testing.T) {
 	// Full quota available again.
 	for range 3 {
 		resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"after reset must return 401, got %d", resp.StatusCode)
 	}
 }
 
@@ -165,7 +172,8 @@ func TestRateLimitReturnsContentTypeJSON(t *testing.T) {
 	// Exhaust quota.
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
-		require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"below-limit must return 401, got %d", resp.StatusCode)
 	}
 
 	resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login", body, "", nil)
