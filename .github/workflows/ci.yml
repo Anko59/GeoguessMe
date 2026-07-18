@@ -1,3 +1,9 @@
+# CI verification gate.
+#
+# Uses Docker Buildx with scoped cache and bounded artifact retention.  The
+# BuildKit GC configuration prevents unbounded Docker layer growth.  Artifacts
+# are retained for 7 days to preserve failure diagnostics.  No secrets, .env
+# files, or sensitive variables are cached or uploaded.
 name: CI
 
 on:
@@ -8,6 +14,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Branch scope for cache key (hashFiles is evaluated in step context).
+  CACHE_BRANCH: ${{ github.ref_name }}
+
 jobs:
   verify:
     name: Dockerized verification gate
@@ -16,17 +26,45 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Set up Docker Buildx
+
+      - name: Set up Docker Buildx with bounded cache
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd922
+        with:
+          install: true
+          buildkitd-config-inline: |
+            [worker.oci]
+              gc = true
+              gckeepstorage = 20000000000
+
+      - name: Cache Docker build layers
+        uses: actions/cache@5a3f399214f9c56da1706b2823afa54b989c91ec
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-${{ env.CACHE_BRANCH }}-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: |
+            docker-${{ runner.os }}-${{ env.CACHE_BRANCH }}-
+            docker-${{ runner.os }}-
+
       - name: Bootstrap pinned tool containers
         run: make bootstrap
+
       - name: Run the complete release gate
-        run: make verify
+        run: |
+          make verify \
+            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+
+      - name: Migrate Docker layer cache for next run
+        if: always()
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache 2>/dev/null || true
+
       - name: Upload reports, logs, and traces on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: geoguessme-verification-artifacts
+          retention-days: 7
           if-no-files-found: ignore
           path: |
             frontend/playwright-report/
