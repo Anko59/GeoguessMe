@@ -10,4 +10,4 @@ if ! make format-check; then
     echo "Formatting check failed. Run: make format" >&2
     exit 1
 fi
-make structure-check lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style
+make structure-check test-structure-regression lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style

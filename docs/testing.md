@@ -6,15 +6,16 @@ tools from pinned images and named caches.
 
 ## Gates
 
-| Target                | Scope                                                                                         |
-| --------------------- | --------------------------------------------------------------------------------------------- |
-| make test-unit        | Backend unit tests and frontend Vitest                                                        |
-| make test-race        | Backend race detector                                                                         |
-| make coverage         | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
-| make test-integration | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                            |
-| make test-e2e         | Desktop and Pixel 5 Playwright projects                                                       |
-| make quality          | Structure, formatting, linting, type-check, audits, tests, coverage, builds                   |
-| make verify           | Quality plus live-stack, container, migration, backup/restore, restart, smoke, and load gates |
+| Target                         | Scope                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| make test-unit                 | Backend unit tests and frontend Vitest                                                        |
+| make test-race                 | Backend race detector                                                                         |
+| make test-structure-regression | Structure-check regression tests in disposable Git repos                                      |
+| make coverage                  | Backend 70% overall and frontend 80/80/80/70 thresholds                                       |
+| make test-integration          | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                            |
+| make test-e2e                  | Desktop and Pixel 5 Playwright projects                                                       |
+| make quality                   | Structure, formatting, linting, type-check, audits, regression tests, tests, coverage, builds |
+| make verify                    | Quality plus live-stack, container, migration, backup/restore, restart, smoke, and load gates |
 
 Reports and traces are written to ignored repository output directories from
 inside containers.
