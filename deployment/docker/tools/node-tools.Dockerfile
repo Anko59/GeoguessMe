@@ -6,7 +6,8 @@ FROM node:22.14.0-bookworm-slim@sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13
 RUN apt-get update \
  && apt-get install --no-install-recommends -y bash git \
  && rm -rf /var/lib/apt/lists/* \
- && git config --system --add safe.directory /workspace
+ && git config --system --add safe.directory /workspace \
+ && mkdir -p /workspace/frontend/node_modules
 
 ENV npm_config_cache=/npm-cache \
     npm_config_update_notifier=false \
