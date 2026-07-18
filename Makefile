@@ -6,13 +6,14 @@
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-cache-status-regression cache-status \
+	test-prod-container-verify-regression \
 	test-prune-regression prune-report prune \
 	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal migration-test load-test \
-	compose-validate container-verify smoke smoke-rehearsal \
+	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
 	quality verify pre-commit pre-push ci clean reset-dev
 
@@ -284,6 +285,9 @@ load-test: build-images ## Run the documented disposable load profile.
 container-verify: build-images ## Verify runtime image hardening and health checks.
 	deployment/scripts/container-verify.sh
 
+prod-container-verify: build-images ## Full production-container verification: images, compose, stack, health, smoke, teardown.
+	deployment/scripts/prod-container-verify.sh
+
 prod-config: ## Validate production image and secret configuration.
 	@test -n "$$BACKEND_IMAGE" || { echo "BACKEND_IMAGE is required"; exit 2; }
 	@test -n "$$WEB_IMAGE" || { echo "WEB_IMAGE is required"; exit 2; }
@@ -311,9 +315,9 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
-verify: quality test-integration test-e2e container-verify compose-validate migration-test backup-rehearsal restart-rehearsal smoke load-test ## Run the complete release gate.
+verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal smoke load-test ## Run the complete release gate.
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh
@@ -344,6 +348,9 @@ disk-cleanup: ## Clean project disk artifacts; requires CONFIRM=disk-cleanup.
 
 test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
 	bash tools/quality/test/check-disk-cleanup-regression.sh
+
+test-prod-container-verify-regression: ## Run prod-container-verify.sh regression tests.
+	bash tools/quality/test/check-prod-container-verify-regression.sh
 
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
