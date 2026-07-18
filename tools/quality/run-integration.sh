@@ -26,7 +26,7 @@ export GEOGUESSME_TEST_TOXIPROXY_PORT="$TOXIPROXY_PORT"
 export GEOGUESSME_TEST_PUBLIC_URL="$PUBLIC_URL"
 export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:${WEB_PORT}"
 
-docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --build --wait
+docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --wait
 "$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
 
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \

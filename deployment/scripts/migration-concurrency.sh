@@ -20,8 +20,8 @@ docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-di
     run --rm --no-deps go-security psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
     "CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'avatar.png', score INTEGER NOT NULL DEFAULT 0); INSERT INTO users (id, username, password) VALUES ('legacy-user', 'legacy_user', 'legacy-password');"
 
-first="$(docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run -d --no-deps --quiet-pull migration | tail -n 1)"
-second="$(docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run -d --no-deps --quiet-pull migration | tail -n 1)"
+first="$(docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run -d --no-deps migration | tail -n 1)"
+second="$(docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" run -d --no-deps migration | tail -n 1)"
 first_status="$(docker wait "$first")"
 second_status="$(docker wait "$second")"
 test "$first_status" = 0

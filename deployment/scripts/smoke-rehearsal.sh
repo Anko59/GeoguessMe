@@ -18,6 +18,6 @@ trap cleanup EXIT
 export GEOGUESSME_TEST_WEB_PORT="$WEB_PORT"
 export GEOGUESSME_TEST_MAILPIT_PORT="$MAILPIT_PORT"
 export GEOGUESSME_TEST_PUBLIC_URL="$PUBLIC_URL"
-docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --build --wait
+docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --wait
 deployment/scripts/smoke-test.sh "$PUBLIC_URL"
 echo "smoke-rehearsal PASSED: disposable stack passed liveness, readiness, auth, and WebSocket ticket checks"

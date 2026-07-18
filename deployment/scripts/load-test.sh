@@ -18,7 +18,7 @@ trap cleanup EXIT
 export GEOGUESSME_TEST_WEB_PORT="$WEB_PORT"
 export GEOGUESSME_TEST_MAILPIT_PORT="$MAILPIT_PORT"
 export GEOGUESSME_TEST_PUBLIC_URL="$PUBLIC_URL"
-docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --build --wait
+docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run --rm --no-deps loadtest k6 run \
