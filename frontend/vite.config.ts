@@ -21,8 +21,6 @@ export default defineConfig({
                 'src/setupTests.ts',
                 'src/main.tsx',
                 'src/App.tsx',
-                'src/components/camera/Camera.tsx',
-                'src/components/map/Map.tsx',
                 'src/components/navigation/ProtectedRoute.tsx',
                 'src/pages/groups/GroupView.tsx',
             ],
