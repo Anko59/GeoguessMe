@@ -30,13 +30,6 @@ func FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
 	return result, rows.Err()
 }
 
-// MarkMediaRemoved nulls the storage key once retention cleanup has enqueued a
-// deletion job, preventing the same object being queued twice.
-func MarkMediaRemoved(ctx context.Context, id string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE photos SET lifecycle_status = 'removed', storage_key = NULL WHERE id = $1`, id)
-	return err
-}
-
 func ExpireChallengeViews(ctx context.Context) error {
 	_, err := database.DB.Exec(ctx, `DELETE FROM challenge_views WHERE view_expires_at < CURRENT_TIMESTAMP - interval '1 day'`)
 	return err
@@ -174,6 +167,30 @@ func (r CleanupRunner) sweepRetainedMedia(ctx context.Context, logger *slog.Logg
 		}
 	}
 	return firstErr
+}
+
+// RunOneCycle executes a single cleanup pass (token cleanup, challenge-view
+// expiry, retention media sweep, and deletion-queue drain) and is exported so
+// integration tests can exercise the full one-cycle behavior without
+// duplicating worker logic.
+func (r CleanupRunner) RunOneCycle(ctx context.Context) {
+	logger := r.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	r.runOnce(ctx, logger)
+}
+
+// DrainDeletionQueue claims and executes pending deletion jobs in batches until
+// the queue is empty or an error stops progress. Exported so focused
+// deletion-retry tests can exercise it with a controlled Deleter without
+// duplicating worker logic.
+func (r CleanupRunner) DrainDeletionQueue(ctx context.Context) {
+	logger := r.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	r.drainDeletionQueue(ctx, logger)
 }
 
 func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logger) {

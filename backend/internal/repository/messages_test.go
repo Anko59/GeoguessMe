@@ -73,11 +73,23 @@ func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].ID != "photo-1" {
 		t.Fatalf("expired media = %+v, %v", items, err)
 	}
-	mock.ExpectExec("UPDATE photos SET lifecycle_status").WithArgs("photo-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("DELETE FROM challenge_views").WillReturnResult(pgxmock.NewResult("DELETE", 1))
-	if err := MarkMediaRemoved(ctx, "photo-1"); err != nil {
+	// RetireRetainedMedia replaces the old MarkMediaRemoved API with the
+	// atomic lock→job→update flow.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
+		WithArgs("photo-1").
+		WillReturnRows(retainedMediaRow("ready", "photos/one"))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").
+		WithArgs(pgxmock.AnyArg(), "photos/one").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("UPDATE photos SET lifecycle_status").
+		WithArgs("photo-1").
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	if err := RetireRetainedMedia(ctx, "photo-1"); err != nil {
 		t.Fatal(err)
 	}
+	mock.ExpectExec("DELETE FROM challenge_views").WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	if err := ExpireChallengeViews(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +157,8 @@ func TestRetireRetainedMediaSuccess(t *testing.T) {
 }
 
 // TestRetireRetainedMediaRollsBackOnJobInsertFailure ensures a deletion-job
-// insert failure aborts the transaction: no media update and no commit occur.
+// insert failure aborts the transaction: the rollback is explicit, no media
+// update and no commit occur.
 func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
@@ -158,13 +171,15 @@ func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
 	mock.ExpectExec("INSERT INTO media_deletion_jobs").
 		WithArgs(pgxmock.AnyArg(), "photos/original").
 		WillReturnError(jobErr)
+	mock.ExpectRollback()
 	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, jobErr) {
 		t.Fatalf("expected job insert error to propagate, got %v", err)
 	}
 }
 
 // TestRetireRetainedMediaRollsBackOnMediaUpdateFailure ensures a media-update
-// failure aborts the transaction after the job was inserted: nothing commits.
+// failure aborts the transaction after the job was inserted: the rollback is
+// explicit and nothing commits.
 func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
@@ -180,6 +195,7 @@ func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
 	mock.ExpectExec("UPDATE photos SET lifecycle_status").
 		WithArgs(photoID).
 		WillReturnError(updateErr)
+	mock.ExpectRollback()
 	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, updateErr) {
 		t.Fatalf("expected media update error to propagate, got %v", err)
 	}
