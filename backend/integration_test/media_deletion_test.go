@@ -255,28 +255,6 @@ func (d *controlledDeleter) calls() []string {
 	return out
 }
 
-// drainQueueOnce claims pending jobs one batch at a time, deleting each object
-// through the provided Deleter and completing or failing the job accordingly.
-// It mirrors CleanupRunner.drainDeletionQueue and exists so integration tests
-// can exercise the full claim-delete-complete/fail-retry lifecycle with a
-// controlled Deleter.
-func drainQueueOnce(ctx context.Context, store repository.Deleter) error {
-	jobs, err := repository.ClaimDeletionJobs(ctx, 25, 15*time.Minute)
-	if err != nil {
-		return err
-	}
-	for _, job := range jobs {
-		if err := store.Delete(ctx, job.StorageKey); err != nil {
-			_ = repository.FailDeletionJob(ctx, job.ID, err.Error())
-			continue
-		}
-		if err := repository.CompleteDeletionJob(ctx, job.ID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // TestDeletionWorkerRetryOnFailure proves that when object deletion fails the
 // job stays incomplete, the error is recorded, and next_attempt_at is moved
 // into the future so the job is scheduled for a later retry.
@@ -293,7 +271,10 @@ func TestDeletionWorkerRetryOnFailure(t *testing.T) {
 	del := &controlledDeleter{}
 	del.setFail(key, errors.New("transient storage error"))
 
-	require.NoError(t, drainQueueOnce(ctx, del))
+	// Use the production CleanupRunner one-cycle drain instead of a
+	// duplicated helper. DrainDeletionQueue loops until the queue is empty
+	// and logs internally; errors are recorded on the job row.
+	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
 
 	// Verify the job was attempted.
 	require.Equal(t, []string{key}, del.calls(), "deleter must have been called for the key")
@@ -331,8 +312,8 @@ func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
 	del := &controlledDeleter{}
 	del.setFail(key, errors.New("transient storage error"))
 
-	// First attempt fails.
-	require.NoError(t, drainQueueOnce(ctx, del))
+	// First attempt fails via the production drain.
+	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
 	require.Equal(t, []string{key}, del.calls())
 
 	// Fetch the job ID from the failed attempt.
@@ -350,8 +331,8 @@ func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
 	// Recover the deleter: clear the transient failure.
 	del.clearFail(key)
 
-	// Second drain claims and completes the same job.
-	require.NoError(t, drainQueueOnce(ctx, del))
+	// Second drain claims and completes the same job via the production path.
+	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
 
 	// The deleter must have been called with the key again (call count is now 2).
 	require.Equal(t, []string{key, key}, del.calls(), "deleter must have been called twice for the same key")
@@ -387,7 +368,7 @@ func TestCompletedJobNotClaimedAgain(t *testing.T) {
 	require.NoError(t, err)
 
 	del := &controlledDeleter{}
-	require.NoError(t, drainQueueOnce(ctx, del))
+	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
 
 	// The completed job must not be claimed.
 	require.Empty(t, del.calls(), "completed job must not be claimed for deletion")
@@ -460,4 +441,49 @@ func TestDeleteUserCascadeIdempotentWithExistingActiveJob(t *testing.T) {
 	// Exactly one active job must remain – the original pre-created one.
 	require.Equal(t, 1, activeJobCount(t, db, storageKey),
 		"exactly one active deletion job must exist after idempotent account deletion")
+}
+
+// TestEnqueueMediaDeletionSurvivor proves the migration-003 ON CONFLICT
+// survivor behavior: enqueuing the same key twice (from concurrent or
+// repeated delete operations) must leave exactly one active job. This is the
+// deterministic counterpart to the concurrent atomic retire test and
+// validates the partial unique index dedup in practice.
+func TestEnqueueMediaDeletionSurvivor(t *testing.T) {
+	db := testDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	key := "survivor/" + unique("k")
+	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
+
+	// Enqueue the same key twice from different sources (simulates concurrent
+	// account deletion and retention sweep both enqueuing the same object).
+	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "account", []string{key}))
+	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "retention", []string{key}))
+
+	// Exactly one active job must survive; the second is a silent no-op.
+	require.Equal(t, 1, activeJobCount(t, db, key),
+		"duplicate enqueue must leave exactly one active survivor")
+
+	// The surviving job must be the first-inserted one (ON CONFLICT DO NOTHING
+	// preserves the original row).
+	var source string
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT source FROM media_deletion_jobs WHERE storage_key = $1 AND completed_at IS NULL`, key).
+		Scan(&source))
+	require.Equal(t, "account", source, "first-inserted source must survive")
+
+	// After the active job is completed, a new enqueue must succeed (the
+	// partial index only covers active jobs).
+	var jobID string
+	require.NoError(t, db.QueryRow(ctx,
+		`SELECT id FROM media_deletion_jobs WHERE storage_key = $1 AND completed_at IS NULL`, key).
+		Scan(&jobID))
+	_, err := db.Exec(ctx,
+		`UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP WHERE id = $1`, jobID)
+	require.NoError(t, err)
+
+	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "retention", []string{key}))
+	require.Equal(t, 1, activeJobCount(t, db, key),
+		"new active job allowed after prior job completed")
 }

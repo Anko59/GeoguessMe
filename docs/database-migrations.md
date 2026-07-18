@@ -77,14 +77,39 @@ Also adds foreign key constraints and indexes where missing.
   `media_deletion_jobs(storage_key)` `WHERE completed_at IS NULL`, so at most
   one active deletion job can exist per storage key. A completed job is outside
   the index, so a later job for the same key is still allowed.
-- Collapses any duplicate active jobs accumulated before this guard (one
-  survivor per key; the stored object is still deleted exactly once) before
-  creating the index, so the migration succeeds on databases that already
-  contain duplicates.
-- Repository insertion uses
-  `ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, so a
-  duplicate active obligation is an idempotent success while genuine database
-  errors still fail.
+
+### Lock/duplicate survivor behavior
+
+The migration deduplication query uses
+`ROW_NUMBER() OVER (PARTITION BY storage_key ORDER BY created_at, next_attempt_at, id)`
+to select one survivor per key from any pre-existing active duplicates. The
+survivor is the row with the earliest `created_at` (then `next_attempt_at`, then
+`id` as tie-breaker). All other active rows for the same key are deleted.
+
+At runtime the repository layer uses
+`ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING` on every
+insert:
+
+- **Concurrent enqueue survivor**: When two callers (e.g. account deletion and
+  retention sweep) attempt to insert an active job for the same key
+  simultaneously, the partial unique index prevents the second insert. The
+  first-inserted row survives; the second is a silent no-op. The stored object
+  is still deleted exactly once because the single surviving job covers the
+  obligation.
+- **RetireRetainedMedia atomic lock**: The `RetireRetainedMedia` operation
+  acquires `FOR UPDATE` on the photo row before deciding to insert a deletion
+  job. If an active job already exists for that key, `ON CONFLICT DO NOTHING`
+  prevents a duplicate. The row lock ensures no two sweeps can race past the
+  lifecycle-status check.
+- **Completed jobs are outside the index**: Once a job's `completed_at` is set,
+  it falls outside the partial index, so a new active job for the same key can
+  be inserted. This handles the case where the same object is re-uploaded and
+  later deleted again.
+
+Repository insertion uses
+`ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, so a
+duplicate active obligation is an idempotent success while genuine database
+errors still fail.
 
 ## Status command
 
