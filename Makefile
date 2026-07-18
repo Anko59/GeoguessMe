@@ -136,8 +136,15 @@ check-e2e-style: ## Reject synchronization and selector patterns that hide flaki
 
 lint: structure-check format-check lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style ## Run every strict lint gate.
 
+# Git worktree directories so structure-check can resolve .git inside containers.
+GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
+GIT_DIR_WORKTREE := $(shell git rev-parse --git-dir 2>/dev/null)
+
 structure-check: ## Enforce tracked-file and directory structure limits.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools /workspace/tools/quality/structure-check
+	$(COMPOSE_TOOLS) run --rm --no-deps \
+		$(if $(GIT_COMMON_DIR),-v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro) \
+		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
+		go-tools /workspace/tools/quality/structure-check
 
 type-check: ## Run the TypeScript compiler without emitting files.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'cd frontend && tsc --noEmit'
