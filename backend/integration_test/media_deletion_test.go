@@ -399,3 +399,65 @@ func TestCompletedJobNotClaimedAgain(t *testing.T) {
 		Scan(&completedAt))
 	require.NotNil(t, completedAt, "completed job must remain completed")
 }
+
+// seedAccountForDeletion inserts a minimal user, group, and active photo with a
+// known storage key, returning the user id, photo id, and key. Rows use per-run
+// unique handles and are cleaned up on test completion. Callers that also call
+// DeleteUserCascade must not double-delete the user or photo rows.
+func seedAccountForDeletion(t *testing.T, db *pgxpool.Pool) (userID, photoID, storageKey string) {
+	t.Helper()
+	ctx := context.Background()
+	handle := unique("acctdel")
+	userID = "acctdel-user-" + handle
+	groupID := "acctdel-group-" + handle
+	photoID = "acctdel-photo-" + handle
+	storageKey = "acctdel-media/" + handle
+	_, err := db.Exec(ctx,
+		`INSERT INTO users (id, username, password, email, email_normalized) VALUES ($1, $2, 'x', $3, $3)`,
+		userID, handle, handle+"@example.test")
+	require.NoError(t, err)
+	_, err = db.Exec(ctx,
+		`INSERT INTO groups (id, name, code) VALUES ($1, $2, $3)`,
+		groupID, "AcctDel "+handle, "code-"+handle)
+	require.NoError(t, err)
+	_, err = db.Exec(ctx,
+		`INSERT INTO photos (id, user_id, group_id, storage_key, lat, long, lifecycle_status, expires_at, retention_at) VALUES ($1, $2, $3, $4, 0, 0, 'ready', CURRENT_TIMESTAMP + interval '1 hour', CURRENT_TIMESTAMP + interval '30 days')`,
+		photoID, userID, groupID, storageKey)
+	require.NoError(t, err)
+	// DeleteUserCascade will remove the user (cascading to photos, group_members
+	// etc.) so we only need to clean up the group and any leftover deletion jobs.
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), `DELETE FROM media_deletion_jobs WHERE storage_key = $1`, storageKey)
+		_, _ = db.Exec(context.Background(), `DELETE FROM photos WHERE id = $1`, photoID)
+		_, _ = db.Exec(context.Background(), `DELETE FROM groups WHERE id = $1`, groupID)
+		_, _ = db.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+	})
+	return userID, photoID, storageKey
+}
+
+// TestDeleteUserCascadeIdempotentWithExistingActiveJob proves that account
+// deletion succeeds when an active deletion job for a photo storage key already
+// exists, and that exactly one active job remains (no duplicate, no rollback).
+func TestDeleteUserCascadeIdempotentWithExistingActiveJob(t *testing.T) {
+	db := testDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	userID, _, storageKey := seedAccountForDeletion(t, db)
+
+	// Pre-create an active deletion obligation for the same key, as if a
+	// retention sweep or prior deletion already enqueued it.
+	_, err := db.Exec(ctx,
+		`INSERT INTO media_deletion_jobs (id, storage_key, source, next_attempt_at) VALUES ($1, $2, 'retention', CURRENT_TIMESTAMP + interval '1 hour')`,
+		"existing-job-"+unique("x"), storageKey)
+	require.NoError(t, err)
+
+	// Account deletion must succeed even though the active job already exists.
+	keys, err := repository.DeleteUserCascade(ctx, userID)
+	require.NoError(t, err, "DeleteUserCascade must succeed when an active deletion job already exists")
+	require.Contains(t, keys, storageKey, "returned keys must include the photo storage key")
+
+	// Exactly one active job must remain – the original pre-created one.
+	require.Equal(t, 1, activeJobCount(t, db, storageKey),
+		"exactly one active deletion job must exist after idempotent account deletion")
+}

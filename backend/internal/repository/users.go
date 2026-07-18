@@ -272,7 +272,7 @@ func DeleteUserCascade(ctx context.Context, userID string) ([]string, error) {
 		return nil, err
 	}
 	for _, key := range keys {
-		if _, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, 'account')`, uuid.NewString(), key); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, 'account') ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, uuid.NewString(), key); err != nil {
 			return nil, err
 		}
 	}
