@@ -76,9 +76,19 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 ## Metrics
 
 Prometheus metrics are available at `/metrics`. The endpoint is public in
-development and test environments. In production (and any environment other than
-`development` or `test`) the endpoint requires
-`Authorization: Bearer <METRICS_TOKEN>`.
+`development` and `test` environments. In `production` (and any environment
+other than `development` or `test`) the endpoint requires
+`Authorization: Bearer <METRICS_TOKEN>`. The presented token is compared to the
+configured value in constant time.
+
+A rejected request returns `401` with these response headers:
+
+- `WWW-Authenticate: Bearer` — advertises the required scheme.
+- `Cache-Control: no-store` — prevents intermediaries from caching the protected
+  response.
+
+The response body is the standard error shape:
+`{"error":{"code":"unauthorized","message":"Metrics authentication required"}}`.
 
 Available metrics:
 

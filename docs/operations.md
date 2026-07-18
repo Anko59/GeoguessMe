@@ -29,9 +29,13 @@ OpenMetrics (Prometheus) format at `/metrics`:
 | `geoguessme_http_errors_total`       | Counter | HTTP 5xx responses           |
 | `geoguessme_storage_cleanup_backlog` | Gauge   | Pending object-deletion jobs |
 
-The `/metrics` endpoint is unprotected in development and test. In production
-(and any environment other than `development` or `test`) it requires Bearer
-authentication with the `METRICS_TOKEN` value.
+The `/metrics` endpoint is unprotected in `development` and `test`. In
+`production` (and any environment other than `development` or `test`) it
+requires Bearer authentication with the `METRICS_TOKEN` value. The token must be
+at least 32 bytes (`openssl rand -hex 32`) and is compared in constant time. A
+failed authentication returns `401` with `WWW-Authenticate: Bearer` and
+`Cache-Control: no-store` so load balancers and caches do not serve or store the
+protected response.
 
 ```bash
 # Production metrics require the configured bearer token
