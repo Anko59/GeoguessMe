@@ -3,7 +3,7 @@
     --bg-color: #ffffff;
     --bg-dark: #f5f5f5;
     --text-color: #1a237e;
-    --text-light: #64748b;
+    --text-light: #4b5563;
 
     /* Gradients */
     --gradient-orange: linear-gradient(135deg, #ffb600 0%, #ffd700 100%);
@@ -13,10 +13,10 @@
     /* Accent Colors */
     --primary-orange: #ffb600;
     --primary-yellow: #ffd700;
-    --primary-blue: #00c0ff;
+    --primary-blue: #0077b6;
     --primary-green: #00ff80;
     --accent-dark: #1a237e;
-    --accent-red: #f43f5e;
+    --accent-red: #dc2626;
 
     /* UI Elements */
     --border-radius: 1.25rem;

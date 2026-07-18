@@ -33,7 +33,7 @@
     padding: 0.5rem 0.5rem;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.6);
+    color: #4b5563;
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
@@ -44,6 +44,10 @@
     justify-content: center;
     gap: 0.25rem;
     position: relative;
+}
+
+.tab.active {
+    color: #0077b6;
 }
 
 .tab-icon {

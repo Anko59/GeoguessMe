@@ -191,7 +191,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                     />
                     {cameraReady && (
                         <div className="camera-controls">
-                            <button className="capture-button" onClick={capturePhoto}>
+                            <button className="capture-button" onClick={capturePhoto} aria-label="Take photo">
                                 <div className="capture-inner"></div>
                             </button>
                         </div>

@@ -61,7 +61,8 @@ api.interceptors.response.use(
 
 export const getAPIErrorMessage = (error: unknown, fallback: string): string => {
     if (error instanceof AxiosError) {
-        return error.response?.data?.error?.message ?? error.message ?? fallback;
+        // Prefer a server-provided message; never leak Axios internal strings.
+        return error.response?.data?.error?.message ?? fallback;
     }
     return error instanceof Error ? error.message : fallback;
 };
