@@ -50,10 +50,12 @@ services:
       retries: 30
 
   migration:
+    image: geoguessme-backend:local
     build:
       context: .
       dockerfile: deployment/docker/backend.Dockerfile
     command: ["migrate", "up"]
+    pull_policy: never
     environment:
       DATABASE_URL: postgres://test:test@db:5432/geoguessme_test?sslmode=disable
       JWT_SECRET: test_secret_key_at_least_32_characters_long
@@ -62,10 +64,12 @@ services:
     restart: "no"
 
   backend:
+    image: geoguessme-backend:local
     build:
       context: .
       dockerfile: deployment/docker/backend.Dockerfile
     command: ["serve"]
+    pull_policy: never
     environment:
       APP_ENV: test
       DATABASE_URL: postgres://test:test@db:5432/geoguessme_test?sslmode=disable
@@ -97,10 +101,12 @@ services:
       retries: 30
 
   web:
+    image: geoguessme-web:local
     build:
       context: .
       dockerfile: deployment/docker/frontend.Dockerfile
     ports: ["${GEOGUESSME_TEST_WEB_PORT:-8080}:80"]
+    pull_policy: never
     depends_on:
       backend: { condition: service_healthy }
 

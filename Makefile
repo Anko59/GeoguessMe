@@ -172,16 +172,16 @@ test-race: ## Run Go unit tests with the race detector.
 
 test-backend-race: test-race ## Compatibility alias for test-race.
 
-test-integration: ## Run the isolated integration stack and tests in Docker.
+test-integration: build-images ## Run the isolated integration stack and tests in Docker.
 	$(TEST_ENV) tools/quality/run-integration.sh
 
-test-e2e: ## Run all Playwright projects in the isolated stack.
+test-e2e: build-images ## Run all Playwright projects in the isolated stack.
 	$(TEST_ENV) tools/quality/run-e2e.sh
 
-test-e2e-ui: ## Run Playwright UI mode in Docker.
+test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
-test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5 (range 1..20)
+test-e2e-repeat: build-images ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5 (range 1..20)
 	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be an integer in 1..20"; exit 2;; esac
 	@if [ "$(COUNT)" -lt 1 ] || [ "$(COUNT)" -gt 20 ]; then echo "COUNT must be in 1..20"; exit 2; fi
 	@i=1; while [ $$i -le $(COUNT) ]; do \
@@ -191,7 +191,7 @@ test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-
 	done
 	@echo "All $(COUNT) E2E runs passed"
 
-test-all: test-unit test-integration test-e2e ## Run unit, integration, and E2E suites.
+test-all: build-images test-unit test-integration test-e2e ## Run unit, integration, and E2E suites.
 
 coverage: ## Enforce and report backend/frontend coverage thresholds.
 	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
@@ -250,18 +250,18 @@ db-restore: ## Restore a PostgreSQL backup through the tool container.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-security /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
 
-backup-rehearsal: ## Run the disposable backup/restore rehearsal.
+backup-rehearsal: build-images ## Run the disposable backup/restore rehearsal.
 	deployment/scripts/backup-restore-rehearsal.sh
 
 restore-rehearsal: backup-rehearsal ## Compatibility alias for restore rehearsal.
 
-restart-rehearsal: ## Run the disposable restart/reconnect rehearsal.
+restart-rehearsal: build-images ## Run the disposable restart/reconnect rehearsal.
 	deployment/scripts/restart-rehearsal.sh
 
-migration-test: ## Run concurrent, idempotent, and legacy-fixture migration tests.
+migration-test: build-images ## Run concurrent, idempotent, and legacy-fixture migration tests.
 	deployment/scripts/migration-concurrency.sh
 
-load-test: ## Run the documented disposable load profile.
+load-test: build-images ## Run the documented disposable load profile.
 	deployment/scripts/load-test.sh
 
 container-verify: build-images ## Verify runtime image hardening and health checks.
@@ -287,10 +287,10 @@ prod-down: ## Stop production services and keep data volumes.
 prod-logs: ## Tail production logs.
 	$(COMPOSE_PROD) logs -f
 
-smoke: ## Run the smoke test against a selected disposable/staging URL.
+smoke: build-images ## Run the smoke test against a selected disposable/staging URL.
 	if [ -n "$${BASE_URL:-}" ]; then deployment/scripts/smoke-test.sh "$$BASE_URL"; else deployment/scripts/smoke-rehearsal.sh; fi
 
-smoke-rehearsal: ## Run the smoke test against a disposable test stack.
+smoke-rehearsal: build-images ## Run the smoke test against a disposable test stack.
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
