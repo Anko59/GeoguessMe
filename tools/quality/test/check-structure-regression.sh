@@ -108,5 +108,62 @@ with_temp_repo pass nested-children-not-flat bash -c 'mkdir -p deep/a deep/b dee
 with_temp_repo fail mixed-extensions-exceed-count bash -c 'mkdir -p mixed-ext; for i in $(seq 1 5); do echo x > "mixed-ext/f$i.go"; done; for i in $(seq 1 5); do echo x > "mixed-ext/f$i.ts"; done; for i in $(seq 1 5); do echo x > "mixed-ext/f$i.yaml"; done'
 # 15 code/config files total (5 .go + 5 .ts + 5 .yaml) — exceeds 14
 
+# ── Generated-file marker: syntax-aware ───────────────────────────────────────
+#
+# pass  = small file with a valid language-appropriate marker → excluded, no violation
+# fail  = 501-line file with invalid/bare marker           → NOT excluded, line-count violation
+
+# shellcheck disable=SC2016
+with_temp_repo pass go-line-comment-marker bash -c 'mkdir -p tools/quality && printf "// GENERATED FILE\npackage main\n" > main.go && printf "main.go\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail go-bare-marker bash -c 'mkdir -p tools/quality && printf "GENERATED FILE\n" > main.go && for i in $(seq 1 500); do echo line; done >> main.go && printf "main.go\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass go-block-comment-marker bash -c 'mkdir -p tools/quality && printf "/* GENERATED FILE */\npackage main\n" > main.go && printf "main.go\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass ts-line-comment-marker bash -c 'mkdir -p tools/quality && printf "// GENERATED FILE\nexport const x = 1;\n" > lib.ts && printf "lib.ts\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass yaml-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nkey: value\n" > config.yaml && printf "config.yaml\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail yaml-bare-marker bash -c 'mkdir -p tools/quality && printf "GENERATED FILE\n" > config.yaml && for i in $(seq 1 500); do echo line; done >> config.yaml && printf "config.yaml\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass sql-dash-marker bash -c 'mkdir -p tools/quality && printf "%s\n%s\n" "-- GENERATED FILE" "CREATE TABLE t (id int);" > schema.sql && printf "schema.sql\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass html-comment-marker bash -c 'mkdir -p tools/quality && printf "<!-- GENERATED FILE -->\n<!DOCTYPE html>\n" > index.html && printf "index.html\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail html-bare-marker bash -c 'mkdir -p tools/quality && printf "GENERATED FILE\n" > index.html && for i in $(seq 1 500); do echo line; done >> index.html && printf "index.html\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass css-block-comment-marker bash -c 'mkdir -p tools/quality && printf "/* GENERATED FILE */\nbody {}\n" > style.css && printf "style.css\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail css-line-comment-rejected bash -c 'mkdir -p tools/quality && printf "// GENERATED FILE\n" > style.css && for i in $(seq 1 500); do echo line; done >> style.css && printf "style.css\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass json-key-marker bash -c 'mkdir -p tools/quality && printf "{\"_generated\": \"GENERATED FILE\"}\n{}\n" > config.json && printf "config.json\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail json-bare-marker bash -c 'mkdir -p tools/quality && printf "GENERATED FILE\n" > config.json && for i in $(seq 1 500); do echo line; done >> config.json && printf "config.json\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass non-code-bare-marker bash -c 'mkdir -p tools/quality && printf "GENERATED FILE\nSome text\n" > readme.md && printf "readme.md\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail allowlist-without-marker bash -c 'mkdir -p tools/quality && printf "package main\n" > main.go && for i in $(seq 1 500); do echo line; done >> main.go && printf "main.go\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo fail spoofed-malformed-marker bash -c 'mkdir -p tools/quality && printf " GENERATED FILE\n" > main.go && for i in $(seq 1 500); do echo line; done >> main.go && printf "main.go\n" > tools/quality/generated-files.allowlist'
+
+# shellcheck disable=SC2016
+with_temp_repo pass toml-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nkey = \"value\"\n" > config.toml && printf "config.toml\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass ini-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nkey=value\n" > config.ini && printf "config.ini\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass env-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nKEY=value\n" > .env && printf ".env\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass dockerfile-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nFROM scratch\n" > Dockerfile && printf "Dockerfile\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass makefile-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nall:\n\t@echo done\n" > Makefile && printf "Makefile\n" > tools/quality/generated-files.allowlist'
+# shellcheck disable=SC2016
+with_temp_repo pass caddyfile-hash-marker bash -c 'mkdir -p tools/quality && printf "# GENERATED FILE\nlocalhost\n" > Caddyfile && printf "Caddyfile\n" > tools/quality/generated-files.allowlist'
+
 echo "results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
