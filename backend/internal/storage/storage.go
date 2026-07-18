@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -130,12 +133,27 @@ func NewS3Store(endpoint, region, bucket, accessKey, secretKey string, pathStyle
 	if err != nil || parsed.Host == "" {
 		return nil, fmt.Errorf("invalid S3 endpoint")
 	}
-	client, err := minio.New(parsed.Host, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: parsed.Scheme == "https", Region: region, BucketLookup: func() minio.BucketLookupType {
-		if pathStyle {
-			return minio.BucketLookupPath
-		}
-		return minio.BucketLookupAuto
-	}()})
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 1 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	client, err := minio.New(parsed.Host, &minio.Options{
+		Creds:     credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure:    parsed.Scheme == "https",
+		Region:    region,
+		Transport: transport,
+		BucketLookup: func() minio.BucketLookupType {
+			if pathStyle {
+				return minio.BucketLookupPath
+			}
+			return minio.BucketLookupAuto
+		}(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +213,12 @@ func (s *S3Store) Health(ctx context.Context) error {
 	return err
 }
 
-// isS3NotFound reports whether an object-storage error indicates a missing key.
+// isS3NotFound reports whether an object-storage error indicates a missing
+// key. It matches structured MinIO ErrorResponse codes (including wrapped
+// errors) and falls back to a NoSuchKey substring match for S3-compatible
+// stores that do not return the MinIO error type. Generic HTTP 404
+// heuristics are intentionally excluded to avoid misclassifying access
+// errors or unrelated HTTP responses.
 func isS3NotFound(err error) bool {
 	if err == nil {
 		return false
@@ -204,6 +227,5 @@ func isS3NotFound(err error) bool {
 	if errors.As(err, &resp) {
 		return resp.Code == "NoSuchKey"
 	}
-	message := err.Error()
-	return strings.Contains(message, "NoSuchKey") || strings.Contains(message, "404")
+	return strings.Contains(err.Error(), "NoSuchKey")
 }

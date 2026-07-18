@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -92,19 +93,28 @@ func TestS3ConfigurationAndNotFoundMapping(t *testing.T) {
 	if _, err := NewS3Store("http://", "us-east-1", "bucket", "key", "secret", true); err == nil {
 		t.Fatal("endpoint without host unexpectedly succeeded")
 	}
-	// Real minio.ErrorResponse with Code="NoSuchKey" must be detected.
+	// Structured MinIO ErrorResponse with Code="NoSuchKey" must be detected.
 	if !isS3NotFound(minio.ErrorResponse{Code: "NoSuchKey", Message: "The specified key does not exist."}) {
 		t.Fatal("minio ErrorResponse with NoSuchKey code was not detected")
+	}
+	// Wrapped NoSuchKey must be detected through the error chain.
+	wrapped := fmt.Errorf("proxy error: %w", minio.ErrorResponse{Code: "NoSuchKey"})
+	if !isS3NotFound(wrapped) {
+		t.Fatal("wrapped NoSuchKey was not detected")
 	}
 	// Non-NoSuchKey minio.ErrorResponse must not match.
 	if isS3NotFound(minio.ErrorResponse{Code: "AccessDenied", Message: "Access Denied"}) {
 		t.Fatal("AccessDenied code was incorrectly reported as not-found")
 	}
-	// Fallback: plain error messages containing "NoSuchKey" or "404" still
-	// match for compatibility with other S3-compatible stores.
-	for _, err := range []error{errors.New("NoSuchKey"), errors.New("HTTP 404"), errors.New("permission denied")} {
-		if got := isS3NotFound(err); got != (err.Error() != "permission denied") {
-			t.Errorf("isS3NotFound(%q) = %v", err, got)
+	// Plain error message containing "NoSuchKey" still matches for
+	// S3-compatible stores that do not return the MinIO error type.
+	if !isS3NotFound(errors.New("NoSuchKey")) {
+		t.Fatal("plain NoSuchKey message was not detected")
+	}
+	// Arbitrary text containing "404" must not match (no generic HTTP heuristics).
+	for _, err := range []error{errors.New("HTTP 404"), errors.New("404 Not Found"), errors.New("permission denied")} {
+		if isS3NotFound(err) {
+			t.Errorf("isS3NotFound(%q) incorrectly returned true", err)
 		}
 	}
 	if isS3NotFound(nil) {

@@ -335,3 +335,72 @@ func unique(prefix string) string {
 	uniqueCounter++
 	return fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), uniqueCounter)
 }
+
+// --- Toxiproxy helpers ---------------------------------------------------
+
+func toxiproxyBase() string {
+	if v := os.Getenv("TOXIPROXY_API_URL"); v != "" {
+		return v
+	}
+	return "http://localhost:8474"
+}
+
+// addToxiproxyTimeout adds a timeout toxic to the named proxy. A timeout of
+// zero causes immediate connection drops, simulating a storage outage.
+func addToxiproxyTimeout(t *testing.T, proxyName string, timeoutMs int) {
+	t.Helper()
+	body := fmt.Sprintf(`{"name":"storage_outage","type":"timeout","stream":"downstream","toxicity":1,"attributes":{"timeout":%d}}`, timeoutMs)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		toxiproxyBase()+"/proxies/"+proxyName+"/toxics", bytes.NewReader([]byte(body)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "toxiproxy timeout toxic must be added")
+}
+
+// removeToxiproxyTimeout removes the storage_outage timeout toxic from the
+// named proxy, restoring normal operation.
+func removeToxiproxyTimeout(t *testing.T, proxyName string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
+		toxiproxyBase()+"/proxies/"+proxyName+"/toxics/storage_outage", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	// 204 No Content on success; 404 if already removed (idempotent).
+	require.True(t, resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound,
+		"toxiproxy timeout toxic removal must succeed")
+}
+
+// waitForReadyStatus polls /health/ready until it returns the expected status
+// or the deadline is reached.
+func waitForReadyStatus(t *testing.T, expectedStatus int) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	client := &http.Client{Timeout: 15 * time.Second}
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/health/ready", nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == expectedStatus {
+				return
+			}
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	t.Fatalf("/health/ready did not reach status %d within deadline", expectedStatus)
+}
+
+// countPhotos returns the number of photo rows across all lifecycle states.
+func countPhotos(t *testing.T) int {
+	t.Helper()
+	db := testDB(t)
+	var n int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT COUNT(*) FROM photos`).Scan(&n))
+	return n
+}
