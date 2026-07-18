@@ -1,15 +1,16 @@
-import { test, expect, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
-import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
+import { test, expect } from './fixtures';
+import { signupViaUI, uniqueGroup } from './helpers';
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 interface ChatScenario {
-    ownerContext: Awaited<ReturnType<typeof newAuthContext>>;
+    ownerContext: BrowserContext;
     owner: Page;
     groupId: string;
     groupCode: string;
 }
 
-async function createScenario(browser: Browser, active: BrowserContextOptions): Promise<ChatScenario> {
-    const ownerContext = await newAuthContext(browser, active);
+async function createScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<ChatScenario> {
+    const ownerContext = await browser.newContext(contextOptions);
     const owner = await ownerContext.newPage();
     await signupViaUI(owner);
     await owner.goto('/group/create');
@@ -29,10 +30,10 @@ async function createScenario(browser: Browser, active: BrowserContextOptions): 
 
 async function addMember(
     browser: Browser,
-    active: BrowserContextOptions,
+    contextOptions: BrowserContextOptions,
     scenario: ChatScenario,
-): Promise<{ context: Awaited<ReturnType<typeof newAuthContext>>; page: Page }> {
-    const context = await newAuthContext(browser, active);
+): Promise<{ context: BrowserContext; page: Page }> {
+    const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     await signupViaUI(page);
     await page.goto('/group/join');
@@ -45,10 +46,9 @@ async function addMember(
 }
 
 test.describe('Chat via WebSocket', () => {
-    test('chat connect, send message, receive in real-time', async ({ browser }, testInfo) => {
-        const active = testInfo.project.use as BrowserContextOptions;
-        const scenario = await createScenario(browser, active);
-        const member = await addMember(browser, active, scenario);
+    test('chat connect, send message, receive in real-time', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
+        const member = await addMember(browser, contextOptions, scenario);
         try {
             await expect(scenario.owner.locator('.chat-container')).toBeVisible();
             await expect(member.page.locator('.chat-container')).toBeVisible();
@@ -65,10 +65,9 @@ test.describe('Chat via WebSocket', () => {
         }
     });
 
-    test('reload restores message history', async ({ browser }, testInfo) => {
-        const active = testInfo.project.use as BrowserContextOptions;
-        const scenario = await createScenario(browser, active);
-        const member = await addMember(browser, active, scenario);
+    test('reload restores message history', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
+        const member = await addMember(browser, contextOptions, scenario);
         try {
             const msgText = `Hello before reload at ${Date.now()}`;
             await scenario.owner.locator('#chat-message').fill(msgText);
@@ -85,9 +84,8 @@ test.describe('Chat via WebSocket', () => {
         }
     });
 
-    test('one-time WS ticket reuse is rejected', async ({ browser }, testInfo) => {
-        const active = testInfo.project.use as BrowserContextOptions;
-        const scenario = await createScenario(browser, active);
+    test('one-time WS ticket reuse is rejected', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
         try {
             let usedTicket = '';
             await scenario.owner.route('**/api/v1/ws/ticket*', async (route) => {
