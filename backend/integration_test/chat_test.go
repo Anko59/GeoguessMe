@@ -158,7 +158,7 @@ func TestWebSocketReconnectAndCatchUp(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// ---- expired (consumed) ticket cannot be reused ----
+	// ---- consumed ticket cannot be reused ----
 	_, err = dialWS(t, groupID, aliceTicket1, baseURL)
 	require.Error(t, err, "consumed one-time ticket must be rejected")
 
@@ -185,6 +185,26 @@ func TestWebSocketReconnectAndCatchUp(t *testing.T) {
 	require.Equal(t, "second", page.Items[0].Content, "missed messages must be in chronological order")
 	require.Equal(t, "third", page.Items[1].Content, "missed messages must be in chronological order")
 	require.NotEqual(t, page.Items[0].ID, page.Items[1].ID, "each message must appear exactly once")
+
+	// ---- send a new message through the other participant after reconnect ----
+	require.NoError(t, bobConn.WriteJSON(map[string]string{"content": "fourth"}))
+
+	// ---- assert the reconnected socket receives it exactly once ----
+	require.NoError(t, aliceConn2.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, payload, err = aliceConn2.ReadMessage()
+	require.NoError(t, err)
+	var fourthMsg struct {
+		Content string `json:"content"`
+		Kind    string `json:"kind"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &fourthMsg))
+	require.Equal(t, "fourth", fourthMsg.Content)
+	require.Equal(t, "text", fourthMsg.Kind)
+
+	// Prove no duplicate: a second read with a short deadline must time out.
+	require.NoError(t, aliceConn2.SetReadDeadline(time.Now().Add(300*time.Millisecond)))
+	_, _, err = aliceConn2.ReadMessage()
+	require.Error(t, err, "reconnected socket must not receive duplicate messages")
 }
 
 // encodeMessageCursor mirrors repository.encodeMessageCursor so integration
