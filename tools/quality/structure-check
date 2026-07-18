@@ -19,8 +19,41 @@ is_binary_media() {
 
 is_generated() {
     local path=$1
-    [ -f tools/quality/generated-files.allowlist ] && grep -Fqx "$path" tools/quality/generated-files.allowlist &&
-        [ "$(sed -n '1p' "$path")" = "GENERATED FILE" ]
+    # Must be listed in the allowlist
+    [ -f tools/quality/generated-files.allowlist ] || return 1
+    grep -Fqx "$path" tools/quality/generated-files.allowlist || return 1
+
+    local first_line
+    first_line=$(sed -n '1p' "$path")
+    [ -n "$first_line" ] || return 1
+
+    # Syntax-aware marker: the marker must appear in a comment form valid for
+    # the file's language. This prevents spoofing via bare text, string
+    # literals, or malformed markers like extra whitespace or leading junk.
+    case "$path" in
+        *.go|*.ts|*.tsx|*.js|*.jsx)
+            [ "$first_line" = "// GENERATED FILE" ] || [ "$first_line" = "/* GENERATED FILE */" ]
+            ;;
+        *.css)
+            [ "$first_line" = "/* GENERATED FILE */" ]
+            ;;
+        *.html)
+            [ "$first_line" = "<!-- GENERATED FILE -->" ]
+            ;;
+        *.sql)
+            [ "$first_line" = "-- GENERATED FILE" ]
+            ;;
+        *.sh|*.yaml|*.yml|*.toml|*.ini|*.conf|*.env|*.env.*|Dockerfile|Dockerfile.*|*/Dockerfile|*/Dockerfile.*|Makefile|Makefile.*|*/Makefile|*/Makefile.*|Caddyfile|Caddyfile.*|*/Caddyfile|*/Caddyfile.*)
+            [ "$first_line" = "# GENERATED FILE" ]
+            ;;
+        *.json)
+            [ "$first_line" = '{"_generated": "GENERATED FILE"}' ]
+            ;;
+        *)
+            # Non-code files: exact bare marker preserved for backward compat
+            [ "$first_line" = "GENERATED FILE" ]
+            ;;
+    esac
 }
 
 is_excluded() {

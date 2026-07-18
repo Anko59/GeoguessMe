@@ -1,2 +1,11 @@
-# One tracked generated path per line. The generated file must begin with the
-# marker "GENERATED FILE" before the structural checker will exempt it.
+# One tracked generated path per line. The generated file must begin with a
+# language-appropriate comment marker "GENERATED FILE" before the structural
+# checker will exempt it. Acceptable forms per file type:
+#   .go .ts .tsx .js .jsx    // GENERATED FILE  or  /* GENERATED FILE */
+#   .css                     /* GENERATED FILE */
+#   .html                    <!-- GENERATED FILE -->
+#   .sql                     -- GENERATED FILE
+#   .sh .yaml .yml .toml     # GENERATED FILE
+#   .ini .conf .env Dockerfile Makefile Caddyfile  # GENERATED FILE
+#   .json                    {"_generated": "GENERATED FILE"}
+#   other (non-code)         GENERATED FILE  (bare, backward compatible)
