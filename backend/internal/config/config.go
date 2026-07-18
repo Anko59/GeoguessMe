@@ -176,8 +176,13 @@ func (c *Config) Validate() error {
 	if c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey == "" || c.S3SecretKey == "" {
 		problems = append(problems, "S3 endpoint, bucket, and credentials are required")
 	}
-	if _, err := url.Parse(c.S3Endpoint); err != nil || !strings.HasPrefix(c.S3Endpoint, "http") {
+	s3URL, s3Err := url.Parse(strings.TrimSpace(c.S3Endpoint))
+	if s3Err != nil || s3URL.Host == "" || (s3URL.Scheme != "http" && s3URL.Scheme != "https") {
 		problems = append(problems, "S3_ENDPOINT must be a valid http(s) URL")
+	}
+	publicURL, publicErr := url.Parse(strings.TrimSpace(c.PublicURL))
+	if publicErr != nil || publicURL.Host == "" || (publicURL.Scheme != "http" && publicURL.Scheme != "https") {
+		problems = append(problems, "PUBLIC_URL must be a valid http(s) URL")
 	}
 	if c.UploadMaxBytes <= 0 || c.UploadMaxPixels == 0 {
 		problems = append(problems, "upload limits must be positive")
@@ -211,6 +216,9 @@ func (c *Config) Validate() error {
 		if c.SMTPHost == "" || c.SMTPFrom == "" {
 			problems = append(problems, "SMTP_HOST and SMTP_FROM are required in production")
 		}
+		if (c.SMTPUsername == "") != (c.SMTPPassword == "") {
+			problems = append(problems, "SMTP_USERNAME and SMTP_PASSWORD must be provided together")
+		}
 		if strings.EqualFold(c.SMTPTLS, SMTPOff) {
 			problems = append(problems, "SMTP_TLS cannot be off in production")
 		}
@@ -220,6 +228,9 @@ func (c *Config) Validate() error {
 		}
 		if strings.HasPrefix(c.S3Endpoint, "http://localhost") {
 			problems = append(problems, "production storage must not use local MinIO")
+		}
+		if publicURL.Scheme != "https" {
+			problems = append(problems, "PUBLIC_URL must use HTTPS in production")
 		}
 		if c.MetricsToken == "" {
 			problems = append(problems, "METRICS_TOKEN is required in production")

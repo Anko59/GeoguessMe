@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -62,8 +63,11 @@ func writeSession(w http.ResponseWriter, user *models.User, refreshToken string)
 	writeJSON(w, http.StatusOK, AuthResponse{AccessToken: accessToken, ExpiresIn: int64(RuntimeConfig.AccessTokenTTL.Seconds()), User: userResponse(user)})
 }
 
-func newRefreshMaterial(userID string) (raw, hash, id string, expiresAt time.Time) {
-	raw, _ = auth.GenerateOpaqueToken(48)
+func newRefreshMaterial(userID string) (raw, hash, id string, expiresAt time.Time, err error) {
+	raw, err = auth.GenerateOpaqueToken(48)
+	if err != nil {
+		return "", "", "", time.Time{}, err
+	}
 	hash = auth.HashToken(raw)
 	id = uuid.NewString()
 	expiresAt = time.Now().Add(RuntimeConfig.RefreshTokenTTL)
@@ -72,7 +76,11 @@ func newRefreshMaterial(userID string) (raw, hash, id string, expiresAt time.Tim
 }
 
 func issueSession(ctx context.Context, w http.ResponseWriter, user *models.User) {
-	raw, hash, id, expiresAt := newRefreshMaterial(user.ID)
+	raw, hash, id, expiresAt, err := newRefreshMaterial(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to start session")
+		return
+	}
 	if err := repository.CreateRefreshSession(ctx, repository.RefreshSession{ID: id, UserID: user.ID, ExpiresAt: expiresAt}, hash); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to start session")
 		return
@@ -162,7 +170,11 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Refresh session is invalid")
 		return
 	}
-	raw, hash, id, expiresAt := newRefreshMaterial("")
+	raw, hash, id, expiresAt, err := newRefreshMaterial("")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to refresh session")
+		return
+	}
 	// Rotation retires the presented session and installs the replacement in a
 	// single transaction; a nil user means the token was invalid or revoked.
 	user, err := repository.RotateRefreshSession(r.Context(), auth.HashToken(cookie.Value), id, hash, expiresAt, time.Now())
@@ -377,6 +389,11 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return false
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return false
 	}

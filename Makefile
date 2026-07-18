@@ -5,9 +5,10 @@
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
-	test-cache-status-regression cache-status \
+	test-cache-status-regression cache-status structure-check \
 	test-prod-container-verify-regression test-migration-fixture-regression \
-	test-prune-regression prune-report prune \
+	test-prune-regression prune-report prune artifacts-clean \
+	test-ci-retention-regression test-artifacts-clean-regression \
 	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
@@ -22,6 +23,9 @@ COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directo
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
+# Cleanup targets may need to remove artifacts created by older root-running
+# containers. The paths are explicit allowlisted build/test directories.
+ARTIFACTS_USER := --user 0:0
 GEOGUESSME_TEST_WEB_PORT ?= 8080
 GEOGUESSME_TEST_MAILPIT_PORT ?= 8025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
@@ -150,12 +154,13 @@ check-e2e-style: ## Reject synchronization and selector patterns that hide flaki
 lint: structure-check format-check lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style ## Run every strict lint gate.
 
 # Git worktree directories so structure-check can resolve .git inside containers.
-GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null))
+GEOGUESSME_GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null))
 GIT_DIR_WORKTREE := $(abspath $(shell git rev-parse --git-dir 2>/dev/null))
+export GEOGUESSME_GIT_COMMON_DIR GIT_DIR_WORKTREE
+ARGS ?=
 
 structure-check: ## Enforce tracked-file and directory structure limits.
 	$(COMPOSE_TOOLS) run --rm --no-deps \
-		$(if $(GIT_COMMON_DIR),-v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro) \
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/structure-check
 
@@ -169,7 +174,6 @@ test-backend: ## Run Go unit tests, excluding live integration tests.
 
 test-structure-regression: ## Run structure-check regression tests in Docker.
 	$(COMPOSE_TOOLS) run --rm --no-deps \
-		$(if $(GIT_COMMON_DIR),-v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro) \
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/test/check-structure-regression.sh
 
@@ -343,7 +347,7 @@ prune-report: ## Preview project-scoped Docker prune (dry-run, no changes).
 
 prune: ## Prune project-scoped Docker artifacts and cache; requires CONFIRM=prune.
 	@test "$(CONFIRM)" = "prune" || { echo 'Refusing to prune without CONFIRM=prune. Use make prune-report to preview, then CONFIRM=prune make prune to execute.' >&2; exit 2; }
-	PROJECT_PREFIX=geoguessme CONFIRM=prune bash tools/quality/prune.sh --force --include-build-cache
+	PROJECT_PREFIX=geoguessme CONFIRM=prune bash tools/quality/prune.sh --force $(ARGS)
 
 test-prune-regression: ## Run prune.sh regression tests.
 	bash tools/quality/test/check-prune-regression.sh
@@ -353,7 +357,7 @@ disk-cleanup-report: ## Preview project disk cleanup (dry-run, no changes).
 
 disk-cleanup: ## Clean project disk artifacts; requires CONFIRM=disk-cleanup.
 	@test "$(CONFIRM)" = "disk-cleanup" || { echo 'Refusing to clean without CONFIRM=disk-cleanup. Use make disk-cleanup-report to preview, then CONFIRM=disk-cleanup make disk-cleanup to execute.' >&2; exit 2; }
-	CONFIRM=disk-cleanup bash tools/quality/disk-cleanup.sh --force
+	CONFIRM=disk-cleanup bash tools/quality/disk-cleanup.sh --force $(ARGS)
 
 test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
 	bash tools/quality/test/check-disk-cleanup-regression.sh
@@ -365,12 +369,12 @@ test-artifacts-clean-regression: ## Verify artifacts-clean target structure and 
 	bash tools/quality/test/check-cache-status-regression.sh
 
 artifacts-clean: ## Remove generated workspace artifacts without touching Docker caches or volumes.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 
 reset-dev: ## Delete development volumes; requires CONFIRM=reset-dev.
 ifeq ($(CONFIRM),reset-dev)

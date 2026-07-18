@@ -11,7 +11,12 @@ PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
 COMPOSE_FILE="deployment/compose.test.yaml"
 
 # Clear stale artifacts so only the current invocation's output is retained.
-rm -rf "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
+if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-report" ]; then
+    rm -rf "$REPO/frontend/test-results" "$REPO/frontend/playwright-report" || {
+        echo "unable to remove stale Playwright artifacts; run make artifacts-clean with matching Docker user" >&2
+        exit 1
+    }
+fi
 mkdir -p "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
 
 # shellcheck disable=SC2317 # Invoked indirectly by EXIT trap below.
@@ -42,7 +47,7 @@ fi
 # Environment variables and arguments are passed directly; output directories
 # are host-mounted so artifacts land deterministically.
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
-    run --rm --no-deps \
+    run --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
     -e "MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT}" \

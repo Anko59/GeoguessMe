@@ -84,6 +84,7 @@ func validConfig() *Config {
 	return &Config{
 		Environment:       "development",
 		Port:              "8080",
+		PublicURL:         "http://localhost:5173",
 		DatabaseURL:       "postgres://u:p@localhost/db?sslmode=disable",
 		DatabaseMinConns:  2,
 		DatabaseMaxConns:  10,
@@ -146,6 +147,7 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 	c := validConfig()
 	c.Environment = "production"
+	c.PublicURL = "https://app.example.test"
 	c.SMTPTLS = "off"
 	c.SMTPHost = "smtp.example"
 	c.SMTPFrom = "no-reply@example.test"
@@ -154,6 +156,7 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 	}
 	c.SMTPTLS = "starttls"
 	c.SMTPUsername = "user"
+	c.SMTPPassword = "password"
 	c.S3Endpoint = "http://localhost:9000"
 	if err := c.Validate(); err == nil {
 		t.Fatal("production must reject local MinIO endpoint")
@@ -214,6 +217,7 @@ func TestMetricsAuthRequiredAndIsTestDecisions(t *testing.T) {
 func TestValidateProductionRequiresStrongMetricsToken(t *testing.T) {
 	base := validConfig()
 	base.Environment = EnvProduction
+	base.PublicURL = "https://app.example.test"
 	base.SMTPTLS = SMTPStartTLS
 	base.SMTPHost = "smtp.example"
 	base.SMTPFrom = "no-reply@example.test"

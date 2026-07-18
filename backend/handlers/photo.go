@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -79,7 +80,13 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	photo := &models.Photo{ID: photoID, UserID: userID, GroupID: groupID, StorageKey: key, MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), Lat: lat, Long: long, LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(RuntimeConfig.ChallengeTTL), RetentionAt: now.Add(RuntimeConfig.PhotoRetention)}
 	if err := repository.CreatePhotoContext(r.Context(), photo); err != nil {
-		_ = MediaStore.Delete(r.Context(), key)
+		if deleteErr := MediaStore.Delete(r.Context(), key); deleteErr != nil {
+			if enqueueErr := repository.EnqueueMediaDeletion(r.Context(), "upload-compensation", []string{key}); enqueueErr != nil {
+				slog.Error("failed to persist upload compensation", "storage_key", key, "delete_error", deleteErr, "enqueue_error", enqueueErr)
+			} else {
+				slog.Warn("queued upload compensation after storage delete failure", "storage_key", key, "error", deleteErr)
+			}
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create challenge")
 		return
 	}

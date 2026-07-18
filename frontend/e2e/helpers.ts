@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
 
 /** Generate a unique username for test isolation. */
 export function uniqueUsername(): string {
@@ -126,36 +126,40 @@ export async function getMailpitLink(email: string, pathFragment: string): Promi
     const mailpitHost = process.env.MAILPIT_BASE_URL || 'http://localhost:8025';
     const query = encodeURIComponent(`to:${email}`);
 
-    for (let i = 0; i < 30; i++) {
-        const searchRes = await fetch(`${mailpitHost}/api/v1/search?query=${query}`);
-        const searchBody = (await searchRes.json()) as { messages: Array<{ ID: string }> };
-        const messages = searchBody.messages ?? [];
-
-        if (messages.length > 0) {
-            const msgId = messages[0].ID;
-            const msgRes = await fetch(`${mailpitHost}/api/v1/message/${msgId}`);
-            const msgBody = (await msgRes.json()) as { Text: string };
-            const text = msgBody.Text ?? '';
-
-            // The plain-text body is a single URL (or contains one). Extract it
-            // by scanning for http(s) URLs containing the expected path.
-            const urlRegex = /https?:\/\/\S+/g;
-            for (const match of text.matchAll(urlRegex)) {
-                const url = match[0];
-                if (url.includes(pathFragment)) {
+    let link: string | null = null;
+    await expect
+        .poll(
+            async () => {
+                try {
+                    const searchRes = await fetch(`${mailpitHost}/api/v1/search?query=${query}`);
+                    const searchBody = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+                    const messages = searchBody.messages ?? [];
+                    if (messages.length === 0) return null;
+                    const msgRes = await fetch(`${mailpitHost}/api/v1/message/${messages[0].ID}`);
+                    const msgBody = (await msgRes.json()) as { Text: string };
+                    const url = (msgBody.Text ?? '')
+                        .match(/https?:\/\/\S+/g)
+                        ?.find((value) => value.includes(pathFragment));
+                    if (!url) return null;
                     const testBaseURL = process.env.PLAYWRIGHT_BASE_URL;
-                    if (!testBaseURL) return url;
-                    const link = new URL(url);
+                    if (!testBaseURL) {
+                        link = url;
+                        return link;
+                    }
+                    const result = new URL(url);
                     const base = new URL(testBaseURL);
-                    link.protocol = base.protocol;
-                    link.host = base.host;
-                    return link.toString();
+                    result.protocol = base.protocol;
+                    result.host = base.host;
+                    link = result.toString();
+                    return link;
+                } catch {
+                    return null;
                 }
-            }
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-    }
-    throw new Error(`Could not find Mailpit email with fragment "${pathFragment}" for "${email}"`);
+            },
+            { timeout: 30000, intervals: [250, 500, 1000] },
+        )
+        .toBeTruthy();
+    return link!;
 }
 
 /**
