@@ -1,4 +1,5 @@
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
 
 interface OwnerScenario {
@@ -8,8 +9,8 @@ interface OwnerScenario {
     groupCode: string;
 }
 
-async function createOwnerScenario(browser: Browser): Promise<OwnerScenario> {
-    const context = await newAuthContext(browser);
+async function createOwnerScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<OwnerScenario> {
+    const context = await newAuthContext(browser, contextOptions);
     const page = await context.newPage();
     await signupViaUI(page);
     await page.goto('/group/create');
@@ -26,8 +27,8 @@ async function createOwnerScenario(browser: Browser): Promise<OwnerScenario> {
 }
 
 test.describe('Group operations', () => {
-    test('owner can see the group in groups list', async ({ browser }) => {
-        const owner = await createOwnerScenario(browser);
+    test('owner can see the group in groups list', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
         try {
             await owner.page.goto('/groups');
             await expect(owner.page.locator('.groups-grid')).toBeVisible();
@@ -36,9 +37,9 @@ test.describe('Group operations', () => {
         }
     });
 
-    test('second user can join the group via code and see it', async ({ browser }) => {
-        const owner = await createOwnerScenario(browser);
-        const joinerContext = await newAuthContext(browser);
+    test('second user can join the group via code and see it', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        const joinerContext = await newAuthContext(browser, contextOptions);
         try {
             const joinerPage = await joinerContext.newPage();
             await signupViaUI(joinerPage);
@@ -54,9 +55,9 @@ test.describe('Group operations', () => {
         }
     });
 
-    test('non-member cannot access a group route', async ({ browser }) => {
-        const owner = await createOwnerScenario(browser);
-        const outsiderContext = await newAuthContext(browser);
+    test('non-member cannot access a group route', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        const outsiderContext = await newAuthContext(browser, contextOptions);
         try {
             const outsiderPage = await outsiderContext.newPage();
             await signupViaUI(outsiderPage);

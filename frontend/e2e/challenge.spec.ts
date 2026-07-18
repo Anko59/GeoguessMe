@@ -1,4 +1,5 @@
-import { test, expect, type BrowserContextOptions, type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
 import {
     installDeterministicCamera,
     installDeterministicGeolocation,
@@ -14,20 +15,17 @@ interface Scenario {
     guesserContext: Awaited<ReturnType<typeof newAuthContext>>;
 }
 
-function cameraOptions(active: BrowserContextOptions): BrowserContextOptions {
+function cameraOptions(contextOptions: BrowserContextOptions): BrowserContextOptions {
     return {
-        ...active,
+        ...contextOptions,
         permissions: ['camera', 'geolocation'],
         geolocation: { latitude: 48.8566, longitude: 2.3522 },
         baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
     };
 }
 
-async function createScenario(
-    browser: Parameters<typeof newAuthContext>[0],
-    active: BrowserContextOptions,
-): Promise<Scenario> {
-    const options = cameraOptions(active);
+async function createScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<Scenario> {
+    const options = cameraOptions(contextOptions);
     const uploaderContext = await newAuthContext(browser, options);
     const guesserContext = await newAuthContext(browser, options);
     await installDeterministicCamera(uploaderContext);
@@ -66,8 +64,11 @@ async function closeScenario(scenario: Scenario): Promise<void> {
 }
 
 test.describe('Challenge flow', () => {
-    test('uploads, accepts, hides media, records a guess, and reopens exact results', async ({ browser }, testInfo) => {
-        const scenario = await createScenario(browser, testInfo.project.use as BrowserContextOptions);
+    test('uploads, accepts, hides media, records a guess, and reopens exact results', async ({
+        browser,
+        contextOptions,
+    }) => {
+        const scenario = await createScenario(browser, contextOptions);
         try {
             const { uploader, guesser } = scenario;
             await uploader.getByRole('button', { name: 'Camera' }).click();
@@ -129,8 +130,8 @@ test.describe('Challenge flow', () => {
         }
     });
 
-    test('completed challenge reopens existing results', async ({ browser }, testInfo) => {
-        const scenario = await createScenario(browser, testInfo.project.use as BrowserContextOptions);
+    test('completed challenge reopens existing results', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
         try {
             const { uploader, guesser } = scenario;
             await uploader.getByRole('button', { name: 'Camera' }).click();
@@ -171,9 +172,8 @@ test.describe('Challenge flow', () => {
         }
     });
 
-    test('camera denial is recoverable and geolocation denial is reported', async ({ browser }, testInfo) => {
-        const active = testInfo.project.use as BrowserContextOptions;
-        const cameraDenied = await newAuthContext(browser, { ...active, permissions: [] });
+    test('camera denial is recoverable and geolocation denial is reported', async ({ browser, contextOptions }) => {
+        const cameraDenied = await newAuthContext(browser, { ...contextOptions, permissions: [] });
         const cameraPage = await cameraDenied.newPage();
         try {
             await signupViaUI(cameraPage);
@@ -188,7 +188,7 @@ test.describe('Challenge flow', () => {
             await cameraDenied.close();
         }
 
-        const locationDenied = await newAuthContext(browser, { ...active, permissions: ['camera'] });
+        const locationDenied = await newAuthContext(browser, { ...contextOptions, permissions: ['camera'] });
         await installDeterministicCamera(locationDenied);
         const locationPage = await locationDenied.newPage();
         try {
