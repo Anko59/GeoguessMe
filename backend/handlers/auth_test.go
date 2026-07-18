@@ -9,15 +9,16 @@ import (
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
 	"geoguessme/internal/models"
-	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v4"
-	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/bcrypt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/pashagolub/pgxmock/v4"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestSignup(t *testing.T) {

@@ -87,15 +87,17 @@ logs-frontend: ## Tail frontend logs.
 
 ##@ Code quality
 format: ## Format tracked source/configuration files in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w && git ls-files -z "*.go" | xargs -0 -r goimports -w'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'
+	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) sqlfluff-write sqlfluff fix --dialect postgres backend/internal/database/migrations
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci $$(git ls-files '*.sh' | while IFS= read -r f; do test -f "$$f" && printf '%s ' "$$f"; done)
 
 fmt: format ## Compatibility alias for format.
 
 format-check: ## Check formatting without rewriting files.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)"'
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
+	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
+	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
 	$(COMPOSE_TOOLS) run --rm --no-deps shfmt shfmt -d -i 4 -ci $$(git ls-files '*.sh' | while IFS= read -r f; do test -f "$$f" && printf '%s ' "$$f"; done)
 
 fmt-check: format-check ## Compatibility alias for format-check.

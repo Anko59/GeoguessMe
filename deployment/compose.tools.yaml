@@ -124,6 +124,13 @@ services:
     volumes:
       - *workspace
 
+  sqlfluff-write:
+    <<: *host-tools
+    image: sqlfluff/sqlfluff:3.4.1@sha256:7e70b3d1dd5aa071712699001dabf912abc0137b0aae96fc1db0d559a68818e0
+    entrypoint: []
+    volumes:
+      - ./:/workspace
+
   # Caddy 2.10-alpine (linux/amd64 digest: 4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d)
   caddy:
     <<: *host-tools
