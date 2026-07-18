@@ -10,6 +10,10 @@ MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-8025}"
 PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
 COMPOSE_FILE="deployment/compose.test.yaml"
 
+# Clear stale artifacts so only the current invocation's output is retained.
+rm -rf "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
+mkdir -p "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
+
 # shellcheck disable=SC2317 # Invoked indirectly by EXIT trap below.
 cleanup() {
     status=$?
@@ -34,23 +38,17 @@ if [ -n "${GEOGUESSME_E2E_SPEC:-}" ]; then
     test_args+=("${GEOGUESSME_E2E_SPEC}")
 fi
 
-mkdir -p "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
-container_name="${PROJECT}-playwright"
+# Run Playwright inside the pinned image without unsafe sh -c interpolation.
+# Environment variables and arguments are passed directly; output directories
+# are host-mounted so artifacts land deterministically.
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
-    run -d --no-deps --name "$container_name" playwright sh -c \
-    "cd /workspace/frontend && PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT} MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT} PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results PLAYWRIGHT_REPORT_DIR=/tmp/playwright/playwright-report PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json ./node_modules/.bin/playwright ${test_args[*]}"
-
-status="$(docker wait "$container_name")"
-docker logs "$container_name"
-if docker cp "$container_name:/tmp/playwright/test-results/." "$REPO/frontend/test-results/"; then
-    :
-else
-    echo "warning: Playwright test artifacts were not produced" >&2
-fi
-if docker cp "$container_name:/tmp/playwright/playwright-report/." "$REPO/frontend/playwright-report/"; then
-    :
-else
-    echo "warning: Playwright HTML report was not produced" >&2
-fi
-docker rm "$container_name" >/dev/null
-exit "$status"
+    run --rm --no-deps \
+    -w /workspace/frontend \
+    -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
+    -e "MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT}" \
+    -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results" \
+    -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/playwright-report" \
+    -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json" \
+    -v "$REPO/frontend/test-results:/tmp/playwright/test-results" \
+    -v "$REPO/frontend/playwright-report:/tmp/playwright/playwright-report" \
+    playwright node node_modules/.bin/playwright "${test_args[@]}"

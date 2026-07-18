@@ -5,7 +5,7 @@
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race \
-	test-integration test-e2e test-e2e-ui test-all coverage audit \
+	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal migration-test load-test \
@@ -171,8 +171,9 @@ test-e2e: ## Run all Playwright projects in the isolated stack.
 test-e2e-ui: ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
-test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5
-	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be a positive integer"; exit 2;; 0) echo "COUNT must be a positive integer"; exit 2;; esac
+test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5 (range 1..20)
+	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be an integer in 1..20"; exit 2;; esac
+	@if [ "$(COUNT)" -lt 1 ] || [ "$(COUNT)" -gt 20 ]; then echo "COUNT must be in 1..20"; exit 2; fi
 	@i=1; while [ $$i -le $(COUNT) ]; do \
 		echo "=== E2E run $$i of $(COUNT) ==="; \
 		$(TEST_ENV) tools/quality/run-e2e.sh || { echo "E2E run $$i failed"; exit 1; }; \
