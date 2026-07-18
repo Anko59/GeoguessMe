@@ -164,27 +164,27 @@ CONFIRM=prune make prune ARGS="--include-build-cache"
 
 ### Prune resource scope
 
-| Resource            | Scope       | Opt-in                  | Evidence                                   |
-| ------------------- | ----------- | ----------------------- | ------------------------------------------ |
-| Project images      | geoguessme* | No (always)             | prune.sh bounded by --max-images (50)      |
-| Dangling cache      | Host-wide   | `--include-build-cache` | docker builder prune --force               |
-| Project volumes     | geoguessme* | `--include-volumes`     | docker volume rm per volume                |
-| Workspace artifacts | Repo paths  | No (always)             | rm -rf on known build/coverage/report dirs |
+| Resource            | Scope       | Opt-in                  | Evidence                                               |
+| ------------------- | ----------- | ----------------------- | ------------------------------------------------------ |
+| Project images      | geoguessme* | No (always)             | prune.sh bounded by --max-images (50)                  |
+| Dangling cache      | Host-wide   | `--include-build-cache` | docker builder prune --force                           |
+| Project volumes     | geoguessme* | `--include-volumes`     | docker volume rm per volume                            |
+| Workspace artifacts | Repo paths  | No (always)             | Dockerized cleanup of known build/coverage/report dirs |
 
 Volumes and build cache are opt-in because they are destructive. Always run
 `make prune-report` first.
 
 ### Related targets
 
-| Target                       | Description                                            |
-| ---------------------------- | ------------------------------------------------------ |
-| `make cache-status`          | Read-only report of project Docker resources           |
-| `make prune-report`          | Dry-run preview of project-scoped pruning              |
-| `make prune`                 | Execute project-scoped pruning (needs `CONFIRM=prune`) |
-| `make clean`                 | Remove build artifacts and dangling build cache        |
-| `make artifacts-clean`       | Remove workspace build/coverage/report artifacts only  |
-| `make tools-clean`           | Remove tool containers, networks, and caches           |
-| `make test-prune-regression` | Run pruning regression tests                           |
+| Target                       | Description                                                                                                                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make cache-status`          | Read-only report of project Docker resources                                                                                                              |
+| `make prune-report`          | Dry-run preview of project-scoped pruning                                                                                                                 |
+| `make prune`                 | Execute project-scoped pruning (needs `CONFIRM=prune`)                                                                                                    |
+| `make clean`                 | Remove build artifacts and dangling build cache                                                                                                           |
+| `make artifacts-clean`       | Remove workspace build/coverage/report artifacts only (allowlisted paths; cleanup may use root inside the tool container for legacy root-owned artifacts) |
+| `make tools-clean`           | Remove tool containers, networks, and caches                                                                                                              |
+| `make test-prune-regression` | Run pruning regression tests                                                                                                                              |
 
 ## Project disk cleanup
 
