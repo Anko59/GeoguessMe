@@ -51,9 +51,9 @@ docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-di
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
     -e "MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT}" \
-    -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results" \
+    -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright-results" \
     -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/playwright-report" \
-    -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json" \
-    -v "$REPO/frontend/test-results:/tmp/playwright/test-results" \
+    -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright-results/.last-run.json" \
+    -v "$REPO/frontend/test-results:/tmp/playwright-results" \
     -v "$REPO/frontend/playwright-report:/tmp/playwright/playwright-report" \
     playwright node node_modules/.bin/playwright "${test_args[@]}"
