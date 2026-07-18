@@ -184,7 +184,7 @@ test-e2e-repeat: ## Run E2E suite COUNT times to catch flakes. Usage: make test-
 test-all: test-unit test-integration test-e2e ## Run unit, integration, and E2E suites.
 
 coverage: ## Enforce and report backend/frontend coverage thresholds.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) && go tool cover -func=/tmp/backend-coverage.out | tee /tmp/backend-coverage.txt && awk "END { gsub(/%/,\"\",\$$3); if (\$$3 < 70) exit 1 }" /tmp/backend-coverage.txt'
+	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
 
 audit: ## Run dependency vulnerability audits in Docker.
