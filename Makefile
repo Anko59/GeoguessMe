@@ -6,6 +6,7 @@
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-cache-status-regression cache-status \
+	test-prune-regression prune-report prune \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
@@ -315,6 +316,16 @@ ci: ## Run the same Dockerized quality and verification targets used locally.
 	$(MAKE) verify
 
 ##@ Maintenance
+prune-report: ## Preview project-scoped Docker prune (dry-run, no changes).
+	PROJECT_PREFIX=geoguessme bash tools/quality/prune.sh --dry-run --include-build-cache
+
+prune: ## Prune project-scoped Docker artifacts and cache; requires CONFIRM=prune.
+	@test "$(CONFIRM)" = "prune" || { echo 'Refusing to prune without CONFIRM=prune. Use make prune-report to preview, then CONFIRM=prune make prune to execute.' >&2; exit 2; }
+	PROJECT_PREFIX=geoguessme CONFIRM=prune bash tools/quality/prune.sh --force --include-build-cache
+
+test-prune-regression: ## Run prune.sh regression tests.
+	bash tools/quality/test/check-prune-regression.sh
+
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'

@@ -96,6 +96,61 @@ replacing production.
 The restore script requires interactive confirmation (type the target database
 name). It is destructive — existing objects are dropped by `pg_restore`.
 
+## Docker resource pruning
+
+Project-scoped Docker artifact and cache pruning is available through
+`tools/quality/prune.sh` and the `make prune-report` / `make prune` targets.
+
+### Safety guarantees
+
+- **Dry-run by default**: `prune-report` (and `prune.sh --dry-run`) only report
+  what would be removed.
+- **Explicit confirmation**: `make prune` requires `CONFIRM=prune` to execute.
+- **Project scope**: only resources matching `PROJECT_PREFIX=geoguessme` are
+  targeted. The script refuses to run with a missing or ambiguous prefix.
+- **No host-wide operations**: images and volumes are filtered by prefix;
+  `docker builder prune` only removes dangling (unreferenced) build cache.
+- **No arbitrary paths**: only known workspace artifact paths within the
+  repository are removed.
+- **Bounded**: refuses if the number of affected images exceeds `--max-images`
+  (default: 50) or volumes exceed `--max-volumes` (default: 20).
+
+### Usage
+
+```bash
+# Preview what would be pruned (safe, read-only)
+make prune-report
+
+# Execute pruning (requires explicit confirmation)
+CONFIRM=prune make prune
+
+# Include volumes (opt-in, data is destructive)
+CONFIRM=prune make prune ARGS="--include-volumes"
+```
+
+### What is pruned
+
+| Resource            | Scope                  | Opt-in                  | Command                                |
+| ------------------- | ---------------------- | ----------------------- | -------------------------------------- |
+| Project images      | `geoguessme*` prefix   | No (always)             | `docker rmi` per image                 |
+| Dangling cache      | Host (dangling layers) | `--include-build-cache` | `docker builder prune --force`         |
+| Project volumes     | `geoguessme*` prefix   | `--include-volumes`     | `docker volume rm` per volume          |
+| Workspace artifacts | Known repo paths       | No (always)             | `rm -rf` on build/coverage/report dirs |
+
+Volumes and build cache are opt-in because they cross into data-destructive
+territory. Always run `make prune-report` first.
+
+### Related targets
+
+| Target                       | Description                                            |
+| ---------------------------- | ------------------------------------------------------ |
+| `make cache-status`          | Read-only report of project Docker resources           |
+| `make prune-report`          | Dry-run preview of project-scoped pruning              |
+| `make prune`                 | Execute project-scoped pruning (needs `CONFIRM=prune`) |
+| `make clean`                 | Remove build artifacts and dangling build cache        |
+| `make tools-clean`           | Remove tool containers, networks, and caches           |
+| `make test-prune-regression` | Run pruning regression tests                           |
+
 ## Storage cleanup worker
 
 A background goroutine runs immediately on startup and then every hour:
