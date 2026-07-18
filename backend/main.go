@@ -100,7 +100,7 @@ func main() {
 
 	mux.Handle("/api/v1/auth/signup", authLimit(http.HandlerFunc(handlers.Signup)))
 	mux.Handle("/api/v1/auth/login", authLimit(http.HandlerFunc(handlers.Login)))
-	mux.Handle("/api/v1/auth/refresh", authLimit(http.HandlerFunc(handlers.Refresh)))
+	mux.Handle("/api/v1/auth/refresh", http.HandlerFunc(handlers.Refresh))
 	mux.Handle("/api/v1/auth/logout", http.HandlerFunc(handlers.Logout))
 	mux.Handle("/api/v1/auth/verify/request", authLimit(protected(handlers.RequestVerification)))
 	mux.Handle("/api/v1/auth/verify", authLimit(http.HandlerFunc(handlers.VerifyEmail)))
