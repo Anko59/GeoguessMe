@@ -31,6 +31,15 @@ services:
       timeout: 3s
       retries: 30
 
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.11.0@sha256:cfdb2ca7ac7131a650d09db49782cc33e5c5d97fd3be5b3a6e27cd13d0ee8d57 # Toxiproxy 2.11.0
+    command: -host 0.0.0.0 -config /config/toxiproxy.json
+    ports: ["${GEOGUESSME_TEST_TOXIPROXY_PORT:-8474}:8474"]
+    volumes:
+      - ./deployment/docker/toxiproxy-config.json:/config/toxiproxy.json:ro
+    depends_on:
+      minio: { condition: service_healthy }
+
   mailpit:
     image: axllent/mailpit:v1.21@sha256:81370195cd4a0eab9604d17c2617a7525b0486f9365555253b6c5376c6350f1a # Mailpit 1.21
     ports: ["${GEOGUESSME_TEST_MAILPIT_PORT:-8025}:8025"]
@@ -63,7 +72,7 @@ services:
       JWT_SECRET: test_secret_key_at_least_32_characters_long
       PUBLIC_URL: ${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:8080}
       ALLOWED_ORIGINS: ${GEOGUESSME_TEST_ALLOWED_ORIGINS:-http://localhost:8080,http://host.docker.internal:8080}
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://toxiproxy:9000
       S3_REGION: us-east-1
       S3_BUCKET: geoguessme-test-media
       S3_ACCESS_KEY: minioadmin
@@ -78,6 +87,7 @@ services:
       RATE_LIMIT_WINDOW: 10s
     depends_on:
       migration: { condition: service_completed_successfully }
+      toxiproxy: { condition: service_started }
       minio: { condition: service_healthy }
       mailpit: { condition: service_healthy }
     healthcheck:

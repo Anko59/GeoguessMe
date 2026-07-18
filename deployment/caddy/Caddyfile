@@ -17,6 +17,12 @@
 		}
 	}
 
+	handle /health/* {
+		reverse_proxy backend:8080 {
+			header_up Host {host}
+		}
+	}
+
 	handle {
 		header /assets/* Cache-Control "public, max-age=31536000, immutable"
 		root * /srv
