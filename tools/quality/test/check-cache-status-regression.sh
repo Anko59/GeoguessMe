@@ -199,9 +199,88 @@ else
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
-if [ "$FAIL" -eq 0 ]; then
-    echo "cache-status regression tests PASSED"
+echo ""
+echo "=== artifacts-clean regression tests ==="
+
+MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)/Makefile"
+
+# ── Artifacts-clean Test A1: Target exists and is documented ─────────────────
+echo "--- Artifacts-clean A1: Target existence ---"
+if grep -q '^artifacts-clean:' "$MAKEFILE"; then
+    pass "artifacts-clean target exists"
 else
-    echo "cache-status regression tests FAILED ($FAIL failure(s))"
+    fail "artifacts-clean target not found in Makefile"
+fi
+if grep -q '^artifacts-clean:.*##' "$MAKEFILE"; then
+    pass "artifacts-clean has help text"
+else
+    fail "artifacts-clean missing help text (## comment)"
+fi
+
+# ── Artifacts-clean Test A2: Dockerized execution ────────────────────────────
+echo "--- Artifacts-clean A2: Dockerized ---"
+artifacts_block=$(sed -n '/^artifacts-clean:/,/^$/p' "$MAKEFILE")
+if echo "$artifacts_block" | grep -q 'COMPOSE_TOOLS'; then
+    pass "artifacts-clean uses COMPOSE_TOOLS (Dockerized)"
+else
+    fail "artifacts-clean does not use COMPOSE_TOOLS"
+fi
+
+# ── Artifacts-clean Test A3: No Docker cache deletion ────────────────────────
+echo "--- Artifacts-clean A3: No Docker cache deletion ---"
+if echo "$artifacts_block" | grep -q 'build-cache-prune'; then
+    fail "artifacts-clean must not trigger Docker build-cache-prune"
+else
+    pass "artifacts-clean does not delete Docker caches"
+fi
+if echo "$artifacts_block" | grep -q 'builder.prune\|docker.prune\|docker.build'; then
+    fail "artifacts-clean must not run docker prune/build commands"
+else
+    pass "artifacts-clean does not run Docker prune/build commands"
+fi
+
+# ── Artifacts-clean Test A4: Known artifact paths only ───────────────────────
+echo "--- Artifacts-clean A4: Known artifact paths ---"
+for allowed in "backend/bin" "backend/tmp" "backend/coverage.out" "frontend/dist" "frontend/coverage" "frontend/test-results" "frontend/playwright-report" "frontend/blob-report"; do
+    if echo "$artifacts_block" | grep -q "$allowed"; then
+        pass "cleans known artifact path: $allowed"
+    fi
+done
+
+# ── Artifacts-clean Test A5: No source/tracked file paths ────────────────────
+echo "--- Artifacts-clean A5: No source paths ---"
+for forbidden in "backend/internal" "backend/cmd" "backend/handlers" "frontend/src" "frontend/public" "frontend/e2e" "deployment/" "docs/" "tools/" ".git/"; do
+    if echo "$artifacts_block" | grep -q "$forbidden"; then
+        fail "artifacts-clean references source path: $forbidden"
+    else
+        pass "does not reference source: $forbidden"
+    fi
+done
+
+# ── Artifacts-clean Test A6: No dangerous paths ──────────────────────────────
+echo "--- Artifacts-clean A6: No dangerous paths ---"
+if echo "$artifacts_block" | grep -qE '(^|[^a-zA-Z./-])/( |$)' || echo "$artifacts_block" | grep -qE 'rm -rf /($|[^a-zA-Z])'; then
+    fail "artifacts-clean contains dangerous bare-root path"
+else
+    pass "no dangerous bare-root path"
+fi
+for d in "/home" "/root" "/etc" "/var"; do
+    if echo "$artifacts_block" | grep -qF "$d"; then
+        fail "artifacts-clean contains dangerous path: $d"
+    else
+        pass "no dangerous path: $d"
+    fi
+done
+if echo "$artifacts_block" | grep -q '\.\.'; then
+    fail "artifacts-clean contains parent-directory traversal (..)"
+else
+    pass "no parent-directory traversal"
+fi
+
+# ── Combined summary ─────────────────────────────────────────────────────────
+if [ "$FAIL" -eq 0 ]; then
+    echo "cache-status and artifacts-clean regression tests PASSED"
+else
+    echo "cache-status and artifacts-clean regression tests FAILED ($FAIL failure(s))"
     exit 1
 fi

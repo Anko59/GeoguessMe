@@ -38,6 +38,7 @@ Vite development server.
 | make disk-cleanup-report              | Preview project disk artifact cleanup (dry-run, read-only)                       |
 | make disk-cleanup                     | Clean project disk artifacts (requires CONFIRM=disk-cleanup)                     |
 | make tools-clean                      | Remove tool caches and containers                                                |
+| make artifacts-clean                  | Remove workspace build/coverage/report artifacts (Dockerized, cache-safe)        |
 | make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                          |
 | make compose-validate                 | Validate every Compose file                                                      |
 | make container-verify                 | Verify image hardening and health checks                                         |

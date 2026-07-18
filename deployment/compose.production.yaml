@@ -22,6 +22,10 @@ services:
       - path: env/production.env
         required: false
     restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
 
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set to an immutable tag}

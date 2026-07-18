@@ -199,12 +199,57 @@ if [ -f "$COMPOSE_PROD" ]; then
     else
         fail "production compose missing tmpfs"
     fi
+    # Migration must wait for healthy database when local-db profile is active.
+    # The depends_on uses required: false so production deploys without local-db
+    # are unaffected.
+    if grep -A 10 '^  migration:' "$COMPOSE_PROD" | grep -q 'service_healthy'; then
+        pass "migration service depends on healthy database"
+    else
+        fail "migration service missing db health dependency"
+    fi
 else
     fail "production compose file not found at $COMPOSE_PROD"
 fi
 
-# ── Test 14: Immutable image reference pattern in production compose ─────────
-echo "--- Test 14: Immutable image references ---"
+# ── Test 14: No contradictory SMTP environment combinations ──────────────────
+echo "--- Test 14: No contradictory SMTP environment ---"
+# The generated production.env must not set SMTP credentials (USERNAME/PASSWORD)
+# while SMTP_TLS=off in production mode — that combination is rejected by the
+# backend's production validation ("SMTP_TLS cannot be off in production" and
+# "authenticated SMTP requires SMTP_TLS starttls or tls").
+#
+# Verify the script uses an unauthenticated local SMTP fixture with a non-off
+# TLS mode that satisfies production validation.
+prod_env_block=$(sed -n '/^cat.*production.env/,/^ENVEOF$/p' "$SCRIPT")
+
+# SMTP_USERNAME and SMTP_PASSWORD must not appear (unauthenticated fixture).
+if echo "$prod_env_block" | grep -qE '^SMTP_USERNAME='; then
+    fail "production.env must not set SMTP_USERNAME (unauthenticated fixture)"
+else
+    pass "no SMTP_USERNAME in production.env fixture"
+fi
+if echo "$prod_env_block" | grep -qE '^SMTP_PASSWORD='; then
+    fail "production.env must not set SMTP_PASSWORD (unauthenticated fixture)"
+else
+    pass "no SMTP_PASSWORD in production.env fixture"
+fi
+
+# SMTP_TLS must not be "off" in production (would fail validation).
+if echo "$prod_env_block" | grep -qE '^SMTP_TLS=off'; then
+    fail "SMTP_TLS=off in production.env would be rejected by production validation"
+else
+    pass "SMTP_TLS is not off (passes production validation)"
+fi
+
+# Verify SMTP_TLS is set to a valid non-off mode.
+if echo "$prod_env_block" | grep -qE '^SMTP_TLS=(starttls|tls)'; then
+    pass "SMTP_TLS is set to a valid production mode (starttls or tls)"
+else
+    fail "SMTP_TLS must be starttls or tls for production validation"
+fi
+
+# ── Test 15: Immutable image reference pattern in production compose ─────────
+echo "--- Test 15: Immutable image references ---"
 if [ -f "$COMPOSE_PROD" ]; then
     # shellcheck disable=SC2016  # literal pattern search for compose variable syntax
     if grep -q '${BACKEND_IMAGE:?BACKEND_IMAGE must be set' "$COMPOSE_PROD"; then

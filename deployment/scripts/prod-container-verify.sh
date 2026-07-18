@@ -70,6 +70,12 @@ TMPDIR="$(mktemp -d)"
 # Generate a complete test production environment. Every variable required by
 # the production backend is supplied. Values are explicitly local/test;
 # production credentials are never invented.
+#
+# SMTP is configured as an unauthenticated local fixture (Mailpit). No
+# credentials are set because Mailpit accepts plain delivery on port 1025.
+# SMTP_TLS=starttls satisfies the production validation rule that TLS cannot
+# be off, but no emails are sent during verification smoke tests so the
+# STARTTLS negotiation with Mailpit is never triggered.
 cat >"$TMPDIR/production.env" <<'ENVEOF'
 APP_ENV=production
 PORT=8080
@@ -106,10 +112,8 @@ PHOTO_VIEW_WINDOW=10s
 PHOTO_RETENTION=720h
 SMTP_HOST=smtp
 SMTP_PORT=1025
-SMTP_USERNAME=test
-SMTP_PASSWORD=test
 SMTP_FROM=no-reply@test.local
-SMTP_TLS=off
+SMTP_TLS=starttls
 SMTP_DIAL_TIMEOUT=10s
 SMTP_TIMEOUT=30s
 METRICS_TOKEN=test-metrics-token-32-chars-long!!

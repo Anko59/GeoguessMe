@@ -182,6 +182,7 @@ Volumes and build cache are opt-in because they are destructive. Always run
 | `make prune-report`          | Dry-run preview of project-scoped pruning              |
 | `make prune`                 | Execute project-scoped pruning (needs `CONFIRM=prune`) |
 | `make clean`                 | Remove build artifacts and dangling build cache        |
+| `make artifacts-clean`       | Remove workspace build/coverage/report artifacts only  |
 | `make tools-clean`           | Remove tool containers, networks, and caches           |
 | `make test-prune-regression` | Run pruning regression tests                           |
 
