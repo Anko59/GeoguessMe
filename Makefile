@@ -4,7 +4,7 @@
 	dev up down restart status logs logs-backend logs-frontend \
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
-	type-check test-unit test-backend test-frontend test-race test-backend-race \
+	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
 	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
@@ -154,6 +154,12 @@ test-unit: test-backend test-frontend ## Run backend and frontend unit tests.
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
+test-structure-regression: ## Run structure-check regression tests in Docker.
+	$(COMPOSE_TOOLS) run --rm --no-deps \
+		$(if $(GIT_COMMON_DIR),-v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro) \
+		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
+		go-tools /workspace/tools/quality/test/check-structure-regression.sh
+
 test-frontend: ## Run frontend unit tests.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
@@ -274,7 +280,7 @@ smoke-rehearsal: ## Run the smoke test against a disposable test stack.
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate migration-test backup-rehearsal restart-rehearsal smoke load-test ## Run the complete release gate.
 
