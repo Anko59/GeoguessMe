@@ -159,6 +159,16 @@ export async function getMailpitLink(email: string, pathFragment: string): Promi
 }
 
 /**
+ * Reset the backend rate limiter via the test-only control endpoint so
+ * subsequent auth requests are not throttled by prior test activity.
+ */
+export async function resetRateLimiter(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        await fetch('/api/v1/test/rate-limit/reset', { method: 'POST' });
+    });
+}
+
+/**
  * Return a 1×1 red PNG as a Buffer (valid image for file-chooser uploads).
  */
 export function deterministicTestImage(): Buffer {
