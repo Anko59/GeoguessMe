@@ -63,6 +63,7 @@ services:
       - npm-cache:/npm-cache
 
   # Playwright 1.61.1 with browser binaries and OS dependencies preinstalled.
+  # Browsers are baked into the pinned image; no cache volume is needed.
   playwright:
     <<: *host-tools
     image: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -71,7 +72,6 @@ services:
     volumes:
       - *workspace
       - frontend-node-modules:/workspace/frontend/node_modules
-      - playwright-cache:/ms-playwright
       - npm-cache:/root/.npm
 
   # ShellCheck 0.10.0 (linux/amd64 digest: 2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb)
@@ -145,4 +145,3 @@ volumes:
   go-build-cache:
   frontend-node-modules:
   npm-cache:
-  playwright-cache:
