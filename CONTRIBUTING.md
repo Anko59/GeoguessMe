@@ -13,37 +13,43 @@ make hooks-install
 make hooks-check
 ```
 
-The repository-wide structural limit is 500 lines per human-authored file and 14
-direct code/configuration children per directory. The tracked structural checker
-reports every violation with its observed value, limit, and classification.
-
 ## Development and handoff
 
-Use make format, focused Dockerized test targets, and make quality during
-development. Before handoff, run make verify, confirm make hooks-check passes,
-commit all intended changes in coherent commits, and leave git status --short
-empty. Do not use --no-verify, remove hooks, weaken a gate, or suppress a
-failure.
+Use `make format`, focused Dockerized test targets, and `make quality` during
+development. Before handoff, run `make verify`, confirm `make hooks-check`
+passes, commit all intended changes in coherent commits, and leave
+`git status --short` empty. Do not use `--no-verify`, remove hooks, weaken a
+gate, or suppress a failure.
 
 Report the exact targets and results. Do not claim production readiness unless
-the complete verification gate passes.
+the complete `make verify` gate passes (see [docs/testing.md](docs/testing.md)
+for expected results per target).
 
 ## Test expectations
 
 Add regression coverage for every behavior change. Prefer role, label, and
 stable test-ID selectors. Synchronize on observable application state; do not
 use unconditional sleeps, positional selectors, or retries to conceal flaky
-behavior. See docs/testing.md.
+behavior. See [docs/testing.md](docs/testing.md).
 
 ## Repository map
 
-- Backend and unit tests: backend/
-- Frontend and unit tests: frontend/
-- Isolated integration tests: backend/integration_test/
-- Playwright scenarios: frontend/e2e/
-- API contract: docs/openapi.yaml and docs/openapi/
-- Deployment: deployment/README.md
-- Operations: docs/operations.md
-- Repository rules: AGENTS.md
+| Area                | Path                             |
+| ------------------- | -------------------------------- |
+| Backend code/tests  | backend/                         |
+| Frontend code/tests | frontend/                        |
+| Integration tests   | backend/integration_test/        |
+| E2E Playwright      | frontend/e2e/                    |
+| API contract        | docs/openapi.yaml, docs/openapi/ |
+| Deployment          | deployment/README.md             |
+| Operations          | docs/operations.md               |
+| Working agreement   | AGENTS.md                        |
 
-Use Conventional Commits and keep commits logically scoped.
+Use [Conventional Commits](https://www.conventionalcommits.org/) and keep
+commits logically scoped.
+
+## Repository rules
+
+See [AGENTS.md](AGENTS.md) for the full working agreement: production quality,
+Docker-only workflow, hooks, structure limits, testing requirements, and handoff
+expectations.
