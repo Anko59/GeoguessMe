@@ -46,5 +46,6 @@ describe('api client', () => {
             'fallback',
         );
         expect(getAPIErrorMessage(null, 'fallback')).toBe('fallback');
+        expect(getAPIErrorMessage('unknown', 'fallback')).toBe('fallback');
     });
 });
