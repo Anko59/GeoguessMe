@@ -5,29 +5,29 @@ be as engaging and enjoyable as the app itself, striking a balance between
 playful accessibility and a clear focus on our core features: friendship, fun,
 challenge, and geography.
 
-### Core Principles:
+### Core Principles
 
-1.  **Friendly & Approachable:** We want users to feel welcomed and excited to
-    engage. Our designs avoid harsh lines, complex details, or overly serious
-    tones. Everything should feel inviting and easy to understand at a glance.
+1. **Friendly & Approachable:** We want users to feel welcomed and excited to
+   engage. Our designs avoid harsh lines, complex details, or overly serious
+   tones. Everything should feel inviting and easy to understand at a glance.
 
-2.  **Playful & Fun:** Echoing the joy of discovery and friendly competition,
-    our visuals incorporate cartoonish elements, vibrant colors, and dynamic
-    compositions that suggest movement and interaction.
+2. **Playful & Fun:** Echoing the joy of discovery and friendly competition, our
+   visuals incorporate cartoonish elements, vibrant colors, and dynamic
+   compositions that suggest movement and interaction.
 
-3.  **Clear & Intuitive:** While playful, our designs are always functional.
-    Icons are immediately recognizable, banners convey their purpose clearly,
-    and backgrounds support content without distraction.
+3. **Clear & Intuitive:** While playful, our designs are always functional.
+   Icons are immediately recognizable, banners convey their purpose clearly, and
+   backgrounds support content without distraction.
 
-4.  **Globally Inspired:** At the heart of gueoguess.me is geography. Subtle
-    nods to maps, globes, and exploration are integrated throughout our assets,
-    reinforcing the game's core mechanic.
+4. **Globally Inspired:** At the heart of gueoguess.me is geography. Subtle nods
+   to maps, globes, and exploration are integrated throughout our assets,
+   reinforcing the game's core mechanic.
 
-5.  **Consistent & Cohesive:** Every visual element, from the smallest icon to
-    the largest banner, speaks the same language. This consistency builds trust,
-    reinforces brand recognition, and ensures a seamless user experience.
+5. **Consistent & Cohesive:** Every visual element, from the smallest icon to
+   the largest banner, speaks the same language. This consistency builds trust,
+   reinforces brand recognition, and ensures a seamless user experience.
 
-### Key Visual Elements:
+### Key Visual Elements
 
 - **Logo: The "High Five" Map Pins**
     - This iconic mark perfectly encapsulates our brand: two stylized map pins
@@ -67,7 +67,7 @@ challenge, and geography.
     - Illustrations, such as user avatars, are friendly and diverse, promoting
       inclusivity.
 
-### Application:
+### Application
 
 - **Icons:** Used for navigation, actions, and status indicators (e.g.,
   correct/incorrect guesses). They are crisp, clear, and primarily use our brand
