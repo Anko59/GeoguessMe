@@ -199,6 +199,14 @@ if [ -f "$COMPOSE_PROD" ]; then
     else
         fail "production compose missing tmpfs"
     fi
+    # Migration must wait for healthy database when local-db profile is active.
+    # The depends_on uses required: false so production deploys without local-db
+    # are unaffected.
+    if grep -A 10 '^  migration:' "$COMPOSE_PROD" | grep -q 'service_healthy'; then
+        pass "migration service depends on healthy database"
+    else
+        fail "migration service missing db health dependency"
+    fi
 else
     fail "production compose file not found at $COMPOSE_PROD"
 fi
