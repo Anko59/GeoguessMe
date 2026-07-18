@@ -6,12 +6,14 @@ deployment/compose.tools.yaml.
 
 ## Tool-container architecture
 
-go-tools supplies Go, goimports, GolangCI-Lint, govulncheck, PostgreSQL client
-utilities, and test/build tools. node-tools supplies the locked frontend
-dependencies, Prettier, ESLint, Stylelint, Markdownlint, Redocly, TypeScript,
-Vitest, and Axe. The official Playwright image matches the locked
-@playwright/test version. ShellCheck, shfmt, Hadolint, actionlint, SQLFluff, and
-Caddy each run in their own pinned image.
+go-tools supplies Go, goimports, and GolangCI-Lint for formatting, linting,
+testing, and building. go-security is a separate heavier image that isolates
+specialized security and operations tools: govulncheck, the CGO build chain (for
+race detection), and PostgreSQL client utilities (psql, pg_dump). node-tools
+supplies the locked frontend dependencies, Prettier, ESLint, Stylelint,
+Markdownlint, Redocly, TypeScript, Vitest, and Axe. The official Playwright
+image matches the locked @playwright/test version. ShellCheck, shfmt, Hadolint,
+actionlint, SQLFluff, and Caddy each run in their own pinned image.
 
 Tool services mount the repository at /workspace, use named caches, do not
 receive production secrets, application volumes, or the Docker socket, and use

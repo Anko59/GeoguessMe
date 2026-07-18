@@ -147,6 +147,30 @@ services:
     volumes:
       - *workspace
 
+  # Heavy security/ops image: govulncheck, race detector (CGO), psql, pg_dump.
+  # Used only when vulnerability auditing, race testing, or database operations
+  # are needed. Normal format/lint/test/build targets use the smaller go-tools.
+  go-security:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/tools/go-security.Dockerfile
+    image: geoguessme/go-security:1.25.12
+    volumes:
+      - *workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+
+  go-security-write:
+    <<: *host-tools
+    image: geoguessme/go-security:1.25.12
+    volumes:
+      - ./:/workspace
+      - ${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:${GIT_COMMON_DIR:-/home/anko/geoguessme/.git}:ro
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+
 volumes:
   go-mod-cache:
   go-build-cache:
