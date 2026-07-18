@@ -1,4 +1,6 @@
 import { test, expect } from './fixtures';
+import type { Browser, BrowserContextOptions } from '@playwright/test';
+import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
 
 test.describe('Viewport preservation', () => {
     test('page inherits exact project viewport', async ({ page }) => {
@@ -62,5 +64,143 @@ test.describe('Viewport preservation', () => {
             navigator.permissions.query({ name: 'geolocation' }).then((s) => s.state),
         );
         expect(geoPerm).toBe('granted');
+    });
+});
+
+test.describe('Group responsive overflow', () => {
+    test('groups list page has no horizontal overflow at configured viewport', async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/groups');
+        await expect(authenticatedPage.locator('.groups-list-container')).toBeVisible();
+        const noHorizontalOverflow = await authenticatedPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        );
+        expect(noHorizontalOverflow).toBe(true);
+    });
+
+    test('groups list action buttons are visible within viewport', async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/groups');
+        const viewport = authenticatedPage.viewportSize();
+        expect(viewport).not.toBeNull();
+        const createBtn = authenticatedPage.getByRole('link', { name: 'Create Group' });
+        await expect(createBtn).toBeVisible();
+        const createBox = await createBtn.boundingBox();
+        expect(createBox).not.toBeNull();
+        expect(createBox!.x + createBox!.width).toBeLessThanOrEqual(viewport!.width);
+        const joinBtn = authenticatedPage.getByRole('link', { name: 'Join Group' });
+        await expect(joinBtn).toBeVisible();
+        const joinBox = await joinBtn.boundingBox();
+        expect(joinBox).not.toBeNull();
+        expect(joinBox!.x + joinBox!.width).toBeLessThanOrEqual(viewport!.width);
+    });
+
+    test('group join page form fits within viewport', async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/group/join');
+        await expect(authenticatedPage.locator('.group-join-container')).toBeVisible();
+        const noHorizontalOverflow = await authenticatedPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        );
+        expect(noHorizontalOverflow).toBe(true);
+        const form = authenticatedPage.locator('.join-form');
+        await expect(form).toBeVisible();
+        const formBox = await form.boundingBox();
+        expect(formBox).not.toBeNull();
+        const viewport = authenticatedPage.viewportSize();
+        expect(viewport).not.toBeNull();
+        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width);
+    });
+
+    test('group create page form fits within viewport', async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/group/create');
+        await expect(authenticatedPage.locator('.group-join-container')).toBeVisible();
+        const form = authenticatedPage.locator('.join-form');
+        await expect(form).toBeVisible();
+        const formBox = await form.boundingBox();
+        expect(formBox).not.toBeNull();
+        const viewport = authenticatedPage.viewportSize();
+        expect(viewport).not.toBeNull();
+        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width);
+    });
+
+    test('group view layout has no horizontal overflow', async ({ browser, contextOptions }) => {
+        const context = await newAuthContext(browser, contextOptions);
+        try {
+            const page = await context.newPage();
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            const groupId = page.url().split('/group/')[1];
+            await page.goto(`/group/${groupId}`);
+            await expect(page.locator('.group-view')).toBeVisible();
+            const noHorizontalOverflow = await page.evaluate(
+                () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+            );
+            expect(noHorizontalOverflow).toBe(true);
+            // Header content must not overflow.
+            const header = page.locator('.header-content');
+            await expect(header).toBeVisible();
+            const headerBox = await header.boundingBox();
+            const viewport = page.viewportSize();
+            expect(viewport).not.toBeNull();
+            expect(headerBox).not.toBeNull();
+            expect(headerBox!.width).toBeLessThanOrEqual(viewport!.width);
+        } finally {
+            await context.close();
+        }
+    });
+
+    test('group card with long name truncates without horizontal scroll', async ({ browser, contextOptions }) => {
+        const context = await newAuthContext(browser, contextOptions);
+        try {
+            const page = await context.newPage();
+            await signupViaUI(page);
+            const longName = 'A_Very_Long_Group_Name_That_Should_Truncate_In_The_UI';
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(longName);
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await page.goto('/groups');
+            await expect(page.locator('.groups-grid')).toBeVisible();
+            const cardTitle = page.locator('.group-card .group-info h3').first();
+            await expect(cardTitle).toBeVisible();
+            const overflow = await cardTitle.evaluate((el) => {
+                const style = window.getComputedStyle(el);
+                return (
+                    style.overflow === 'hidden' && style.textOverflow === 'ellipsis' && style.whiteSpace === 'nowrap'
+                );
+            });
+            expect(overflow).toBe(true);
+            const noHorizontalOverflow = await page.evaluate(
+                () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+            );
+            expect(noHorizontalOverflow).toBe(true);
+        } finally {
+            await context.close();
+        }
+    });
+
+    test('group view header elements remain accessible at both viewports', async ({ browser, contextOptions }) => {
+        const context = await newAuthContext(browser, contextOptions);
+        try {
+            const page = await context.newPage();
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await expect(page.locator('.back-btn')).toBeVisible();
+            await expect(page.locator('.header-logo')).toBeVisible();
+            await expect(page.locator('.group-name')).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Open group settings' })).toBeVisible();
+            const headerContent = page.locator('.header-content');
+            const headerBox = await headerContent.boundingBox();
+            const viewport = page.viewportSize();
+            expect(viewport).not.toBeNull();
+            expect(headerBox).not.toBeNull();
+            expect(headerBox!.width).toBeLessThanOrEqual(viewport!.width);
+        } finally {
+            await context.close();
+        }
     });
 });
