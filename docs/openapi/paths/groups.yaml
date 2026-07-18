@@ -104,9 +104,19 @@ messages:
     security: [{ bearerAuth: [] }]
     parameters:
       - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
-      - { name: cursor, in: query, schema: { type: string } }
+      - {
+          name: cursor,
+          in: query,
+          description: Opaque base64 cursor from a previous next_cursor; empty selects the most recent page,
+          schema: { type: string },
+        }
       - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 500 } }
-      - { name: after_id, in: query, schema: { type: string } }
+      - {
+          name: after_id,
+          in: query,
+          description: Legacy message id resolved onto the cursor for reconnect catch-up; ignored when cursor is set,
+          schema: { type: string },
+        }
     responses:
       "200":
         description: Message page.
