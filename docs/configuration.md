@@ -27,7 +27,7 @@ validated. Never commit a real `.env` or production secret.
 | `SMTP_TLS`               | string   | `off`                                         | All        | Must be `off`, `starttls`, or `tls`. Cannot be `off` in production                                                                                              |
 | `SMTP_DIAL_TIMEOUT`      | duration | `10s`                                         | All        | Must be positive                                                                                                                                                |
 | `SMTP_TIMEOUT`           | duration | `30s`                                         | All        | Must be positive                                                                                                                                                |
-| `S3_ENDPOINT`            | string   | `http://localhost:9000`                       | All        | Must be valid http(s) URL                                                                                                                                       |
+| `S3_ENDPOINT`            | string   | `http://localhost:9000`                       | All        | Must be valid http(s) URL; must use HTTPS in production                                                                                                         |
 | `S3_REGION`              | string   | `us-east-1`                                   | All        |                                                                                                                                                                 |
 | `S3_BUCKET`              | string   | `geoguessme-media`                            | All        | Must be non-empty                                                                                                                                               |
 | `S3_ACCESS_KEY`          | string   | `minioadmin`                                  | All        | Must be non-empty                                                                                                                                               |
@@ -55,7 +55,7 @@ When `APP_ENV=production`, the following additional checks apply:
 - `SMTP_TLS` cannot be `off`
 - Authenticated SMTP (`SMTP_USERNAME` set) requires `starttls` or `tls`
 - `METRICS_TOKEN` is required and must be at least 32 bytes (after trimming)
-- S3 endpoint must not be `http://localhost:*`
+- S3 endpoint must use HTTPS and must not be local MinIO
 
 `APP_ENV` itself must be one of `development`, `production`, or `test` in every
 environment; any other value is rejected at startup so the metrics
