@@ -96,29 +96,36 @@ replacing production.
 The restore script requires interactive confirmation (type the target database
 name). It is destructive — existing objects are dropped by `pg_restore`.
 
-## Restart rehearsal
+### Restart rehearsal
 
-The `make restart-rehearsal` target runs a stateful restart rehearsal that
-verifies all services recover cleanly with persistent data:
+The `make restart-rehearsal` and `make reconnect-rehearsal` targets run stateful
+rehearsals that verify all services recover cleanly with persistent data.
+
+`make restart-rehearsal`:
 
 1. Starts the full test stack with a dedicated project name
 2. Seeds real fixture data (users, groups, photos, guesses, messages, challenge
    views) and a MinIO media object
 3. Records pre-restart state: row counts, migration count, data checksums,
    constraint count, and MinIO object content
-4. Restarts **all** services (`docker compose down` without `-v`, then
-   `docker compose up -d --wait`) — containers and networks are recreated, but
-   named volumes persist
-5. Polls health/readiness with deadline-based polling (no unconditional sleeps)
-6. Verifies: schema continuity (migrations unchanged, no duplicates), data
+4. Stops all services (down without `-v`, preserving named volumes)
+5. Restarts all services (up -d --wait), recreating containers and networks
+6. Polls health/readiness with deadline-based polling (no unconditional sleeps)
+7. Verifies: schema continuity (migrations unchanged, no duplicates), data
    continuity (row counts and checksums match), media continuity (MinIO object
-   intact), no runaway deletion jobs, and nominal metrics backlog
-7. Cleans up all project resources on exit (success or failure)
+   intact, content verified), no runaway deletion jobs, and nominal metrics
+   backlog
+8. Cleans up all project resources on exit
 
 The rehearsal is self-contained and uses the `geoguessme-restart-rehearsal`
-project. It is safe to run locally; it refuses project names that do not contain
-`rehearsal`. Regression tests validate the script structure via
-`make test-restart-regression`.
+project. It refuses project names that do not contain `rehearsal`. Regression
+tests validate script structure via `make test-restart-regression`.
+
+`make reconnect-rehearsal` starts the same disposable stack and runs the Go
+reconnect-rehearsal harness, which exercises concurrent WebSocket clients,
+disconnect/reconnect cycles, cursor catch-up, live delivery, and exact-once
+message behavior. Evidence (latency, errors, throughput) is captured without
+sleeps or retry masking.
 
 ## Docker resource pruning
 
@@ -150,19 +157,22 @@ CONFIRM=prune make prune
 
 # Include volumes (opt-in, data is destructive)
 CONFIRM=prune make prune ARGS="--include-volumes"
+
+# Include build cache (opt-in, slows next build)
+CONFIRM=prune make prune ARGS="--include-build-cache"
 ```
 
-### What is pruned
+### Prune resource scope
 
-| Resource            | Scope                  | Opt-in                  | Command                                |
-| ------------------- | ---------------------- | ----------------------- | -------------------------------------- |
-| Project images      | `geoguessme*` prefix   | No (always)             | `docker rmi` per image                 |
-| Dangling cache      | Host (dangling layers) | `--include-build-cache` | `docker builder prune --force`         |
-| Project volumes     | `geoguessme*` prefix   | `--include-volumes`     | `docker volume rm` per volume          |
-| Workspace artifacts | Known repo paths       | No (always)             | `rm -rf` on build/coverage/report dirs |
+| Resource            | Scope       | Opt-in                  | Evidence                                   |
+| ------------------- | ----------- | ----------------------- | ------------------------------------------ |
+| Project images      | geoguessme* | No (always)             | prune.sh bounded by --max-images (50)      |
+| Dangling cache      | Host-wide   | `--include-build-cache` | docker builder prune --force               |
+| Project volumes     | geoguessme* | `--include-volumes`     | docker volume rm per volume                |
+| Workspace artifacts | Repo paths  | No (always)             | rm -rf on known build/coverage/report dirs |
 
-Volumes and build cache are opt-in because they cross into data-destructive
-territory. Always run `make prune-report` first.
+Volumes and build cache are opt-in because they are destructive. Always run
+`make prune-report` first.
 
 ### Related targets
 

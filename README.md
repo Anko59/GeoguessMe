@@ -15,35 +15,63 @@ make bootstrap
 make dev
 ```
 
-make bootstrap builds or pulls the tool images, populates named dependency
-caches from the lockfiles, installs the tracked hooks, and runs a tool
-self-test. make dev starts PostgreSQL, MinIO, Mailpit, the backend, and the Vite
-development server.
+make bootstrap builds or pulls the pinned tool images, populates named
+dependency caches from the lockfiles, installs the tracked hooks, and runs a
+tool self-test. make dev starts PostgreSQL, MinIO, Mailpit, the backend, and the
+Vite development server.
 
 ## Canonical commands
 
-| Command                               | Purpose                                                                            |
-| ------------------------------------- | ---------------------------------------------------------------------------------- |
-| make bootstrap                        | Prepare the Docker-only toolchain and hooks                                        |
-| make dev                              | Start the development stack                                                        |
-| make format / make format-check       | Format or check tracked files                                                      |
-| make quality                          | Run strict quality, coverage, audit, and build gates                               |
-| make verify                           | Run the complete integration, E2E, deployment, and rehearsal gate                  |
-| make test-unit / make test-race       | Run unit or race tests                                                             |
-| make test-integration / make test-e2e | Run isolated live-stack suites                                                     |
-| make build-images                     | Build production images with normal Docker layer caching                           |
-| make clean-build                      | Build production images from scratch without layer cache                           |
-| make tools-clean                      | Remove only tool caches and containers                                             |
-| make cache-status                     | Report project-only Docker images, build cache, volumes, and artifacts (read-only) |
-| make test-cache-status-regression     | Run cache-status regression tests                                                  |
-| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                            |
-| make disk-cleanup-report              | Preview project disk artifact cleanup (dry-run, read-only)                         |
-| make disk-cleanup                     | Clean project disk artifacts; requires CONFIRM=disk-cleanup                        |
+| Command                               | Purpose                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| make bootstrap                        | Prepare the Docker-only toolchain and hooks                                      |
+| make dev                              | Start the development stack                                                      |
+| make format / make format-check       | Format or check tracked files                                                    |
+| make quality                          | Run all quality gates (structure, lint, audit, unit, race, coverage, build)      |
+| make verify                           | Run the complete release gate (quality + live-stack + rehearsals + load)         |
+| make test-unit / make test-race       | Run unit or race tests                                                           |
+| make test-integration / make test-e2e | Run isolated live-stack suites                                                   |
+| make build-images                     | Build production images with normal Docker layer caching                         |
+| make clean-build                      | Build production images from scratch without layer cache                         |
+| make cache-status                     | Report project-only Docker resources (read-only)                                 |
+| make prune-report / make prune        | Preview or execute project-scoped Docker prune (CONFIRM=prune)                   |
+| make disk-cleanup-report              | Preview project disk artifact cleanup (dry-run, read-only)                       |
+| make disk-cleanup                     | Clean project disk artifacts (requires CONFIRM=disk-cleanup)                     |
+| make tools-clean                      | Remove tool caches and containers                                                |
+| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                          |
+| make compose-validate                 | Validate every Compose file                                                      |
+| make container-verify                 | Verify image hardening and health checks                                         |
+| make prod-container-verify            | Full production-container verification (build, harden, compose, smoke, teardown) |
+| make migration-test                   | Concurrent, idempotent, and legacy-fixture migration tests                       |
+| make backup-rehearsal                 | Disposable backup/restore rehearsal with continuity evidence                     |
+| make restart-rehearsal                | Stateful restart rehearsal (schema, data, media continuity)                      |
+| make reconnect-rehearsal              | WebSocket disconnect/reconnect and exact-once evidence                           |
+| make load-test                        | Disposable load test (k6, 5 VUs, 30s by default)                                 |
+| make smoke / make smoke-rehearsal     | Smoke test against a staging or disposable stack                                 |
 
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation
 scenarios. Hooks use make pre-commit and make pre-push; they fail when Docker is
 unavailable and cannot be bypassed.
+
+## Known constraints (unproven in production)
+
+The rehearsal and container-verify evidence proves correctness against
+local/disposable infrastructure only. The following production inputs have no
+test evidence in this repository:
+
+- **External PostgreSQL, S3, and SMTP** — every live-stack test uses
+  Compose-local services (local-db, local-minio, local-smtp profiles).
+- **TLS termination at edge** — no ingress-controller, load-balancer, or
+  certificate-provisioning configuration is shipped.
+- **Zero-downtime rolling deployment** — Compose restart stops all containers
+  before starting new ones.
+- **Autoscaling** — no horizontal pod autoscaler or replica-count automation.
+- **Secrets management** — production secrets are read from a single git-ignored
+  `.env` file; no vault, SOPS, or external secrets store.
+
+Deployers must validate these in their own infrastructure before claiming
+production readiness.
 
 ## Architecture
 

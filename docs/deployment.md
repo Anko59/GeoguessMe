@@ -1,8 +1,9 @@
 # Deployment guide
 
-The supported deployment workflow is documented in deployment/README.md. It
-covers first deploy, migrations, immutable image upgrades, rollback,
-backup/restore, restart behavior, health checks, secrets, and outage response.
+The supported deployment workflow is documented in
+[deployment/README.md](../deployment/README.md). It covers first deploy,
+migrations, immutable image upgrades, rollback, backup/restore, restart
+behavior, health checks, secrets, outage response, and rehearsal evidence.
 
 All operational actions use Dockerized Make targets:
 
@@ -28,3 +29,20 @@ infrastructure.
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
 and rollback evidence.
+
+## Known unproven production inputs
+
+All rehearsals and container-verify targets test against Compose-local
+infrastructure only. External PostgreSQL, S3, and SMTP are never exercised by
+any repository target. Deployers must validate those integrations independently
+before claiming production readiness.
+
+## See also
+
+- [deployment/README.md](../deployment/README.md) — rehearsal evidence table,
+  tool architecture, first-deploy steps
+- [configuration.md](configuration.md) — every environment variable, defaults,
+  production validation
+- [operations.md](operations.md) — health, metrics, backups, secret rotation,
+  incident response
+- [testing.md](testing.md) — comprehensive gate listing with expected results
