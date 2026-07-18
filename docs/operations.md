@@ -96,6 +96,30 @@ replacing production.
 The restore script requires interactive confirmation (type the target database
 name). It is destructive — existing objects are dropped by `pg_restore`.
 
+## Restart rehearsal
+
+The `make restart-rehearsal` target runs a stateful restart rehearsal that
+verifies all services recover cleanly with persistent data:
+
+1. Starts the full test stack with a dedicated project name
+2. Seeds real fixture data (users, groups, photos, guesses, messages, challenge
+   views) and a MinIO media object
+3. Records pre-restart state: row counts, migration count, data checksums,
+   constraint count, and MinIO object content
+4. Restarts **all** services (`docker compose down` without `-v`, then
+   `docker compose up -d --wait`) — containers and networks are recreated, but
+   named volumes persist
+5. Polls health/readiness with deadline-based polling (no unconditional sleeps)
+6. Verifies: schema continuity (migrations unchanged, no duplicates), data
+   continuity (row counts and checksums match), media continuity (MinIO object
+   intact), no runaway deletion jobs, and nominal metrics backlog
+7. Cleans up all project resources on exit (success or failure)
+
+The rehearsal is self-contained and uses the `geoguessme-restart-rehearsal`
+project. It is safe to run locally; it refuses project names that do not contain
+`rehearsal`. Regression tests validate the script structure via
+`make test-restart-regression`.
+
 ## Docker resource pruning
 
 Project-scoped Docker artifact and cache pruning is available through
