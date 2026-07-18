@@ -279,6 +279,9 @@ else
 fi
 
 # --- 5f: Media continuity (MinIO object survives restart) ---
+# Re-establish mc alias lost across container restart (stored in ephemeral
+# container filesystem, not the /data volume).
+minio_exec mc alias set rehearsal http://localhost:9000 minioadmin minioadmin || true
 post_minio_obj=$(minio_exec mc ls rehearsal/geoguessme-test-media/rehearsal/test-object.dat | wc -l)
 if [ "$post_minio_obj" -ge 1 ]; then
     pass "MinIO media object survives restart"
