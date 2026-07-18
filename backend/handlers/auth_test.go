@@ -45,6 +45,41 @@ func TestSignup(t *testing.T) {
 	})
 }
 
+func TestDecodeJSONRejectsTrailingValues(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice"}{"username":"bob"}`))
+	var payload SignupRequest
+	if decodeJSON(recorder, request, &payload) {
+		t.Fatal("decodeJSON accepted trailing JSON")
+	}
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("decodeJSON status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestSessionSetupFailuresReturnServerError(t *testing.T) {
+	setupHandlers(t)
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test"}
+
+	// A failed refresh-session insert must not produce an access token or cookie.
+	mock := handlerMock(t)
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(assert.AnError)
+	recorder := httptest.NewRecorder()
+	issueSession(context.Background(), recorder, user)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("issueSession status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+
+	// Token signing failure is surfaced as a server error instead of issuing a
+	// cookie with an unusable access token.
+	auth.Init("short")
+	recorder = httptest.NewRecorder()
+	writeSession(recorder, user, "refresh-token")
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("writeSession status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+}
+
 func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	setupHandlers(t)
 	Mailer = email.Noop{}
