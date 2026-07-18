@@ -90,7 +90,7 @@ format: ## Format tracked source/configuration files in Docker.
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w && git ls-files -z "*.go" | xargs -0 -r goimports -w'
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'
 	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) sqlfluff-write sqlfluff fix --dialect postgres backend/internal/database/migrations
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci $$(git ls-files '*.sh' | while IFS= read -r f; do test -f "$$f" && printf '%s ' "$$f"; done)
+	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci
 
 fmt: format ## Compatibility alias for format.
 
@@ -98,7 +98,7 @@ format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
 	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
-	$(COMPOSE_TOOLS) run --rm --no-deps shfmt shfmt -d -i 4 -ci $$(git ls-files '*.sh' | while IFS= read -r f; do test -f "$$f" && printf '%s ' "$$f"; done)
+	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps shfmt shfmt -d -i 4 -ci
 
 fmt-check: format-check ## Compatibility alias for format-check.
 
@@ -112,16 +112,16 @@ lint-css: ## Run Stylelint.
 	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
 
 lint-docs: ## Run Markdownlint.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools markdownlint README.md CONTRIBUTING.md AGENTS.md docs/*.md deployment/*.md
+	git ls-files -z '*.md' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps node-tools markdownlint
 
 lint-shell: ## Run ShellCheck on every tracked shell script.
-	$(COMPOSE_TOOLS) run --rm --no-deps shellcheck shellcheck -x $$(find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print | sort)
+	find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps shellcheck shellcheck -x
 
 lint-docker: ## Run Hadolint on every Dockerfile.
-	$(COMPOSE_TOOLS) run --rm --no-deps hadolint hadolint $$(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './.git/*' -not -path './frontend/node_modules/*' -print | sort)
+	find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './.git/*' -not -path './frontend/node_modules/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps hadolint hadolint
 
 lint-actions: ## Run actionlint on tracked workflows.
-	$(COMPOSE_TOOLS) run --rm --no-deps actionlint actionlint $$(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' | while IFS= read -r f; do test -f "$$f" && printf '%s ' "$$f"; done)
+	git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps actionlint actionlint
 
 lint-sql: ## Run SQLFluff against migrations.
 	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations

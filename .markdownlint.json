@@ -4,5 +4,6 @@
   "no-inline-html": false,
   "first-line-h1": false,
   "no-duplicate-header": { "siblings_only": true },
-  "MD033": false
+  "MD033": false,
+  "MD007": { "indent": 4 }
 }
