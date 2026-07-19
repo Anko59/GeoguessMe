@@ -65,6 +65,12 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
   refresh sessions.
 - Token TTL: `RESET_TOKEN_TTL` (default 1 hour).
 
+Authenticated users can update their username, email address, or selected
+profile avatar through `PATCH /api/v1/auth/profile`; the current password is
+required and changing the email clears its verification state. Password changes
+use `POST /api/v1/auth/password/change`, require the current password, and
+revoke all sessions so the user must sign in again.
+
 ## Logout
 
 - `POST /api/v1/auth/logout` — revokes the current refresh session and clears
@@ -82,6 +88,7 @@ database. If they differ, the request is rejected with 401.
 Auth version is bumped by:
 
 - Password reset
+- Password change
 - `logout?all=1`
 
 This means password reset and global logout invalidate all outstanding access

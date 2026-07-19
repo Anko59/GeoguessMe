@@ -1,0 +1,71 @@
+.account-settings-container {
+    padding: 2rem 1rem;
+}
+
+.account-settings-card {
+    width: min(100%, 620px);
+}
+
+.account-intro,
+.account-help {
+    color: #667085;
+}
+
+.account-section,
+.account-danger {
+    display: grid;
+    gap: 0.55rem;
+    margin: 1.5rem 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.account-section h2,
+.account-danger h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.15rem;
+    color: #1f2937;
+}
+
+.avatar-picker {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.avatar-choice {
+    aspect-ratio: 1;
+    padding: 0.2rem;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: #f3f4f6;
+    cursor: pointer;
+}
+
+.avatar-choice.selected {
+    border-color: #00a8e8;
+    box-shadow: 0 0 0 3px rgba(0, 168, 232, 0.2);
+}
+
+.avatar-choice img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.account-danger {
+    border-top-color: #fecaca;
+}
+
+@media (max-width: 480px) {
+    .account-settings-container {
+        padding: 1rem 0.5rem;
+    }
+
+    .avatar-picker {
+        gap: 0.35rem;
+    }
+}

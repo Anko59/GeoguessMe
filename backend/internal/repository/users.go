@@ -245,6 +245,33 @@ func UpdatePassword(ctx context.Context, userID, passwordHash string) error {
 	return err
 }
 
+// UpdateProfile changes the public account fields. Changing the email address
+// clears verification so the new address must be verified independently.
+func UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
+	_, err := database.DB.Exec(ctx, `UPDATE users SET username = $1, email = $2, email_normalized = $3, avatar = $4, email_verified_at = CASE WHEN email_normalized <> $3 THEN NULL ELSE email_verified_at END, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND deleted_at IS NULL`, username, email, strings.ToLower(strings.TrimSpace(email)), avatar, userID)
+	if err != nil {
+		return nil, err
+	}
+	return GetUserByID(ctx, userID)
+}
+
+// ChangePassword updates the password and invalidates every existing session
+// atomically, including the session used for the request.
+func ChangePassword(ctx context.Context, userID, passwordHash string) error {
+	tx, err := database.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND deleted_at IS NULL`, passwordHash, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // DeleteUserCascade removes the account and every related row, and enqueues
 // durable deletion jobs for the media the account authored so object storage
 // can never be orphaned. The returned keys are for observability only.

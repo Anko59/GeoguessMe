@@ -31,17 +31,19 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ### Authentication
 
-| Method | Path                           | Auth   | Description                          | Status codes  |
-| ------ | ------------------------------ | ------ | ------------------------------------ | ------------- |
-| POST   | `/api/v1/auth/signup`          | No     | Create account                       | 200, 400, 409 |
-| POST   | `/api/v1/auth/login`           | No     | Log in                               | 200, 401      |
-| POST   | `/api/v1/auth/refresh`         | Cookie | Rotate refresh session               | 200, 401      |
-| POST   | `/api/v1/auth/logout`          | No     | Revoke session; `?all=1` revokes all | 204           |
-| POST   | `/api/v1/auth/verify/request`  | Bearer | Send verification email              | 202           |
-| POST   | `/api/v1/auth/verify`          | No     | Verify email with `{token}`          | 200, 400      |
-| POST   | `/api/v1/auth/password/forgot` | No     | Send reset link `{email}`            | 202           |
-| POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`   | 200, 400      |
-| DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`          | 204, 401      |
+| Method | Path                           | Auth   | Description                           | Status codes       |
+| ------ | ------------------------------ | ------ | ------------------------------------- | ------------------ |
+| POST   | `/api/v1/auth/signup`          | No     | Create account                        | 200, 400, 409      |
+| POST   | `/api/v1/auth/login`           | No     | Log in                                | 200, 401           |
+| POST   | `/api/v1/auth/refresh`         | Cookie | Rotate refresh session                | 200, 401           |
+| POST   | `/api/v1/auth/logout`          | No     | Revoke session; `?all=1` revokes all  | 204                |
+| POST   | `/api/v1/auth/verify/request`  | Bearer | Send verification email               | 202                |
+| POST   | `/api/v1/auth/verify`          | No     | Verify email with `{token}`           | 200, 400           |
+| POST   | `/api/v1/auth/password/forgot` | No     | Send reset link `{email}`             | 202                |
+| POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`    | 200, 400           |
+| POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions | 204, 400, 401      |
+| PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar     | 200, 400, 401, 409 |
+| DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`           | 204, 401           |
 
 ### Groups
 

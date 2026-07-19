@@ -24,6 +24,10 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/forgotPassword
   /auth/password/reset:
     $ref: ./openapi/paths/auth.yaml#/resetPassword
+  /auth/password/change:
+    $ref: ./openapi/paths/auth.yaml#/changePassword
+  /auth/profile:
+    $ref: ./openapi/paths/auth.yaml#/updateProfile
   /auth/account:
     $ref: ./openapi/paths/auth.yaml#/deleteAccount
   /user/groups:

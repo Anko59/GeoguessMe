@@ -7,12 +7,13 @@ import type { User } from '../../types';
 
 const mocks = vi.hoisted(() => ({
     get: vi.fn(),
+    patch: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
-    default: { get: mocks.get, post: mocks.post, delete: mocks.delete },
+    default: { get: mocks.get, patch: mocks.patch, post: mocks.post, delete: mocks.delete },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -39,11 +40,39 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     mocks.get.mockReset();
+    mocks.patch.mockReset();
     mocks.post.mockReset();
     mocks.delete.mockReset();
 });
 
 describe('AccountSettings', () => {
+    it('updates the profile and selected avatar', async () => {
+        mocks.patch.mockResolvedValueOnce({
+            data: { username: 'alice', email: 'alice@example.test', avatar: 'avatar2.png' },
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Choose avatar2.png' }));
+        fireEvent.change(screen.getByLabelText('Current password to save profile changes'), {
+            target: { value: 'Password123' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+        await waitFor(() =>
+            expect(mocks.patch).toHaveBeenCalledWith('/auth/profile', {
+                username: 'alice',
+                email: 'alice@example.test',
+                avatar: 'avatar2.png',
+                current_password: 'Password123',
+            }),
+        );
+        expect(await screen.findByRole('status')).toHaveTextContent('Profile updated');
+    });
+
     it('shows verification and deletion flows', async () => {
         mocks.post.mockResolvedValueOnce({ data: { message: 'Verification sent' } });
         mocks.delete.mockResolvedValueOnce({ data: {} });

@@ -97,6 +97,18 @@
     font-size: 20px;
 }
 
+.personal-settings-link {
+    display: inline-block;
+    margin: 0 0 1rem;
+    color: #7dd3fc;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.personal-settings-link:hover {
+    text-decoration: underline;
+}
+
 .settings-section {
     margin-bottom: 25px;
 }

@@ -105,6 +105,8 @@ func main() {
 	mux.Handle("/api/v1/auth/verify", authLimit(http.HandlerFunc(handlers.VerifyEmail)))
 	mux.Handle("/api/v1/auth/password/forgot", authLimit(http.HandlerFunc(handlers.ForgotPassword)))
 	mux.Handle("/api/v1/auth/password/reset", authLimit(http.HandlerFunc(handlers.ResetPassword)))
+	mux.Handle("/api/v1/auth/password/change", authLimit(protected(handlers.ChangePassword)))
+	mux.Handle("/api/v1/auth/profile", authLimit(protected(handlers.UpdateProfile)))
 	mux.Handle("/api/v1/auth/account", protected(handlers.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(handlers.GetUserGroups))

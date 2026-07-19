@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -374,7 +376,15 @@ func clearRefreshCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/v1/auth", MaxAge: -1, HttpOnly: true, Secure: RuntimeConfig != nil && strings.EqualFold(RuntimeConfig.Environment, "production"), SameSite: http.SameSiteLaxMode})
 }
 
-func randomAvatar() string { return "avatar.png" }
+var availableAvatars = []string{"avatar.png", "avatar2.png", "avatar3.png", "avatar4.png", "avatar5.png", "avatar6.png", "avatar7.png", "avatar8.png", "avatar9.png", "avatar10.png"}
+
+func randomAvatar() string {
+	index, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableAvatars))))
+	if err != nil {
+		return availableAvatars[0]
+	}
+	return availableAvatars[index.Int64()]
+}
 
 func configuredCost() int {
 	cost := bcrypt.DefaultCost

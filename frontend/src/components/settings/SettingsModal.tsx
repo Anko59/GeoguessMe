@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Member } from '../../types';
 import LogoutButton from '../navigation/LogoutButton';
@@ -70,6 +71,10 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                     <span id="group-settings-title">Group Settings</span>
                 </h2>
                 <h3 className="group-name-display">{groupName}</h3>
+
+                <Link to="/settings" className="personal-settings-link" onClick={onClose}>
+                    Open personal settings
+                </Link>
 
                 <div className="settings-section">
                     <h4 className="section-title">

@@ -84,6 +84,48 @@ func TestPasswordResetRevokesSessions(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
+func TestProfileUpdateAndPasswordChange(t *testing.T) {
+	resetRateLimiter(t)
+	user := unique("profile")
+	email := user + "@example.test"
+	const pass = "StrongPassword123"
+	session := signup(t, user, email, pass)
+
+	updatedUsername := user + "new"
+	updatedEmail := updatedUsername + "@example.test"
+	resp, data := doJSON(t, http.MethodPatch, "/api/v1/auth/profile", map[string]string{
+		"username":         updatedUsername,
+		"email":            updatedEmail,
+		"avatar":           "avatar2.png",
+		"current_password": pass,
+	}, session.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "profile update: %s", data)
+	var profile struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Avatar   string `json:"avatar"`
+	}
+	require.NoError(t, json.Unmarshal(data, &profile))
+	require.Equal(t, updatedUsername, profile.Username)
+	require.Equal(t, updatedEmail, profile.Email)
+	require.Equal(t, "avatar2.png", profile.Avatar)
+
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/change", map[string]string{
+		"current_password": pass,
+		"new_password":     "NewStrongPassword123",
+	}, session.access, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/user/groups", nil, session.access, nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/refresh", nil, "", []*http.Cookie{session.refresh})
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"username": updatedUsername,
+		"password": "NewStrongPassword123",
+	}, "", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
 func TestAccountDeletionImmediateLossAndReuse(t *testing.T) {
 	resetRateLimiter(t)
 	user := unique("deleter")

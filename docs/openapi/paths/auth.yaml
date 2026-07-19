@@ -128,6 +128,69 @@ resetPassword:
       "200": { description: Password reset. }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+changePassword:
+  post:
+    operationId: changePassword
+    summary: Change the authenticated user's password.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [current_password, new_password]
+            properties:
+              current_password: { type: string }
+              new_password: { type: string, minLength: 8, maxLength: 128 }
+    responses:
+      "204": { description: Password changed; all sessions are revoked. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+updateProfile:
+  patch:
+    operationId: updateProfile
+    summary: Update the authenticated user's profile.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, email, avatar, current_password]
+            properties:
+              username: { type: string, minLength: 3, maxLength: 30 }
+              email: { type: string, format: email }
+              avatar:
+                {
+                  type: string,
+                  enum:
+                    [
+                      avatar.png,
+                      avatar2.png,
+                      avatar3.png,
+                      avatar4.png,
+                      avatar5.png,
+                      avatar6.png,
+                      avatar7.png,
+                      avatar8.png,
+                      avatar9.png,
+                      avatar10.png,
+                    ],
+                }
+              current_password: { type: string }
+    responses:
+      "200":
+        description: Updated profile.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthUser" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 deleteAccount:
   delete:
     operationId: deleteAccount
