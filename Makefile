@@ -27,8 +27,8 @@ TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
 ARTIFACTS_USER := --user 0:0
-GEOGUESSME_TEST_WEB_PORT ?= 8080
-GEOGUESSME_TEST_MAILPIT_PORT ?= 8025
+GEOGUESSME_TEST_WEB_PORT ?= 18080
+GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 

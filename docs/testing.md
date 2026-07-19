@@ -41,7 +41,8 @@ inside containers.
 
 deployment/compose.test.yaml is disposable and uses dedicated database and media
 volumes. GEOGUESSME_TEST_WEB_PORT and GEOGUESSME_TEST_MAILPIT_PORT may be set to
-non-default ports. The runner derives one public URL and supplies it to
+non-default ports (the defaults are `18080` and `18025` to avoid the development
+stack's `8080` and `8025`). The runner derives one public URL and supplies it to
 PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket origins, and email-link
 assertions. Mailpit is addressed through the separately derived
 MAILPIT_BASE_URL.
