@@ -39,7 +39,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "happy-dom": "^20.10.6",
-    "jsdom": "^27.0.1",
+    "jsdom": "^29.1.1",
     "markdownlint-cli": "^0.49.1",
     "prettier": "^3.9.5",
     "stylelint": "^17.14.0",
