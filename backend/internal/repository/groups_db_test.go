@@ -21,6 +21,12 @@ func TestGroupQueriesAndMembership(t *testing.T) {
 	if err := CreateGroupAndMembership(context.Background(), group, "user-1"); err != nil {
 		t.Fatal(err)
 	}
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO groups").WithArgs(group.ID, group.Name, group.Code, group.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if err := CreateGroup(group); err != nil {
+		t.Fatal(err)
+	}
 	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(group.Code).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	got, err := GetGroupByCodeContext(context.Background(), group.Code)
 	if err != nil || got == nil || got.ID != group.ID {
@@ -64,6 +70,10 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	if err != nil || len(groups) != 1 {
 		t.Fatalf("groups = %+v, %v", groups, err)
 	}
+	mock.ExpectQuery("SELECT g.id, g.name, g.code").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow("g1", "One", "AAA111", now))
+	if groups, err := GetUserGroups("user-1"); err != nil || len(groups) != 1 {
+		t.Fatalf("GetUserGroups = %+v, %v", groups, err)
+	}
 	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar"}).AddRow("u1", "alice", "a.png"))
 	members, err := GetGroupMembers("g1")
 	if err != nil || len(members) != 1 || members[0]["username"] != "alice" {
@@ -73,5 +83,9 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	entries, err := GetGroupLeaderboardContext(context.Background(), "g1")
 	if err != nil || len(entries) != 1 || entries[0].Score != 80 {
 		t.Fatalf("leaderboard = %+v, %v", entries, err)
+	}
+	mock.ExpectQuery("SELECT u.id, u.username").WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "score", "count", "average"}).AddRow("u1", "alice", 80, 2, 80.5))
+	if entries, err := GetGroupLeaderboard("g1"); err != nil || len(entries) != 1 {
+		t.Fatalf("GetGroupLeaderboard = %+v, %v", entries, err)
 	}
 }

@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthResponse } from './types';
 
@@ -28,6 +28,7 @@ vi.mock('./api', () => mockModule);
 
 import App from './App';
 import Home from './pages/home/Home';
+import { AuthContext } from './context/AuthContext';
 
 const authResponse: AuthResponse = {
     access_token: 'access-token',
@@ -54,6 +55,26 @@ describe('Home Page', () => {
             </BrowserRouter>,
         );
         expect(screen.getByText('geoguess.me')).toBeInTheDocument();
+    });
+
+    it('redirects authenticated visitors to groups', () => {
+        render(
+            <AuthContext.Provider
+                value={{
+                    user: authResponse.user,
+                    loading: false,
+                    isAuthenticated: true,
+                    login: vi.fn(),
+                    logout: vi.fn(async () => undefined),
+                    refresh: vi.fn(async () => true),
+                }}
+            >
+                <MemoryRouter initialEntries={['/']}>
+                    <Home />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        expect(screen.queryByText('geoguess.me')).not.toBeInTheDocument();
     });
 });
 

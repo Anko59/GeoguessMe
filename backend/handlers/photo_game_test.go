@@ -19,9 +19,66 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg=="
+
+func TestProfileUpdateAndPasswordChange(t *testing.T) {
+	setupHandlers(t)
+	mock := handlerMock(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash), Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+	updated := &models.User{ID: user.ID, Username: "alice-new", Email: "alice-new@example.test", Password: string(hash), Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(updated.Username).WillReturnRows(handlerUserRows(updated))
+	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs(updated.Email).WillReturnRows(handlerUserRows(updated))
+	mock.ExpectExec("UPDATE users SET username").WithArgs(updated.Username, updated.Email, updated.Email, updated.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
+	recorder := httptest.NewRecorder()
+	UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice-new","email":"alice-new@example.test","avatar":"avatar2.png","current_password":"Password123"}`, user.ID))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("profile update status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET password").WithArgs(pgxmock.AnyArg(), user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	recorder = httptest.NewRecorder()
+	ChangePassword(recorder, requestWithUser(http.MethodPost, "/", `{"current_password":"Password123","new_password":"NewPassword123"}`, user.ID))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("password change status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestProfileValidationBranches(t *testing.T) {
+	setupHandlers(t)
+	recorder := httptest.NewRecorder()
+	UpdateProfile(recorder, requestWithUser(http.MethodGet, "/", "{}", "user-1"))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("profile method status = %d", recorder.Code)
+	}
+	mock := handlerMock(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash)}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	requireStatus(t, UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"alice@example.test","avatar":"nope.png","current_password":"Password123"}`, user.ID), http.StatusBadRequest)
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	requireStatus(t, ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"Password123","new_password":"weak"}`, user.ID), http.StatusBadRequest)
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	requireStatus(t, UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"alice@example.test","avatar":"avatar.png","current_password":"WrongPassword123"}`, user.ID), http.StatusUnauthorized)
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	requireStatus(t, ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"WrongPassword123","new_password":"NewPassword123"}`, user.ID), http.StatusUnauthorized)
+}
 
 func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "created_at", "expires_at", "retention_at"}).

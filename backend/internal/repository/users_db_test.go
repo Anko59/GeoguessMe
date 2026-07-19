@@ -44,6 +44,18 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 			t.Errorf("%s = %+v, %v", name, got, err)
 		}
 	}
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(userRows(user))
+	if got, err := GetUserByUsername("alice"); err != nil || got == nil {
+		t.Fatalf("GetUserByUsername = %+v, %v", got, err)
+	}
+	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnRows(userRows(user))
+	if got, err := GetUserByEmail("alice@example.test"); err != nil || got == nil {
+		t.Fatalf("GetUserByEmail = %+v, %v", got, err)
+	}
+	mock.ExpectExec("INSERT INTO users").WithArgs(user.ID, user.Username, user.Email, "alice@example.test", user.Password, user.Avatar, user.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	if err := CreateUser(user); err != nil {
+		t.Fatalf("CreateUser = %v", err)
+	}
 	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(2))
 	status, err := GetUserAuthStatus(context.Background(), user.ID)
 	if err != nil || !status.Active || status.AuthVersion != 2 {
@@ -85,6 +97,54 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 	}
 	if err := RevokeAllRefreshSessions(context.Background(), user.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProfileAndPasswordUpdates(t *testing.T) {
+	mock := newMockPool(t)
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice-new", Email: "alice-new@example.test", Password: "hash", Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
+	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Email, user.Email, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+	updated, err := UpdateProfile(context.Background(), user.ID, user.Username, user.Email, user.Avatar)
+	if err != nil || updated == nil || updated.Avatar != user.Avatar {
+		t.Fatalf("UpdateProfile = %+v, %v", updated, err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET password").WithArgs("new-hash", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	if err := ChangePassword(context.Background(), user.ID, "new-hash"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProfileAndPasswordUpdateFailures(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "alice@example.test", "alice@example.test", "avatar.png", "user-1").WillReturnError(errors.New("profile write failed"))
+	if _, err := UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err == nil {
+		t.Fatal("UpdateProfile succeeded after write failure")
+	}
+	mock.ExpectBegin().WillReturnError(errors.New("transaction unavailable"))
+	if err := ChangePassword(context.Background(), "user-1", "hash"); err == nil {
+		t.Fatal("ChangePassword succeeded after transaction failure")
+	}
+	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "alice@example.test", "alice@example.test", "avatar.png", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
+	if updated, err := UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err != nil || updated != nil {
+		t.Fatalf("UpdateProfile missing user = %+v, %v", updated, err)
+	}
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET password").WithArgs("hash", "user-1").WillReturnError(errors.New("password write failed"))
+	if err := ChangePassword(context.Background(), "user-1", "hash"); err == nil {
+		t.Fatal("ChangePassword succeeded after password write failure")
+	}
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET password").WithArgs("hash", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs("user-1").WillReturnError(errors.New("session revoke failed"))
+	if err := ChangePassword(context.Background(), "user-1", "hash"); err == nil {
+		t.Fatal("ChangePassword succeeded after session revoke failure")
 	}
 }
 

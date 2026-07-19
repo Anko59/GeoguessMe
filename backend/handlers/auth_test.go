@@ -365,7 +365,7 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 	}{
 		{"signup", Signup}, {"login", Login}, {"refresh", Refresh}, {"logout", Logout},
 		{"request verification", RequestVerification}, {"verify email", VerifyEmail}, {"forgot password", ForgotPassword},
-		{"reset password", ResetPassword}, {"delete account", DeleteAccount}, {"create group", CreateGroup},
+		{"reset password", ResetPassword}, {"change password", ChangePassword}, {"delete account", DeleteAccount}, {"create group", CreateGroup},
 		{"join group", JoinGroup}, {"leaderboard", GetLeaderboard}, {"ticket", CreateWebSocketTicket},
 		{"guess", SubmitChallengeGuess}, {"results", GetChallengeResults}, {"messages", GetGroupMessages},
 		{"group details", GetGroupDetails}, {"group members", GetGroupMembers}, {"user groups", GetUserGroups},
