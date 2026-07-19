@@ -1,11 +1,13 @@
 import { useContext } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import './Home.css';
 
 export default function Home() {
     const auth = useContext(AuthContext);
-    if (auth?.isAuthenticated && !auth.loading) return <Navigate to="/groups" replace />;
+    const location = useLocation();
+    const loggingOut = (location.state as { loggingOut?: boolean } | null)?.loggingOut === true;
+    if (auth?.isAuthenticated && !auth.loading && !loggingOut) return <Navigate to="/groups" replace />;
 
     return (
         <div className="home-container">

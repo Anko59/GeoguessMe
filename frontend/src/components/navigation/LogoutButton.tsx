@@ -7,17 +7,15 @@ export default function LogoutButton() {
     const { logout } = useAuth();
 
     const handleLogout = async (): Promise<void> => {
-        // Leaving the protected page must not depend on the revocation
-        // request succeeding. AuthProvider clears local credentials in its
-        // own finally block; always navigate away even when the server or
-        // network is unavailable.
+        // Leave the protected route before auth state is cleared. Otherwise
+        // ProtectedRoute can redirect to /login while the logout request is
+        // settling, racing the intended public landing page navigation.
+        navigate('/', { replace: true, state: { loggingOut: true } });
         try {
             await logout();
         } catch {
-            // A local sign-out is still complete when the revocation request
-            // fails; do not leave an unhandled rejection on the page.
-        } finally {
-            navigate('/');
+            // AuthProvider clears local credentials in its finally block;
+            // local sign-out is complete even if server revocation fails.
         }
     };
 

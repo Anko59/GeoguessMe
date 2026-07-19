@@ -76,6 +76,26 @@ describe('Home Page', () => {
         );
         expect(screen.queryByText('geoguess.me')).not.toBeInTheDocument();
     });
+
+    it('keeps the landing page visible during logout navigation', () => {
+        render(
+            <AuthContext.Provider
+                value={{
+                    user: authResponse.user,
+                    loading: false,
+                    isAuthenticated: true,
+                    login: vi.fn(),
+                    logout: vi.fn(async () => undefined),
+                    refresh: vi.fn(async () => true),
+                }}
+            >
+                <MemoryRouter initialEntries={[{ pathname: '/', state: { loggingOut: true } }]}>
+                    <Home />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        expect(screen.getByText('geoguess.me')).toBeInTheDocument();
+    });
 });
 
 describe('App shell — public routes', () => {
