@@ -51,7 +51,7 @@ fi
 # are host-mounted so artifacts land deterministically.
 run_status=0
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
-    run --rm --no-deps --user "$(id -u):$(id -g)" \
+    run -T --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
     -e "MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT}" \
