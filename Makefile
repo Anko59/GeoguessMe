@@ -42,6 +42,11 @@ help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
 
 bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
+	@# frontend/node_modules is gitignored, so a fresh checkout lacks the host
+	@# mountpoint that the read-only workspace bind mount needs for the
+	@# geoguessme-tools_frontend-node-modules named volume. Create the stub so
+	@# the node-tools and playwright services can start on a clean checkout.
+	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
