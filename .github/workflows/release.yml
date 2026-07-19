@@ -1,0 +1,148 @@
+# Release pipeline.
+#
+# Triggered by version tags matching "v*". It re-runs the complete release gate
+# so a tag is never published from a commit that fails it, then builds the
+# production backend and web images, publishes them to the GitHub Container
+# Registry, and creates a GitHub Release whose notes record the exact immutable
+# image references (image@sha256:digest) that operators must pin in
+# deployment/env/production.env. No "latest" tag is published so deploys stay
+# reproducible, matching the production compose contract.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  CACHE_BRANCH: ${{ github.ref_name }}
+
+jobs:
+  verify:
+    name: Release verification gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Set up Docker Buildx with bounded cache
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          install: true
+          buildkitd-config-inline: |
+            [worker.oci]
+              gc = true
+              gckeepstorage = 20000000000
+
+      - name: Cache Docker build layers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /tmp/.buildx-cache
+          key: release-${{ runner.os }}-${{ env.CACHE_BRANCH }}-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-
+
+      - name: Bootstrap pinned tool containers
+        run: make bootstrap
+
+      - name: Run the complete release gate
+        run: |
+          make verify \
+            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+
+      - name: Migrate Docker layer cache for next run
+        if: always()
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache 2>/dev/null || true
+
+  release:
+    name: Publish images and GitHub release
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Resolve lowercase registry owner
+        id: owner
+        run: echo "name=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Backend image metadata
+        id: backend-meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-backend
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Web image metadata
+        id: web-meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-web
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push backend image
+        id: backend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deployment/docker/backend.Dockerfile
+          push: true
+          tags: ${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.backend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push web image
+        id: web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deployment/docker/frontend.Dockerfile
+          push: true
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Production images
+
+            Pin these immutable references in `deployment/env/production.env`
+            (`BACKEND_IMAGE` and `WEB_IMAGE`):
+
+            ```
+            BACKEND_IMAGE=ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-backend@${{ steps.backend.outputs.digest }}
+            WEB_IMAGE=ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-web@${{ steps.web.outputs.digest }}
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
