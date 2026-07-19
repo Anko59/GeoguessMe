@@ -25,6 +25,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const attemptRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const stopCamera = useCallback(() => {
@@ -33,16 +34,32 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     }, []);
 
     const startCamera = useCallback(async () => {
+        const attempt = ++attemptRef.current;
         setFileMode(false);
+        setCameraReady(false);
+        setError('');
+        stopCamera();
+        if (!navigator.mediaDevices?.getUserMedia) {
+            setError(
+                'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
+            );
+            return;
+        }
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false,
             });
+            if (attempt !== attemptRef.current) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                return;
+            }
             streamRef.current = mediaStream;
             if (videoRef.current) {
                 const video = videoRef.current;
-                const markCameraReady = () => setCameraReady(true);
+                const markCameraReady = () => {
+                    if (attempt === attemptRef.current && video.videoWidth > 0) setCameraReady(true);
+                };
                 video.onloadedmetadata = markCameraReady;
                 video.oncanplay = markCameraReady;
                 video.srcObject = mediaStream;
@@ -52,10 +69,22 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                     .catch(() => undefined);
             }
             setError('');
-        } catch {
-            setError('Camera access denied. Please allow camera permissions.');
+        } catch (requestError: unknown) {
+            if (attempt !== attemptRef.current) return;
+            const name = requestError instanceof DOMException ? requestError.name : '';
+            if (name === 'NotAllowedError' || name === 'SecurityError') {
+                setError('Camera access denied. Allow camera permissions and try again.');
+            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                setError('No camera was found. Connect a camera or upload a photo from your device.');
+            } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+                setError('The camera is busy or unavailable. Close other camera apps and try again.');
+            } else if (requestError instanceof Error && /denied|permission/i.test(requestError.message)) {
+                setError('Camera access denied. Allow camera permissions and try again.');
+            } else {
+                setError('The camera could not be started. Try again or upload a photo from your device.');
+            }
         }
-    }, []);
+    }, [stopCamera]);
 
     useEffect(() => {
         void startCamera();
@@ -167,9 +196,9 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
             {error && (
                 <div className="camera-error">
                     <p>{error}</p>
-                    {error.includes('Camera') && (
+                    {!capturedPhoto && (
                         <>
-                            <button className="btn btn-primary" onClick={startCamera}>
+                            <button className="btn btn-primary" onClick={() => void startCamera()}>
                                 Try Again
                             </button>
                             <button className="btn btn-outline file-fallback-btn" onClick={openFilePicker}>

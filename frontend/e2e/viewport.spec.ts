@@ -3,6 +3,34 @@ import type { Browser, BrowserContextOptions } from '@playwright/test';
 import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
 
 test.describe('Viewport preservation', () => {
+    test('public home page fits one viewport without asset overflow', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('.home-container')).toBeVisible();
+        const metrics = await page.evaluate(() => {
+            const container = document.querySelector('.home-container')?.getBoundingClientRect();
+            const asset = document.querySelector('.home-welcome-asset')?.getBoundingClientRect();
+            const image = document.querySelector('.welcome-asset-img')?.getBoundingClientRect();
+            return {
+                clientWidth: document.documentElement.clientWidth,
+                clientHeight: document.documentElement.clientHeight,
+                scrollWidth: document.documentElement.scrollWidth,
+                scrollHeight: document.documentElement.scrollHeight,
+                container,
+                asset,
+                image,
+            };
+        });
+        expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
+        expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight);
+        expect(metrics.container).not.toBeNull();
+        expect(metrics.asset).not.toBeNull();
+        expect(metrics.image).not.toBeNull();
+        expect(metrics.image!.left).toBeGreaterThanOrEqual(metrics.asset!.left - 1);
+        expect(metrics.image!.right).toBeLessThanOrEqual(metrics.asset!.right + 1);
+        expect(metrics.image!.top).toBeGreaterThanOrEqual(metrics.asset!.top - 1);
+        expect(metrics.image!.bottom).toBeLessThanOrEqual(metrics.asset!.bottom + 1);
+    });
+
     test('page inherits exact project viewport', async ({ page }) => {
         const viewport = page.viewportSize();
         expect(viewport).not.toBeNull();

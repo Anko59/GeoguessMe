@@ -22,6 +22,10 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   `next_cursor` in the response means no more pages. The legacy `after_id`
   message id is resolved onto the cursor so reconnect callers that only know the
   last received message id keep working.
+- Challenge messages in `items` may include viewer-specific `challenge_status`
+  (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
+  controls the available chat action and is derived from the authenticated
+  viewer's challenge view and guess state.
 
 ## Endpoint overview
 

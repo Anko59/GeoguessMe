@@ -14,6 +14,11 @@ const { routeRef, apiMocks, mockModule } = vi.hoisted(() => {
             getAPIErrorMessage: (error: unknown, fallback: string) =>
                 error instanceof Error ? error.message : fallback,
             getAccessToken: () => null,
+            refreshAuthSession: () =>
+                apiMocks
+                    .post('/auth/refresh')
+                    .then((response: { data?: AuthResponse } | undefined) => response?.data ?? null)
+                    .catch(() => null),
             setAccessToken: vi.fn(),
         },
     };

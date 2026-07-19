@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import './GroupJoin.css';
@@ -12,16 +12,32 @@ export default function GroupJoin() {
     const [code, setCode] = useState(initialCode);
     const [name, setName] = useState('');
     const [error, setError] = useState('');
+    const [joining, setJoining] = useState(false);
+    const autoJoinAttempted = useRef(false);
 
-    const handleJoin = async (e: React.FormEvent): Promise<void> => {
-        e.preventDefault();
+    const joinGroup = useCallback(async (): Promise<void> => {
         setError('');
+        setJoining(true);
         try {
-            const res = await api.post('/group/join', { code });
+            const res = await api.post('/group/join', { code: code.trim().toUpperCase() });
             navigate(`/group/${res.data.id}`);
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Failed to join group'));
+        } finally {
+            setJoining(false);
         }
+    }, [code, navigate]);
+
+    useEffect(() => {
+        if (mode === 'join' && initialCode && !autoJoinAttempted.current) {
+            autoJoinAttempted.current = true;
+            void joinGroup();
+        }
+    }, [initialCode, joinGroup, mode]);
+
+    const handleJoin = async (e: React.FormEvent): Promise<void> => {
+        e.preventDefault();
+        await joinGroup();
     };
 
     const handleCreate = async (e: React.FormEvent): Promise<void> => {
@@ -67,7 +83,9 @@ export default function GroupJoin() {
                         maxLength={6}
                         required
                     />
-                    <button type="submit">Join Group</button>
+                    <button type="submit" disabled={joining}>
+                        {joining ? 'Joining…' : 'Join Group'}
+                    </button>
                 </form>
             ) : (
                 <form onSubmit={handleCreate} className="join-form">

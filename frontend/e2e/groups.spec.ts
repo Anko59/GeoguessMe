@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
-import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
+import { newAuthContext, signupViaUI, uniqueEmail, uniqueGroup, uniqueUsername } from './helpers';
 
 interface OwnerScenario {
     context: BrowserContext;
@@ -51,6 +51,25 @@ test.describe('Group operations', () => {
             await expect(joinerPage.locator('.groups-grid')).toBeVisible();
         } finally {
             await joinerContext.close();
+            await owner.context.close();
+        }
+    });
+
+    test('invite link survives signup and automatically opens the group', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        const inviteContext = await newAuthContext(browser, contextOptions);
+        try {
+            const invitePage = await inviteContext.newPage();
+            await invitePage.goto(`/group/join?code=${owner.groupCode}`);
+            await expect(invitePage).toHaveURL(/\/login/);
+            await invitePage.getByRole('link', { name: 'Sign up' }).click();
+            await invitePage.fill('#signup-username', uniqueUsername());
+            await invitePage.fill('#signup-email', uniqueEmail());
+            await invitePage.fill('#signup-password', 'TestPass123');
+            await invitePage.locator('button.btn-primary[type="submit"]').click();
+            await invitePage.waitForURL(new RegExp(`/group/${owner.groupID}$`));
+        } finally {
+            await inviteContext.close();
             await owner.context.close();
         }
     });

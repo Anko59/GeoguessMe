@@ -38,7 +38,7 @@ export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:
 docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --wait
 "$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
 
-test_args=(test --project=desktop --project=mobile)
+test_args=(test --project=desktop --project=firefox --project=mobile)
 if [ "${1:-}" = "--ui" ]; then
     test_args+=(--ui)
 fi

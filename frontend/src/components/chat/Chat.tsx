@@ -34,7 +34,7 @@ export default function Chat({
 
     return (
         <div className="chat-container">
-            <div className="chat-status" role="status">
+            <div className="chat-status visually-hidden" role="status" aria-live="polite">
                 {connectionStatus === 'connected'
                     ? 'Connected'
                     : connectionStatus === 'connecting'
@@ -88,7 +88,14 @@ export default function Chat({
                                                 <span>{isMe ? 'Challenge sent' : 'New challenge'}</span>
                                             </span>
                                             <span className="start-challenge-btn">
-                                                {isMe ? 'View results' : 'Accept challenge'}
+                                                {isMe ||
+                                                message.challenge_status === 'results' ||
+                                                message.challenge_status === 'guessed' ||
+                                                message.challenge_status === 'expired'
+                                                    ? 'View results'
+                                                    : message.challenge_status === 'accepted'
+                                                      ? 'Continue challenge'
+                                                      : 'Accept challenge'}
                                             </span>
                                         </span>
                                     </button>

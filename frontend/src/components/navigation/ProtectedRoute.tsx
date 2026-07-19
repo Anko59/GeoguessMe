@@ -9,6 +9,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     const { loading, isAuthenticated } = useAuth();
     const location = useLocation();
     if (loading) return <div className="loading">Restoring session…</div>;
-    if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    if (!isAuthenticated) {
+        const from = `${location.pathname}${location.search}${location.hash}`;
+        return <Navigate to="/login" replace state={{ from }} />;
+    }
     return <>{children}</>;
 }

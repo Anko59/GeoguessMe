@@ -20,7 +20,7 @@ export default function GroupView() {
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [groupError, setGroupError] = useState('');
-    const { messages, connectionStatus, wsRef, error: messagesError } = useGroupMessages(id);
+    const { messages, connectionStatus, wsRef, error: messagesError, updateChallengeStatus } = useGroupMessages(id);
 
     useEffect(() => {
         if (!id) return;
@@ -86,7 +86,11 @@ export default function GroupView() {
                     </div>
                 )}
             </div>
-            <Game gameMessage={gameMessage} onClose={() => setGameMessage(null)} />
+            <Game
+                gameMessage={gameMessage}
+                onChallengeStatusChange={updateChallengeStatus}
+                onClose={() => setGameMessage(null)}
+            />
             <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
     );

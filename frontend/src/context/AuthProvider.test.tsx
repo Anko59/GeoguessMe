@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     post: vi.fn(),
     delete: vi.fn(),
     setAccessToken: vi.fn(),
+    refreshAuthSession: vi.fn(),
     token: null as string | null,
 }));
 
@@ -21,6 +22,7 @@ vi.mock('../api', () => ({
         mocks.token = token;
         mocks.setAccessToken(token);
     },
+    refreshAuthSession: () => mocks.refreshAuthSession(),
 }));
 
 const authResponse: AuthResponse = {
@@ -41,11 +43,13 @@ beforeEach(() => {
     mocks.post.mockReset();
     mocks.delete.mockReset();
     mocks.token = null;
+    mocks.refreshAuthSession.mockReset();
 });
 
 describe('AuthProvider', () => {
     it('restores, logs in, and logs out through AuthProvider', async () => {
-        mocks.post.mockResolvedValueOnce({ data: authResponse }).mockResolvedValueOnce({ data: {} });
+        mocks.refreshAuthSession.mockResolvedValueOnce(authResponse);
+        mocks.post.mockResolvedValueOnce({ data: {} });
         function Consumer() {
             const auth = useAuth();
             return (
@@ -72,7 +76,7 @@ describe('AuthProvider', () => {
     });
 
     it('clears a failed restored session and guards useAuth', async () => {
-        mocks.post.mockRejectedValue(new Error('expired'));
+        mocks.refreshAuthSession.mockResolvedValue(null);
         function Consumer() {
             return <output>{useAuth().isAuthenticated ? 'yes' : 'no'}</output>;
         }

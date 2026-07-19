@@ -106,7 +106,9 @@ func JoinGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	} else if isMember {
-		writeError(w, http.StatusConflict, "already_member", "Already a member")
+		// Invite links are intentionally idempotent: completing authentication
+		// and replaying an invite must still open the existing group.
+		writeJSON(w, http.StatusOK, group)
 		return
 	}
 	if err := repository.AddGroupMemberContext(r.Context(), &models.GroupMember{GroupID: group.ID, UserID: GetUserIDFromContext(r), JoinedAt: time.Now()}); err != nil {

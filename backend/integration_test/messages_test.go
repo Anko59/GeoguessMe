@@ -65,3 +65,35 @@ func TestMessageCursorPagination(t *testing.T) {
 	require.Equal(t, full.Items[1].ID, recent.Items[0].ID, "latest page must start at the second-newest message")
 	require.Equal(t, full.Items[2].ID, recent.Items[1].ID, "latest page must end at the newest message")
 }
+
+func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Challenge Status Group")
+	joinGroup(t, bob.access, code)
+	photoID := uploadPhoto(t, alice.access, groupID)
+
+	messageStatus := func(t *testing.T, bearer string) string {
+		t.Helper()
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, bearer, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var page struct {
+			Items []struct {
+				PhotoID         string `json:"photo_id"`
+				ChallengeStatus string `json:"challenge_status"`
+			} `json:"items"`
+		}
+		require.NoError(t, jsonUnmarshal(data, &page))
+		for _, item := range page.Items {
+			if item.PhotoID == photoID {
+				return item.ChallengeStatus
+			}
+		}
+		return ""
+	}
+
+	require.Eventually(t, func() bool { return messageStatus(t, alice.access) == "results" }, 5*time.Second, 100*time.Millisecond, "uploader status must be available once the challenge message is persisted")
+	require.Equal(t, "available", messageStatus(t, bob.access), "participant starts with Accept challenge")
+	acceptChallenge(t, bob.access, photoID)
+	require.Equal(t, "accepted", messageStatus(t, bob.access), "accepted participant sees Continue challenge")
+}

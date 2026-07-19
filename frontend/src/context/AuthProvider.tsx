@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import api, { setAccessToken } from '../api';
+import api, { refreshAuthSession, setAccessToken } from '../api';
 import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthResponse } from '../types';
 
@@ -12,16 +12,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.user);
     }, []);
     const refreshSession = useCallback(async (): Promise<boolean> => {
-        try {
-            const response = await api.post<AuthResponse>('/auth/refresh');
-            login(response.data);
-            return true;
-        } catch {
+        const response = await refreshAuthSession();
+        if (!response) {
             setAccessToken(null);
             setUser(null);
             return false;
         }
-    }, [login]);
+        setUser(response.user);
+        return true;
+    }, []);
     const logout = useCallback(async (): Promise<void> => {
         try {
             await api.post('/auth/logout');

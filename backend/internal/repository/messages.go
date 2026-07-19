@@ -91,6 +91,58 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 	return page, nil
 }
 
+// GetGroupMessagesPageForViewer enriches challenge messages with state that is
+// specific to the authenticated viewer. The state is derived from the
+// existing challenge views and guesses tables, so reconnects and hard reloads
+// restore the same action shown in the chat without client-only assumptions.
+func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, limit int, viewerID string) (MessagesPage, error) {
+	page, err := GetGroupMessagesPage(ctx, groupID, cursor, limit)
+	if err != nil || viewerID == "" || len(page.Items) == 0 {
+		return page, err
+	}
+	photoIDs := make([]string, 0, len(page.Items))
+	for _, message := range page.Items {
+		if message.Kind == "challenge" && message.PhotoID != nil {
+			photoIDs = append(photoIDs, *message.PhotoID)
+		}
+	}
+	if len(photoIDs) == 0 {
+		return page, nil
+	}
+	rows, err := database.DB.Query(ctx, `
+		SELECT p.id,
+			CASE
+				WHEN p.user_id = $2 THEN 'results'
+				WHEN EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id AND g.user_id = $2) THEN 'guessed'
+				WHEN p.expires_at <= NOW() THEN 'expired'
+				WHEN EXISTS (SELECT 1 FROM challenge_views v WHERE v.photo_id = p.id AND v.user_id = $2) THEN 'accepted'
+				ELSE 'available'
+			END AS challenge_status
+		FROM photos p
+		WHERE p.id = ANY($1)`, photoIDs, viewerID)
+	if err != nil {
+		return MessagesPage{}, err
+	}
+	defer rows.Close()
+	statuses := make(map[string]string, len(photoIDs))
+	for rows.Next() {
+		var photoID, status string
+		if err := rows.Scan(&photoID, &status); err != nil {
+			return MessagesPage{}, err
+		}
+		statuses[photoID] = status
+	}
+	if err := rows.Err(); err != nil {
+		return MessagesPage{}, err
+	}
+	for index := range page.Items {
+		if page.Items[index].PhotoID != nil {
+			page.Items[index].ChallengeStatus = statuses[*page.Items[index].PhotoID]
+		}
+	}
+	return page, nil
+}
+
 // scanMessageRows drains a message result set (closing it) into a slice in the
 // order the database returned it.
 func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {

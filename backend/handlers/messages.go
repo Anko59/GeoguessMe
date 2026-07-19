@@ -47,7 +47,7 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	page, err := repository.GetGroupMessagesPage(r.Context(), groupID, cursor, limit)
+	page, err := repository.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 		return

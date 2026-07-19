@@ -23,10 +23,11 @@ interface GameState {
 
 interface GameProps {
     gameMessage: Message | null;
+    onChallengeStatusChange?: (photoId: string, status: NonNullable<Message['challenge_status']>) => void;
     onClose: () => void;
 }
 
-export default function Game({ gameMessage, onClose }: GameProps) {
+export default function Game({ gameMessage, onChallengeStatusChange, onClose }: GameProps) {
     const { user } = useAuth();
     const [state, setState] = useState<GameState>({ status: 'idle', serverOffset: 0 });
     const [selectedLocation, setSelectedLocation] = useState<Position | null>(null);
@@ -57,6 +58,11 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                 const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`);
                 const data = response.data;
                 const offset = Date.parse(data.server_time) - Date.now();
+                const deadline = Date.parse(data.view_expires_at);
+                if (deadline <= Date.now()) {
+                    setState({ status: 'guessing', photoId, deadline, serverOffset: 0 });
+                    return;
+                }
                 const mediaUrl = await loadMedia(data.media_url);
                 setState({
                     status: 'viewing',
@@ -65,6 +71,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                     deadline: Date.parse(data.view_expires_at),
                     serverOffset: offset,
                 });
+                onChallengeStatusChange?.(photoId, 'accepted');
             } catch (requestError: unknown) {
                 setState({
                     status: 'error',
@@ -74,7 +81,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                 });
             }
         },
-        [loadMedia],
+        [loadMedia, onChallengeStatusChange],
     );
 
     const loadResults = useCallback(
@@ -92,6 +99,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                     serverOffset: Date.parse(results.server_time) - Date.now(),
                     results,
                 });
+                onChallengeStatusChange?.(photoId, 'results');
                 return true;
             } catch (requestError: unknown) {
                 if (showError) {
@@ -105,7 +113,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                 return false;
             }
         },
-        [loadMedia],
+        [loadMedia, onChallengeStatusChange],
     );
 
     const submitGuess = useCallback(async (): Promise<void> => {
@@ -113,6 +121,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
         setState((current) => ({ ...current, status: 'submitting' }));
         try {
             await api.post<GuessResult>(`/challenges/${state.photoId}/guess`, selectedLocation);
+            onChallengeStatusChange?.(state.photoId, 'guessed');
             await loadResults(state.photoId);
         } catch (requestError: unknown) {
             setState((current) => ({
@@ -121,7 +130,7 @@ export default function Game({ gameMessage, onClose }: GameProps) {
                 message: getAPIErrorMessage(requestError, 'Your guess could not be submitted.'),
             }));
         }
-    }, [loadResults, selectedLocation, state.photoId]);
+    }, [loadResults, onChallengeStatusChange, selectedLocation, state.photoId]);
 
     const close = useCallback((): void => {
         if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
@@ -233,18 +242,50 @@ export default function Game({ gameMessage, onClose }: GameProps) {
         return (
             <div className="game-overlay">
                 <div className="result-view scale-in">
-                    <h2>Challenge results</h2>
-                    {state.mediaUrl && <img src={state.mediaUrl} alt="Challenge location" className="result-image" />}
-                    {!state.results.media_available && (
-                        <p>The original image has been removed; scores remain available.</p>
-                    )}
-                    <div className="result-map">
-                        <Map
-                            onLocationSelect={() => undefined}
-                            selectedLocation={null}
-                            actualLocation={{ lat: state.results.actual_lat, long: state.results.actual_long }}
-                            guesses={state.results.guesses}
-                        />
+                    <div className="result-header">
+                        <h2>Challenge results</h2>
+                        {state.results.guesses.length > 0 ? (
+                            <p>
+                                {state.results.guesses.length} submitted score
+                                {state.results.guesses.length === 1 ? '' : 's'}
+                            </p>
+                        ) : (
+                            <p>No guesses have been submitted yet.</p>
+                        )}
+                    </div>
+                    <div className="result-content">
+                        <div className="result-details">
+                            {state.mediaUrl && (
+                                <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
+                            )}
+                            {!state.results.media_available && (
+                                <p className="result-notice">
+                                    The original image has been removed; scores remain available.
+                                </p>
+                            )}
+                            <div className="score-list" aria-label="Submitted scores">
+                                {state.results.guesses.map((guess) => (
+                                    <div
+                                        key={guess.id}
+                                        className={`score-card ${guess.user_id === user?.id ? 'current-player' : ''}`}
+                                    >
+                                        <div>
+                                            <strong>{guess.user_id === user?.id ? 'You' : guess.username}</strong>
+                                            <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                        </div>
+                                        <b>{guess.score} pts</b>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="result-map" aria-label="Challenge map">
+                            <Map
+                                onLocationSelect={() => undefined}
+                                selectedLocation={null}
+                                actualLocation={{ lat: state.results.actual_lat, long: state.results.actual_long }}
+                                guesses={state.results.guesses}
+                            />
+                        </div>
                     </div>
                     <button onClick={close} className="next-button btn btn-primary">
                         Close

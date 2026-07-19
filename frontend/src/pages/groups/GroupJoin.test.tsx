@@ -32,9 +32,8 @@ describe('GroupJoin', () => {
             </MemoryRouter>,
         );
         expect(screen.getByDisplayValue('abc123')).toBeInTheDocument();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Join Group' })[1]);
         await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/group/joined'));
-        expect(mocks.post).toHaveBeenCalledWith('/group/join', { code: 'abc123' });
+        expect(mocks.post).toHaveBeenCalledWith('/group/join', { code: 'ABC123' });
 
         firstRender.unmount();
         mocks.post.mockRejectedValueOnce(new Error('bad group name'));

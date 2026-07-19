@@ -31,6 +31,17 @@ export default defineConfig({
             },
         },
         {
+            name: 'firefox',
+            // Firefox is used for the cross-browser session contract. The
+            // full camera suite remains Chromium-only because Playwright
+            // Firefox rejects the camera permission capability at context
+            // creation time.
+            testMatch: /auth\.spec\.ts$/,
+            use: {
+                ...devices['Desktop Firefox'],
+            },
+        },
+        {
             name: 'mobile',
             use: {
                 ...devices['Pixel 5'],

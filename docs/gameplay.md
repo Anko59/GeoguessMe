@@ -59,4 +59,13 @@ and a `media_url` (with `?result=1`) if the media is still available.
 ## Group join codes
 
 Groups are joined via a 6-character alphanumeric code (uppercase A–Z, 0–9).
-Codes are generated randomly at creation.
+Codes are generated randomly at creation. An unauthenticated invite preserves
+the code through login or signup, automatically joins the account, and opens the
+group. Replaying an invite for an existing member is safe and simply opens the
+group again.
+
+The chat message history includes a viewer-specific `challenge_status`:
+`available`, `accepted`, `guessed`, `results`, or `expired`. The frontend uses
+this to show Accept, Continue, or View Results without exposing result data to
+unauthorized members. Results show every submitted score visible to the current
+authorized viewer, with the current player highlighted.

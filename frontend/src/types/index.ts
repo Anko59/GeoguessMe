@@ -23,6 +23,7 @@ export interface Message {
     error_code?: string;
     content: string;
     created_at: string;
+    challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
 }
 
 export interface Group {

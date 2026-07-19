@@ -2,7 +2,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { APIErrorBody, AuthResponse } from './types';
 
 let accessToken: string | null = null;
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<AuthResponse | null> | null = null;
 
 export const setAccessToken = (token: string | null): void => {
     accessToken = token;
@@ -15,13 +15,13 @@ export const api = axios.create({
     withCredentials: true,
 });
 
-const refresh = async (): Promise<string | null> => {
+export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
         refreshPromise = axios
             .post<AuthResponse>('/api/v1/auth/refresh', undefined, { withCredentials: true })
             .then((response) => {
                 setAccessToken(response.data.access_token);
-                return response.data.access_token;
+                return response.data;
             })
             .catch(() => {
                 setAccessToken(null);
@@ -32,6 +32,11 @@ const refresh = async (): Promise<string | null> => {
             });
     }
     return refreshPromise;
+};
+
+export const refreshAccessToken = async (): Promise<string | null> => {
+    const response = await refreshAuthSession();
+    return response?.access_token ?? null;
 };
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -49,7 +54,7 @@ api.interceptors.response.use(
         const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
         if (error.response?.status === 401 && request && !request._retried && !request.url?.includes('/auth/refresh')) {
             request._retried = true;
-            const token = await refresh();
+            const token = await refreshAccessToken();
             if (token) {
                 request.headers.Authorization = `Bearer ${token}`;
                 return api(request);

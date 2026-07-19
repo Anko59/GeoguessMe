@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { AuthResponse } from '../../types';
@@ -12,7 +12,12 @@ export default function Signup() {
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const { login } = useAuth();
+    const returnTo =
+        typeof location.state?.from === 'string' && /^\/group\/join(?:\?code=|$)/.test(location.state.from)
+            ? location.state.from
+            : '/groups';
 
     const handleSubmit = async (event: React.FormEvent): Promise<void> => {
         event.preventDefault();
@@ -23,7 +28,7 @@ export default function Signup() {
         try {
             const response = await api.post<AuthResponse>('/auth/signup', payload);
             login(response.data);
-            navigate('/groups');
+            navigate(returnTo, { replace: true });
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Signup failed'));
         } finally {
@@ -79,7 +84,7 @@ export default function Signup() {
                 </form>
                 <p className="auth-footer">
                     Already have an account?{' '}
-                    <Link to="/login" className="auth-link">
+                    <Link to="/login" state={{ from: returnTo }} className="auth-link">
                         Login
                     </Link>
                 </p>

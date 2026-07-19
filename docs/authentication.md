@@ -39,6 +39,12 @@ Each use of a refresh token creates a new session and retires the old one in a
 single database transaction. If a refresh token has already been revoked or
 consumed, the rotation fails and the cookie is cleared.
 
+The browser coordinates startup restoration and 401 recovery through one
+single-flight refresh request. This prevents React development checks or
+concurrent API failures from consuming the same one-time refresh cookie twice.
+Hard reloads therefore restore the session in Chromium and Firefox as long as
+the refresh cookie is present and valid.
+
 ## Verification
 
 - `POST /api/v1/auth/verify/request` (authenticated) sends a verification email.

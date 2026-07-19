@@ -67,6 +67,12 @@ Message:
     photo_id: { type: [string, "null"], format: uuid }
     content: { type: string }
     created_at: { type: string, format: date-time }
+    challenge_status:
+      {
+        type: string,
+        enum: [available, accepted, guessed, results, expired],
+        description: Viewer-specific action state for challenge messages,
+      }
 
 MessagesPage:
   type: object
