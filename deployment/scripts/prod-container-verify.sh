@@ -18,6 +18,8 @@ web_image="${WEB_IMAGE:-geoguessme-web:local}"
 
 PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify}"
 WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-18083}"
+SMTP_WEB_PORT="${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-18085}"
+export GEOGUESSME_PROD_VERIFY_SMTP_PORT="$SMTP_WEB_PORT"
 # The production config requires an HTTPS public origin. The disposable local
 # gateway is intentionally plain HTTP, so probes use a separate URL.
 PUBLIC_URL="https://localhost:${WEB_PORT}"

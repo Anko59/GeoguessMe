@@ -24,7 +24,9 @@ test-only credentials, polls health and readiness, verifies representative HTTP
 behavior (liveness, readiness, auth enforcement, WebSocket auth), and tears down
 all resources. It is safe for local/CI use because it uses the `local-db`,
 `local-minio`, and `local-smtp` Compose profiles and never touches production
-infrastructure.
+infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
+`18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
+`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
 
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
