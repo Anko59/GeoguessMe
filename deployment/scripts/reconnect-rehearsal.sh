@@ -35,7 +35,7 @@ docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$
 
 echo "=== Reconnect rehearsal: running harness ==="
 docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
-    run --rm --no-deps go-tools-write sh -c \
+    run -T --rm --no-deps go-tools-write sh -c \
     "cd /workspace/tools/load/reconnect-rehearsal && go run . -base-url 'http://host.docker.internal:${WEB_PORT}'"
 
 echo "=== Reconnect rehearsal PASSED ==="

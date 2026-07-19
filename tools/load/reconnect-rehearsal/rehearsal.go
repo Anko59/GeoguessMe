@@ -153,6 +153,32 @@ func runRound1(concurrent int, creds []credentials, group groupRef, res *result)
 		fail("ws connect phase failed", res)
 	}
 
+	// A successful WebSocket handshake can precede the hub's registration
+	// handoff. Complete a persisted readiness barrier before sending the
+	// measured round so no early broadcast is lost by a still-registering peer.
+	ready := make([]string, concurrent)
+	for i := range ready {
+		ready[i] = fmt.Sprintf("r1-ready-%d-%s", i, randomSuffix())
+	}
+	for i := range conns {
+		if err := conns[i].WriteJSON(map[string]string{"content": ready[i]}); err != nil {
+			fmt.Fprintf(os.Stderr, "write readiness %d failed: %v\n", i, err)
+			res.addError()
+		}
+	}
+	if !waitForReadiness(creds[0].Access, group.ID, ready) {
+		res.addError()
+		fail("ws readiness barrier failed", res)
+	}
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+	conns = make([]*websocket.Conn, concurrent)
+	for i := range conns {
+		ticket := mustVal(getWSTicket(creds[i].Access, group.ID))
+		conns[i] = mustVal(dialWS(group.ID, ticket))
+	}
+
 	// Each client sends one message, then reads N deliveries.
 	tStart := time.Now()
 	for i := 0; i < concurrent; i++ {
