@@ -25,10 +25,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - name: Set up Docker Buildx with bounded cache
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           install: true
           buildkitd-config-inline: |
@@ -37,7 +37,7 @@ jobs:
               gckeepstorage = 20000000000
 
       - name: Cache Docker build layers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/.buildx-cache
           key: docker-${{ runner.os }}-${{ env.CACHE_BRANCH }}-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload reports, logs, and traces on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: geoguessme-verification-artifacts
           retention-days: 7
