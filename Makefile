@@ -22,6 +22,7 @@ COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml 
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
+COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
@@ -43,7 +44,7 @@ help: ## Show this help.
 bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
@@ -61,16 +62,16 @@ hooks-check: ## Verify tracked hooks, Docker prerequisites, and canonical target
 	@echo "hooks-check PASSED"
 
 tools-self-test: ## Run a short self-test inside each tool image.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version'
-	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'go version && govulncheck -version && psql --version && gcc --version'
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'node --version && npm --version && prettier --version && eslint --version && tsc --version'
-	$(COMPOSE_TOOLS) run --rm --no-deps playwright node --version
-	$(COMPOSE_TOOLS) run --rm --no-deps shellcheck shellcheck --version
-	$(COMPOSE_TOOLS) run --rm --no-deps shfmt shfmt --version
-	$(COMPOSE_TOOLS) run --rm --no-deps hadolint hadolint --version
-	$(COMPOSE_TOOLS) run --rm --no-deps actionlint actionlint -version
-	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff --version
-	$(COMPOSE_TOOLS) run --rm --no-deps caddy caddy version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'go version && govulncheck -version && psql --version && gcc --version'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'node --version && npm --version && prettier --version && eslint --version && tsc --version'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck --version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt --version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps hadolint hadolint --version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint -version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff --version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy version
 	tools/quality/test/check-tool-image-split.sh
 
 tools-clean: ## Remove only project-specific tool containers, networks, and caches.
@@ -102,54 +103,54 @@ logs-frontend: ## Tail frontend logs.
 
 ##@ Code quality
 format: ## Format tracked source/configuration files in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w && git ls-files -z "*.go" | xargs -0 -r goimports -w'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) sqlfluff-write sqlfluff fix --dialect postgres backend/internal/database/migrations
-	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w && git ls-files -z "*.go" | xargs -0 -r goimports -w'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff-write sqlfluff fix --dialect postgres backend/internal/database/migrations
+	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci
 
 fmt: format ## Compatibility alias for format.
 
 format-check: ## Check formatting without rewriting files.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
-	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
-	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps shfmt shfmt -d -i 4 -ci
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
+	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci
 
 fmt-check: format-check ## Compatibility alias for format-check.
 
 lint-go: ## Run strict Go analyzers.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && golangci-lint run ./...'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && golangci-lint run ./...'
 
 lint-frontend: ## Run ESLint with zero warnings.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend run lint -- --max-warnings=0
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint -- --max-warnings=0
 
 lint-css: ## Run Stylelint.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
 
 lint-docs: ## Run Markdownlint.
-	git ls-files -z '*.md' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps node-tools markdownlint
+	git ls-files -z '*.md' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools markdownlint
 
 lint-shell: ## Run ShellCheck on every tracked shell script.
-	find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps shellcheck shellcheck -x
+	find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck -x
 
 lint-docker: ## Run Hadolint on every Dockerfile.
-	find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './.git/*' -not -path './frontend/node_modules/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps hadolint hadolint
+	find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './.git/*' -not -path './frontend/node_modules/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps hadolint hadolint
 
 lint-actions: ## Run actionlint on tracked workflows.
-	git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 -r $(COMPOSE_TOOLS) run --rm --no-deps actionlint actionlint
+	git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint
 
 lint-sql: ## Run SQLFluff against migrations.
-	$(COMPOSE_TOOLS) run --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --dialect postgres backend/internal/database/migrations
 
 lint-caddy: ## Validate and format-check Caddy configuration.
-	$(COMPOSE_TOOLS) run --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
-	$(COMPOSE_TOOLS) run --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
 
 lint-openapi: ## Validate the split OpenAPI contract with Redocly.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend exec -- redocly lint /workspace/docs/openapi.yaml
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend exec -- redocly lint /workspace/docs/openapi.yaml
 
 check-e2e-style: ## Reject synchronization and selector patterns that hide flakiness.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c '! find frontend/e2e -type f -name "*.ts" -print0 | xargs -0 -r grep -nE "waitForTimeout|networkidle|\.last\(\)|nth-child|\.nth\("'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c '! find frontend/e2e -type f -name "*.ts" -print0 | xargs -0 -r grep -nE "waitForTimeout|networkidle|\.last\(\)|nth-child|\.nth\("'
 
 lint: structure-check format-check lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style ## Run every strict lint gate.
 
@@ -160,20 +161,20 @@ export GEOGUESSME_GIT_COMMON_DIR GIT_DIR_WORKTREE
 ARGS ?=
 
 structure-check: ## Enforce tracked-file and directory structure limits.
-	$(COMPOSE_TOOLS) run --rm --no-deps \
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/structure-check
 
 type-check: ## Run the TypeScript compiler without emitting files.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools bash -c 'cd frontend && tsc --noEmit'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && tsc --noEmit'
 
 test-unit: test-backend test-frontend ## Run backend and frontend unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
 test-structure-regression: ## Run structure-check regression tests in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps \
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
 		$(if $(GIT_DIR_WORKTREE),-v $(GIT_DIR_WORKTREE):$(GIT_DIR_WORKTREE):ro) \
 		go-tools /workspace/tools/quality/test/check-structure-regression.sh
 
@@ -193,10 +194,10 @@ cache-status: ## Report project-only Docker images, build cache, volumes, and ar
 	bash tools/quality/cache-status.sh
 
 test-frontend: ## Run frontend unit tests.
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
 test-race: ## Run Go unit tests with the race detector.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
 
 test-backend-race: test-race ## Compatibility alias for test-race.
 
@@ -222,21 +223,21 @@ test-e2e-repeat: build-images ## Run E2E suite COUNT times to catch flakes. Usag
 test-all: build-images test-unit test-integration test-e2e ## Run unit, integration, and E2E suites.
 
 coverage: ## Enforce and report backend/frontend coverage thresholds.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-tools sh -c 'cd backend && go test -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
 
 audit: ## Run dependency vulnerability audits in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
-	$(COMPOSE_TOOLS) run --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
 ##@ Build
 build: build-frontend build-backend ## Build production frontend and backend artifacts in Docker.
 
 build-backend: ## Build the backend binary in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && go build -trimpath -o bin/geoguessme .'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && go build -trimpath -o bin/geoguessme .'
 
 build-frontend: ## Build the frontend bundle in Docker.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
 build-images: ## Build production images with normal Docker layer caching.
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
@@ -267,16 +268,16 @@ migrate-status: ## Show migration status through the backend container.
 
 migration-new: ## Create a migration file after checking NAME.
 	@test -n "$(NAME)" || { echo "usage: make migration-new NAME=description"; exit 2; }
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'latest=$$(find backend/internal/database/migrations -name "*.sql" -printf "%f\n" | sed "s/^0*\([0-9]*\)_.*/\1/" | sort -n | tail -1); next=$$((10#$${latest:-0}+1)); file=$$(printf "backend/internal/database/migrations/%03d_%s.sql" $$next "$(NAME)"); printf -- "-- %03d %s\n" $$next "$(NAME)" > "$$file"; echo "created $$file"'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'latest=$$(find backend/internal/database/migrations -name "*.sql" -printf "%f\n" | sed "s/^0*\([0-9]*\)_.*/\1/" | sort -n | tail -1); next=$$((10#$${latest:-0}+1)); file=$$(printf "backend/internal/database/migrations/%03d_%s.sql" $$next "$(NAME)"); printf -- "-- %03d %s\n" $$next "$(NAME)" > "$$file"; echo "created $$file"'
 
 db-backup: ## Create a PostgreSQL backup through the tool container.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" -e BACKUP_DIR=/workspace/backups go-security /workspace/deployment/scripts/backup-postgres.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" -e BACKUP_DIR=/workspace/backups go-security /workspace/deployment/scripts/backup-postgres.sh
 
 db-restore: ## Restore a PostgreSQL backup through the tool container.
 	@test -n "$(FILE)" || { echo "usage: make db-restore FILE=backups/file.sql.gz"; exit 2; }
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }
-	$(COMPOSE_TOOLS) run --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-security /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-security /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
 
 backup-rehearsal: build-images ## Run the disposable backup/restore rehearsal.
 	deployment/scripts/backup-restore-rehearsal.sh
@@ -369,12 +370,12 @@ test-artifacts-clean-regression: ## Verify artifacts-clean target structure and 
 	bash tools/quality/test/check-cache-status-regression.sh
 
 artifacts-clean: ## Remove generated workspace artifacts without touching Docker caches or volumes.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 
 clean: build-cache-prune ## Remove generated artifacts and build cache without touching Docker/application volumes.
-	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
-	$(COMPOSE_TOOLS) run --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(ARTIFACTS_USER) go-tools-write sh -c 'rm -rf backend/bin backend/tmp backend/coverage.out'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(ARTIFACTS_USER) node-tools-write sh -c 'rm -rf frontend/dist frontend/coverage frontend/test-results frontend/playwright-report frontend/blob-report'
 
 reset-dev: ## Delete development volumes; requires CONFIRM=reset-dev.
 ifeq ($(CONFIRM),reset-dev)
