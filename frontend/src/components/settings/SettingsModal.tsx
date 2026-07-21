@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Member } from '../../types';
 import LogoutButton from '../navigation/LogoutButton';
+import Icon from '../ui/Icon';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -63,7 +64,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                 onClick={(e) => e.stopPropagation()}
             >
                 <button className="modal-close" onClick={onClose} aria-label="Close settings">
-                    ×
+                    <Icon name="close" />
                 </button>
 
                 <h2 className="modal-title">
@@ -129,10 +130,18 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                 </div>
 
                 <div className="settings-section">
-                    <h4 className="section-title members-toggle" onClick={() => setMembersExpanded(!membersExpanded)}>
-                        <span className="toggle-icon">{membersExpanded ? '▼' : '▶'}</span>
+                    <button
+                        type="button"
+                        className="section-title members-toggle"
+                        aria-expanded={membersExpanded}
+                        onClick={() => setMembersExpanded(!membersExpanded)}
+                    >
+                        <Icon name="users" />
                         Group Members
-                    </h4>
+                        <span className="toggle-icon" aria-hidden="true">
+                            ⌄
+                        </span>
+                    </button>
                     {membersExpanded && (
                         <div className="members-list">
                             {loadingMembers ? (

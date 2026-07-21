@@ -93,9 +93,9 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
     if (leaderboard.length === 0) {
         return (
             <div className="leaderboard-container">
-                <div className="empty-state">
-                    <div className="empty-icon">🏆</div>
-                    <p>No scores yet</p>
+                <div className="leaderboard-empty-state">
+                    <img src="/cup_icon.png" alt="" className="leaderboard-empty-icon" />
+                    <h2>No scores yet</h2>
                     <p className="empty-subtitle">Be the first to guess a location!</p>
                 </div>
             </div>
@@ -106,7 +106,10 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         <div className="leaderboard-container">
             <div className="leaderboard-header">
                 <img src="/friends_leaderboard_icon.png" alt="" className="leaderboard-icon" />
-                <h2>Leaderboard</h2>
+                <div>
+                    <p>Group rankings</p>
+                    <h2>Leaderboard</h2>
+                </div>
             </div>
 
             <div className="leaderboard-list">

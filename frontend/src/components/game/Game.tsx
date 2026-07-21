@@ -206,7 +206,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         return (
             <div className="game-overlay">
                 <div className="skipped-message fade-in">
-                    <div className="skip-icon">⏱</div>
+                    <img src="/timer_icon.png" alt="" className="skip-icon" />
                     <p>Photo hidden</p>
                     <p className="skip-subtitle">Guessing opens in {remaining} seconds.</p>
                 </div>

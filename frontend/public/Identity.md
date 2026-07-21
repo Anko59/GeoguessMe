@@ -79,6 +79,47 @@ challenge, and geography.
   miniature icons) in muted versions of our palette are used to add visual
   interest without competing with foreground content.
 
+### Product UI System
+
+The application uses a refined-playful interpretation of this identity. Most of
+the interface is composed from white and light-grey surfaces so that the brand
+colors remain distinctive instead of becoming visual noise.
+
+- **Typography:** Use the native system sans-serif stack. Headings are compact,
+  bold, and slightly tightened; body copy remains neutral and highly legible.
+- **Spacing:** Follow the shared 4px-based spacing tokens in `src/styles`. Avoid
+  one-off spacing values unless a media or map surface requires them.
+- **Shape:** Controls use 12px corners, content surfaces use 16px corners, and
+  hero or modal surfaces use 24px corners. Fully rounded shapes are reserved for
+  avatars, indicators, and compact badges.
+- **Elevation:** Prefer a subtle border over a shadow. Small shadows identify
+  interactive cards; larger shadows are reserved for dialogs and hero content.
+- **Gradients:** Orange-yellow denotes the primary invitation or action.
+  Blue-green denotes active, connected, selected, or progress states. Do not
+  introduce unrelated feature gradients.
+- **Illustration:** Use the branded PNG artwork for major moments and feature
+  cues, not for routine controls. Utility actions use the consistent inline SVG
+  icon set.
+- **Responsive behavior:** Mobile layouts use edge-to-edge workspaces and a
+  bottom group navigation bar. At 768px and above, content is constrained to a
+  1120px frame and group navigation moves to a left rail.
+- **Accessibility:** Interactive controls must be at least 44px, have a visible
+  keyboard focus state, meet WCAG AA contrast, and respect reduced-motion user
+  preferences.
+
+### Protected Data Visualizations
+
+The visual encoding of gameplay data is part of the product contract:
+
+- Leaderboard score bars retain the blue-green gradient, with the first-place
+  bar using the orange-yellow gradient.
+- Gold (`#FFD700`), silver (`#C0C0C0`), and bronze (`#CD7F32`) ranking accents
+  must not be reassigned.
+- Leaflet tiles and default location markers remain unchanged. Guess markers
+  remain orange (`#F59E0B`) with a white outline.
+- Surrounding cards, spacing, and typography may evolve, but these colors and
+  their meanings must remain stable.
+
 By adhering to these principles and utilizing these visual elements, we ensure
 that every interaction with gueoguess.me is a delightful, intuitive, and
 memorable experience for our users.

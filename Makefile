@@ -49,7 +49,7 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
