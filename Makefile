@@ -25,6 +25,7 @@ COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.producti
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
+TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform terraform sh -ec
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
@@ -363,11 +364,10 @@ terraform-init: ## Initialize the R2 backend; requires infra/terraform/backend.h
 	$(TERRAFORM) init -backend-config=backend.hcl
 
 terraform-validate: ## Initialize without remote state and validate Terraform.
-	$(TERRAFORM) init -backend=false
-	$(TERRAFORM) validate
+	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate'
 
-terraform-test: terraform-validate ## Exercise a mocked infrastructure plan and assertions.
-	$(TERRAFORM) test
+terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
+	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
 
 terraform-plan: terraform-init ## Create a reviewed infrastructure plan.
 	$(TERRAFORM) plan -out=geoguessme.tfplan
