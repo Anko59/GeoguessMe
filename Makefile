@@ -16,7 +16,7 @@
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
-	hosted-config hosted-contract-test terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt \
+	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt \
 	quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
 
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
@@ -50,7 +50,7 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools
-	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
+	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy cloudflared
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
@@ -79,6 +79,7 @@ tools-self-test: ## Run a short self-test inside each tool image.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint -version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff --version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps terraform terraform version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
 	tools/quality/test/check-tool-image-split.sh
@@ -344,6 +345,12 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
+
+cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.
+	@test -n "$(HOST)" || { echo 'HOST is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
+	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
 
 terraform-fmt: ## Format infrastructure code in the pinned Terraform container.
 	$(TERRAFORM) fmt -recursive

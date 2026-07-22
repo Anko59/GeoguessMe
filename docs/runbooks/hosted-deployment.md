@@ -35,10 +35,26 @@ uses R2's S3 lockfile. The server has Hetzner backups, delete/rebuild
 protection, unattended security updates, a 2 GB swap file, bounded Docker logs,
 and no public inbound firewall rule.
 
-Through the Access-protected operator SSH route, read the two generated public
-age recipients from `/etc/geoguessme/age/*-recipient.txt`. Fill each environment
-example with unique database/JWT/metrics/Restic credentials and its dedicated
-R2/Brevo values, then run:
+Terraform ignores post-creation `user_data` drift because Hetzner cannot update
+cloud-init in place and replacing a stateful host is unsafe. Apply bootstrap
+changes explicitly to the running host and verify them, or use the documented
+backup/restore replacement procedure; a newly created host always receives the
+current template.
+
+Use the Access-protected operator SSH route:
+
+```text
+ssh -i /path/to/operator-key \
+  -o ProxyCommand='make -s cloudflared-access-ssh HOST=%h' \
+  ops@deploy.geoguessme.com
+```
+
+Export the Terraform Access service-token outputs as `TUNNEL_SERVICE_TOKEN_ID`
+and `TUNNEL_SERVICE_TOKEN_SECRET` before using this non-interactive operator
+route. Do not place either value on the command line. Read the two generated
+public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
+environment example with unique database/JWT/metrics/Restic credentials and its
+dedicated R2/Brevo values, then run:
 
 ```text
 make secrets-encrypt ENV=dev RECIPIENT=age1...

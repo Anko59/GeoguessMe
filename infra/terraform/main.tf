@@ -149,15 +149,15 @@ resource "hcloud_server" "app" {
     dev_ci_key         = var.dev_ci_ssh_public_key
     production_key     = var.production_ci_ssh_public_key
     tunnel_token       = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
-    common_script      = base64encode(file("${path.module}/../../deployment/scripts/hosted/common.sh"))
-    deploy_script      = base64encode(file("${path.module}/../../deployment/scripts/hosted/deploy.sh"))
-    forced_script      = base64encode(file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"))
-    backup_script      = base64encode(file("${path.module}/../../deployment/scripts/hosted/backup.sh"))
-    restore_script     = base64encode(file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"))
-    health_script      = base64encode(file("${path.module}/../../deployment/scripts/hosted/health-check.sh"))
-    alert_script       = base64encode(file("${path.module}/../../deployment/scripts/hosted/alert.sh"))
-    production_compose = base64encode(file("${path.module}/../../deployment/compose.production.yaml"))
-    hosted_compose     = base64encode(file("${path.module}/../../deployment/compose.hosted.yaml"))
+    common_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/common.sh"))
+    deploy_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/deploy.sh"))
+    forced_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"))
+    backup_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/backup.sh"))
+    restore_script     = base64gzip(file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"))
+    health_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/health-check.sh"))
+    alert_script       = base64gzip(file("${path.module}/../../deployment/scripts/hosted/alert.sh"))
+    production_compose = base64gzip(file("${path.module}/../../deployment/compose.production.yaml"))
+    hosted_compose     = base64gzip(file("${path.module}/../../deployment/compose.hosted.yaml"))
   })
 
   public_net {
@@ -167,5 +167,6 @@ resource "hcloud_server" "app" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [user_data]
   }
 }

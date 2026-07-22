@@ -145,6 +145,15 @@ services:
     volumes:
       - *workspace
 
+  # cloudflared 2026.7.2 (multi-arch digest); used as an SSH ProxyCommand.
+  cloudflared:
+    <<: *host-tools
+    image: cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d
+    environment:
+      - TUNNEL_SERVICE_TOKEN_ID
+      - TUNNEL_SERVICE_TOKEN_SECRET
+    volumes: []
+
   # Terraform 1.15.8. State is remote in R2; provider credentials are passed
   # explicitly and never baked into this image or Compose configuration.
   terraform:

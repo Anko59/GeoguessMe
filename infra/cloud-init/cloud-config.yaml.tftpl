@@ -23,7 +23,7 @@ users:
     lock_passwd: true
 
 write_files:
-  - path: /etc/ssh/sshd_config.d/99-geoguessme.conf
+  - path: /etc/ssh/sshd_config.d/00-geoguessme.conf
     permissions: "0644"
     content: |
       PasswordAuthentication no
@@ -33,11 +33,13 @@ write_files:
   - path: /home/ops/.ssh/authorized_keys
     owner: ops:ops
     permissions: "0600"
+    defer: true
     content: |
       ${admin_key}
   - path: /home/deploy/.ssh/authorized_keys
     owner: deploy:deploy
     permissions: "0600"
+    defer: true
     content: |
       restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
       restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
@@ -69,39 +71,39 @@ write_files:
       WantedBy=multi-user.target
   - path: /opt/geoguessme/bin/common.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${common_script}
   - path: /opt/geoguessme/bin/deploy.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${deploy_script}
   - path: /opt/geoguessme/bin/forced-command.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${forced_script}
   - path: /opt/geoguessme/bin/backup.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${backup_script}
   - path: /opt/geoguessme/bin/restore-rehearsal.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${restore_script}
   - path: /opt/geoguessme/bin/health-check.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${health_script}
   - path: /opt/geoguessme/bin/alert.sh
     permissions: "0755"
-    encoding: b64
+    encoding: gzip+base64
     content: ${alert_script}
   - path: /opt/geoguessme/config/compose.production.yaml
     permissions: "0444"
-    encoding: b64
+    encoding: gzip+base64
     content: ${production_compose}
   - path: /opt/geoguessme/config/compose.hosted.yaml
     permissions: "0444"
-    encoding: b64
+    encoding: gzip+base64
     content: ${hosted_compose}
   - path: /etc/systemd/system/geoguessme-backup@.service
     permissions: "0644"
@@ -179,6 +181,8 @@ runcmd:
   - [chown, deploy:deploy, /etc/geoguessme]
   - [sh, -c, "set -eu; umask 077; age-keygen -o /etc/geoguessme/age/dev.txt; age-keygen -y /etc/geoguessme/age/dev.txt > /etc/geoguessme/age/dev-recipient.txt; age-keygen -o /etc/geoguessme/age/production.txt; age-keygen -y /etc/geoguessme/age/production.txt > /etc/geoguessme/age/production-recipient.txt"]
   - [chmod, "0600", /etc/geoguessme/age/dev.txt, /etc/geoguessme/age/production.txt]
+  - [chmod, "0644", /etc/geoguessme/age/dev-recipient.txt, /etc/geoguessme/age/production-recipient.txt]
+  - [chown, -R, deploy:deploy, /etc/geoguessme/age]
   - [sh, -c, "curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb"]
   - [sh, -c, "echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  /tmp/cloudflared.deb' | sha256sum -c -"]
   - [dpkg, -i, /tmp/cloudflared.deb]
@@ -186,7 +190,7 @@ runcmd:
   - [sh, -c, "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]
   - [ufw, default, deny, incoming]
   - [ufw, default, allow, outgoing]
-  - [ufw, allow, in, on, lo]
+  - [ufw, allow, in, "on", lo, to, any]
   - [ufw, --force, enable]
   - [systemctl, restart, ssh]
   - [systemctl, restart, docker]
