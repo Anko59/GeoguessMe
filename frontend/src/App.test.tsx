@@ -54,7 +54,7 @@ describe('Home Page', () => {
                 <Home />
             </BrowserRouter>,
         );
-        expect(screen.getByText('geoguess.me')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
     });
 
     it('redirects authenticated visitors to groups', () => {
@@ -74,7 +74,7 @@ describe('Home Page', () => {
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.queryByText('geoguess.me')).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /guess the place/i })).not.toBeInTheDocument();
     });
 
     it('keeps the landing page visible during logout navigation', () => {
@@ -94,7 +94,7 @@ describe('Home Page', () => {
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.getByText('geoguess.me')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
     });
 });
 
@@ -104,7 +104,7 @@ describe('App shell — public routes', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByText('geoguess.me')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
     });
 
     it('renders the login page at /login', async () => {
@@ -231,21 +231,21 @@ describe('App startup', () => {
         render(<App />);
         // AuthProvider fires a session-restore POST on mount; the mock
         // rejects it so the Home route renders as an unauthenticated visitor.
-        expect(await screen.findByText('geoguess.me')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
     });
 
     it('shows the home page logo and welcome assets', async () => {
         render(<App />);
-        expect(await screen.findByAltText('Welcome Banner')).toBeInTheDocument();
-        expect(screen.getByAltText('Welcome')).toBeInTheDocument();
-        expect(screen.getByText('Share Photos')).toBeInTheDocument();
-        expect(screen.getByText('Guess Locations')).toBeInTheDocument();
-        expect(screen.getByText('Compete')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
+        expect(document.querySelector('.welcome-asset-img')).toHaveAttribute('alt', '');
+        expect(screen.getByRole('heading', { name: 'Snap' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Guess' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Climb' })).toBeInTheDocument();
     });
 
     it('provides signup and login navigation links', async () => {
         render(<App />);
-        await screen.findByText('geoguess.me');
+        await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i });
         expect(screen.getByText("Get Started - It's Free!").closest('a')).toHaveAttribute('href', '/signup');
         expect(screen.getByText('Already Playing? Login').closest('a')).toHaveAttribute('href', '/login');
     });

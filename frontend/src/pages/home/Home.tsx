@@ -12,46 +12,58 @@ export default function Home() {
     return (
         <div className="home-container">
             <div className="home-hero">
-                <div className="home-banner-wrapper">
-                    <img src="/welcome_banner.png" alt="Welcome Banner" className="home-banner" />
-                </div>
-
                 <div className="home-content">
-                    <div className="home-welcome-asset">
-                        <img src="/welcome_asset.png" alt="Welcome" className="welcome-asset-img" />
+                    <div className="home-copy">
+                        <div className="home-brand">
+                            <img src="/logo.png" alt="" className="home-logo" />
+                            <span>GeoGuessMe</span>
+                        </div>
+                        <p className="home-eyebrow">The world is your game board</p>
+                        <h1 className="home-title gradient-text">
+                            <span className="visually-hidden">geoguess.me — </span>
+                            Guess the place. Share the story.
+                        </h1>
+                        <p className="home-tagline">
+                            Turn everyday photos into quick geography challenges with friends.
+                        </p>
+
+                        <div className="home-actions">
+                            <Link to="/signup" className="btn btn-primary btn-large">
+                                Get Started - It's Free!
+                            </Link>
+                            <Link to="/login" className="btn btn-secondary btn-large">
+                                Already Playing? Login
+                            </Link>
+                        </div>
                     </div>
 
-                    <h1 className="home-title gradient-text">geoguess.me</h1>
-                    <p className="home-tagline">Where Snapchat Meets Geoguessr</p>
+                    <div className="home-welcome-asset" aria-hidden="true">
+                        <img src="/welcome_asset.png" alt="" className="welcome-asset-img" />
+                    </div>
 
                     <div className="home-features">
                         <div className="feature-card">
-                            <img src="/camera_icon.png" alt="Camera" className="feature-icon" />
-                            <h3>Share Photos</h3>
-                            <p>Capture moments with your friends</p>
+                            <img src="/camera_icon.png" alt="" className="feature-icon" />
+                            <div>
+                                <h2>Snap</h2>
+                                <p>Share a place from your day.</p>
+                            </div>
                         </div>
                         <div className="feature-card">
-                            <img src="/globe_icon.png" alt="Globe" className="feature-icon" />
-                            <h3>Guess Locations</h3>
-                            <p>Challenge your geography skills</p>
+                            <img src="/globe_icon.png" alt="" className="feature-icon" />
+                            <div>
+                                <h2>Guess</h2>
+                                <p>Find the location on the map.</p>
+                            </div>
                         </div>
                         <div className="feature-card">
-                            <img src="/cup_icon.png" alt="Trophy" className="feature-icon" />
-                            <h3>Compete</h3>
-                            <p>Climb the leaderboard and win</p>
+                            <img src="/cup_icon.png" alt="" className="feature-icon" />
+                            <div>
+                                <h2>Climb</h2>
+                                <p>Earn points with every guess.</p>
+                            </div>
                         </div>
                     </div>
-
-                    <div className="home-actions">
-                        <Link to="/signup" className="btn btn-primary btn-large">
-                            Get Started - It's Free!
-                        </Link>
-                        <Link to="/login" className="btn btn-secondary btn-large">
-                            Already Playing? Login
-                        </Link>
-                    </div>
-
-                    <p className="home-footer-text">Join thousands of players worldwide</p>
                 </div>
             </div>
         </div>

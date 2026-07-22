@@ -47,6 +47,14 @@ docker-compose.override.yml
 docker-compose.override.yaml
 deployment/compose.*.override.yaml
 
+# --- Terraform local state and plans (state is stored remotely in R2) ---
+infra/terraform/.terraform/
+infra/terraform/backend.hcl
+infra/terraform/terraform.tfvars
+infra/terraform/*.tfplan
+*.tfstate
+*.tfstate.*
+
 # --- Editor / OS ---
 .idea/
 .vscode/

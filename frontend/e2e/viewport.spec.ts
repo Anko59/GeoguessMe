@@ -3,6 +3,35 @@ import type { Browser, BrowserContextOptions } from '@playwright/test';
 import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
 
 test.describe('Viewport preservation', () => {
+    test('landing page remains usable at narrow-phone and tablet widths', async ({ page }) => {
+        for (const viewport of [
+            { width: 320, height: 568 },
+            { width: 768, height: 1024 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/');
+            await expect(page.locator('.home-container')).toBeVisible();
+
+            const metrics = await page.evaluate(() => ({
+                clientWidth: document.documentElement.clientWidth,
+                clientHeight: document.documentElement.clientHeight,
+                scrollWidth: document.documentElement.scrollWidth,
+                scrollHeight: document.documentElement.scrollHeight,
+            }));
+            expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
+            expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight);
+
+            for (const link of [
+                page.getByRole('link', { name: /get started/i }),
+                page.getByRole('link', { name: /login/i }),
+            ]) {
+                const box = await link.boundingBox();
+                expect(box).not.toBeNull();
+                expect(box!.height).toBeGreaterThanOrEqual(44);
+            }
+        }
+    });
+
     test('public home page fits one viewport without asset overflow', async ({ page }) => {
         await page.goto('/');
         await expect(page.locator('.home-container')).toBeVisible();
@@ -173,6 +202,18 @@ test.describe('Group responsive overflow', () => {
             expect(viewport).not.toBeNull();
             expect(headerBox).not.toBeNull();
             expect(headerBox!.width).toBeLessThanOrEqual(viewport!.width);
+
+            const navigationBox = await page.locator('.tab-bar').boundingBox();
+            expect(navigationBox).not.toBeNull();
+            if (viewport!.width >= 768) {
+                expect(navigationBox!.x).toBe(0);
+                expect(navigationBox!.width).toBeLessThanOrEqual(100);
+                expect(headerBox!.x).toBeGreaterThanOrEqual(navigationBox!.width);
+            } else {
+                expect(navigationBox!.x).toBe(0);
+                expect(navigationBox!.width).toBeLessThanOrEqual(viewport!.width);
+                expect(navigationBox!.y + navigationBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+            }
         } finally {
             await context.close();
         }

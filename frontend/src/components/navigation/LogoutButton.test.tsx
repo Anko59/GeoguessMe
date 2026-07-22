@@ -32,7 +32,7 @@ describe('LogoutButton', () => {
             </AuthContext.Provider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Logout Logout' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
 
         await waitFor(() => expect(screen.getByTestId('home')).toBeInTheDocument());
         expect(logout).toHaveBeenCalledOnce();

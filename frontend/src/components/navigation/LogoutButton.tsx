@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import Icon from '../ui/Icon';
 import './LogoutButton.css';
 
 export default function LogoutButton() {
@@ -21,7 +22,7 @@ export default function LogoutButton() {
 
     return (
         <button className="logout-btn" onClick={handleLogout}>
-            <img src="/logout_icon.png" alt="Logout" className="logout-icon" />
+            <Icon name="logout" className="logout-icon" />
             Logout
         </button>
     );

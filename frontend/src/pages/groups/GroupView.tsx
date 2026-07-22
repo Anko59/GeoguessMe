@@ -10,6 +10,7 @@ import Game from '../../components/game/Game';
 import SettingsModal from '../../components/settings/SettingsModal';
 import TabBar, { type TabType } from '../../components/navigation/TabBar';
 import { useGroupMessages } from '../../hooks/useGroupMessages';
+import Icon from '../../components/ui/Icon';
 import './GroupView.css';
 
 export default function GroupView() {
@@ -38,10 +39,14 @@ export default function GroupView() {
             <div className="group-header">
                 <div className="header-content">
                     <Link to="/groups" className="back-btn">
-                        <img src="/back_arrow.png" alt="Back" className="back-arrow-icon" />
+                        <Icon name="arrow-left" className="back-arrow-icon" />
+                        <span className="visually-hidden">Back to groups</span>
                     </Link>
                     <img src="/logo.png" alt="GeoGuessMe" className="header-logo" />
-                    <h1 className="group-name gradient-text">{group?.name ?? 'Group'}</h1>
+                    <div className="group-title-block">
+                        <span>Group</span>
+                        <h1 className="group-name">{group?.name ?? 'Group'}</h1>
+                    </div>
                     <button
                         className="settings-btn"
                         onClick={() => setSettingsOpen(true)}
