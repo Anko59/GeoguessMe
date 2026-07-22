@@ -26,7 +26,7 @@ case "$environment" in
         identity='^https://github.com/Anko59/geoguessme/.github/workflows/deploy\.yml@refs/heads/dev$'
         ;;
     production)
-        identity='^https://github.com/Anko59/geoguessme/.github/workflows/release\.yml@refs/tags/v[^/]+$'
+        identity='^https://github.com/Anko59/geoguessme/.github/workflows/release\.yml@refs/heads/main$'
         ;;
 esac
 

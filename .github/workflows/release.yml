@@ -2,7 +2,11 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+concurrency:
+  group: geoguessme-production-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -16,10 +20,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - name: Require the tag commit to be on main
-        run: |
-          git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - run: make bootstrap
       - run: make verify
@@ -36,10 +36,40 @@ jobs:
     outputs:
       backend: ${{ steps.refs.outputs.backend }}
       web: ${{ steps.refs.outputs.web }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Resolve the next release version
+        id: version
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [[ -z "$latest" ]]; then
+            tag=v0.2.0
+          elif [[ "$latest" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major=${BASH_REMATCH[1]}
+            minor=${BASH_REMATCH[2]}
+            patch=${BASH_REMATCH[3]}
+            if (( major == 0 && minor < 2 )); then
+              tag=v0.2.0
+            else
+              tag="v${major}.${minor}.$((patch + 1))"
+            fi
+          else
+            echo "Latest release tag is not semantic: $latest" >&2
+            exit 1
+          fi
+          git rev-parse --verify --quiet "refs/tags/$tag" && {
+            echo "Release tag already exists: $tag" >&2
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -50,8 +80,8 @@ jobs:
         id: names
         run: |
           owner=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          echo "backend=ghcr.io/$owner/geoguessme-backend:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "web=ghcr.io/$owner/geoguessme-web:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "backend=ghcr.io/$owner/geoguessme-backend:${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$owner/geoguessme-web:${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
       - name: Build and push backend with SBOM and provenance
         id: backend
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -91,6 +121,8 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           body: |
             Immutable images:

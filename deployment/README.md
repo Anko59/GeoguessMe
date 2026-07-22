@@ -45,13 +45,16 @@ The main operator targets are:
 make terraform-validate
 make terraform-plan
 CONFIRM=apply make terraform-apply
-make secrets-encrypt ENV=dev RECIPIENT=age1...
+make secrets-generate ENV=dev RECIPIENT=age1...
 make hosted-config
 ```
 
 Cloud-init creates independent age identities for dev and production. SOPS
 encrypted dotenv files are tracked as `deployment/secrets/*.env.enc`; decrypted
 files exist only as mode-0600 files under `/etc/geoguessme` on the host.
+`secrets-generate` requires the documented SMTP, GHCR, media-R2, backup-R2, and
+Cloudflare account variables and streams plaintext directly between the pinned
+tool and SOPS containers, so no plaintext dotenv file is created locally.
 
 The host deployment command accepts only an environment fixed in
 `authorized_keys`, two digest-qualified image references, and a 40-character

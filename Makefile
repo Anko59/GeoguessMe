@@ -16,7 +16,7 @@
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
-	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt \
+	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
 	quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
 
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
@@ -382,6 +382,25 @@ secrets-encrypt: ## Encrypt ENV=dev|production from its example using RECIPIENT.
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	cp deployment/env/$(ENV).env.example deployment/secrets/$(ENV).env.enc
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
+
+secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
+	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
+	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
+	@mkdir -p deployment/secrets
+	@temporary=$$(mktemp deployment/secrets/.$(ENV).env.enc.XXXXXX); \
+	trap 'rm -f "$$temporary"' EXIT INT TERM; \
+	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
+		-e TARGET_ENV=$(ENV) -e BREVO_SMTP_USERNAME -e BREVO_SMTP_PASSWORD \
+		-e GHCR_USERNAME -e GHCR_TOKEN -e MEDIA_ACCESS_KEY_ID -e MEDIA_SECRET_ACCESS_KEY \
+		-e BACKUP_ACCESS_KEY_ID -e BACKUP_SECRET_ACCESS_KEY -e CLOUDFLARE_ACCOUNT_ID \
+		go-tools sh /workspace/deployment/scripts/generate-hosted-secret.sh | \
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \
+		--input-type dotenv --output-type dotenv --age "$(RECIPIENT)" /dev/stdin' \
+		>"$$temporary"; \
+	test -s "$$temporary"; \
+	chmod 0600 "$$temporary"; \
+	mv "$$temporary" deployment/secrets/$(ENV).env.enc; \
+	trap - EXIT INT TERM
 
 smoke: build-images ## Run the smoke test against a selected disposable/staging URL.
 	if [ -n "$${BASE_URL:-}" ]; then deployment/scripts/smoke-test.sh "$$BASE_URL"; else deployment/scripts/smoke-rehearsal.sh; fi

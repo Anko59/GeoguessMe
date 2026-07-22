@@ -57,8 +57,8 @@ environment example with unique database/JWT/metrics/Restic credentials and its
 dedicated R2/Brevo values, then run:
 
 ```text
-make secrets-encrypt ENV=dev RECIPIENT=age1...
-make secrets-encrypt ENV=production RECIPIENT=age1...
+make secrets-generate ENV=dev RECIPIENT=age1...
+make secrets-generate ENV=production RECIPIENT=age1...
 ```
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
@@ -71,17 +71,23 @@ secrets named `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`,
 read-only Access values in the `monitoring` environment; it contains no SSH key
 and is restricted to scheduled health checks from `main`.
 
+Dev and production use independent Restic repositories at the `/dev` and
+`/production` prefixes of the shared private backup bucket. Keep their
+`RESTIC_PASSWORD` values distinct; a restore must use the matching environment
+secret file.
+
 ## GitHub and release flow
 
 Features merge by squash PR into `dev`; every `dev` push runs the complete gate,
 publishes signed digest-only images, and deploys development. Release PRs merge
-`dev` into `main`. A `v*` tag whose commit is on `main` runs the complete gate,
-publishes signed images, creates the GitHub release, and deploys production.
+`dev` into `main`; that protected merge automatically runs the complete gate,
+selects the next semantic patch version (with `v0.2.0` as the launch floor),
+publishes signed images, creates the GitHub release/tag, and deploys production.
 Pull-request jobs never receive deployment environment secrets.
 
 Both branches require the Dockerized verification check, PRs, linear history,
 resolved conversations, admin enforcement, and prohibit force-push/deletion. The
-`development` environment accepts only `dev`; `production` accepts only `v*`.
+`development` environment accepts only `dev`; `production` accepts only `main`.
 The `monitoring` environment accepts only `main`. Keep approvals at zero while
 the repository has one maintainer.
 
@@ -90,8 +96,8 @@ the repository has one maintainer.
 Verify Access OTP for `jeancollette138@gmail.com`, signup/verification/reset
 email, uploads and reads, WebSockets, client-IP rate limiting, TLS/security
 headers, backup creation, and isolated restore on dev. Soak for at least 24
-hours. Resolve or supersede every failing Dependabot PR before tagging the
-release.
+hours. Resolve or supersede every failing Dependabot PR before merging the
+release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated
 restore rehearsal. Verify public health, account email, R2, WebSockets, backup

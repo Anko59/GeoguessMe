@@ -11,6 +11,7 @@ HEALTH="$ROOT/deployment/scripts/hosted/health-check.sh"
 COMPOSE="$ROOT/deployment/compose.production.yaml"
 HOSTED="$ROOT/deployment/compose.hosted.yaml"
 CADDY="$ROOT/deployment/caddy/Caddyfile"
+SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
 
 fail() {
     printf 'contract test failed: %s\n' "$1" >&2
@@ -38,10 +39,13 @@ assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.production.yaml"'
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.hosted.yaml"'
 assert_contains "$DEPLOY" 'workflows/deploy\.yml@refs/heads/dev'
-assert_contains "$DEPLOY" 'workflows/release\.yml@refs/tags/v'
+assert_contains "$DEPLOY" 'workflows/release\.yml@refs/heads/main'
 assert_contains "$DEPLOY" '--annotations "revision=$revision"'
 assert_contains "$ROOT/.github/workflows/deploy.yml" '-a "revision=$GITHUB_SHA"'
 assert_contains "$ROOT/.github/workflows/release.yml" '-a "revision=$GITHUB_SHA"'
+assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
+assert_contains "$ROOT/.github/workflows/release.yml" 'tag=v0.2.0'
+assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.version.outputs.tag }}'
 
 # Signature verification and backup happen before pull and migration.
 verify_line=$(line_of "$DEPLOY" 'COSIGN_IMAGE.*verify')
@@ -67,10 +71,32 @@ fi
 # Backup retention and isolated restore requirements.
 assert_contains "$BACKUP" '--keep-hourly 24 --keep-daily 14 --keep-weekly 8 --keep-monthly 6'
 assert_contains "$BACKUP" 'gzip -t'
+assert_contains "$ROOT/deployment/env/dev.env.example" 'geoguessme-database-backups/dev'
+assert_contains "$ROOT/deployment/env/production.env.example" 'geoguessme-database-backups/production'
+assert_contains "$SECRET_GENERATOR" 'RESTIC_REPOSITORY=s3:https://%s.r2.cloudflarestorage.com/geoguessme-database-backups/%s'
+assert_contains "$ROOT/Makefile" 'generate-hosted-secret.sh |'
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
 assert_contains "$HEALTH" 'for service in postgres backend web'
 assert_contains "$HEALTH" '.State.Health.Status'
 assert_contains "$COMMON" 'BACKEND_IMAGE="$backend"'
+
+# Secret generation fills every external credential, uses an isolated backup
+# prefix, and does not leave template placeholders in the deployment payload.
+generated=$(TARGET_ENV=dev \
+    BREVO_SMTP_USERNAME=smtp-user BREVO_SMTP_PASSWORD=smtp-password \
+    GHCR_USERNAME=registry-user GHCR_TOKEN=registry-token \
+    MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
+    BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
+    CLOUDFLARE_ACCOUNT_ID=account-id "$SECRET_GENERATOR")
+case "$generated" in
+    *replace-* | *ACCOUNT_ID*) fail 'generated secret payload contains a template placeholder' ;;
+esac
+printf '%s\n' "$generated" | grep -Fq 'SMTP_USERNAME=smtp-user' ||
+    fail 'generated secret payload omitted the SMTP username'
+printf '%s\n' "$generated" | grep -Fq 'S3_ACCESS_KEY=media-key' ||
+    fail 'generated secret payload omitted the media credential'
+printf '%s\n' "$generated" | grep -Fq 'geoguessme-database-backups/dev' ||
+    fail 'generated secret payload omitted the isolated backup prefix'
 
 # Backup age is calculated from epoch markers without wall-clock sleeps.
 marker=$(mktemp)

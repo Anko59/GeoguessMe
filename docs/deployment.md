@@ -41,7 +41,7 @@ and rollback evidence.
 
 Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
 be validated on dev, followed by a 24-hour soak and an isolated production
-backup restore, before the first production tag.
+backup restore, before the first production promotion to `main`.
 
 ## See also
 
