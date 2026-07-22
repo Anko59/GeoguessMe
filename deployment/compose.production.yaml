@@ -12,14 +12,14 @@
 #   SMTP_*          external authenticated SMTP (starttls or tls)
 # Provide secrets via deployment/env/production.env (git-ignored).
 
-name: geoguessme-prod
+name: ${COMPOSE_PROJECT_NAME:-geoguessme-prod}
 
 services:
   migration:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set to an immutable tag}
     command: ["migrate", "up"]
     env_file:
-      - path: env/production.env
+      - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
         required: false
     restart: "no"
     depends_on:
@@ -31,7 +31,7 @@ services:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set to an immutable tag}
     command: ["serve"]
     env_file:
-      - path: env/production.env
+      - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
         required: false
     read_only: true
     tmpfs: ["/tmp"]
@@ -43,10 +43,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_BACKEND_CPUS:-1.0}
+          memory: ${GEOGUESSME_BACKEND_MEMORY:-768M}
 
   web:
     image: ${WEB_IMAGE:?WEB_IMAGE must be set to an immutable tag}
-    ports: ["80:80"]
+    ports: ["127.0.0.1:${GEOGUESSME_WEB_PORT:-8081}:80"]
     read_only: true
     tmpfs:
       - "/data:uid=1000,gid=1000,mode=0755"
@@ -59,13 +64,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_WEB_CPUS:-0.5}
+          memory: ${GEOGUESSME_WEB_MEMORY:-256M}
 
   # --- Optional local services for staging/restore exercises ---------------
   db:
     image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f # PostgreSQL 15
     profiles: [local-db]
     env_file:
-      - path: env/production.env
+      - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
         required: false
     volumes: ["geoguessme_prod_db:/var/lib/postgresql/data"]
     healthcheck:

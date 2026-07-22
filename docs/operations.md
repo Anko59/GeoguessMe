@@ -59,6 +59,18 @@ email links in text form.
 
 ## Backups
 
+On the hosted server, systemd invokes the environment-specific backup command
+hourly. PostgreSQL dumps are compressed and encrypted into private R2 by Restic,
+with 24 hourly, 14 daily, 8 weekly, and 6 monthly restore points. A weekly timer
+restores the latest production snapshot into a disposable database and verifies
+it without touching the active volume. The 15-minute host check fails when the
+latest backup is older than two hours, disk usage reaches 85%, the tunnel is
+down, or containers/readiness are unhealthy.
+
+Production database restore is always an explicitly approved manual operation;
+deployment rollback changes image digests only. See the
+[hosted deployment runbook](runbooks/hosted-deployment.md).
+
 ### Database
 
 Use the Dockerized `make db-backup` target:

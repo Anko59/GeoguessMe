@@ -1,0 +1,199 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - age
+  - ca-certificates
+  - curl
+  - docker.io
+  - docker-compose-v2
+  - gzip
+  - unattended-upgrades
+  - ufw
+
+users:
+  - name: ops
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    lock_passwd: true
+  - name: deploy
+    groups: [docker]
+    shell: /bin/sh
+    lock_passwd: true
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-geoguessme.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers ops deploy
+  - path: /home/ops/.ssh/authorized_keys
+    owner: ops:ops
+    permissions: "0600"
+    content: |
+      ${admin_key}
+  - path: /home/deploy/.ssh/authorized_keys
+    owner: deploy:deploy
+    permissions: "0600"
+    content: |
+      restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
+      restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
+  - path: /etc/cloudflared/token
+    permissions: "0600"
+    content: |
+      ${tunnel_token}
+  - path: /etc/systemd/system/cloudflared.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Cloudflare Tunnel
+      After=network-online.target
+      Wants=network-online.target
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/token
+      Restart=always
+      RestartSec=5s
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      [Install]
+      WantedBy=multi-user.target
+  - path: /opt/geoguessme/bin/common.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${common_script}
+  - path: /opt/geoguessme/bin/deploy.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${deploy_script}
+  - path: /opt/geoguessme/bin/forced-command.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${forced_script}
+  - path: /opt/geoguessme/bin/backup.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${backup_script}
+  - path: /opt/geoguessme/bin/restore-rehearsal.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${restore_script}
+  - path: /opt/geoguessme/bin/health-check.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${health_script}
+  - path: /opt/geoguessme/bin/alert.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${alert_script}
+  - path: /opt/geoguessme/config/compose.production.yaml
+    permissions: "0444"
+    encoding: b64
+    content: ${production_compose}
+  - path: /opt/geoguessme/config/compose.hosted.yaml
+    permissions: "0444"
+    encoding: b64
+    content: ${hosted_compose}
+  - path: /etc/systemd/system/geoguessme-backup@.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=GeoGuessMe %i encrypted database backup
+      After=docker.service
+      OnFailure=geoguessme-alert@%i.service
+      [Service]
+      Type=oneshot
+      User=deploy
+      ExecStart=/opt/geoguessme/bin/backup.sh %i scheduled
+  - path: /etc/systemd/system/geoguessme-backup@.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Hourly GeoGuessMe %i backup
+      [Timer]
+      OnCalendar=hourly
+      RandomizedDelaySec=5m
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  - path: /etc/systemd/system/geoguessme-health@.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=GeoGuessMe %i host health check
+      OnFailure=geoguessme-alert@%i.service
+      [Service]
+      Type=oneshot
+      User=deploy
+      ExecStart=/opt/geoguessme/bin/health-check.sh %i
+  - path: /etc/systemd/system/geoguessme-health@.timer
+    permissions: "0644"
+    content: |
+      [Timer]
+      OnCalendar=*:0/15
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=GeoGuessMe %i isolated restore rehearsal
+      After=docker.service
+      OnFailure=geoguessme-alert@%i.service
+      [Service]
+      Type=oneshot
+      User=deploy
+      ExecStart=/opt/geoguessme/bin/restore-rehearsal.sh %i
+  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.timer
+    permissions: "0644"
+    content: |
+      [Timer]
+      OnCalendar=Sun *-*-* 03:30:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  - path: /etc/systemd/system/geoguessme-alert@.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Email GeoGuessMe %i host failure alert
+      [Service]
+      Type=oneshot
+      User=deploy
+      ExecStart=/opt/geoguessme/bin/alert.sh %i
+
+runcmd:
+  - [mkdir, -p, /etc/geoguessme/age, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases, /run/lock/geoguessme]
+  - [chown, -R, deploy:deploy, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme, /run/lock/geoguessme]
+  - [chmod, "0555", /opt/geoguessme/bin, /opt/geoguessme/config]
+  - [chown, deploy:deploy, /etc/geoguessme]
+  - [sh, -c, "set -eu; umask 077; age-keygen -o /etc/geoguessme/age/dev.txt; age-keygen -y /etc/geoguessme/age/dev.txt > /etc/geoguessme/age/dev-recipient.txt; age-keygen -o /etc/geoguessme/age/production.txt; age-keygen -y /etc/geoguessme/age/production.txt > /etc/geoguessme/age/production-recipient.txt"]
+  - [chmod, "0600", /etc/geoguessme/age/dev.txt, /etc/geoguessme/age/production.txt]
+  - [sh, -c, "curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb"]
+  - [sh, -c, "echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  /tmp/cloudflared.deb' | sha256sum -c -"]
+  - [dpkg, -i, /tmp/cloudflared.deb]
+  - [rm, -f, /tmp/cloudflared.deb]
+  - [sh, -c, "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, in, on, lo]
+  - [ufw, --force, enable]
+  - [systemctl, restart, ssh]
+  - [systemctl, restart, docker]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, cloudflared.service]
+  - [systemctl, enable, --now, geoguessme-backup@dev.timer, geoguessme-backup@production.timer]
+  - [systemctl, enable, --now, geoguessme-health@dev.timer, geoguessme-health@production.timer]
+  - [systemctl, enable, --now, geoguessme-restore-rehearsal@production.timer]
+
+final_message: "GeoGuessMe host bootstrap complete"

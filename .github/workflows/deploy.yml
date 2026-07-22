@@ -1,36 +1,30 @@
-name: Release
+name: Deploy development
 
 on:
   push:
-    tags: ["v*"]
+    branches: [dev]
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    name: Release verification gate
+    name: Development verification gate
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          fetch-depth: 0
-      - name: Require the tag commit to be on main
-        run: |
-          git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - run: make bootstrap
       - run: make verify
 
-  release:
-    name: Publish signed release
+  publish:
+    name: Publish signed development images
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
       id-token: write
       packages: write
     outputs:
@@ -50,8 +44,8 @@ jobs:
         id: names
         run: |
           owner=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          echo "backend=ghcr.io/$owner/geoguessme-backend:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "web=ghcr.io/$owner/geoguessme-web:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "backend=ghcr.io/$owner/geoguessme-backend:dev-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$owner/geoguessme-web:dev-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
       - name: Build and push backend with SBOM and provenance
         id: backend
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -62,8 +56,8 @@ jobs:
           tags: ${{ steps.names.outputs.backend }}
           sbom: true
           provenance: mode=max
-          cache-from: type=gha,scope=release-backend
-          cache-to: type=gha,mode=max,scope=release-backend
+          cache-from: type=gha,scope=dev-backend
+          cache-to: type=gha,mode=max,scope=dev-backend
       - name: Build and push web with SBOM and provenance
         id: web
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -74,8 +68,8 @@ jobs:
           tags: ${{ steps.names.outputs.web }}
           sbom: true
           provenance: mode=max
-          cache-from: type=gha,scope=release-web
-          cache-to: type=gha,mode=max,scope=release-web
+          cache-from: type=gha,scope=dev-web
+          cache-to: type=gha,mode=max,scope=dev-web
       - name: Sign immutable images
         env:
           BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
@@ -88,24 +82,13 @@ jobs:
         run: |
           echo "backend=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}" >> "$GITHUB_OUTPUT"
           echo "web=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}" >> "$GITHUB_OUTPUT"
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          generate_release_notes: true
-          body: |
-            Immutable images:
-
-            ```text
-            BACKEND_IMAGE=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
-            WEB_IMAGE=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
-            ```
 
   deploy:
-    name: Deploy production digest
-    needs: release
+    name: Deploy development digest
+    needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
+    environment: development
     concurrency:
       group: geoguessme-host-deployment
       cancel-in-progress: false
@@ -121,8 +104,8 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          BACKEND: ${{ needs.release.outputs.backend }}
-          WEB: ${{ needs.release.outputs.web }}
+          BACKEND: ${{ needs.publish.outputs.backend }}
+          WEB: ${{ needs.publish.outputs.web }}
         run: |
           install -d -m 0700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy

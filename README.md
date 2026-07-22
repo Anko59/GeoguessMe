@@ -49,30 +49,28 @@ Vite development server.
 | make reconnect-rehearsal              | WebSocket disconnect/reconnect and exact-once evidence                           |
 | make load-test                        | Disposable load test (k6, 5 VUs, 30s by default)                                 |
 | make smoke / make smoke-rehearsal     | Smoke test against a staging or disposable stack                                 |
+| make hosted-config                    | Validate isolated dev/production hosted topology                                 |
+| make terraform-validate / plan        | Validate or plan Hetzner/Cloudflare infrastructure                               |
+| make hosted-contract-test             | Check deployment, backup, locking, proxy, and rollback contracts                 |
 
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation
 scenarios. Hooks use make pre-commit and make pre-push; they fail when Docker is
 unavailable and cannot be bypassed.
 
-## Known constraints (unproven in production)
+## Production platform
 
-The rehearsal and container-verify evidence proves correctness against
-local/disposable infrastructure only. The following production inputs have no
-test evidence in this repository:
+The repository includes a one-host Hetzner deployment for up to roughly 100
+initial users. Dev and production are separate Compose projects with separate
+PostgreSQL volumes, encrypted secrets, R2 buckets, ports, limits, and release
+metadata. Cloudflare Tunnel provides outbound-only ingress; dev uses Access
+email OTP, while production is public.
 
-- **External PostgreSQL, S3, and SMTP** — every live-stack test uses
-  Compose-local services (local-db, local-minio, local-smtp profiles).
-- **TLS termination at edge** — no ingress-controller, load-balancer, or
-  certificate-provisioning configuration is shipped.
-- **Zero-downtime rolling deployment** — Compose restart stops all containers
-  before starting new ones.
-- **Autoscaling** — no horizontal pod autoscaler or replica-count automation.
-- **Secrets management** — production secrets are read from a single git-ignored
-  `.env` file; no vault, SOPS, or external secrets store.
-
-Deployers must validate these in their own infrastructure before claiming
-production readiness.
+Local verification still cannot prove live R2, Cloudflare Access, or Brevo
+delivery. Follow the hosted deployment runbook and complete dev acceptance plus
+a real backup restore before declaring production ready. The shared host is a
+single failure domain and deployments may interrupt service for up to two
+minutes; no autoscaling or zero-downtime claim is made.
 
 ## Architecture
 
@@ -88,11 +86,11 @@ Mailpit host port is passed independently with MAILPIT_BASE_URL.
 
 ## Deployment
 
-Production uses immutable backend and web image references, a one-shot migration
-service, non-root read-only backend execution, health checks, and external
-PostgreSQL, S3, and authenticated SMTP by default. Use the deployment guide and
-operations guide. Compose restart is a restart, not zero-downtime rolling
-deployment.
+Production uses immutable signed backend and web image digests, a one-shot
+migration service, non-root read-only backend execution, local persistent
+PostgreSQL, private Cloudflare R2 media, and Brevo SMTP. Start with the
+[hosted runbook](docs/runbooks/hosted-deployment.md), deployment guide, and
+operations guide.
 
 ## Documentation
 

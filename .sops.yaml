@@ -1,0 +1,6 @@
+# Recipients are supplied explicitly by `make secrets-encrypt` because the
+# remote host generates independent dev and production age identities at
+# bootstrap. This rule keeps the encrypted dotenv payload fully opaque.
+creation_rules:
+  - path_regex: deployment/secrets/(dev|production)\.env\.enc$
+    unencrypted_regex: ^$

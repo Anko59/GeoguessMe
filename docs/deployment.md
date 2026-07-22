@@ -5,6 +5,11 @@ The supported deployment workflow is documented in
 migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
 
+The concrete hosted implementation and launch checklist is in the
+[hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
+Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
+signed digest deployments, Brevo, monitoring, and recovery.
+
 All operational actions use Dockerized Make targets:
 
 ```text
@@ -32,12 +37,11 @@ Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
 and rollback evidence.
 
-## Known unproven production inputs
+## Live acceptance
 
-All rehearsals and container-verify targets test against Compose-local
-infrastructure only. External PostgreSQL, S3, and SMTP are never exercised by
-any repository target. Deployers must validate those integrations independently
-before claiming production readiness.
+Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
+be validated on dev, followed by a 24-hour soak and an isolated production
+backup restore, before the first production tag.
 
 ## See also
 
