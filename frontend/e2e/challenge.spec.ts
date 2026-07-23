@@ -252,6 +252,38 @@ test.describe('Challenge flow', () => {
         }
     });
 
+    test('loads the self-hosted 3D lens catalog on demand', async ({ browser, contextOptions }) => {
+        const ctx = await newAuthContext(browser, cameraOptions(contextOptions));
+        await installDeterministicCamera(ctx);
+        const page = await ctx.newPage();
+        const pageErrors: Error[] = [];
+        page.on('pageerror', (pageError) => pageErrors.push(pageError));
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await page.getByRole('button', { name: 'Camera' }).click();
+
+            const options = page.locator('.camera-filter-option');
+            await expect(options).toHaveCount(16);
+            const modelResponse = page.waitForResponse((response) =>
+                response.url().endsWith('/vendor/mediapipe/face_landmarker.task'),
+            );
+            await page.getByRole('button', { name: 'Cyber visor' }).click();
+            expect((await modelResponse).status()).toBe(200);
+            await expect(page.locator('.camera-filter-picker')).not.toContainText('Loading 3D face tracking', {
+                timeout: 30000,
+            });
+            await expect(page.getByRole('button', { name: 'Cyber visor' })).toHaveAttribute('aria-pressed', 'true');
+            expect(await page.locator('.camera-filter-overlay').evaluate((canvas) => canvas.width > 1)).toBe(true);
+            expect(pageErrors).toEqual([]);
+        } finally {
+            await ctx.close();
+        }
+    });
+
     test('retake discards the captured photo and reactivates camera', async ({ browser, contextOptions }) => {
         const ctx = await newAuthContext(browser, {
             ...contextOptions,

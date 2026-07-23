@@ -316,17 +316,16 @@ test.describe('Chat via WebSocket', () => {
     test('one-time WS ticket reuse is rejected', async ({ browser, contextOptions }) => {
         const scenario = await createScenario(browser, contextOptions);
         try {
-            let usedTicket = '';
-            await scenario.owner.route('**/api/v1/ws/ticket*', async (route) => {
-                const response = await route.fetch();
-                const body = (await response.json()) as { ticket: string };
-                usedTicket = body.ticket;
-                await route.fulfill({ response });
-            });
-
+            const ticketResponse = scenario.owner.waitForResponse(
+                (response) =>
+                    response.url().includes('/api/v1/ws/ticket?') &&
+                    response.request().method() === 'POST' &&
+                    response.status() === 201,
+            );
             await scenario.owner.reload();
             await scenario.owner.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await expect(scenario.owner.getByRole('status')).toHaveText('Connected');
+            const { ticket: usedTicket } = (await (await ticketResponse).json()) as { ticket: string };
             expect(usedTicket).toMatch(/^\S+$/);
 
             const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';

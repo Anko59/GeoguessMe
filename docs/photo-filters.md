@@ -1,25 +1,33 @@
 # Photo filters
 
-The camera composer includes optional face filters powered by the vendored
-[Jeeliz FaceFilter](https://github.com/jeeliz/jeelizFaceFilter) browser engine.
-The available lenses are Comedy glasses, Heart eyes, Puppy, Flower crown, and
-Rainbow. They are local Canvas2D compositions driven by Jeeliz's face position,
-scale, rotation, and mouth-opening expression data. Filter rendering is
-client-side and the selected overlay is composited into the JPEG before it is
-uploaded with the photo.
+The camera composer includes an on-device augmented-reality lens system powered
+by
+[MediaPipe Face Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker)
+and Three.js. Face Landmarker supplies 478 three-dimensional landmarks and 52
+facial-expression values. The renderer anchors illuminated 3D geometry to the
+eyes, cheeks, nose, mouth, forehead, and chin instead of estimating placement
+from a face rectangle.
 
-The same filter picker is available after choosing an image from the device. The
-image is rendered into a local canvas stream for face tracking; the original
-file is not sent anywhere until the user presses Send. If the browser does not
-provide WebGL or canvas capture, the camera and upload flows remain available
-without a filter.
+The catalog contains 15 effects plus the original image: Cyber visor, Crystal
+crown, Neon kitty, 3D puppy, Inferno, Heavenly, Space cadet, Party pop,
+Butterfly, Frog prince, Mecha, Masquerade, Ice queen, Pixel hero, and Superstar.
+Several lenses react to expressions such as mouth opening, and animated
+particles continue rendering while the camera is active.
 
-Camera and location permissions are still required to send a photo. The camera
-flow uses the front-facing camera for selfie-style lenses and should be served
-over HTTPS outside local development. Users should keep the face well lit and
-inside the preview for stable tracking; the picker smooths small movements and
-uses the correct Jeeliz viewport coordinate orientation.
+The model, WebAssembly runtime, and rendering code are hosted by the
+application. Camera frames and selected files remain in the browser; the
+composited JPEG is the only image uploaded, and only after the user presses
+Send. The same lens picker works for the live front-facing camera and JPEG, PNG,
+or WebP files. Production's Content Security Policy permits WebAssembly
+compilation with `wasm-unsafe-eval`; it does not permit general JavaScript
+string evaluation.
 
-The pinned Jeeliz browser build and `NN_DEFAULT.json` model live under
-`frontend/public/vendor/jeeliz/`. Their Apache-2.0 license and source commit are
-recorded beside the assets.
+WebGL is required for 3D rendering. MediaPipe attempts GPU inference first and
+falls back to CPU inference when necessary. If tracking or rendering is
+unavailable, the camera and original-file upload paths remain usable. Camera and
+location permissions are still required to send a photo, and camera access
+requires HTTPS outside local development.
+
+The pinned Face Landmarker model and provenance live under
+`frontend/public/vendor/mediapipe/`. MediaPipe and its model use Apache-2.0;
+Three.js uses the MIT license.
