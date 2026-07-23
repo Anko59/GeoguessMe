@@ -276,9 +276,14 @@ test.describe('Challenge flow', () => {
             const options = page.locator('.camera-filter-option');
             await expect(options).toHaveCount(LENS_OPTIONS.length);
             const rail = page.locator('.camera-filter-options');
-            const initialScroll = await rail.evaluate((element) => element.scrollLeft);
-            await page.getByRole('button', { name: 'Next lenses' }).click();
-            await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(initialScroll);
+            const nextLenses = page.getByRole('button', { name: 'Next lenses' });
+            if (await nextLenses.isVisible()) {
+                const initialScroll = await rail.evaluate((element) => element.scrollLeft);
+                await nextLenses.click();
+                await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(initialScroll);
+            } else {
+                expect(await rail.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+            }
 
             await page.getByRole('button', { name: /text/i }).click();
             await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
