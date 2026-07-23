@@ -31,6 +31,10 @@ edits, or another bypass. Never weaken, suppress, or skip a failing gate to make
 a commit pass; fix the underlying code, test, documentation, or tool
 configuration.
 
+The commit hook runs repository-wide formatting, structure, and lint checks. The
+push hook runs `make preflight`; it deliberately does not duplicate the complete
+operational gate that CI runs after merge to `dev`.
+
 ## Structure
 
 No human-authored tracked file may exceed 500 lines. No directory may directly
@@ -43,16 +47,28 @@ excluded as described by the structural checker.
 
 Add tests for every behavior and regression. Use deterministic state-based
 synchronization, never unconditional sleeps. Do not use retries to hide flaky
-tests. Run focused relevant tests during development and run the complete
-`make verify` suite before handoff. Do not claim production readiness unless
-`make verify` passes.
+tests. Run focused relevant tests during development and `make preflight` before
+handoff. Pull-request CI selects backend integration and Chromium E2E from
+changed paths. The complete `make verify` suite runs once on the exact `dev`
+revision before development deployment and nightly. Run it locally when changing
+deployment, test infrastructure, or the gates themselves. Do not claim
+production readiness unless the exact revision has a successful complete gate.
 
 ## Handoff
 
 Leave the working tree clean. Commit all intended changes in coherent commits.
 Do not commit caches, reports, coverage files, binaries, backups, secrets, or
-test data. Report the exact Make targets run and their results, and report
-commit IDs for the intended handoff.
+test data. Report the exact Make targets run and their results, CI evidence for
+the exact revision, and commit IDs for the intended handoff.
+
+## Branch and release flow
+
+Feature and dependency pull requests target `dev`. Production release pull
+requests use a short-lived repository `release/*` branch based on `main` whose
+tree exactly matches the successfully deployed `dev` tree. Both protected
+branches require signed commits, strict checks, and squash merging; do not push
+directly to either branch. Production promotes the exact signed image digests
+that passed the complete dev gate instead of rebuilding source.
 
 ## Documentation
 

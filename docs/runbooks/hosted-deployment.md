@@ -78,18 +78,24 @@ secret file.
 
 ## GitHub and release flow
 
-Features merge by squash PR into `dev`; every `dev` push runs the complete gate,
-publishes signed digest-only images, and deploys development. Release PRs merge
-`dev` into `main`; that protected merge automatically runs the complete gate,
-selects the next semantic patch version (with `v0.2.0` as the launch floor),
-publishes signed images, creates the GitHub release/tag, and deploys production.
-Pull-request jobs never receive deployment environment secrets.
+Features merge by verified squash PR into `dev`; pull-request CI runs a fast
+gate plus path-selected backend integration or Chromium E2E. Every `dev` push
+runs the complete operational gate once, publishes signed digest-only images,
+and deploys development. Release PRs target `main` from a short-lived repository
+`release/*` branch; CI verifies that its tree exactly equals the current `dev`
+tree and that revision deployed successfully. Create that branch from `main` and
+materialize the `dev` tree on it; this preserves linear squash history without
+rewriting protected branches. The release workflow checks tree equality,
+verifies the dev signatures, promotes the same manifests without rebuilding,
+adds the production signature, selects the next semantic patch version (with
+`v0.2.0` as the launch floor), creates the GitHub release/tag, and deploys
+production. Pull-request jobs never receive deployment secrets.
 
-Both branches require the Dockerized verification check, PRs, linear history,
-resolved conversations, admin enforcement, and prohibit force-push/deletion. The
-`development` environment accepts only `dev`; `production` accepts only `main`.
-The `monitoring` environment accepts only `main`. Keep approvals at zero while
-the repository has one maintainer.
+Both branches require signed commits, the aggregate Dockerized verification
+check, PRs, linear history, resolved conversations, admin enforcement, and
+prohibit force-push/deletion. The `development` environment accepts only `dev`;
+`production` accepts only `main`. The `monitoring` environment accepts only
+`main`. Keep approvals at zero while the repository has one maintainer.
 
 ## Dev acceptance and production launch
 

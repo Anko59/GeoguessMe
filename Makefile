@@ -1,23 +1,23 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap hooks-install hooks-check tools-clean tools-self-test \
+.PHONY: help bootstrap bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-clean tools-self-test \
 	dev up down restart status logs logs-backend logs-frontend \
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
-	test-cache-status-regression cache-status structure-check \
+	test-cache-status-regression test-ci-classifier test-e2e-regression cache-status structure-check \
 	test-prod-container-verify-regression test-migration-fixture-regression \
 	test-prune-regression prune-report prune artifacts-clean \
 	test-ci-retention-regression test-artifacts-clean-regression \
 	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
-	test-integration test-e2e test-e2e-ui test-e2e-repeat test-all coverage audit \
+	test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
 	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
-	quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
+	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
 
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
@@ -56,6 +56,16 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
+
+bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build go-tools
+
+bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build node-tools
+	$(COMPOSE_TOOLS) pull playwright
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
@@ -195,6 +205,12 @@ test-ci-retention-regression: ## Verify CI workflow has bounded retention and ca
 test-cache-status-regression: ## Run cache-status regression tests.
 	bash tools/quality/test/check-cache-status-regression.sh
 
+test-ci-classifier: ## Verify deterministic CI path classification.
+	bash tools/quality/ci/test-classify-changes.sh
+
+test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
+	bash tools/quality/test/check-e2e-regression.sh
+
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh
 
@@ -217,6 +233,9 @@ test-integration: build-images ## Run the isolated integration stack and tests i
 
 test-e2e: build-images ## Run all Playwright projects in the isolated stack.
 	$(TEST_ENV) tools/quality/run-e2e.sh
+
+test-e2e-pr: build-images ## Run the Chromium PR browser suite in the isolated stack.
+	$(TEST_ENV) GEOGUESSME_E2E_PROJECTS=desktop tools/quality/run-e2e.sh
 
 test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
@@ -241,8 +260,8 @@ audit: ## Run dependency vulnerability audits in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
-deps-go-security-update: ## Update the vulnerable x/text module and normalize Go dependency metadata.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/text@v0.39.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
+deps-go-security-update: ## Update vulnerable Go security modules and normalize metadata.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/crypto@v0.54.0 golang.org/x/text@v0.40.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
 
 deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only
@@ -409,18 +428,26 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+preflight: structure-check format-check lint test-structure-regression test-ci-classifier test-e2e-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+
+preflight-docs: structure-check format-check lint-docs test-ci-classifier ## Run the documentation-only pull-request gate.
+
+pr-backend: test-integration ## Run backend live-stack checks selected by CI.
+
+pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
+
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-e2e-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh
 
-pre-push: ## Run the complete verification gate before pushing.
-	$(MAKE) verify
+pre-push: ## Run the fast deterministic gate before pushing.
+	$(MAKE) preflight
 
-ci: ## Run the same Dockerized quality and verification targets used locally.
-	$(MAKE) verify
+ci: ## Run the fast deterministic pull-request gate.
+	$(MAKE) preflight
 
 ##@ Maintenance
 prune-report: ## Preview project-scoped Docker prune (dry-run, no changes).
