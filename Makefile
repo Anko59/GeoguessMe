@@ -5,7 +5,7 @@
 	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	type-check test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
-	test-cache-status-regression test-ci-classifier test-e2e-regression cache-status structure-check \
+	test-cache-status-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression cache-status structure-check \
 	test-prod-container-verify-regression test-migration-fixture-regression \
 	test-prune-regression prune-report prune artifacts-clean \
 	test-ci-retention-regression test-artifacts-clean-regression \
@@ -100,7 +100,7 @@ tools-clean: ## Remove only project-specific tool containers, networks, and cach
 
 ##@ Development
 dev: ## Start the Docker development stack.
-	$(COMPOSE_DEV) up -d --build
+	$(COMPOSE_DEV) up -d --build --renew-anon-volumes
 
 up: dev ## Alias for dev.
 
@@ -210,6 +210,9 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
+
+test-dev-workflow-regression: ## Verify dev rebuilds refresh anonymous dependency volumes.
+	bash tools/quality/test/check-dev-workflow-regression.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh
@@ -428,7 +431,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-preflight: structure-check format-check lint test-structure-regression test-ci-classifier test-e2e-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint test-structure-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -436,7 +439,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-e2e-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 

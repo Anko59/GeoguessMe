@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
+import { EXPECTED_LENS_ASSETS } from './cameraAssertions';
 import {
     deterministicTestImage,
     installDeterministicCamera,
@@ -11,6 +12,7 @@ import {
     uniqueGroup,
     unsupportedFormatBytes,
 } from './helpers';
+import { LENS_OPTIONS } from '../src/components/camera/lenses/lensCatalog';
 
 interface Scenario {
     uploader: Page;
@@ -247,6 +249,65 @@ test.describe('Challenge flow', () => {
             const uploadResponse = await uploadResponsePromise;
             expect(uploadResponse.status()).toBe(201);
             await expect(page.locator('.chat-container')).toBeVisible();
+        } finally {
+            await ctx.close();
+        }
+    });
+
+    test('loads and switches every self-hosted camera lens on demand', async ({ browser, contextOptions }) => {
+        test.setTimeout(90000);
+        const ctx = await newAuthContext(browser, cameraOptions(contextOptions));
+        await installDeterministicCamera(ctx);
+        const page = await ctx.newPage();
+        const pageErrors: Error[] = [];
+        const loadedLensAssets = new Set<string>();
+        page.on('pageerror', (pageError) => pageErrors.push(pageError));
+        page.on('response', (response) => {
+            if (response.ok()) loadedLensAssets.add(new URL(response.url()).pathname);
+        });
+        try {
+            await signupViaUI(page);
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await page.getByRole('button', { name: 'Camera' }).click();
+
+            const options = page.locator('.camera-filter-option');
+            await expect(options).toHaveCount(LENS_OPTIONS.length);
+            const rail = page.locator('.camera-filter-options');
+            const nextLenses = page.getByRole('button', { name: 'Next lenses' });
+            if (await nextLenses.isVisible()) {
+                const initialScroll = await rail.evaluate((element) => element.scrollLeft);
+                await nextLenses.click();
+                await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(initialScroll);
+            } else {
+                expect(await rail.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+            }
+
+            await page.getByRole('button', { name: /text/i }).click();
+            await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
+            await page.getByRole('button', { name: 'Neon', exact: true }).click();
+            await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
+
+            const modelResponse = page.waitForResponse((response) =>
+                response.url().endsWith('/vendor/mediapipe/face_landmarker.task'),
+            );
+            await page.getByRole('button', { name: 'Cyber visor' }).click();
+            expect((await modelResponse).status()).toBe(200);
+            await expect(page.locator('.camera-filter-picker')).not.toContainText('Loading 3D face tracking', {
+                timeout: 30000,
+            });
+            expect(await page.locator('.camera-filter-overlay').evaluate((canvas) => canvas.width > 1)).toBe(true);
+
+            for (const lens of LENS_OPTIONS.filter(({ id }) => id !== 'none')) {
+                const button = page.getByRole('button', { name: lens.label });
+                await button.click();
+                await expect(button).toHaveAttribute('aria-pressed', 'true');
+            }
+
+            await expect.poll(() => EXPECTED_LENS_ASSETS.every((path) => loadedLensAssets.has(path))).toBe(true);
+            expect(pageErrors).toEqual([]);
         } finally {
             await ctx.close();
         }

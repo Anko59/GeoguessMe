@@ -14,7 +14,9 @@ make dev
 
 The development stack runs PostgreSQL, MinIO, Mailpit, a Go backend hot-reload
 container, and a Vite frontend container. Named application volumes preserve
-database and media data across make down and make restart.
+database and media data across make down and make restart. Each make dev rebuild
+renews the frontend's anonymous dependency volume so package-lock changes are
+available to Vite without deleting persistent application data.
 
 ## Useful targets
 
