@@ -65,10 +65,12 @@ images only; it never automatically restores PostgreSQL.
 
 Development merges run the complete operational gate exactly once, then build,
 attest, and sign immutable images before deployment. A release PR may come only
-from the successfully deployed repository `dev` branch. Production compares the
-`main` and `dev` Git trees, verifies the development workflow signatures,
-promotes the exact manifests without rebuilding, verifies unchanged digests,
-adds the production workflow signature, and deploys those references.
+from a repository `release/*` branch whose tree exactly equals the successfully
+deployed `dev` tree. Basing that short-lived branch on `main` avoids recurring
+squash-history conflicts without rewriting either protected branch. Production
+compares the `main` and `dev` Git trees, verifies the development workflow
+signatures, promotes the exact manifests without rebuilding, verifies unchanged
+digests, adds the production workflow signature, and deploys those references.
 
 ## Generic first deploy
 

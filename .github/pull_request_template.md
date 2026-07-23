@@ -8,7 +8,8 @@ List the Dockerized Make targets run and their results.
 
 ## Contribution checklist
 
-- [ ] This PR targets `dev`. Only a release PR from `dev` may target `main`.
+- [ ] This PR targets `dev`, or it is a `release/*` PR to `main` whose tree
+      exactly matches the successfully deployed `dev` tree.
 - [ ] Behavior changes include deterministic regression coverage.
 - [ ] Documentation and operational assumptions are updated where relevant.
 - [ ] Commits intended for protected branches will be GitHub-verified through

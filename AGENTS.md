@@ -63,11 +63,12 @@ the exact revision, and commit IDs for the intended handoff.
 
 ## Branch and release flow
 
-Feature and dependency pull requests target `dev`. Only the repository `dev`
-branch may open a release pull request to `main`. Both protected branches
-require signed commits, strict checks, and squash merging; do not push directly
-to either branch. Production promotes the exact signed image digests that passed
-the complete dev gate instead of rebuilding source.
+Feature and dependency pull requests target `dev`. Production release pull
+requests use a short-lived repository `release/*` branch based on `main` whose
+tree exactly matches the successfully deployed `dev` tree. Both protected
+branches require signed commits, strict checks, and squash merging; do not push
+directly to either branch. Production promotes the exact signed image digests
+that passed the complete dev gate instead of rebuilding source.
 
 ## Documentation
 

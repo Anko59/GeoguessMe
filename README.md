@@ -56,11 +56,14 @@ Vite development server.
 | make terraform-validate / plan        | Validate or plan Hetzner/Cloudflare infrastructure                               |
 | make hosted-contract-test             | Check deployment, backup, locking, proxy, and rollback contracts                 |
 
-Pull requests target `dev`; only the repository `dev` branch may target `main`.
-The protected branches accept verified squash commits. PR CI classifies changed
-paths, runs the fast gate, and selects backend integration or Chromium E2E.
-After merge, the exact `dev` revision runs the complete gate once before deploy.
-Production promotes those signed image digests without rebuilding them.
+Pull requests target `dev`. Production release PRs target `main` from a
+short-lived repository `release/*` branch whose Git tree must exactly equal the
+successfully deployed `dev` tree. This avoids squash-history conflicts without
+rewriting either protected branch. The protected branches accept verified squash
+commits. PR CI classifies changed paths, runs the fast gate, and selects backend
+integration or Chromium E2E. After merge, the exact `dev` revision runs the
+complete gate once before deploy. Production promotes those signed image digests
+without rebuilding them.
 
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation
