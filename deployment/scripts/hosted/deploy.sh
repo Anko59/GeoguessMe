@@ -23,10 +23,10 @@ flock -n 9 || die 'another host deployment is already running'
 
 case "$environment" in
     dev)
-        identity='^https://github.com/Anko59/geoguessme/.github/workflows/deploy\.yml@refs/heads/dev$'
+        identity='^https://github.com/Anko59/GeoguessMe/.github/workflows/deploy\.yml@refs/heads/dev$'
         ;;
     production)
-        identity='^https://github.com/Anko59/geoguessme/.github/workflows/release\.yml@refs/heads/main$'
+        identity='^https://github.com/Anko59/GeoguessMe/.github/workflows/release\.yml@refs/heads/main$'
         ;;
 esac
 
@@ -36,7 +36,7 @@ if [ ! -d "$release" ]; then
     staging=$(mktemp -d "$APP_ROOT/releases/.staging.XXXXXX")
     trap 'rm -f "$archive"; rm -rf "$staging"' EXIT INT TERM
     curl --fail --silent --show-error --location \
-        "https://github.com/Anko59/geoguessme/archive/$revision.tar.gz" -o "$archive"
+        "https://github.com/Anko59/GeoguessMe/archive/$revision.tar.gz" -o "$archive"
     tar -xzf "$archive" --strip-components=1 -C "$staging"
     mv "$staging" "$release"
     rm -f "$archive"
