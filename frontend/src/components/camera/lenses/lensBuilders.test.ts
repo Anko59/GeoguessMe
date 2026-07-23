@@ -63,6 +63,15 @@ describe('3D lens builders', () => {
         expect(tongue?.scale.y).toBeGreaterThan(1);
     });
 
+    it('keeps flat generated accessories upright in the top-left camera coordinate system', () => {
+        for (const id of ['disco-outlaw', 'hr-nightmare', 'toxic-ex', 'tax-fraud'] as const) {
+            const lens = buildLens(id);
+            const accessory = lens.root.children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+            expect(accessory.material.map?.flipY).toBe(false);
+            expect(accessory.material.transparent).toBe(true);
+        }
+    });
+
     it('returns an inert group for an unknown identifier', () => {
         const lens = buildLens('future-lens' as LensId);
         lens.update(1, CLOSED_MOUTH);

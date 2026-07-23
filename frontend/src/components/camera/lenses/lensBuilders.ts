@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import { buildBadDecisions, buildDiscoOutlaw, buildJeelizPuppy, buildRedFlagRoyalty } from './assetLensBuilders';
+import {
+    buildBadDecisions,
+    buildDiscoOutlaw,
+    buildHrNightmare,
+    buildJeelizPuppy,
+    buildRedFlagRoyalty,
+    buildTaxFraud,
+    buildToxicEx,
+} from './assetLensBuilders';
 import type { FacePose } from './facePose';
 import type { LensId } from './lensCatalog';
 
@@ -449,6 +457,12 @@ export function buildLens(id: LensId): BuiltLens {
             return buildRedFlagRoyalty();
         case 'bad-decisions':
             return buildBadDecisions();
+        case 'hr-nightmare':
+            return buildHrNightmare();
+        case 'toxic-ex':
+            return buildToxicEx();
+        case 'tax-fraud':
+            return buildTaxFraud();
         default:
             return { root: new THREE.Group(), update: () => undefined };
     }

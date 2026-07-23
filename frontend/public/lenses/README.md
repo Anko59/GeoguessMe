@@ -11,7 +11,7 @@ the Apache-2.0
 at commit `6f2695120b992511fd6cb1fd80c600bb957cd08c`. Its upstream license is
 included at `jeeliz-dog/LICENSE`.
 
-## Generated headpieces
+## Generated accessories
 
 The WebP files under `generated/` were created with OpenAI's built-in image
 generation tool, keyed against a flat green background, converted to alpha, and
@@ -26,6 +26,12 @@ Prompt summaries:
   warning flags, chains, and gems; isolated front view.
 - `bad-decisions.webp`: a neon adult-party halo combining flaming dice, a
   martini, metallic cards, and dark chrome; isolated front view.
+- `hr-nightmare.webp`: a full-face frame with lacquered devil horns, a loosened
+  office tie, lipstick-marked memos, paperclips, and champagne droplets.
+- `toxic-ex.webp`: a full-face radioactive couture frame with a biohazard halo,
+  cracked chrome hearts, warning tape, and fluorescent slime.
+- `tax-fraud.webp`: a full-face camp-luxury frame with a jeweled yacht visor,
+  gold chains, receipts, speedboats, champagne corks, and a money briefcase.
 
-Each source prompt required a uniform `#00ff00` chroma background, no person,
+Each source prompt required a uniform removable chroma background, no person,
 logos, watermark, or text, and a complete accessory with generous padding.

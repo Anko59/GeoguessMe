@@ -6,16 +6,25 @@ const textureLoader = new THREE.TextureLoader();
 const geometryLoader = new THREE.BufferGeometryLoader();
 
 function loadColorTexture(path: string): THREE.Texture {
-    if (import.meta.env.MODE === 'test') return new THREE.Texture();
-    const texture = textureLoader.load(path);
+    const texture = import.meta.env.MODE === 'test' ? new THREE.Texture() : textureLoader.load(path);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = false;
+    // The orthographic camera uses a top-left origin. Three's default image
+    // upload flip would invert flat accessories a second time.
+    texture.flipY = false;
     return texture;
 }
 
-function buildImageHeadpiece(path: string, width: number, height: number, y: number, sway: number): BuiltLens {
+function buildImageAccessory(
+    path: string,
+    width: number,
+    height: number,
+    y: number,
+    sway: number,
+    pulse = 0,
+): BuiltLens {
     const root = new THREE.Group();
     const material = new THREE.MeshBasicMaterial({
         map: loadColorTexture(path),
@@ -34,6 +43,8 @@ function buildImageHeadpiece(path: string, width: number, height: number, y: num
         update: (elapsed) => {
             headpiece.rotation.z = Math.sin(elapsed * 1.4) * sway;
             headpiece.position.y = y + Math.sin(elapsed * 1.9) * 0.012;
+            const scale = 1 + Math.sin(elapsed * 2.2) * pulse;
+            headpiece.scale.setScalar(scale);
         },
     };
 }
@@ -100,13 +111,25 @@ export function buildJeelizPuppy(): BuiltLens {
 }
 
 export function buildDiscoOutlaw(): BuiltLens {
-    return buildImageHeadpiece('/lenses/generated/disco-outlaw.webp', 1.65, 1.1, -0.63, 0.018);
+    return buildImageAccessory('/lenses/generated/disco-outlaw.webp', 1.65, 1.1, -0.63, 0.018);
 }
 
 export function buildRedFlagRoyalty(): BuiltLens {
-    return buildImageHeadpiece('/lenses/generated/red-flag-royalty.webp', 1.55, 1.55, -0.72, 0.012);
+    return buildImageAccessory('/lenses/generated/red-flag-royalty.webp', 1.55, 1.55, -0.72, 0.012);
 }
 
 export function buildBadDecisions(): BuiltLens {
-    return buildImageHeadpiece('/lenses/generated/bad-decisions.webp', 1.62, 1.08, -0.61, 0.022);
+    return buildImageAccessory('/lenses/generated/bad-decisions.webp', 1.62, 1.08, -0.61, 0.022);
+}
+
+export function buildHrNightmare(): BuiltLens {
+    return buildImageAccessory('/lenses/generated/hr-nightmare.webp', 2.05, 2.05, 0.12, 0.012, 0.012);
+}
+
+export function buildToxicEx(): BuiltLens {
+    return buildImageAccessory('/lenses/generated/toxic-ex.webp', 2.02, 2.02, 0.05, -0.014, 0.018);
+}
+
+export function buildTaxFraud(): BuiltLens {
+    return buildImageAccessory('/lenses/generated/tax-fraud.webp', 2.08, 2.08, 0.13, 0.01, 0.009);
 }

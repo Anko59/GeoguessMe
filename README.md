@@ -88,8 +88,8 @@ minutes; no autoscaling or zero-downtime claim is made.
 ## Architecture
 
 - React, TypeScript, and Vite frontend served by Caddy.
-- On-device MediaPipe/Three.js camera composer with 21 lenses, face
-  deformations, generated headpieces, and editable text banners.
+- On-device MediaPipe/Three.js camera composer with 24 lenses, full-face
+  accessories, exaggerated face deformations, and editable text banners.
 - Go HTTP/WebSocket API with embedded ordered SQL migrations.
 - PostgreSQL for accounts, groups, messages, challenges, and sessions.
 - Private S3-compatible media storage; MinIO is used by development and tests.

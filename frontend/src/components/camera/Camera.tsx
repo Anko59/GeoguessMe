@@ -22,7 +22,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const [filterError, setFilterError] = useState('');
     const [faceDetected, setFaceDetected] = useState(false);
     const [textBanner, setTextBanner] = useState<TextBanner>(EMPTY_TEXT_BANNER);
-
     const videoRef = useRef<HTMLVideoElement>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -88,7 +87,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         },
         [],
     );
-
     const initializeVideoEffects = useCallback(
         async (video: HTMLVideoElement, width: number, height: number) => {
             const attempt = ++effectAttemptRef.current;
@@ -141,7 +139,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         },
         [createRenderer, updateFaceDetected],
     );
-
     const initializeImageEffects = useCallback(
         async (source: HTMLCanvasElement, width: number, height: number) => {
             const attempt = ++effectAttemptRef.current;
@@ -166,7 +163,12 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 if (attempt !== effectAttemptRef.current) return;
                 lastFrameRef.current = frame;
                 updateFaceDetected(Boolean(frame));
-                renderer.render(frame);
+                const animate = (timestamp: number) => {
+                    if (attempt !== effectAttemptRef.current) return;
+                    renderer.render(frame, timestamp);
+                    trackingAnimationRef.current = requestAnimationFrame(animate);
+                };
+                animate(performance.now());
                 setFilterReady(true);
                 if (!frame) setFilterError('No face found. Try a brighter, front-facing photo.');
             } catch {
@@ -177,12 +179,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         },
         [createRenderer, updateFaceDetected],
     );
-
     const stopCamera = useCallback(() => {
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
     }, []);
-
     const startCamera = useCallback(async () => {
         const attempt = ++cameraAttemptRef.current;
         filePreparationAttemptRef.current += 1;

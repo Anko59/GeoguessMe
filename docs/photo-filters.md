@@ -8,13 +8,14 @@ facial-expression values. The renderer anchors illuminated 3D geometry to the
 eyes, cheeks, nose, mouth, forehead, and chin instead of estimating placement
 from a face rectangle.
 
-The catalog contains 21 effects plus the original image. It combines animated
-Three.js accessories, the original Jeeliz dog ears and nose, detailed generated
-headpieces, and three live face deformations. The adult-party set includes Disco
-outlaw, Red flag royalty, and Bad decisions; deformation modes include Main
-character, Seen too much, and Tiny patience. Several lenses react to expressions
-such as mouth opening, and animated particles continue rendering while the
-camera is active.
+The catalog contains 24 effects plus the original image. It combines animated
+Three.js accessories, the original Jeeliz dog ears and nose, generated
+headpieces, full-face frames, and three live face deformations. The adult-party
+set includes HR nightmare, Toxic ex, Tax fraud, Disco outlaw, Red flag royalty,
+and Bad decisions. The deliberately exaggerated deformation modes are Ego
+inflation, Doomscroll damage, and Budget facelift. Several lenses react to
+expressions such as mouth opening, and animated particles continue rendering
+while the camera is active.
 
 The lens rail supports touch swiping, mouse dragging, mouse-wheel scrolling, and
 desktop previous/next controls. The text tool adds an editable banner before or

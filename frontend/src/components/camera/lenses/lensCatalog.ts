@@ -18,6 +18,9 @@ export type LensId =
     | 'disco-outlaw'
     | 'red-flag-royalty'
     | 'bad-decisions'
+    | 'hr-nightmare'
+    | 'toxic-ex'
+    | 'tax-fraud'
     | 'big-head'
     | 'bug-eyes'
     | 'tiny-face';
@@ -33,6 +36,51 @@ export interface LensOption {
 
 export const LENS_OPTIONS: LensOption[] = [
     { id: 'none', label: 'Original', icon: '✦', accent: '#777b91' },
+    {
+        id: 'hr-nightmare',
+        label: 'HR nightmare',
+        icon: '😈',
+        accent: '#ff214d',
+        preview: '/lenses/generated/hr-nightmare.webp',
+    },
+    {
+        id: 'toxic-ex',
+        label: 'Toxic ex',
+        icon: '☣️',
+        accent: '#a7ff16',
+        preview: '/lenses/generated/toxic-ex.webp',
+    },
+    {
+        id: 'tax-fraud',
+        label: 'Tax fraud',
+        icon: '🛥️',
+        accent: '#f5d76e',
+        preview: '/lenses/generated/tax-fraud.webp',
+    },
+    {
+        id: 'bad-decisions',
+        label: 'Bad decisions',
+        icon: '🎲',
+        accent: '#ff5a21',
+        preview: '/lenses/generated/bad-decisions.webp',
+    },
+    {
+        id: 'red-flag-royalty',
+        label: 'Red flag royalty',
+        icon: '🚩',
+        accent: '#ff334f',
+        preview: '/lenses/generated/red-flag-royalty.webp',
+    },
+    {
+        id: 'disco-outlaw',
+        label: 'Disco outlaw',
+        icon: '🤠',
+        accent: '#ff3eb5',
+        preview: '/lenses/generated/disco-outlaw.webp',
+    },
+    { id: 'big-head', label: 'Ego inflation', icon: '🗿', accent: '#ffcb55', kind: 'deformation' },
+    { id: 'bug-eyes', label: 'Doomscroll damage', icon: '👀', accent: '#8dff72', kind: 'deformation' },
+    { id: 'tiny-face', label: 'Budget facelift', icon: '🤏', accent: '#74c8ff', kind: 'deformation' },
     { id: 'cyber', label: 'Cyber visor', icon: '🥽', accent: '#12e7ff' },
     { id: 'crystal-crown', label: 'Crystal crown', icon: '👑', accent: '#b88cff' },
     { id: 'cat', label: 'Neon kitty', icon: '🐱', accent: '#ff72c6' },
@@ -48,30 +96,6 @@ export const LENS_OPTIONS: LensOption[] = [
     { id: 'ice', label: 'Ice queen', icon: '❄️', accent: '#8de7ff' },
     { id: 'arcade', label: 'Pixel hero', icon: '👾', accent: '#79ff84' },
     { id: 'glam', label: 'Superstar', icon: '✨', accent: '#ff8bb5' },
-    {
-        id: 'disco-outlaw',
-        label: 'Disco outlaw',
-        icon: '🤠',
-        accent: '#ff3eb5',
-        preview: '/lenses/generated/disco-outlaw.webp',
-    },
-    {
-        id: 'red-flag-royalty',
-        label: 'Red flag royalty',
-        icon: '🚩',
-        accent: '#ff334f',
-        preview: '/lenses/generated/red-flag-royalty.webp',
-    },
-    {
-        id: 'bad-decisions',
-        label: 'Bad decisions',
-        icon: '🎲',
-        accent: '#ff5a21',
-        preview: '/lenses/generated/bad-decisions.webp',
-    },
-    { id: 'big-head', label: 'Main character', icon: '🗿', accent: '#ffcb55', kind: 'deformation' },
-    { id: 'bug-eyes', label: 'Seen too much', icon: '👀', accent: '#8dff72', kind: 'deformation' },
-    { id: 'tiny-face', label: 'Tiny patience', icon: '🤏', accent: '#74c8ff', kind: 'deformation' },
 ];
 
 const DEFORMATION_LENSES = new Set<LensId>(
