@@ -63,6 +63,13 @@ both stacks with one lock, creates a pre-deploy backup, migrates, waits for
 health, and records the active release. Application failure restores previous
 images only; it never automatically restores PostgreSQL.
 
+Development merges run the complete operational gate exactly once, then build,
+attest, and sign immutable images before deployment. A release PR may come only
+from the successfully deployed repository `dev` branch. Production compares the
+`main` and `dev` Git trees, verifies the development workflow signatures,
+promotes the exact manifests without rebuilding, verifies unchanged digests,
+adds the production workflow signature, and deploys those references.
+
 ## Generic first deploy
 
 Set immutable image references (`BACKEND_IMAGE` and `WEB_IMAGE` must include an

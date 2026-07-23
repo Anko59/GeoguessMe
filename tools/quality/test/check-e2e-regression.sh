@@ -36,7 +36,7 @@ rm -rf "$stale_dir"
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/run-e2e.sh"
 
 meta_fail=0
-if ! grep -q 'run --rm --no-deps' "$SCRIPT"; then
+if ! grep -q 'run -T --rm --no-deps' "$SCRIPT"; then
     echo "FAIL: metacharacter-path - missing --rm run pattern"
     FAIL=$((FAIL + 1))
     meta_fail=1
@@ -54,6 +54,28 @@ if ! grep -q '"${test_args\[@\]}"' "$SCRIPT"; then
 fi
 if [ "$meta_fail" -eq 0 ]; then
     echo "PASS: metacharacter-path"
+    PASS=$((PASS + 1))
+fi
+
+# ── Project-selection regression ─────────────────────────────────────────────
+# Pull requests run Chromium desktop only, while the default release gate keeps
+# the complete desktop, Firefox, and mobile matrix.
+
+project_fail=0
+if ! grep -q 'GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile' "$SCRIPT"; then
+    echo "FAIL: project-selection - full browser matrix is not the default"
+    FAIL=$((FAIL + 1))
+    project_fail=1
+fi
+MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)/Makefile"
+if ! grep -A 1 '^test-e2e-pr:' "$MAKEFILE" |
+    grep -q 'GEOGUESSME_E2E_PROJECTS=desktop'; then
+    echo "FAIL: project-selection - PR target does not select Chromium desktop"
+    FAIL=$((FAIL + 1))
+    project_fail=1
+fi
+if [ "$project_fail" -eq 0 ]; then
+    echo "PASS: project-selection"
     PASS=$((PASS + 1))
 fi
 

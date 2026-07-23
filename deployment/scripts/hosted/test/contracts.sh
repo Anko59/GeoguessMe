@@ -49,7 +49,11 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'cosign-release: v2.5.3'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign-release: v2.5.3'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag=v0.2.0'
-assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.version.outputs.tag }}'
+assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
+assert_contains "$ROOT/.github/workflows/release.yml" 'main_tree=$(git rev-parse "$GITHUB_SHA^{tree}")'
+assert_contains "$ROOT/.github/workflows/release.yml" 'cosign verify'
+assert_contains "$ROOT/.github/workflows/release.yml" 'imagetools create'
+assert_contains "$ROOT/.github/workflows/release.yml" 'actual_backend'
 
 # Signature verification and backup happen before pull and migration.
 verify_line=$(line_of "$DEPLOY" 'COSIGN_IMAGE.*verify')
