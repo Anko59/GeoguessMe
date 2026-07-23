@@ -149,11 +149,21 @@ describe('Camera component', () => {
         });
     });
 
-    it('uploads a photo via file picker with geolocation', async () => {
+    it('uploads the original file when image filtering cannot prepare it', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         stubGeolocation();
         mocks.post.mockResolvedValue({ data: {} });
         const onUploadComplete = vi.fn();
+        vi.stubGlobal(
+            'Image',
+            class {
+                onerror: ((event: Event) => void) | null = null;
+
+                set src(_value: string) {
+                    Promise.resolve().then(() => this.onerror?.(new Event('error')));
+                }
+            },
+        );
 
         render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);
         await waitFor(() => {
@@ -180,7 +190,9 @@ describe('Camera component', () => {
         expect(formData.get('group_id')).toBe('group-1');
         expect(formData.get('lat')).toBe('45.5');
         expect(formData.get('long')).toBe('-73.6');
-        expect(formData.get('photo')).toBeInstanceOf(Blob);
+        const uploadedPhoto = formData.get('photo');
+        expect(uploadedPhoto).toBeInstanceOf(Blob);
+        expect((uploadedPhoto as Blob).type).toBe('image/png');
         expect(onUploadComplete).toHaveBeenCalled();
     });
 

@@ -10,6 +10,7 @@ import {
 import './Camera.css';
 
 const FACE_FILTER_MODEL_PATH = '/vendor/jeeliz/neuralNets/';
+const FILTERABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function dataURLToBlob(dataURL: string): Blob {
     const [header, encoded] = dataURL.split(',', 2);
@@ -46,6 +47,8 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
     const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const preparedFileDataRef = useRef<string | null>(null);
+    const filePreparationAttemptRef = useRef(0);
     const faceFilterRef = useRef<JeelizFaceFilterApi | null>(null);
     const filterAttemptRef = useRef(0);
     const cameraAttemptRef = useRef(0);
@@ -148,6 +151,8 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
 
     const startCamera = useCallback(async () => {
         const attempt = ++cameraAttemptRef.current;
+        filePreparationAttemptRef.current += 1;
+        preparedFileDataRef.current = null;
         setFileMode(false);
         setCapturedPhoto(null);
         setCameraReady(false);
@@ -249,6 +254,8 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
         setCapturedPhoto(null);
         clearOverlay();
         if (fileMode) {
+            filePreparationAttemptRef.current += 1;
+            preparedFileDataRef.current = null;
             if (fileInputRef.current) fileInputRef.current.value = '';
             setFilterError('');
         } else {
@@ -257,8 +264,10 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     };
 
     const prepareImageFilter = async (dataURL: string) => {
+        const preparationAttempt = filePreparationAttemptRef.current;
         const image = new Image();
         image.onload = async () => {
+            if (preparationAttempt !== filePreparationAttemptRef.current) return;
             const sourceCanvas = sourceCanvasRef.current;
             const sourceVideo = videoRef.current;
             if (!sourceCanvas || !sourceVideo) return;
@@ -272,20 +281,47 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                 setFilterError('Face filters require a modern browser. Photos can still be sent without a filter.');
                 return;
             }
-            const stream = sourceCanvas.captureStream(1);
+            let stream: MediaStream;
+            try {
+                stream = sourceCanvas.captureStream(1);
+            } catch {
+                setFilterError('Face filters could not start. Photos can still be sent without a filter.');
+                return;
+            }
+            if (preparationAttempt !== filePreparationAttemptRef.current) {
+                stream.getTracks().forEach((track) => track.stop());
+                return;
+            }
+            preparedFileDataRef.current = dataURL;
             streamRef.current = stream;
             sourceVideo.srcObject = stream;
             await sourceVideo.play().catch(() => undefined);
+            if (preparationAttempt !== filePreparationAttemptRef.current) {
+                stopCamera();
+                return;
+            }
             await destroyFaceFilter();
             void initializeFaceFilter(sourceVideo, dimensions.width, dimensions.height);
         };
-        image.onerror = () => setError('Failed to read the selected file.');
+        image.onerror = () => {
+            if (preparationAttempt !== filePreparationAttemptRef.current) return;
+            preparedFileDataRef.current = null;
+            setError('Failed to read the selected file.');
+        };
         image.src = dataURL;
     };
 
     const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        filePreparationAttemptRef.current += 1;
+        preparedFileDataRef.current = null;
+        const canPrepareFilter = FILTERABLE_IMAGE_TYPES.has(file.type.toLowerCase());
+        setFilterError(
+            canPrepareFilter
+                ? ''
+                : 'Face filters support JPEG, PNG, and WebP photos. The original photo can still be sent.',
+        );
         stopCamera();
         void destroyFaceFilter();
         const reader = new FileReader();
@@ -294,7 +330,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
             setCapturedPhoto(reader.result);
             setFileMode(true);
             setError('');
-            void prepareImageFilter(reader.result);
+            if (canPrepareFilter) void prepareImageFilter(reader.result);
         };
         reader.onerror = () => setError('Failed to read the selected file.');
         reader.readAsDataURL(file);
@@ -322,6 +358,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     };
 
     const renderFilePhoto = (): string | null => {
+        if (preparedFileDataRef.current !== capturedPhoto) return capturedPhoto;
         const sourceCanvas = sourceCanvasRef.current;
         const overlay = overlayCanvasRef.current;
         const captureCanvas = captureCanvasRef.current;
