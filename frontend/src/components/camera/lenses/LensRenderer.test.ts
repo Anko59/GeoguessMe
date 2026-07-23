@@ -2,6 +2,7 @@ import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import * as THREE from 'three';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FaceFrame } from './facePose';
+import { LENS_OPTIONS } from './lensCatalog';
 
 interface RendererDouble {
     clear: ReturnType<typeof vi.fn>;
@@ -113,5 +114,18 @@ describe('LensRenderer', () => {
         expect(webgl.dispose).toHaveBeenCalledOnce();
         geometryDispose.mockRestore();
         materialDispose.mockRestore();
+    });
+
+    it('renders every catalog lens against a detected face', () => {
+        const renderer = new LensRenderer(document.createElement('canvas'));
+        const webgl = rendererState.instances[0];
+        renderer.resize(640, 480);
+
+        for (const [index, lens] of LENS_OPTIONS.entries()) {
+            renderer.setLens(lens.id);
+            expect(renderer.render(faceFrame(), index * 100)).toBe(true);
+        }
+
+        expect(webgl.render).toHaveBeenCalledTimes(LENS_OPTIONS.length);
     });
 });

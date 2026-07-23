@@ -18,7 +18,8 @@ make dev
 make bootstrap builds or pulls the pinned tool images, populates named
 dependency caches from the lockfiles, installs the tracked hooks, and runs a
 tool self-test. make dev starts PostgreSQL, MinIO, Mailpit, the backend, and the
-Vite development server.
+Vite development server. It refreshes the frontend's anonymous dependency volume
+after rebuilding while preserving named database and media volumes.
 
 ## Canonical commands
 

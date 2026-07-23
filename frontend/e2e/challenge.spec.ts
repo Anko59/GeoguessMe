@@ -11,6 +11,7 @@ import {
     uniqueGroup,
     unsupportedFormatBytes,
 } from './helpers';
+import { LENS_OPTIONS } from '../src/components/camera/lenses/lensCatalog';
 
 interface Scenario {
     uploader: Page;
@@ -252,7 +253,7 @@ test.describe('Challenge flow', () => {
         }
     });
 
-    test('loads the self-hosted 3D lens catalog on demand', async ({ browser, contextOptions }) => {
+    test('loads and switches every self-hosted 3D lens on demand', async ({ browser, contextOptions }) => {
         const ctx = await newAuthContext(browser, cameraOptions(contextOptions));
         await installDeterministicCamera(ctx);
         const page = await ctx.newPage();
@@ -276,8 +277,14 @@ test.describe('Challenge flow', () => {
             await expect(page.locator('.camera-filter-picker')).not.toContainText('Loading 3D face tracking', {
                 timeout: 30000,
             });
-            await expect(page.getByRole('button', { name: 'Cyber visor' })).toHaveAttribute('aria-pressed', 'true');
             expect(await page.locator('.camera-filter-overlay').evaluate((canvas) => canvas.width > 1)).toBe(true);
+
+            for (const lens of LENS_OPTIONS.filter(({ id }) => id !== 'none')) {
+                const button = page.getByRole('button', { name: lens.label });
+                await button.click();
+                await expect(button).toHaveAttribute('aria-pressed', 'true');
+            }
+
             expect(pageErrors).toEqual([]);
         } finally {
             await ctx.close();
