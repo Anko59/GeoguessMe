@@ -33,7 +33,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
 
     useEffect(() => {
         mountedRef.current = true;
-        void fetchLeaderboard();
+        queueMicrotask(() => void fetchLeaderboard());
         const interval = setInterval(() => void fetchLeaderboard(), 10000);
         return () => {
             mountedRef.current = false;
