@@ -46,7 +46,13 @@ describe('Map component', () => {
     it('renders the map container', () => {
         render(<Map onLocationSelect={vi.fn()} selectedLocation={null} />);
         expect(screen.getByTestId('MapContainer')).toBeInTheDocument();
-        expect(screen.getByTestId('TileLayer')).toBeInTheDocument();
+        const tileLayer = screen.getByTestId('TileLayer');
+        expect(tileLayer).toBeInTheDocument();
+        expect(tileLayer).toHaveAttribute(
+            'url',
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        );
+        expect(tileLayer).toHaveAttribute('attribution', expect.stringContaining('Esri'));
     });
 
     it('registers a map click handler via useMapEvents', () => {

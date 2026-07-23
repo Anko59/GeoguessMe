@@ -47,6 +47,12 @@ function LocationMarker({
     return position ? <Marker position={[position.lat, position.long]} /> : null;
 }
 
+const SATELLITE_TILE_URL =
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SATELLITE_ATTRIBUTION =
+    'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, ' +
+    'Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+
 const GuessIcon = L.divIcon({
     className: 'guess-marker',
     html: `<div style="background-color: #f59e0b; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
@@ -57,10 +63,7 @@ const GuessIcon = L.divIcon({
 export default function Map({ onLocationSelect, selectedLocation, actualLocation, guesses }: MapProps) {
     return (
         <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+            <TileLayer attribution={SATELLITE_ATTRIBUTION} url={SATELLITE_TILE_URL} />
             <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />
 
             {/* Actual Location (Flag/Green Marker) */}
