@@ -3,20 +3,34 @@ updates:
   - package-ecosystem: gomod
     directory: /backend
     target-branch: dev
+    open-pull-requests-limit: 5
     schedule: { interval: weekly }
     groups:
       go-modules:
         patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     target-branch: dev
+    open-pull-requests-limit: 5
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@testing-library/jest-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: globals
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
-      npm-dependencies:
+      npm-compatible:
         patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     target-branch: dev
+    open-pull-requests-limit: 3
     schedule: { interval: weekly }
     groups:
       github-actions:

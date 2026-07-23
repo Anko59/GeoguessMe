@@ -8,10 +8,13 @@ tools from pinned images and named caches.
 
 | Target                                     | Scope                                                                                                                                                                              | Expected result                                                           |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests                                                                                                   | Fast deterministic local/PR gate PASS                                     |
+| make preflight-docs                        | Structure, formatting, documentation lint, and path-classifier regression                                                                                                          | Documentation-only gate PASS                                              |
 | make test-unit                             | Backend unit tests and frontend Vitest                                                                                                                                             | go test PASS; Vitest PASS                                                 |
 | make test-race                             | Backend race detector                                                                                                                                                              | go test -race PASS (no races)                                             |
 | make test-structure-regression             | Structure-check regression tests in disposable Git repos                                                                                                                           | check-structure-regression.sh PASS                                        |
 | make test-ci-retention-regression          | Verify CI bounded retention and cache scopes                                                                                                                                       | check-ci-retention-regression.sh PASS                                     |
+| make test-e2e-regression                   | Verify E2E cleanup, safe arguments, browser selection, and volume safeguards                                                                                                       | check-e2e-regression.sh PASS                                              |
 | make test-cache-status-regression          | Cache-status reporting regression tests                                                                                                                                            | check-cache-status-regression.sh PASS                                     |
 | make test-restart-regression               | Restart-rehearsal script structure regression                                                                                                                                      | check-restart-regression.sh PASS                                          |
 | make test-prune-regression                 | Prune script regression tests                                                                                                                                                      | check-prune-regression.sh PASS                                            |
@@ -22,7 +25,8 @@ tools from pinned images and named caches.
 | make cache-status                          | Report project-only Docker resources (read-only)                                                                                                                                   | script output (non-fatal)                                                 |
 | make coverage                              | Backend ≥70% overall; frontend ≥80/80/80/70 (statements/branches/functions/lines)                                                                                                  | go test cover OK; Vitest --coverage PASS                                  |
 | make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                 | All integration tests PASS                                                |
-| make test-e2e                              | Desktop and Pixel 5 Playwright projects                                                                                                                                            | All Playwright projects PASS                                              |
+| make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                 | All Playwright projects PASS                                              |
+| make test-e2e-pr                           | Chromium desktop Playwright project                                                                                                                                                | PR browser checks PASS                                                    |
 | make quality                               | Structure, format, lint, type-check, audit, regression, unit, race, coverage, build, compose-validate                                                                              | Zero violations; all gates PASS                                           |
 | make migration-test                        | Concurrent, idempotent, legacy-fixture migration tests (advisory lock, backfill, dedupe)                                                                                           | migration-concurrency.sh PASS                                             |
 | make backup-rehearsal                      | Disposable backup, restore, continuity verification                                                                                                                                | backup-restore-rehearsal.sh PASS                                          |
@@ -36,6 +40,28 @@ tools from pinned images and named caches.
 
 Reports and traces are written to ignored repository output directories from
 inside containers.
+
+## Gate frequency
+
+The gates intentionally become broader as a change approaches deployment:
+
+| Event                   | Gate                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| Commit                  | Formatting, structure, and lint through `make pre-commit`                                                 |
+| Local push              | `make preflight`                                                                                          |
+| Documentation-only PR   | `make preflight-docs`                                                                                     |
+| Backend PR              | `make preflight` and `make pr-backend` in parallel                                                        |
+| Frontend PR             | `make preflight` and Chromium-only `make pr-frontend` in parallel                                         |
+| Shared or deployment PR | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
+| Merge to `dev`          | One complete `make verify`, then signed-image publication and development deployment                      |
+| Release PR to `main`    | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
+| Merge to `main`         | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
+| Nightly                 | Complete `make verify`                                                                                    |
+
+The aggregate required status remains `Dockerized verification gate`, so branch
+protection cannot be bypassed when path-selected jobs are skipped. Unknown paths
+fail safe by selecting both application suites. API contracts, workflows,
+deployment, infrastructure, tools, and Makefile changes also select both suites.
 
 ## Integration stack
 
@@ -63,11 +89,16 @@ E2E style checks reject waitForTimeout, networkidle, positional selectors, and
 retry-based flake masking. Accessibility scenarios run real Axe scans and fail
 on serious or critical violations.
 
+`make test-e2e-pr` runs desktop Chromium for pull-request feedback. The complete
+desktop Chromium, desktop Firefox, and mobile Chromium matrix remains part of
+`make verify` on dev and nightly.
+
 ## Local/CI equivalence
 
-CI checks out the repository, enables Docker Buildx, and invokes the same make
-verify target used for local handoff. It does not install Go, Node, Python,
-Playwright, or linters on the runner.
+CI checks out the repository and invokes the same focused Make targets available
+locally. It does not install Go, Node, Python, Playwright, or linters directly
+on the runner. The complete `make verify` target is intentionally reserved for
+the exact dev deployment revision and nightly verification.
 
 The CI workflow uses scoped Docker layer caching (bounded by branch and lockfile
 hash), explicit artifact retention of 7 days for failure diagnostics, and

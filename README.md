@@ -25,8 +25,11 @@ Vite development server.
 | Command                               | Purpose                                                                          |
 | ------------------------------------- | -------------------------------------------------------------------------------- |
 | make bootstrap                        | Prepare the Docker-only toolchain and hooks                                      |
+| make bootstrap-integration            | Prepare the focused backend integration toolchain                                |
+| make bootstrap-e2e                    | Prepare the focused browser toolchain                                            |
 | make dev                              | Start the development stack                                                      |
 | make format / make format-check       | Format or check tracked files                                                    |
+| make preflight                        | Fast local/PR lint, contract, audit, type, and unit gate                         |
 | make quality                          | Run all quality gates (structure, lint, audit, unit, race, coverage, build)      |
 | make verify                           | Run the complete release gate (quality + live-stack + rehearsals + load)         |
 | make test-unit / make test-race       | Run unit or race tests                                                           |
@@ -53,10 +56,19 @@ Vite development server.
 | make terraform-validate / plan        | Validate or plan Hetzner/Cloudflare infrastructure                               |
 | make hosted-contract-test             | Check deployment, backup, locking, proxy, and rollback contracts                 |
 
+Pull requests target `dev`. Production release PRs target `main` from a
+short-lived repository `release/*` branch whose Git tree must exactly equal the
+successfully deployed `dev` tree. This avoids squash-history conflicts without
+rewriting either protected branch. The protected branches accept verified squash
+commits. PR CI classifies changed paths, runs the fast gate, and selects backend
+integration or Chromium E2E. After merge, the exact `dev` revision runs the
+complete gate once before deploy. Production promotes those signed image digests
+without rebuilding them.
+
 Run make help for the full target list. Use make build-images for normal
 development; reserve make clean-build for reproducible CI or cache-invalidation
-scenarios. Hooks use make pre-commit and make pre-push; they fail when Docker is
-unavailable and cannot be bypassed.
+scenarios. Hooks use make pre-commit and the fast make pre-push gate; they fail
+when Docker is unavailable and cannot be bypassed.
 
 ## Production platform
 

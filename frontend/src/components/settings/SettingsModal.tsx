@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Member } from '../../types';
@@ -34,9 +34,11 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
         }
     }, [groupId]);
 
-    useEffect(() => {
-        if (isOpen && membersExpanded && members.length === 0) void fetchMembers();
-    }, [fetchMembers, isOpen, members.length, membersExpanded]);
+    const toggleMembers = () => {
+        const expanding = !membersExpanded;
+        setMembersExpanded(expanding);
+        if (expanding && members.length === 0) void fetchMembers();
+    };
 
     if (!isOpen) return null;
 
@@ -134,7 +136,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
                         type="button"
                         className="section-title members-toggle"
                         aria-expanded={membersExpanded}
-                        onClick={() => setMembersExpanded(!membersExpanded)}
+                        onClick={toggleMembers}
                     >
                         <Icon name="users" />
                         Group Members
