@@ -45,18 +45,18 @@ inside containers.
 
 The gates intentionally become broader as a change approaches deployment:
 
-| Event                      | Gate                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Commit                     | Formatting, structure, and lint through `make pre-commit`                                                 |
-| Local push                 | `make preflight`                                                                                          |
-| Documentation-only PR      | `make preflight-docs`                                                                                     |
-| Backend PR                 | `make preflight` and `make pr-backend` in parallel                                                        |
-| Frontend PR                | `make preflight` and Chromium-only `make pr-frontend` in parallel                                         |
-| Shared or deployment PR    | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
-| Merge to `dev`             | One complete `make verify`, then signed-image publication and development deployment                      |
-| Release PR `dev` to `main` | Branch-policy and successful exact-dev-deployment verification; no repeated application tests             |
-| Merge to `main`            | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
-| Nightly                    | Complete `make verify`                                                                                    |
+| Event                   | Gate                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| Commit                  | Formatting, structure, and lint through `make pre-commit`                                                 |
+| Local push              | `make preflight`                                                                                          |
+| Documentation-only PR   | `make preflight-docs`                                                                                     |
+| Backend PR              | `make preflight` and `make pr-backend` in parallel                                                        |
+| Frontend PR             | `make preflight` and Chromium-only `make pr-frontend` in parallel                                         |
+| Shared or deployment PR | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
+| Merge to `dev`          | One complete `make verify`, then signed-image publication and development deployment                      |
+| Release PR to `main`    | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
+| Merge to `main`         | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
+| Nightly                 | Complete `make verify`                                                                                    |
 
 The aggregate required status remains `Dockerized verification gate`, so branch
 protection cannot be bypassed when path-selected jobs are skipped. Unknown paths

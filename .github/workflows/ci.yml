@@ -1,9 +1,9 @@
 # Tiered pull-request verification.
 #
 # Pull requests receive fast deterministic checks plus only the live-stack
-# suites selected by their changed paths. Release PRs are accepted only from
-# the already deployed dev branch. The complete operational gate runs once in
-# deploy.yml after a dev merge and again on the nightly schedule.
+# suites selected by their changed paths. Release PRs must carry the exact tree
+# from the already deployed dev branch. The complete operational gate runs once
+# in deploy.yml after a dev merge and again on the nightly schedule.
 name: CI
 
 on:
@@ -33,13 +33,20 @@ jobs:
           if [[ "$BASE_REF" != main ]]; then
             exit 0
           fi
-          if [[ "$HEAD_REF" != dev || "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]]; then
-            echo "Only the repository dev branch may open a pull request to main." >&2
+          if [[ "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" || "$HEAD_REF" != release/* ]]; then
+            echo "Only a repository release/* branch may open a pull request to main." >&2
+            exit 1
+          fi
+          dev_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/dev" --jq '.commit.sha')
+          dev_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$dev_sha" --jq '.tree.sha')
+          head_tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$HEAD_SHA" --jq '.tree.sha')
+          if [[ "$head_tree" != "$dev_tree" ]]; then
+            echo "The release branch tree does not exactly match the current dev tree." >&2
             exit 1
           fi
           runs=$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs?branch=dev&event=push&status=success&per_page=100")
-          deployed=$(jq --arg sha "$HEAD_SHA" \
+          deployed=$(jq --arg sha "$dev_sha" \
             '[.workflow_runs[] | select(.head_sha == $sha)] | length' <<<"$runs")
           if (( deployed == 0 )); then
             echo "The dev head has not completed a successful development deployment." >&2

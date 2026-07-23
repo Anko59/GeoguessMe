@@ -17,8 +17,9 @@ make hooks-check
 
 Create feature branches from `dev` and target pull requests to `dev`. External
 contributors normally work from a fork; trusted collaborators may create a
-branch in this repository. Only the repository `dev` branch may target `main`
-for a production release.
+branch in this repository. Production release PRs use a short-lived repository
+`release/*` branch based on `main` whose resulting Git tree exactly matches the
+successfully deployed `dev` tree. CI rejects every other source or tree.
 
 Use `make format` and focused Dockerized test targets during development. Before
 pushing, run `make preflight` and confirm `make hooks-check` passes.

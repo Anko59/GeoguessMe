@@ -55,8 +55,12 @@ done
 
 contains "$CI" '^  pull_request:' "CI runs for pull requests"
 absent "$CI" '^  push:' "CI does not duplicate post-merge workflows"
-contains "$CI" 'Only the repository dev branch may open a pull request to main' \
-    "main accepts release PRs only from dev"
+contains "$CI" 'Only a repository release/\* branch may open a pull request to main' \
+    "main accepts release PRs only from repository release branches"
+contains "$CI" 'head_tree.*dev_tree' \
+    "release PR tree must exactly equal the current dev tree"
+contains "$CI" 'deployed=.*--arg sha "[$]dev_sha"' \
+    "release PR verifies deployment of the current dev commit"
 contains "$CI" 'actions/workflows/deploy\.yml/runs' \
     "release PR checks the exact dev deployment"
 contains "$CI" 'classify-changes\.sh --null' \
