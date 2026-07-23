@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FacePose } from './facePose';
 import { buildLens } from './lensBuilders';
 import { LENS_OPTIONS, type LensId } from './lensCatalog';
@@ -19,7 +19,16 @@ const CLOSED_MOUTH: FacePose = {
 };
 
 describe('3D lens builders', () => {
-    it.each(LENS_OPTIONS)('builds and animates $label', ({ id }) => {
+    beforeAll(() => {
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture());
+        vi.spyOn(THREE.BufferGeometryLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            onLoad(new THREE.BufferGeometry());
+        });
+    });
+
+    afterAll(() => vi.restoreAllMocks());
+
+    it.each(LENS_OPTIONS)('builds and animates $label', ({ id, kind }) => {
         const lens = buildLens(id);
         expect(lens.root).toBeInstanceOf(THREE.Group);
 
@@ -32,7 +41,7 @@ describe('3D lens builders', () => {
             blinkRight: 1,
         });
 
-        if (id === 'none') {
+        if (id === 'none' || kind === 'deformation') {
             expect(lens.root.children).toHaveLength(0);
         } else {
             expect(lens.root.children.length).toBeGreaterThan(0);

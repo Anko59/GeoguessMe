@@ -1,6 +1,6 @@
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import * as THREE from 'three';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FaceFrame } from './facePose';
 import { LENS_OPTIONS } from './lensCatalog';
 
@@ -56,7 +56,13 @@ function faceFrame(): FaceFrame {
 describe('LensRenderer', () => {
     beforeEach(() => {
         rendererState.instances.length = 0;
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture());
+        vi.spyOn(THREE.BufferGeometryLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            onLoad(new THREE.BufferGeometry());
+        });
     });
+
+    afterEach(() => vi.restoreAllMocks());
 
     it('configures the transparent renderer and caps large source dimensions', () => {
         const renderer = new LensRenderer(document.createElement('canvas'));

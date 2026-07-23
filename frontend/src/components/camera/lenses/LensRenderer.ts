@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FaceDeformation } from './faceDeformation';
 import { deriveFacePose, smoothFacePose, type FaceFrame, type FacePose } from './facePose';
 import { buildLens, type BuiltLens } from './lensBuilders';
 import type { LensId } from './lensCatalog';
@@ -10,7 +11,12 @@ function disposeObject(object: THREE.Object3D): void {
         if (!(child instanceof THREE.Mesh)) return;
         child.geometry.dispose();
         const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => material.dispose());
+        materials.forEach((material) => {
+            Object.values(material).forEach((value) => {
+                if (value instanceof THREE.Texture) value.dispose();
+            });
+            material.dispose();
+        });
     });
 }
 
@@ -21,6 +27,7 @@ export class LensRenderer {
     private builtLens: BuiltLens = buildLens('none');
     private selectedLens: LensId = 'none';
     private smoothedPose: FacePose | null = null;
+    private readonly deformation = new FaceDeformation();
     private width = 1;
     private height = 1;
     private readonly startedAt = performance.now();
@@ -46,7 +53,12 @@ export class LensRenderer {
         const rim = new THREE.DirectionalLight(0xff68be, 2.1);
         rim.position.set(500, 100, 500);
         this.scene.add(rim);
+        this.scene.add(this.deformation.mesh);
         this.scene.add(this.builtLens.root);
+    }
+
+    setSource(source: HTMLVideoElement | HTMLCanvasElement): void {
+        this.deformation.setSource(source);
     }
 
     resize(sourceWidth: number, sourceHeight: number): void {
@@ -54,6 +66,7 @@ export class LensRenderer {
         this.width = Math.max(1, Math.round(sourceWidth * scale));
         this.height = Math.max(1, Math.round(sourceHeight * scale));
         this.renderer.setSize(this.width, this.height, false);
+        this.deformation.resize(this.width, this.height);
         this.camera.left = 0;
         this.camera.right = this.width;
         this.camera.top = 0;
@@ -72,6 +85,7 @@ export class LensRenderer {
 
     render(frame: FaceFrame | null, timestamp = performance.now()): boolean {
         this.renderer.clear();
+        this.deformation.update(this.selectedLens, frame);
         if (this.selectedLens === 'none') {
             this.builtLens.root.visible = false;
             this.renderer.render(this.scene, this.camera);
@@ -99,11 +113,13 @@ export class LensRenderer {
 
     clear(): void {
         this.smoothedPose = null;
+        this.deformation.clear();
         this.renderer.clear();
     }
 
     dispose(): void {
         disposeObject(this.builtLens.root);
+        this.deformation.dispose();
         this.renderer.dispose();
     }
 }

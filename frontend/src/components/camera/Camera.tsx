@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import api, { getAPIErrorMessage } from '../../api';
-import { dataURLToBlob, fitDimensions, getCurrentPosition, isFilterableImageType } from './cameraUtils';
+import { getAPIErrorMessage } from '../../api';
+import { dataURLToBlob, fitDimensions, isFilterableImageType, uploadPhoto } from './cameraUtils';
 import './Camera.css';
+import { CameraErrorPanel, PreviewActions } from './CameraPanels';
 import FilterPicker from './FilterPicker';
+import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
 import type { FaceFrame } from './lenses/facePose';
 import type { FaceTracker as FaceTrackerInstance } from './lenses/faceTracker';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
 import type { LensId } from './lenses/lensCatalog';
+import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
 
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -18,6 +21,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const [filterReady, setFilterReady] = useState(false);
     const [filterError, setFilterError] = useState('');
     const [faceDetected, setFaceDetected] = useState(false);
+    const [textBanner, setTextBanner] = useState<TextBanner>(EMPTY_TEXT_BANNER);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -61,28 +65,36 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         clearEffects();
     }, [clearEffects]);
 
-    const createRenderer = useCallback(async (width: number, height: number): Promise<LensRendererInstance | null> => {
-        const canvas = overlayCanvasRef.current;
-        if (!canvas) return null;
-        try {
-            const { LensRenderer } = await import('./lenses/LensRenderer');
-            const renderer = new LensRenderer(canvas);
-            renderer.resize(width, height);
-            renderer.setLens(selectedFilterRef.current);
-            rendererRef.current = renderer;
-            return renderer;
-        } catch {
-            setFilterError('3D lenses require WebGL. Photos can still be sent without a lens.');
-            return null;
-        }
-    }, []);
+    const createRenderer = useCallback(
+        async (
+            source: HTMLVideoElement | HTMLCanvasElement,
+            width: number,
+            height: number,
+        ): Promise<LensRendererInstance | null> => {
+            const canvas = overlayCanvasRef.current;
+            if (!canvas) return null;
+            try {
+                const { LensRenderer } = await import('./lenses/LensRenderer');
+                const renderer = new LensRenderer(canvas);
+                renderer.setSource(source);
+                renderer.resize(width, height);
+                renderer.setLens(selectedFilterRef.current);
+                rendererRef.current = renderer;
+                return renderer;
+            } catch {
+                setFilterError('Camera effects require WebGL. Photos can still be sent without a lens.');
+                return null;
+            }
+        },
+        [],
+    );
 
     const initializeVideoEffects = useCallback(
         async (video: HTMLVideoElement, width: number, height: number) => {
             const attempt = ++effectAttemptRef.current;
             setFilterReady(false);
             setFilterError('');
-            const renderer = await createRenderer(width, height);
+            const renderer = await createRenderer(video, width, height);
             if (!renderer) return;
             if (attempt !== effectAttemptRef.current) {
                 renderer.dispose();
@@ -135,7 +147,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             const attempt = ++effectAttemptRef.current;
             setFilterReady(false);
             setFilterError('');
-            const renderer = await createRenderer(width, height);
+            const renderer = await createRenderer(source, width, height);
             if (!renderer) return;
             if (attempt !== effectAttemptRef.current) {
                 renderer.dispose();
@@ -180,6 +192,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         setCameraReady(false);
         setError('');
         setFilterError('');
+        if (sourceCanvasRef.current) sourceCanvasRef.current.width = 0;
         stopCamera();
         destroyEffects();
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -262,6 +275,13 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         captureCanvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
         context.drawImage(overlay, 0, 0, captureCanvas.width, captureCanvas.height);
+        const sourceCanvas = sourceCanvasRef.current;
+        const sourceContext = sourceCanvas?.getContext('2d');
+        if (sourceCanvas && sourceContext) {
+            sourceCanvas.width = captureCanvas.width;
+            sourceCanvas.height = captureCanvas.height;
+            sourceContext.drawImage(captureCanvas, 0, 0);
+        }
         const flash = document.createElement('div');
         flash.className = 'camera-flash';
         document.body.appendChild(flash);
@@ -335,39 +355,31 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         reader.readAsDataURL(file);
     };
 
-    const uploadBlob = async (blob: Blob, filename: string) => {
-        const position = await getCurrentPosition();
-        const formData = new FormData();
-        formData.append('photo', blob, filename);
-        formData.append('group_id', groupID);
-        formData.append('lat', position.coords.latitude.toString());
-        formData.append('long', position.coords.longitude.toString());
-        await api.post('/photo/upload', formData);
-    };
-
-    const renderFilePhoto = (): string | null => {
-        if (preparedFileDataRef.current !== capturedPhoto) return capturedPhoto;
+    const renderFinalPhoto = (): string | null => {
         const sourceCanvas = sourceCanvasRef.current;
-        const overlay = overlayCanvasRef.current;
         const captureCanvas = captureCanvasRef.current;
-        if (!sourceCanvas || !overlay || !captureCanvas || sourceCanvas.width === 0) return capturedPhoto;
+        if (!sourceCanvas || !captureCanvas || sourceCanvas.width === 0) return capturedPhoto;
         const context = captureCanvas.getContext('2d');
         if (!context) return capturedPhoto;
-        rendererRef.current?.render(lastFrameRef.current);
         captureCanvas.width = sourceCanvas.width;
         captureCanvas.height = sourceCanvas.height;
         context.drawImage(sourceCanvas, 0, 0);
-        context.drawImage(overlay, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        if (fileMode && preparedFileDataRef.current === capturedPhoto) {
+            const overlay = overlayCanvasRef.current;
+            rendererRef.current?.render(lastFrameRef.current);
+            if (overlay) context.drawImage(overlay, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        }
+        drawTextBanner(context, captureCanvas.width, captureCanvas.height, textBanner);
         return captureCanvas.toDataURL('image/jpeg', 0.9);
     };
 
     const handleUpload = async () => {
-        const photo = fileMode ? renderFilePhoto() : capturedPhoto;
+        const photo = renderFinalPhoto();
         if (!photo) return;
         setUploading(true);
         setError('');
         try {
-            await uploadBlob(dataURLToBlob(photo), fileMode ? 'upload.jpg' : 'capture.jpg');
+            await uploadPhoto(dataURLToBlob(photo), fileMode ? 'upload.jpg' : 'capture.jpg', groupID);
             destroyEffects();
             stopCamera();
             setCapturedPhoto(null);
@@ -417,6 +429,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onSelect={selectLens}
         />
     );
+    const textEditor = <TextBannerEditor banner={textBanner} onChange={setTextBanner} />;
 
     return (
         <div className="camera-container">
@@ -429,26 +442,19 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             />
             <canvas ref={captureCanvasRef} className="camera-capture-canvas" aria-hidden="true" />
             <canvas ref={sourceCanvasRef} className="camera-source-canvas" aria-hidden="true" />
-            {error && (
-                <div className="camera-error">
-                    <p>{error}</p>
-                    {!capturedPhoto && (
-                        <>
-                            <button className="btn btn-primary" onClick={() => void startCamera()}>
-                                Try Again
-                            </button>
-                            <button className="btn btn-outline file-fallback-btn" onClick={() => setFileMode(true)}>
-                                Upload from device
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
+            <CameraErrorPanel
+                error={error}
+                hasPhoto={Boolean(capturedPhoto)}
+                onRetry={() => void startCamera()}
+                onUseFile={() => setFileMode(true)}
+            />
             {!capturedPhoto ? (
                 <div className="camera-view">
                     <canvas ref={overlayCanvasRef} className="camera-filter-overlay" aria-hidden="true" />
+                    <TextBannerOverlay banner={textBanner} />
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
+                            {textEditor}
                             {filterPicker}
                             <button className="capture-button" onClick={capturePhoto} aria-label="Take photo">
                                 <div className="capture-inner"></div>
@@ -481,15 +487,12 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 <div className="photo-preview">
                     <img src={capturedPhoto} alt="Captured" className="preview-image" />
                     <canvas ref={overlayCanvasRef} className="photo-filter-overlay" aria-hidden="true" />
-                    {fileMode && <div className="preview-filter-picker">{filterPicker}</div>}
-                    <div className="preview-controls">
-                        <button className="btn btn-outline" onClick={retake} disabled={uploading}>
-                            Retake
-                        </button>
-                        <button className="btn btn-primary" onClick={() => void handleUpload()} disabled={uploading}>
-                            {uploading ? 'Sending...' : 'Send 📸'}
-                        </button>
+                    <TextBannerOverlay banner={textBanner} />
+                    <div className="preview-composer">
+                        {textEditor}
+                        {fileMode && filterPicker}
                     </div>
+                    <PreviewActions uploading={uploading} onRetake={retake} onSend={() => void handleUpload()} />
                 </div>
             )}
         </div>

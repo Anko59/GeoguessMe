@@ -410,6 +410,41 @@ describe('Camera component', () => {
         expect(play).toHaveBeenCalled();
     });
 
+    it('adds an editable text banner to a captured camera photo before upload', async () => {
+        stubUserMedia();
+        stubGeolocation();
+        mocks.post.mockResolvedValue({ data: {} });
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        const context = {
+            beginPath: vi.fn(),
+            closePath: vi.fn(),
+            drawImage: vi.fn(),
+            fill: vi.fn(),
+            fillText: vi.fn(),
+            lineTo: vi.fn(),
+            measureText: vi.fn((text: string) => ({ width: text.length * 20 })),
+            moveTo: vi.fn(),
+            quadraticCurveTo: vi.fn(),
+            restore: vi.fn(),
+            save: vi.fn(),
+        } as unknown as CanvasRenderingContext2D;
+        HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(context);
+
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        fireEvent.click(screen.getByRole('button', { name: /text/i }));
+        fireEvent.change(screen.getByPlaceholderText('Say something dangerous…'), {
+            target: { value: 'CEO OF BAD IDEAS' },
+        });
+        expect(screen.getByText('CEO OF BAD IDEAS')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Send/ }));
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledOnce());
+        expect(context.fillText).toHaveBeenCalledWith('CEO OF BAD IDEAS', 320, expect.any(Number), 550.4);
+    });
+
     it('does not start camera initialization after an immediate unmount', async () => {
         const { unmount } = render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
         unmount();

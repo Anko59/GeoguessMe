@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildBadDecisions, buildDiscoOutlaw, buildJeelizPuppy, buildRedFlagRoyalty } from './assetLensBuilders';
 import type { FacePose } from './facePose';
 import type { LensId } from './lensCatalog';
 
@@ -181,26 +182,6 @@ function buildCat(): BuiltLens {
         [Math.PI / 2, 0, Math.PI],
     );
     return { root, update: (elapsed) => (nose.rotation.z = Math.PI + Math.sin(elapsed * 3) * 0.08) };
-}
-
-function buildPuppy(): BuiltLens {
-    const root = new THREE.Group();
-    const brown = standard('#7b462b');
-    for (const side of [-1, 1]) {
-        sphere(root, brown, [side * 0.43, -0.18, 0], [1.2, 2.7, 0.62]).rotation.z = side * 0.28;
-    }
-    sphere(root, standard('#dca77b'), [-0.105, 0.33, 0.1], [1.45, 1.05, 0.75]);
-    sphere(root, standard('#dca77b'), [0.105, 0.33, 0.1], [1.45, 1.05, 0.75]);
-    sphere(root, standard('#241713'), [0, 0.24, 0.2], [0.85, 0.55, 0.65]);
-    const tongue = sphere(root, standard('#f37f9f'), [0, 0.48, 0.15], [0.68, 1.2, 0.35]);
-    return {
-        root,
-        update: (_elapsed, pose) => {
-            tongue.visible = pose.mouthOpen > 0.22;
-            tongue.scale.y = 0.5 + pose.mouthOpen * 1.45;
-            tongue.position.y = 0.42 + pose.mouthOpen * 0.12;
-        },
-    };
 }
 
 function buildDevil(): BuiltLens {
@@ -439,7 +420,7 @@ export function buildLens(id: LensId): BuiltLens {
         case 'cat':
             return buildCat();
         case 'puppy':
-            return buildPuppy();
+            return buildJeelizPuppy();
         case 'devil':
             return buildDevil();
         case 'angel':
@@ -462,6 +443,12 @@ export function buildLens(id: LensId): BuiltLens {
             return buildArcade();
         case 'glam':
             return buildGlam();
+        case 'disco-outlaw':
+            return buildDiscoOutlaw();
+        case 'red-flag-royalty':
+            return buildRedFlagRoyalty();
+        case 'bad-decisions':
+            return buildBadDecisions();
         default:
             return { root: new THREE.Group(), update: () => undefined };
     }

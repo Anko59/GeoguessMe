@@ -119,8 +119,10 @@ describe('face pose', () => {
 
 describe('lens catalog', () => {
     it('offers a substantial catalog with unique identifiers', () => {
-        expect(LENS_OPTIONS).toHaveLength(16);
+        expect(LENS_OPTIONS).toHaveLength(22);
         expect(new Set(LENS_OPTIONS.map((option) => option.id)).size).toBe(LENS_OPTIONS.length);
         expect(LENS_OPTIONS[0].id).toBe('none');
+        expect(LENS_OPTIONS.filter((option) => option.kind === 'deformation')).toHaveLength(3);
+        expect(LENS_OPTIONS.filter((option) => option.preview)).toHaveLength(3);
     });
 });

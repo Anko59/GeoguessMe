@@ -8,11 +8,19 @@ facial-expression values. The renderer anchors illuminated 3D geometry to the
 eyes, cheeks, nose, mouth, forehead, and chin instead of estimating placement
 from a face rectangle.
 
-The catalog contains 15 effects plus the original image: Cyber visor, Crystal
-crown, Neon kitty, 3D puppy, Inferno, Heavenly, Space cadet, Party pop,
-Butterfly, Frog prince, Mecha, Masquerade, Ice queen, Pixel hero, and Superstar.
-Several lenses react to expressions such as mouth opening, and animated
-particles continue rendering while the camera is active.
+The catalog contains 21 effects plus the original image. It combines animated
+Three.js accessories, the original Jeeliz dog ears and nose, detailed generated
+headpieces, and three live face deformations. The adult-party set includes Disco
+outlaw, Red flag royalty, and Bad decisions; deformation modes include Main
+character, Seen too much, and Tiny patience. Several lenses react to expressions
+such as mouth opening, and animated particles continue rendering while the
+camera is active.
+
+The lens rail supports touch swiping, mouse dragging, mouse-wheel scrolling, and
+desktop previous/next controls. The text tool adds an editable banner before or
+after capture, with Classic, Neon, and Clean themes and adjustable vertical
+placement. Banner text is rendered into the final JPEG rather than uploaded as
+separate metadata.
 
 The model, WebAssembly runtime, and rendering code are hosted by the
 application. Camera frames and selected files remain in the browser; the
@@ -29,5 +37,6 @@ location permissions are still required to send a photo, and camera access
 requires HTTPS outside local development.
 
 The pinned Face Landmarker model and provenance live under
-`frontend/public/vendor/mediapipe/`. MediaPipe and its model use Apache-2.0;
-Three.js uses the MIT license.
+`frontend/public/vendor/mediapipe/`. Lens asset provenance lives under
+`frontend/public/lenses/`. MediaPipe, its model, and the reused Jeeliz demo
+assets use Apache-2.0; Three.js uses the MIT license.

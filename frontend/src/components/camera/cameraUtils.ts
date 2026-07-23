@@ -1,3 +1,5 @@
+import api from '../../api';
+
 export function dataURLToBlob(dataURL: string): Blob {
     const [header, encoded] = dataURL.split(',', 2);
     const binary = atob(encoded);
@@ -22,4 +24,15 @@ export function getCurrentPosition(): Promise<GeolocationPosition> {
         navigator.geolocation.getCurrentPosition(resolve, reject);
     });
 }
+
+export async function uploadPhoto(blob: Blob, filename: string, groupID: string): Promise<void> {
+    const position = await getCurrentPosition();
+    const formData = new FormData();
+    formData.append('photo', blob, filename);
+    formData.append('group_id', groupID);
+    formData.append('lat', position.coords.latitude.toString());
+    formData.append('long', position.coords.longitude.toString());
+    await api.post('/photo/upload', formData);
+}
+
 const FILTERABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);

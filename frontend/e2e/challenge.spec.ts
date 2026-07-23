@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
+import { EXPECTED_LENS_ASSETS } from './cameraAssertions';
 import {
     deterministicTestImage,
     installDeterministicCamera,
@@ -253,12 +254,17 @@ test.describe('Challenge flow', () => {
         }
     });
 
-    test('loads and switches every self-hosted 3D lens on demand', async ({ browser, contextOptions }) => {
+    test('loads and switches every self-hosted camera lens on demand', async ({ browser, contextOptions }) => {
+        test.setTimeout(90000);
         const ctx = await newAuthContext(browser, cameraOptions(contextOptions));
         await installDeterministicCamera(ctx);
         const page = await ctx.newPage();
         const pageErrors: Error[] = [];
+        const loadedLensAssets = new Set<string>();
         page.on('pageerror', (pageError) => pageErrors.push(pageError));
+        page.on('response', (response) => {
+            if (response.ok()) loadedLensAssets.add(new URL(response.url()).pathname);
+        });
         try {
             await signupViaUI(page);
             await page.goto('/group/create');
@@ -268,7 +274,17 @@ test.describe('Challenge flow', () => {
             await page.getByRole('button', { name: 'Camera' }).click();
 
             const options = page.locator('.camera-filter-option');
-            await expect(options).toHaveCount(16);
+            await expect(options).toHaveCount(LENS_OPTIONS.length);
+            const rail = page.locator('.camera-filter-options');
+            const initialScroll = await rail.evaluate((element) => element.scrollLeft);
+            await page.getByRole('button', { name: 'Next lenses' }).click();
+            await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(initialScroll);
+
+            await page.getByRole('button', { name: /text/i }).click();
+            await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
+            await page.getByRole('button', { name: 'Neon', exact: true }).click();
+            await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
+
             const modelResponse = page.waitForResponse((response) =>
                 response.url().endsWith('/vendor/mediapipe/face_landmarker.task'),
             );
@@ -285,6 +301,7 @@ test.describe('Challenge flow', () => {
                 await expect(button).toHaveAttribute('aria-pressed', 'true');
             }
 
+            await expect.poll(() => EXPECTED_LENS_ASSETS.every((path) => loadedLensAssets.has(path))).toBe(true);
             expect(pageErrors).toEqual([]);
         } finally {
             await ctx.close();
