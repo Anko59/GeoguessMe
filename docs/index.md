@@ -22,6 +22,8 @@ submit one server-timed guess.
 - [Configuration](configuration.md) — every environment variable, defaults,
   validation
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility
+- [Photo filters](photo-filters.md) — camera filters, capture behavior, and
+  permissions
 - [Authentication](authentication.md) — access/refresh tokens, verification,
   account deletion
 - [API reference](api.md) — endpoint conventions, error format, rate limits

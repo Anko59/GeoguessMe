@@ -18,7 +18,8 @@ make dev
 make bootstrap builds or pulls the pinned tool images, populates named
 dependency caches from the lockfiles, installs the tracked hooks, and runs a
 tool self-test. make dev starts PostgreSQL, MinIO, Mailpit, the backend, and the
-Vite development server.
+Vite development server. It refreshes the frontend's anonymous dependency volume
+after rebuilding while preserving named database and media volumes.
 
 ## Canonical commands
 
@@ -87,6 +88,8 @@ minutes; no autoscaling or zero-downtime claim is made.
 ## Architecture
 
 - React, TypeScript, and Vite frontend served by Caddy.
+- On-device MediaPipe/Three.js camera composer with 24 lenses, full-face
+  accessories, exaggerated face deformations, and editable text banners.
 - Go HTTP/WebSocket API with embedded ordered SQL migrations.
 - PostgreSQL for accounts, groups, messages, challenges, and sessions.
 - Private S3-compatible media storage; MinIO is used by development and tests.
