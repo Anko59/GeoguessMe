@@ -3,11 +3,12 @@ import api, { getAPIErrorMessage } from '../../api';
 import {
     clearFaceFilter,
     drawFaceFilter,
-    FACE_FILTER_OPTIONS,
+    smoothFaceDetection,
     type FaceDetectionState,
     type FaceFilterId,
 } from '../../faceFilters';
 import './Camera.css';
+import FilterPicker from './FilterPicker';
 
 const FACE_FILTER_MODEL_PATH = '/vendor/jeeliz/neuralNets/';
 const FILTERABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -56,12 +57,14 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const selectedFilterRef = useRef<FaceFilterId>('none');
     const lastDetectionRef = useRef<FaceDetectionState | null>(null);
+    const smoothedDetectionRef = useRef<FaceDetectionState | null>(null);
 
     const clearOverlay = useCallback(() => {
         const overlay = overlayCanvasRef.current;
         const context = overlay?.getContext('2d');
         if (overlay && context) clearFaceFilter(context, overlay.width, overlay.height);
         lastDetectionRef.current = null;
+        smoothedDetectionRef.current = null;
     }, []);
 
     const destroyFaceFilter = useCallback(async () => {
@@ -126,7 +129,16 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
                     callbackTrack: (state) => {
                         if (attempt !== filterAttemptRef.current) return;
                         faceFilter.render_video();
-                        drawCurrentFilter(state);
+                        const smoothedState = smoothFaceDetection(smoothedDetectionRef.current, {
+                            detected: state.detected,
+                            x: state.x,
+                            y: state.y,
+                            s: state.s,
+                            rz: state.rz,
+                            mouthOpening: state.expressions?.[0] ?? 0,
+                        });
+                        smoothedDetectionRef.current = smoothedState;
+                        drawCurrentFilter(smoothedState);
                     },
                 });
                 if (!initialized && attempt === filterAttemptRef.current) {
@@ -169,7 +181,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
         }
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+                video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false,
             });
             if (attempt !== cameraAttemptRef.current) {
@@ -181,13 +193,14 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
             if (!video) return;
             video.srcObject = mediaStream;
             const markCameraReady = () => {
-                if (attempt !== cameraAttemptRef.current || video.videoWidth === 0) return;
+                if (attempt !== cameraAttemptRef.current || video.videoWidth === 0 || video.readyState < 2) return;
                 setCameraReady(true);
                 if (initializedCameraAttemptRef.current === attempt) return;
                 initializedCameraAttemptRef.current = attempt;
                 void initializeFaceFilter(video, video.videoWidth, video.videoHeight);
             };
             video.onloadedmetadata = markCameraReady;
+            video.onloadeddata = markCameraReady;
             video.oncanplay = markCameraReady;
             void video
                 .play()
@@ -226,7 +239,7 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
 
     useEffect(() => {
         selectedFilterRef.current = selectedFilter;
-        drawCurrentFilter(lastDetectionRef.current);
+        drawCurrentFilter(smoothedDetectionRef.current ?? lastDetectionRef.current);
     }, [drawCurrentFilter, selectedFilter]);
 
     const capturePhoto = () => {
@@ -397,24 +410,12 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     };
 
     const filterPicker = (
-        <div className="camera-filter-picker" role="group" aria-label="Photo filters">
-            <span className="camera-filter-label">Filters</span>
-            <div className="camera-filter-options">
-                {FACE_FILTER_OPTIONS.map((option) => (
-                    <button
-                        key={option.id}
-                        type="button"
-                        className={`camera-filter-option ${selectedFilter === option.id ? 'selected' : ''}`}
-                        aria-pressed={selectedFilter === option.id}
-                        onClick={() => setSelectedFilter(option.id)}
-                    >
-                        {option.label}
-                    </button>
-                ))}
-            </div>
-            {selectedFilter !== 'none' && !filterReady && !filterError && <small>Loading face tracking…</small>}
-            {filterError && <small className="camera-filter-status">{filterError}</small>}
-        </div>
+        <FilterPicker
+            selectedFilter={selectedFilter}
+            filterReady={filterReady}
+            filterError={filterError}
+            onSelect={setSelectedFilter}
+        />
     );
 
     return (
