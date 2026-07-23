@@ -81,12 +81,15 @@ secret file.
 Features merge by verified squash PR into `dev`; pull-request CI runs a fast
 gate plus path-selected backend integration or Chromium E2E. Every `dev` push
 runs the complete operational gate once, publishes signed digest-only images,
-and deploys development. Release PRs merge only `dev` into `main`; CI verifies
-that the exact dev revision deployed successfully. The release workflow checks
-tree equality, verifies the dev signatures, promotes the same manifests without
-rebuilding, adds the production signature, selects the next semantic patch
-version (with `v0.2.0` as the launch floor), creates the GitHub release/tag, and
-deploys production. Pull-request jobs never receive deployment secrets.
+and deploys development. Release PRs target `main` from a short-lived repository
+`release/*` branch; CI verifies that its tree exactly equals the current `dev`
+tree and that revision deployed successfully. Create that branch from `main` and
+materialize the `dev` tree on it; this preserves linear squash history without
+rewriting protected branches. The release workflow checks tree equality,
+verifies the dev signatures, promotes the same manifests without rebuilding,
+adds the production signature, selects the next semantic patch version (with
+`v0.2.0` as the launch floor), creates the GitHub release/tag, and deploys
+production. Pull-request jobs never receive deployment secrets.
 
 Both branches require signed commits, the aggregate Dockerized verification
 check, PRs, linear history, resolved conversations, admin enforcement, and
