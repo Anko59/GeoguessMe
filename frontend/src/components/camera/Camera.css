@@ -1,3 +1,5 @@
+@import url('./CameraComposer.css');
+
 .camera-container {
     width: 100%;
     height: 100%;
@@ -19,14 +21,47 @@
 .camera-video {
     width: 100%;
     height: 100%;
+    position: absolute;
+    inset: 0;
     display: block;
     object-fit: cover;
     opacity: 0;
+    transform: scaleX(-1);
     transition: opacity 500ms ease;
 }
 
 .camera-video.ready {
     opacity: 1;
+}
+
+.camera-capture-canvas,
+.camera-source-canvas {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.camera-filter-overlay,
+.photo-filter-overlay {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.camera-filter-overlay {
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+
+.photo-filter-overlay {
+    object-fit: contain;
 }
 
 .camera-loading,
@@ -93,25 +128,163 @@
 }
 
 .camera-file-input {
-    position: absolute;
     width: 1px;
     height: 1px;
+    position: absolute;
     opacity: 0;
 }
 
 .camera-controls {
     position: absolute;
     right: 0;
-    bottom: max(2rem, env(safe-area-inset-bottom));
+    bottom: max(0.85rem, env(safe-area-inset-bottom));
     left: 0;
     z-index: 3;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.camera-filter-picker {
+    width: min(calc(100% - 1rem), 56rem);
+    padding: 0.8rem 0.85rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    color: var(--surface);
+    background: linear-gradient(180deg, rgba(8, 10, 24, 0.58), rgba(5, 7, 18, 0.94));
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 1.5rem;
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(22px) saturate(1.35);
+}
+
+.camera-filter-heading {
+    padding: 0 0.3rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.camera-filter-label,
+.camera-filter-current {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.camera-filter-label {
+    text-transform: uppercase;
+}
+
+.camera-filter-current {
+    color: var(--brand-yellow);
+    font-weight: 600;
+}
+
+.camera-filter-options {
+    width: 100%;
+    padding: 0.15rem 0.1rem 0.3rem;
+    display: flex;
+    gap: 0.72rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x mandatory;
+}
+
+.camera-filter-options::-webkit-scrollbar {
+    display: none;
+}
+
+.camera-filter-option {
+    --lens-accent: #7a7e91;
+
+    width: 5.5rem;
+    min-width: 5.5rem;
+    padding: 0.38rem 0.22rem 0.52rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.38rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--lens-accent) 17%, transparent), rgba(5, 7, 18, 0.5));
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 1.2rem;
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1.05;
+    scroll-snap-align: center;
+    transition:
+        transform var(--duration-fast) var(--ease-out),
+        background var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out);
+}
+
+.camera-filter-option:hover {
+    background: linear-gradient(160deg, color-mix(in srgb, var(--lens-accent) 32%, transparent), rgba(5, 7, 18, 0.55));
+    border-color: color-mix(in srgb, var(--lens-accent) 70%, white);
+    transform: translateY(-3px);
+}
+
+.camera-filter-icon {
+    width: 4.35rem;
+    height: 4.35rem;
+    display: grid;
+    place-items: center;
+    background:
+        radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.42), transparent 34%),
+        linear-gradient(145deg, color-mix(in srgb, var(--lens-accent) 72%, white), var(--lens-accent));
+    border: 1px solid color-mix(in srgb, var(--lens-accent) 55%, white);
+    border-radius: 1rem;
+    box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.32),
+        0 8px 18px color-mix(in srgb, var(--lens-accent) 22%, transparent);
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.camera-filter-option-label {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.camera-filter-option.selected {
+    color: var(--surface);
+    background: color-mix(in srgb, var(--lens-accent) 26%, rgba(5, 7, 18, 0.75));
+    border-color: var(--lens-accent);
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--lens-accent) 32%, transparent),
+        0 10px 28px color-mix(in srgb, var(--lens-accent) 26%, transparent);
+    transform: translateY(-4px);
+}
+
+.camera-filter-option.selected .camera-filter-icon {
+    border-color: white;
+    box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.45),
+        0 0 0 3px color-mix(in srgb, var(--lens-accent) 48%, transparent),
+        0 10px 24px color-mix(in srgb, var(--lens-accent) 45%, transparent);
+}
+
+.camera-filter-picker small {
+    max-width: 28rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.camera-filter-picker .camera-filter-status {
+    color: #fff0b8;
 }
 
 .capture-button {
-    width: 5.25rem;
-    height: 5.25rem;
+    width: 4.75rem;
+    height: 4.75rem;
     padding: 0.45rem;
     display: grid;
     place-items: center;
@@ -157,12 +330,23 @@
     object-fit: contain;
 }
 
+.preview-filter-picker {
+    position: absolute;
+    right: 0;
+    bottom: max(6.5rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    left: 0;
+    z-index: 3;
+    display: flex;
+    justify-content: center;
+}
+
 .preview-controls {
     padding: 0 clamp(1rem, 4vw, 2rem);
     position: absolute;
     right: 0;
     bottom: max(1.5rem, env(safe-area-inset-bottom));
     left: 0;
+    z-index: 4;
     display: flex;
     justify-content: center;
     gap: var(--space-3);
@@ -191,6 +375,7 @@
     100% {
         opacity: 0;
     }
+
     45% {
         opacity: 0.88;
     }

@@ -116,6 +116,7 @@ age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMM
 # Cloudflare client IP replaces both forwarding headers at the only gateway.
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
+assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
 
 # Reject malformed image input before touching Docker or secrets.
 if "$DEPLOY" dev latest latest 0123456789012345678901234567890123456789 >/dev/null 2>&1; then

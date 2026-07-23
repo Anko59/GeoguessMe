@@ -1,0 +1,2 @@
+# Vendored browser runtime and neural-network data are pinned upstream assets.
+frontend/public/vendor/jeeliz/**

@@ -56,11 +56,17 @@ beforeEach(() => {
 
     HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
         drawImage: vi.fn(),
+        clearRect: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,abc123');
 
     Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: 640 });
     Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: 480 });
+    Object.defineProperty(HTMLVideoElement.prototype, 'srcObject', {
+        configurable: true,
+        writable: true,
+        value: null,
+    });
 
     vi.stubGlobal(
         'FileReader',
@@ -79,6 +85,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
 
@@ -97,6 +104,33 @@ describe('Camera component', () => {
         });
         expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
+    });
+
+    it.each([
+        ['SecurityError', /Camera access denied/i],
+        ['NotFoundError', /No camera was found/i],
+        ['DevicesNotFoundError', /No camera was found/i],
+        ['NotReadableError', /camera is busy or unavailable/i],
+        ['TrackStartError', /camera is busy or unavailable/i],
+        ['UnknownError', /camera could not be started/i],
+    ])('maps %s camera failures to actionable guidance', async (name, expectedMessage) => {
+        mocks.getUserMedia.mockRejectedValue(new DOMException('Camera failed', name));
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByText(expectedMessage)).toBeInTheDocument());
+    });
+
+    it('offers file upload when the media devices API is unavailable', async () => {
+        vi.stubGlobal('navigator', {
+            mediaDevices: undefined,
+            geolocation: { getCurrentPosition: mocks.getCurrentPosition },
+        });
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Camera access denied or unavailable/i)).toBeInTheDocument();
+        });
+        expect(mocks.getUserMedia).not.toHaveBeenCalled();
     });
 
     it('retries camera access when Try Again is clicked', async () => {
@@ -148,11 +182,44 @@ describe('Camera component', () => {
         });
     });
 
-    it('uploads a photo via file picker with geolocation', async () => {
+    it('keeps unsupported image files usable while disabling 3D preparation', async () => {
+        mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+
+        const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
+        fireEvent.change(input, { target: { files: [] } });
+        expect(screen.queryByAltText('Captured')).not.toBeInTheDocument();
+        await act(async () => {
+            fireEvent.change(input, {
+                target: { files: [new File(['animated-image'], 'photo.gif', { type: 'image/gif' })] },
+            });
+        });
+
+        await waitFor(() => expect(screen.getByAltText('Captured')).toBeInTheDocument());
+        expect(screen.getByText(/3D lenses support JPEG, PNG, and WebP/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cyber visor' }));
+        expect(screen.getByRole('button', { name: 'Cyber visor' })).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Original' }));
+        expect(screen.getByRole('button', { name: 'Original' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('uploads the original file when image filtering cannot prepare it', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         stubGeolocation();
         mocks.post.mockResolvedValue({ data: {} });
         const onUploadComplete = vi.fn();
+        vi.stubGlobal(
+            'Image',
+            class {
+                onerror: ((event: Event) => void) | null = null;
+
+                set src(_value: string) {
+                    Promise.resolve().then(() => this.onerror?.(new Event('error')));
+                }
+            },
+        );
 
         render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);
         await waitFor(() => {
@@ -179,7 +246,9 @@ describe('Camera component', () => {
         expect(formData.get('group_id')).toBe('group-1');
         expect(formData.get('lat')).toBe('45.5');
         expect(formData.get('long')).toBe('-73.6');
-        expect(formData.get('photo')).toBeInstanceOf(Blob);
+        const uploadedPhoto = formData.get('photo');
+        expect(uploadedPhoto).toBeInstanceOf(Blob);
+        expect((uploadedPhoto as Blob).type).toBe('image/png');
         expect(onUploadComplete).toHaveBeenCalled();
     });
 
@@ -323,6 +392,57 @@ describe('Camera component', () => {
         // Unmount triggers useEffect cleanup → stopCamera → track.stop().
         unmount();
         expect(trackStop).toHaveBeenCalled();
+    });
+
+    it('captures a ready camera frame and can retake it', async () => {
+        stubUserMedia();
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        expect(screen.getByAltText('Captured')).toBeInTheDocument();
+        expect(document.querySelector('.camera-flash')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retake' }));
+        await waitFor(() => expect(mocks.getUserMedia).toHaveBeenCalledTimes(2));
+        expect(play).toHaveBeenCalled();
+    });
+
+    it('adds an editable text banner to a captured camera photo before upload', async () => {
+        stubUserMedia();
+        stubGeolocation();
+        mocks.post.mockResolvedValue({ data: {} });
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        const context = {
+            beginPath: vi.fn(),
+            closePath: vi.fn(),
+            drawImage: vi.fn(),
+            fill: vi.fn(),
+            fillText: vi.fn(),
+            lineTo: vi.fn(),
+            measureText: vi.fn((text: string) => ({ width: text.length * 20 })),
+            moveTo: vi.fn(),
+            quadraticCurveTo: vi.fn(),
+            restore: vi.fn(),
+            save: vi.fn(),
+        } as unknown as CanvasRenderingContext2D;
+        HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(context);
+
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        fireEvent.click(screen.getByRole('button', { name: /text/i }));
+        fireEvent.change(screen.getByPlaceholderText('Say something dangerous…'), {
+            target: { value: 'CEO OF BAD IDEAS' },
+        });
+        expect(screen.getByText('CEO OF BAD IDEAS')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Send/ }));
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledOnce());
+        expect(context.fillText).toHaveBeenCalledWith('CEO OF BAD IDEAS', 320, expect.any(Number), 550.4);
     });
 
     it('does not start camera initialization after an immediate unmount', async () => {
