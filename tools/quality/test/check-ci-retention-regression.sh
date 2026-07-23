@@ -1,197 +1,122 @@
 #!/usr/bin/env bash
-# Deterministic regression/config check for CI workflow cache and artifact
-# retention configuration.
-#
-# Checks:
-#   1. Workflow file exists and is valid YAML (via actionlint if available)
-#   2. upload-artifact step has explicit retention-days set
-#   3. Docker Buildx is configured with install: true
-#   4. Setup-buildx-action has buildkitd-config-inline with GC config
-#   5. A cache step exists for Docker build layers
-#   6. No secrets, .env files, or sensitive variables are uploaded as artifacts
-#   7. Failure diagnostics are preserved (upload-artifact runs on failure())
-#   8. Cache keys are scoped by branch and lockfile hash
-#   9. Makefile provides DOCKER_BUILD_FLAGS for CI cache integration
 set -euo pipefail
 
-WORKFLOW=".github/workflows/ci.yml"
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-
-PASS=0
-FAIL=0
-
-pass() {
-    echo "PASS: $*"
-    PASS=$((PASS + 1))
-}
-
-fail() {
-    echo "FAIL: $*"
-    FAIL=$((FAIL + 1))
-}
-
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$REPO_ROOT"
 
-echo "ci-retention regression tests:"
+pass=0
+fail=0
 
-# ── Test 1: Workflow file exists ────────────────────────────────────────────
-echo "--- Test 1: Workflow file exists ---"
+ok() {
+    echo "PASS: $*"
+    pass=$((pass + 1))
+}
 
-if [ -f "$WORKFLOW" ]; then
-    pass "workflow file $WORKFLOW exists"
-else
-    fail "workflow file $WORKFLOW not found"
-fi
+bad() {
+    echo "FAIL: $*"
+    fail=$((fail + 1))
+}
 
-# ── Test 2: YAML validity via actionlint (when available) ───────────────────
-echo "--- Test 2: Workflow validity ---"
-
-if command -v actionlint >/dev/null 2>&1; then
-    if actionlint "$WORKFLOW" >/dev/null 2>&1; then
-        pass "actionlint validates $WORKFLOW"
+contains() {
+    local file=$1
+    local pattern=$2
+    local description=$3
+    if grep -Eq "$pattern" "$file"; then
+        ok "$description"
     else
-        fail "actionlint reports errors in $WORKFLOW"
-        actionlint "$WORKFLOW" 2>&1 | head -10
+        bad "$description"
     fi
-else
-    echo "  SKIP: actionlint not available, using basic YAML check"
-    if grep -q '^name:' "$WORKFLOW" && grep -q '^jobs:' "$WORKFLOW"; then
-        pass "basic YAML structure check passed"
+}
+
+absent() {
+    local file=$1
+    local pattern=$2
+    local description=$3
+    if grep -Eq "$pattern" "$file"; then
+        bad "$description"
     else
-        fail "basic YAML structure check failed"
+        ok "$description"
     fi
-fi
+}
 
-# ── Test 3: retention-days set on artifact upload ───────────────────────────
-echo "--- Test 3: artifact retention-days ---"
+CI=.github/workflows/ci.yml
+DEPLOY=.github/workflows/deploy.yml
+RELEASE=.github/workflows/release.yml
+NIGHTLY=.github/workflows/nightly.yml
 
-if grep -q 'retention-days:' "$WORKFLOW"; then
-    days=$(grep -oP 'retention-days:\s*\K[0-9]+' "$WORKFLOW" | head -1)
-    if [ -n "$days" ] && [ "$days" -ge 1 ] && [ "$days" -le 90 ]; then
-        pass "artifact upload has retention-days: $days (bounded)"
+echo "tiered CI regression tests:"
+for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY"; do
+    if [ -f "$workflow" ]; then
+        ok "$workflow exists"
     else
-        fail "retention-days value '$days' out of expected 1..90 range"
+        bad "$workflow exists"
     fi
-else
-    fail "no retention-days found in workflow"
-fi
-
-# ── Test 4: Docker Buildx install: true ─────────────────────────────────────
-echo "--- Test 4: Buildx install: true ---"
-
-if grep -q 'install: true' "$WORKFLOW"; then
-    pass "docker/setup-buildx-action has install: true"
-else
-    fail "docker/setup-buildx-action missing install: true"
-fi
-
-# ── Test 5: BuildKit GC configuration ───────────────────────────────────────
-echo "--- Test 5: BuildKit GC configuration ---"
-
-if grep -q 'gckeepstorage' "$WORKFLOW"; then
-    pass "BuildKit GC gckeepstorage is configured (bounded cache)"
-else
-    fail "BuildKit GC gckeepstorage is not configured"
-fi
-
-if grep -q 'gc = true' "$WORKFLOW"; then
-    pass "BuildKit GC is enabled"
-else
-    fail "BuildKit GC is not enabled"
-fi
-
-# ── Test 6: Cache step exists for Docker layers ─────────────────────────────
-echo "--- Test 6: Docker cache step ---"
-
-if grep -qE 'actions/cache@' "$WORKFLOW"; then
-    pass "actions/cache step exists"
-else
-    fail "no actions/cache step found"
-fi
-
-# Cache must reference a Docker-specific path.
-if grep -q '/tmp/.buildx-cache' "$WORKFLOW"; then
-    pass "cache path targets Docker buildx cache directory"
-else
-    fail "cache path does not target Docker buildx cache directory"
-fi
-
-# ── Test 7: No secrets or sensitive data uploaded ───────────────────────────
-echo "--- Test 7: No secrets or sensitive data ---"
-
-# Artifact paths must not include .env files, secret files, or credentials.
-artifact_paths=$(sed -n '/path:/,/^[[:space:]]*[a-z]/p' "$WORKFLOW" | grep -E '^\s+- ' | grep -oP '\S+$' || true)
-if [ -z "$artifact_paths" ]; then
-    # Try a different extraction for multi-line YAML
-    artifact_paths=$(grep -A 20 'path:' "$WORKFLOW" | grep -E '^\s+- ' | sed 's/^\s*- //' || true)
-fi
-
-has_secrets=false
-for p in $artifact_paths; do
-    case "$p" in
-        *.env | *.env.* | *secret* | *credential* | *token* | *password* | *key*)
-            fail "potential secret path found in artifacts: $p"
-            has_secrets=true
-            ;;
-    esac
 done
 
-if [ "$has_secrets" = false ]; then
-    pass "no secret, .env, or credential paths in artifact upload"
+contains "$CI" '^  pull_request:' "CI runs for pull requests"
+absent "$CI" '^  push:' "CI does not duplicate post-merge workflows"
+contains "$CI" 'Only the repository dev branch may open a pull request to main' \
+    "main accepts release PRs only from dev"
+contains "$CI" 'actions/workflows/deploy\.yml/runs' \
+    "release PR checks the exact dev deployment"
+contains "$CI" 'classify-changes\.sh --null' \
+    "changed paths select live-stack suites"
+contains "$CI" 'make preflight-docs' "documentation-only PRs use the small gate"
+contains "$CI" 'make preflight' "application PRs use the fast gate"
+contains "$CI" 'make pr-backend' "backend changes select integration tests"
+contains "$CI" 'make pr-frontend' "frontend changes select Chromium E2E"
+contains "$CI" 'name: Dockerized verification gate' \
+    "stable aggregate status preserves branch protection"
+absent "$CI" 'make verify' "pull requests do not run the operational release gate"
+
+contains "$CI" 'retention-days: 7' "failure artifacts have bounded retention"
+contains "$CI" 'actions/cache@' "live-stack jobs use persistent Docker caches"
+contains "$CI" 'BUILDX_BUILDER:' "Buildx v4 selects its named builder explicitly"
+contains "$CI" 'gckeepstorage = 12000000000' "PR BuildKit cache is bounded"
+
+secret_paths=false
+while IFS= read -r path; do
+    case "$path" in
+        *.env | *.env.* | *secret* | *credential* | *token* | *password* | *key*)
+            bad "potential secret artifact path: $path"
+            secret_paths=true
+            ;;
+    esac
+done < <(sed -n '/^[[:space:]]*path: |$/,/^[[:space:]]*[a-zA-Z_-]*:/p' "$CI" |
+    sed -n 's/^[[:space:]]*\([^[:space:]].*\)$/\1/p' || true)
+if [ "$secret_paths" = false ]; then
+    ok "artifact paths exclude secrets and credentials"
 fi
 
-# ── Test 8: Failure diagnostics preserved ───────────────────────────────────
-echo "--- Test 8: Failure diagnostics preserved ---"
-
-if grep -q 'failure()' "$WORKFLOW"; then
-    pass "artifact upload runs on failure() to preserve diagnostics"
+deploy_verify_count=$(grep -c 'make verify' "$DEPLOY" || true)
+if [ "$deploy_verify_count" -eq 1 ]; then
+    ok "dev performs exactly one complete gate"
 else
-    fail "artifact upload does not run on failure()"
+    bad "dev must perform exactly one complete gate (found $deploy_verify_count)"
 fi
+contains "$DEPLOY" 'needs: verify' "dev publishing waits for the complete gate"
 
-# The artifact name should indicate verification artifacts.
-if grep -q 'name:.*artifact' "$WORKFLOW"; then
-    pass "artifact upload has a descriptive name"
+absent "$RELEASE" 'make verify' "production does not repeat the dev gate"
+absent "$RELEASE" 'docker/build-push-action@' "production does not rebuild tested images"
+contains "$RELEASE" 'main_tree=\$\(git rev-parse' "release resolves the main tree"
+contains "$RELEASE" 'dev_tree=\$\(git rev-parse' "release resolves the tested dev tree"
+contains "$RELEASE" 'cosign verify' "release verifies development signatures"
+contains "$RELEASE" 'imagetools create' "release promotes immutable manifests"
+contains "$RELEASE" 'cosign sign' "release adds the production workflow signature"
+contains "$RELEASE" 'actual_backend.*BACKEND_DIGEST' \
+    "promotion verifies the backend digest did not change"
+
+contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
+contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"
+contains Makefile '^pre-push:.*fast deterministic gate' \
+    "pre-push is documented as the fast gate"
+contains Makefile '^[[:space:]]+\$\(MAKE\) preflight$' "pre-push invokes preflight"
+contains Makefile 'DOCKER_BUILD_FLAGS' "Make supports CI Docker caching"
+
+echo
+if [ "$fail" -eq 0 ]; then
+    echo "tiered CI regression tests PASSED ($pass passed)"
 else
-    fail "artifact upload is missing a name"
-fi
-
-# ── Test 9: Cache keys are scoped ───────────────────────────────────────────
-echo "--- Test 9: Cache key scoping ---"
-
-if grep -qE 'key:.*CACHE_BRANCH' "$WORKFLOW"; then
-    pass "cache key includes branch scope"
-fi
-
-if grep -q 'restore-keys:' "$WORKFLOW"; then
-    pass "cache has restore-keys for cross-run fallback"
-else
-    fail "cache missing restore-keys"
-fi
-
-# ── Test 10: DOCKER_BUILD_FLAGS variable in Makefile ────────────────────────
-echo "--- Test 10: Makefile cache support ---"
-
-if grep -q 'DOCKER_BUILD_FLAGS' Makefile; then
-    pass "Makefile defines DOCKER_BUILD_FLAGS for CI cache"
-else
-    fail "Makefile missing DOCKER_BUILD_FLAGS"
-fi
-
-# Verify build-images uses the variable (literal $(DOCKER_BUILD_FLAGS) in Makefile).
-# shellcheck disable=SC2016
-pattern='docker build.*$(DOCKER_BUILD_FLAGS)'
-if grep -q "$pattern" Makefile; then
-    pass "build-images target passes DOCKER_BUILD_FLAGS"
-else
-    fail "build-images target does not use DOCKER_BUILD_FLAGS"
-fi
-
-# ── Summary ──────────────────────────────────────────────────────────────────
-echo ""
-if [ "$FAIL" -eq 0 ]; then
-    echo "ci-retention regression tests PASSED (${PASS} passed)"
-else
-    echo "ci-retention regression tests FAILED (${PASS} passed, ${FAIL} failed)"
+    echo "tiered CI regression tests FAILED ($pass passed, $fail failed)"
     exit 1
 fi

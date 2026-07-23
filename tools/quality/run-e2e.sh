@@ -38,7 +38,17 @@ export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:
 docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --wait
 "$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
 
-test_args=(test --project=desktop --project=firefox --project=mobile)
+IFS=',' read -r -a selected_projects <<<"${GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile}"
+test_args=(test)
+for project in "${selected_projects[@]}"; do
+    case "$project" in
+        desktop | firefox | mobile) test_args+=("--project=$project") ;;
+        *)
+            echo "unsupported Playwright project: $project" >&2
+            exit 2
+            ;;
+    esac
+done
 if [ "${1:-}" = "--ui" ]; then
     test_args+=(--ui)
 fi
