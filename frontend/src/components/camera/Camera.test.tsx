@@ -324,4 +324,15 @@ describe('Camera component', () => {
         unmount();
         expect(trackStop).toHaveBeenCalled();
     });
+
+    it('does not start camera initialization after an immediate unmount', async () => {
+        const { unmount } = render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        unmount();
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(mocks.getUserMedia).not.toHaveBeenCalled();
+    });
 });

@@ -87,8 +87,15 @@ export default function Camera({ groupID, onUploadComplete }: CameraProps) {
     }, [stopCamera]);
 
     useEffect(() => {
-        void startCamera();
-        return stopCamera;
+        let active = true;
+        queueMicrotask(() => {
+            if (active) void startCamera();
+        });
+        return () => {
+            active = false;
+            attemptRef.current += 1;
+            stopCamera();
+        };
     }, [startCamera, stopCamera]);
 
     const capturePhoto = () => {

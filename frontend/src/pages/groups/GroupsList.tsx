@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
@@ -10,11 +10,7 @@ export default function GroupsList() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchGroups();
-    }, []);
-
-    const fetchGroups = async () => {
+    const fetchGroups = useCallback(async () => {
         try {
             const res = await api.get('/user/groups');
             setGroups(res.data || []);
@@ -23,7 +19,11 @@ export default function GroupsList() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        queueMicrotask(() => void fetchGroups());
+    }, [fetchGroups]);
 
     if (loading) {
         return (

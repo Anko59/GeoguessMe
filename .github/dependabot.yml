@@ -14,6 +14,15 @@ updates:
     target-branch: dev
     open-pull-requests-limit: 5
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@testing-library/jest-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: globals
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       npm-compatible:
         patterns: ["*"]

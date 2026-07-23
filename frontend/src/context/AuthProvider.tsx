@@ -30,7 +30,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
     useEffect(() => {
-        void refreshSession().finally(() => setLoading(false));
+        let active = true;
+        queueMicrotask(() => {
+            void refreshSession().finally(() => {
+                if (active) setLoading(false);
+            });
+        });
+        return () => {
+            active = false;
+        };
     }, [refreshSession]);
     const value = useMemo(
         () => ({ user, loading, isAuthenticated: user !== null, login, logout, refresh: refreshSession }),
