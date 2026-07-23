@@ -56,6 +56,7 @@ beforeEach(() => {
 
     HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
         drawImage: vi.fn(),
+        clearRect: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,abc123');
 

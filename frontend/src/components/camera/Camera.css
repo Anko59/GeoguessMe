@@ -19,6 +19,8 @@
 .camera-video {
     width: 100%;
     height: 100%;
+    position: absolute;
+    inset: 0;
     display: block;
     object-fit: cover;
     opacity: 0;
@@ -27,6 +29,36 @@
 
 .camera-video.ready {
     opacity: 1;
+}
+
+.camera-engine-canvas,
+.camera-capture-canvas,
+.camera-source-canvas {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.camera-filter-overlay,
+.photo-filter-overlay {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.camera-filter-overlay {
+    object-fit: cover;
+}
+
+.photo-filter-overlay {
+    object-fit: contain;
 }
 
 .camera-loading,
@@ -93,20 +125,77 @@
 }
 
 .camera-file-input {
-    position: absolute;
     width: 1px;
     height: 1px;
+    position: absolute;
     opacity: 0;
 }
 
 .camera-controls {
     position: absolute;
     right: 0;
-    bottom: max(2rem, env(safe-area-inset-bottom));
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
     left: 0;
     z-index: 3;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.camera-filter-picker {
+    max-width: calc(100% - 1rem);
+    padding: 0.55rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--surface);
+    background: rgba(5, 7, 18, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(12px);
+}
+
+.camera-filter-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.camera-filter-options {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+}
+
+.camera-filter-option {
+    padding: 0.35rem 0.6rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.camera-filter-option.selected {
+    color: #171a29;
+    background: var(--brand-yellow);
+    border-color: var(--brand-yellow);
+}
+
+.camera-filter-picker small {
+    max-width: 18rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.7rem;
+    text-align: center;
+}
+
+.camera-filter-picker .camera-filter-status {
+    color: #ffd5d5;
 }
 
 .capture-button {
@@ -157,12 +246,23 @@
     object-fit: contain;
 }
 
+.preview-filter-picker {
+    position: absolute;
+    right: 0;
+    bottom: max(6.5rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    left: 0;
+    z-index: 3;
+    display: flex;
+    justify-content: center;
+}
+
 .preview-controls {
     padding: 0 clamp(1rem, 4vw, 2rem);
     position: absolute;
     right: 0;
     bottom: max(1.5rem, env(safe-area-inset-bottom));
     left: 0;
+    z-index: 4;
     display: flex;
     justify-content: center;
     gap: var(--space-3);
@@ -191,6 +291,7 @@
     100% {
         opacity: 0;
     }
+
     45% {
         opacity: 0.88;
     }

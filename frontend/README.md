@@ -9,6 +9,8 @@ the host.
 
 - `src/pages` contains route-level experiences.
 - `src/components` contains gameplay, navigation, and reusable UI components.
+- `src/faceFilters.ts` contains the local Canvas2D overlays used with Jeeliz
+  face tracking in the camera composer.
 - `src/styles` contains the global design tokens, base rules, primitives, and
   motion policy.
 - `public/Identity.md` defines the brand and protected visualization colors.
