@@ -16,13 +16,16 @@
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
-	quality verify pre-commit pre-push ci clean reset-dev
+	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
+	quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
 
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
+TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
+TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform terraform sh -ec
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
@@ -48,8 +51,8 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools
-	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm ci --prefix /workspace/frontend --cache /npm-cache
+	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy cloudflared
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
@@ -77,6 +80,9 @@ tools-self-test: ## Run a short self-test inside each tool image.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint -version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff --version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps terraform terraform version
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
 	tools/quality/test/check-tool-image-split.sh
 
 tools-clean: ## Remove only project-specific tool containers, networks, and caches.
@@ -235,6 +241,12 @@ audit: ## Run dependency vulnerability audits in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
+deps-go-security-update: ## Update the vulnerable x/text module and normalize Go dependency metadata.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/text@v0.39.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
+
+deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only
+
 ##@ Build
 build: build-frontend build-backend ## Build production frontend and backend artifacts in Docker.
 
@@ -263,6 +275,7 @@ compose-validate: ## Validate every Compose file.
 	docker compose -f deployment/compose.dev.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.test.yaml --project-directory . config --quiet
 	BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose -f deployment/compose.production.yaml --project-directory . config --quiet
+	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.tools.yaml --project-directory . config --quiet
 
 migrate-up: ## Apply pending migrations through the backend container.
@@ -327,6 +340,68 @@ prod-down: ## Stop production services and keep data volumes.
 prod-logs: ## Tail production logs.
 	$(COMPOSE_PROD) logs -f
 
+hosted-config: ## Validate production and dev hosted Compose expansion.
+	COMPOSE_PROJECT_NAME=geoguessme-production GEOGUESSME_ENV_FILE=deployment/env/production.env.example GEOGUESSME_WEB_PORT=8081 BACKEND_IMAGE=example.invalid/geoguessme-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
+	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 GEOGUESSME_BACKEND_MEMORY=512M GEOGUESSME_DATABASE_MEMORY=768M BACKEND_IMAGE=example.invalid/geoguessme-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
+
+hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
+
+cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.
+	@test -n "$(HOST)" || { echo 'HOST is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
+	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
+
+terraform-fmt: ## Format infrastructure code in the pinned Terraform container.
+	$(TERRAFORM) fmt -recursive
+
+terraform-fmt-check: ## Check infrastructure formatting in the pinned Terraform container.
+	$(TERRAFORM) fmt -check -recursive
+
+terraform-init: ## Initialize the R2 backend; requires infra/terraform/backend.hcl.
+	@test -f infra/terraform/backend.hcl || { echo 'copy backend.hcl.example to backend.hcl and fill it first'; exit 2; }
+	$(TERRAFORM) init -backend-config=backend.hcl
+
+terraform-validate: ## Initialize without remote state and validate Terraform.
+	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate'
+
+terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
+	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
+
+terraform-plan: terraform-init ## Create a reviewed infrastructure plan.
+	$(TERRAFORM) plan -out=geoguessme.tfplan
+
+terraform-apply: ## Apply the exact reviewed plan; requires CONFIRM=apply.
+	@test "$(CONFIRM)" = apply || { echo 'Refusing without CONFIRM=apply'; exit 2; }
+	@test -f infra/terraform/geoguessme.tfplan || { echo 'run make terraform-plan first'; exit 2; }
+	$(TERRAFORM) apply geoguessme.tfplan
+
+secrets-encrypt: ## Encrypt ENV=dev|production from its example using RECIPIENT.
+	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
+	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
+	cp deployment/env/$(ENV).env.example deployment/secrets/$(ENV).env.enc
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
+
+secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
+	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
+	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
+	@mkdir -p deployment/secrets
+	@temporary=$$(mktemp deployment/secrets/.$(ENV).env.enc.XXXXXX); \
+	trap 'rm -f "$$temporary"' EXIT INT TERM; \
+	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
+		-e TARGET_ENV=$(ENV) -e BREVO_SMTP_USERNAME -e BREVO_SMTP_PASSWORD \
+		-e GHCR_USERNAME -e GHCR_TOKEN -e MEDIA_ACCESS_KEY_ID -e MEDIA_SECRET_ACCESS_KEY \
+		-e BACKUP_ACCESS_KEY_ID -e BACKUP_SECRET_ACCESS_KEY -e CLOUDFLARE_ACCOUNT_ID \
+		go-tools sh /workspace/deployment/scripts/generate-hosted-secret.sh | \
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \
+		--input-type dotenv --output-type dotenv --age "$(RECIPIENT)" /dev/stdin' \
+		>"$$temporary"; \
+	test -s "$$temporary"; \
+	chmod 0600 "$$temporary"; \
+	mv "$$temporary" deployment/secrets/$(ENV).env.enc; \
+	trap - EXIT INT TERM
+
 smoke: build-images ## Run the smoke test against a selected disposable/staging URL.
 	if [ -n "$${BASE_URL:-}" ]; then deployment/scripts/smoke-test.sh "$$BASE_URL"; else deployment/scripts/smoke-rehearsal.sh; fi
 
@@ -334,7 +409,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 

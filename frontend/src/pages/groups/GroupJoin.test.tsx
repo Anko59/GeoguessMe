@@ -42,6 +42,8 @@ describe('GroupJoin', () => {
                 <GroupJoin />
             </MemoryRouter>,
         );
+        expect(screen.getAllByRole('button', { name: 'Create Group' })[0]).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Join Group' })).toHaveAttribute('aria-pressed', 'false');
         fireEvent.change(screen.getByPlaceholderText('Group Name'), { target: { value: 'Bad' } });
         fireEvent.click(screen.getAllByRole('button', { name: 'Create Group' })[1]);
         expect(await screen.findByText('bad group name')).toBeInTheDocument();

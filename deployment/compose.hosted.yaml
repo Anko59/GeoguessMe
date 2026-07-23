@@ -1,0 +1,37 @@
+# Hosted overlay for the two isolated remote environments. Compose project
+# names provide separate networks and volumes while the environment files
+# provide independent credentials and external R2 buckets.
+services:
+  migration:
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+    env_file:
+      - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
+        required: true
+    volumes:
+      - database:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_DATABASE_CPUS:-1.0}
+          memory: ${GEOGUESSME_DATABASE_MEMORY:-1G}
+
+volumes:
+  database:

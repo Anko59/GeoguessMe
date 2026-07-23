@@ -55,7 +55,10 @@ describe('SettingsModal', () => {
         expect(screen.getByDisplayValue(`${window.location.origin}/group/join?code=ABC123`)).toBeInTheDocument();
         fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
         expect(await screen.findByText('Copied!')).toBeInTheDocument();
-        fireEvent.click(screen.getByText('Group Members'));
+        const membersToggle = screen.getByRole('button', { name: 'Group Members' });
+        expect(membersToggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(membersToggle);
+        expect(membersToggle).toHaveAttribute('aria-expanded', 'true');
         expect(await screen.findByText('bob')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
         expect(onClose).toHaveBeenCalled();

@@ -1,24 +1,15 @@
-# Release pipeline.
-#
-# Triggered by version tags matching "v*". It re-runs the complete release gate
-# so a tag is never published from a commit that fails it, then builds the
-# production backend and web images, publishes them to the GitHub Container
-# Registry, and creates a GitHub Release whose notes record the exact immutable
-# image references (image@sha256:digest) that operators must pin in
-# deployment/env/production.env. No "latest" tag is published so deploys stay
-# reproducible, matching the production compose contract.
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+
+concurrency:
+  group: geoguessme-production-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
-
-env:
-  CACHE_BRANCH: ${{ github.ref_name }}
 
 jobs:
   verify:
@@ -26,123 +17,152 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Set up Docker Buildx with bounded cache
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          install: true
-          buildkitd-config-inline: |
-            [worker.oci]
-              gc = true
-              gckeepstorage = 20000000000
-
-      - name: Cache Docker build layers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: /tmp/.buildx-cache
-          key: release-${{ runner.os }}-${{ env.CACHE_BRANCH }}-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
-          restore-keys: |
-            release-${{ runner.os }}-
-
-      - name: Bootstrap pinned tool containers
-        run: make bootstrap
-
-      - name: Run the complete release gate
-        run: |
-          make verify \
-            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
-
-      - name: Migrate Docker layer cache for next run
-        if: always()
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache 2>/dev/null || true
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - run: make bootstrap
+      - run: make verify
 
   release:
-    name: Publish images and GitHub release
-    runs-on: ubuntu-latest
+    name: Publish signed release
     needs: verify
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
       packages: write
+    outputs:
+      backend: ${{ steps.refs.outputs.backend }}
+      web: ${{ steps.refs.outputs.web }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Resolve lowercase registry owner
-        id: owner
-        run: echo "name=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Log in to GitHub Container Registry
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v2.5.3
+      - name: Resolve the next release version
+        id: version
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [[ -z "$latest" ]]; then
+            tag=v0.2.0
+          elif [[ "$latest" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major=${BASH_REMATCH[1]}
+            minor=${BASH_REMATCH[2]}
+            patch=${BASH_REMATCH[3]}
+            if (( major == 0 && minor < 2 )); then
+              tag=v0.2.0
+            else
+              tag="v${major}.${minor}.$((patch + 1))"
+            fi
+          else
+            echo "Latest release tag is not semantic: $latest" >&2
+            exit 1
+          fi
+          git rev-parse --verify --quiet "refs/tags/$tag" && {
+            echo "Release tag already exists: $tag" >&2
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Backend image metadata
-        id: backend-meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-backend
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Web image metadata
-        id: web-meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-web
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Build and push backend image
+      - name: Resolve registry names
+        id: names
+        run: |
+          owner=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "backend=ghcr.io/$owner/geoguessme-backend:${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$owner/geoguessme-web:${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+      - name: Build and push backend with SBOM and provenance
         id: backend
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: deployment/docker/backend.Dockerfile
           push: true
-          tags: ${{ steps.backend-meta.outputs.tags }}
-          labels: ${{ steps.backend-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push web image
+          tags: ${{ steps.names.outputs.backend }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=release-backend
+          cache-to: type=gha,mode=max,scope=release-backend
+      - name: Build and push web with SBOM and provenance
         id: web
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: deployment/docker/frontend.Dockerfile
           push: true
-          tags: ${{ steps.web-meta.outputs.tags }}
-          labels: ${{ steps.web-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+          tags: ${{ steps.names.outputs.web }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=release-web
+          cache-to: type=gha,mode=max,scope=release-web
+      - name: Sign immutable images
+        env:
+          BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+        run: |
+          cosign sign --yes -a "revision=$GITHUB_SHA" "$BACKEND"
+          cosign sign --yes -a "revision=$GITHUB_SHA" "$WEB"
+      - name: Export immutable references
+        id: refs
+        run: |
+          echo "backend=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          echo "web=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           body: |
-            ## Production images
+            Immutable images:
 
-            Pin these immutable references in `deployment/env/production.env`
-            (`BACKEND_IMAGE` and `WEB_IMAGE`):
+            ```text
+            BACKEND_IMAGE=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
+            WEB_IMAGE=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+            ```
 
-            ```
-            BACKEND_IMAGE=ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-backend@${{ steps.backend.outputs.digest }}
-            WEB_IMAGE=ghcr.io/${{ steps.owner.outputs.name }}/geoguessme-web@${{ steps.web.outputs.digest }}
-            ```
+  deploy:
+    name: Deploy production digest
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: geoguessme-host-deployment
+      cancel-in-progress: false
+    steps:
+      - name: Install pinned cloudflared
+        run: |
+          curl -fsSLo cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb
+          echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  cloudflared.deb' | sha256sum -c -
+          sudo dpkg -i cloudflared.deb
+      - name: Deploy through Cloudflare Access
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          BACKEND: ${{ needs.release.outputs.backend }}
+          WEB: ${{ needs.release.outputs.web }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/deploy ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
+            -o ProxyCommand='cloudflared access ssh --hostname %h' \
+            deploy@deploy.geoguessme.com \
+            "deploy $BACKEND $WEB $GITHUB_SHA"

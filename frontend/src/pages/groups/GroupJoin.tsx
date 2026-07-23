@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
+import Icon from '../../components/ui/Icon';
 import './GroupJoin.css';
 
 export default function GroupJoin() {
@@ -54,20 +55,30 @@ export default function GroupJoin() {
     return (
         <div className="group-join-container">
             <Link to="/groups" className="back-btn-page">
-                <img src="/back_arrow.png" alt="Back" className="back-arrow-page" />
+                <Icon name="arrow-left" className="back-arrow-page" />
                 <span>Back to Groups</span>
             </Link>
 
             <div className="group-join-header">
-                <img src="/logo.png" alt="Logo" className="join-logo" />
-                <h1 className="gradient-text">Join or Create a Group</h1>
+                <img src="/logo.png" alt="" className="join-logo" />
+                <p className="join-eyebrow">Play together</p>
+                <h1>Find your group</h1>
+                <p>Join with a six-character code or start a new circle.</p>
             </div>
 
-            <div className="mode-selector">
-                <button onClick={() => setMode('join')} className={`mode-btn ${mode === 'join' ? 'active' : ''}`}>
+            <div className="mode-selector" aria-label="Group action">
+                <button
+                    aria-pressed={mode === 'join'}
+                    onClick={() => setMode('join')}
+                    className={`mode-btn ${mode === 'join' ? 'active' : ''}`}
+                >
                     Join Group
                 </button>
-                <button onClick={() => setMode('create')} className={`mode-btn ${mode === 'create' ? 'active' : ''}`}>
+                <button
+                    aria-pressed={mode === 'create'}
+                    onClick={() => setMode('create')}
+                    className={`mode-btn ${mode === 'create' ? 'active' : ''}`}
+                >
                     Create Group
                 </button>
             </div>
@@ -83,7 +94,7 @@ export default function GroupJoin() {
                         maxLength={6}
                         required
                     />
-                    <button type="submit" disabled={joining}>
+                    <button type="submit" className="btn btn-accent" disabled={joining}>
                         {joining ? 'Joining…' : 'Join Group'}
                     </button>
                 </form>
@@ -97,11 +108,17 @@ export default function GroupJoin() {
                         onChange={(e) => setName(e.target.value)}
                         required
                     />
-                    <button type="submit">Create Group</button>
+                    <button type="submit" className="btn btn-accent">
+                        Create Group
+                    </button>
                 </form>
             )}
 
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+                <div className="error-message" role="alert">
+                    {error}
+                </div>
+            )}
         </div>
     );
 }

@@ -61,6 +61,17 @@ When `APP_ENV=production`, the following additional checks apply:
 environment; any other value is rejected at startup so the metrics
 authentication decision is unambiguous.
 
+## Hosted operator variables
+
+The hosted dotenv also contains values consumed by PostgreSQL and backup
+containers rather than the backend: `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`POSTGRES_DB`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, `AWS_ACCESS_KEY_ID`, and
+`AWS_SECRET_ACCESS_KEY`. Dev and production must use different PostgreSQL,
+application, age, and R2 media credentials. Backup credentials are scoped only
+to the private backup bucket. Both remote environments deliberately use
+`APP_ENV=production`; dev is distinguished by its URL, project, port, bucket,
+credentials, and tighter resource limits.
+
 ## Example `.env` for development
 
 ```bash

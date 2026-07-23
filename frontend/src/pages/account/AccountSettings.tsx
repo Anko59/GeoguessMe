@@ -78,11 +78,20 @@ export default function AccountSettings() {
     return (
         <main className="auth-container account-settings-container">
             <section className="auth-card account-settings-card">
-                <h1 className="auth-title gradient-text">Account settings</h1>
-                <p className="account-intro">Manage your profile, avatar, email address, username, and password.</p>
+                <div className="account-header">
+                    <img src="/logo.png" alt="" />
+                    <div>
+                        <p className="account-eyebrow">Your GeoGuessMe profile</p>
+                        <h1 className="auth-title">Account settings</h1>
+                        <p className="account-intro">Manage your profile, security, and account.</p>
+                    </div>
+                </div>
 
                 <div className="account-section">
-                    <h2>Profile</h2>
+                    <div className="account-section-heading">
+                        <h2>Profile</h2>
+                        <p>How friends see you in groups and results.</p>
+                    </div>
                     <div className="avatar-picker" role="radiogroup" aria-label="Profile image">
                         {avatars.map((candidate) => (
                             <button
@@ -124,7 +133,10 @@ export default function AccountSettings() {
                 </div>
 
                 <div className="account-section">
-                    <h2>Password</h2>
+                    <div className="account-section-heading">
+                        <h2>Security</h2>
+                        <p>Choose a strong password you do not use elsewhere.</p>
+                    </div>
                     <label htmlFor="new-password">New password</label>
                     <input
                         id="new-password"
@@ -149,14 +161,26 @@ export default function AccountSettings() {
                         {error}
                     </p>
                 )}
-                <p>{user?.email_verified_at ? 'Email verified' : 'Email not verified'}</p>
-                {!user?.email_verified_at && (
-                    <button className="btn btn-secondary" onClick={() => void resend()}>
-                        Resend verification email
-                    </button>
-                )}
+                <div className="account-verification">
+                    <div>
+                        <strong>{user?.email_verified_at ? 'Email verified' : 'Email not verified'}</strong>
+                        <span>
+                            {user?.email_verified_at
+                                ? 'Your account recovery address is confirmed.'
+                                : 'Verify your address to secure account recovery.'}
+                        </span>
+                    </div>
+                    {!user?.email_verified_at && (
+                        <button className="btn btn-secondary" onClick={() => void resend()}>
+                            Resend verification email
+                        </button>
+                    )}
+                </div>
                 <div className="account-danger">
-                    <h2>Delete account</h2>
+                    <div className="account-section-heading">
+                        <h2>Danger zone</h2>
+                        <p>Permanently delete your account and gameplay data.</p>
+                    </div>
                     <label htmlFor="delete-password">Confirm password to delete account</label>
                     <input
                         id="delete-password"
@@ -164,14 +188,16 @@ export default function AccountSettings() {
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                     />
-                    <button className="btn btn-outline" onClick={() => void removeAccount()}>
+                    <button className="btn btn-danger" onClick={() => void removeAccount()}>
                         Delete account
                     </button>
                 </div>
-                <LogoutButton />
-                <Link to="/groups" className="auth-link">
-                    Back to groups
-                </Link>
+                <div className="account-footer-actions">
+                    <LogoutButton />
+                    <Link to="/groups" className="auth-link">
+                        Back to groups
+                    </Link>
+                </div>
             </section>
         </main>
     );

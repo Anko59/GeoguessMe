@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
+import Icon from '../../components/ui/Icon';
 import './GroupsList.css';
 
 export default function GroupsList() {
@@ -27,7 +28,10 @@ export default function GroupsList() {
     if (loading) {
         return (
             <div className="groups-list-container">
-                <div className="loading">Loading your groups...</div>
+                <div className="loading" role="status">
+                    <div className="spinner" />
+                    <span>Loading your groups…</span>
+                </div>
             </div>
         );
     }
@@ -35,8 +39,9 @@ export default function GroupsList() {
     if (error)
         return (
             <div className="groups-list-container">
-                <div className="error-message" role="alert">
-                    {error}
+                <div className="groups-state error-message" role="alert">
+                    <strong>We couldn’t load your groups</strong>
+                    <span>{error}</span>
                     <button
                         className="btn btn-secondary"
                         onClick={() => {
@@ -53,29 +58,46 @@ export default function GroupsList() {
 
     return (
         <div className="groups-list-container">
-            <div className="welcome-banner">
-                <img src="/welcome_banner.png" alt="Welcome" />
-            </div>
+            <header className="groups-topbar">
+                <Link to="/groups" className="groups-brand" aria-label="GeoGuessMe groups">
+                    <img src="/logo.png" alt="" />
+                    <span>GeoGuessMe</span>
+                </Link>
+                <Link to="/settings" className="groups-account-link">
+                    Account settings
+                </Link>
+            </header>
 
-            <div className="groups-header">
-                <h1 className="gradient-text">My Groups</h1>
-                <p className="subtitle">Choose a group to start playing</p>
+            <div className="groups-heading-row">
+                <div className="groups-header">
+                    <p className="groups-eyebrow">Your game circles</p>
+                    <h1>My Groups</h1>
+                    <p className="subtitle">Choose a group or invite friends to start exploring.</p>
+                </div>
+                <img src="/welcome_banner.png" alt="" className="groups-heading-art" />
             </div>
 
             <div className="groups-actions">
-                <Link to="/group/create" className="action-btn btn-primary">
+                <Link to="/group/create" className="action-btn action-create">
                     <img src="/friends_group_icon.png" alt="" className="btn-icon" />
-                    <span>Create Group</span>
+                    <span>
+                        <strong>Create Group</strong>
+                        <small>Start a new circle</small>
+                    </span>
                 </Link>
-                <Link to="/group/join" className="action-btn btn-secondary">
+                <Link to="/group/join" className="action-btn action-join">
                     <img src="/join_group_icon.png" alt="" className="btn-icon" />
-                    <span>Join Group</span>
+                    <span>
+                        <strong>Join Group</strong>
+                        <small>Enter an invite code</small>
+                    </span>
                 </Link>
             </div>
 
             {groups.length === 0 ? (
                 <div className="empty-state">
-                    <div className="empty-icon">🌍</div>
+                    <img src="/globe_icon.png" alt="" className="empty-icon" />
+                    <h2>No groups yet</h2>
                     <p>You haven't joined any groups yet</p>
                     <p className="empty-subtitle">Create or join a group to start playing!</p>
                 </div>
@@ -90,7 +112,7 @@ export default function GroupsList() {
                                     <span className="group-code">#{group.code}</span>
                                 </div>
                             </div>
-                            <img src="/foward_arrow_icon.png" alt="" className="group-arrow" />
+                            <Icon name="chevron-right" className="group-arrow" />
                         </Link>
                     ))}
                 </div>

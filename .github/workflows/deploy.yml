@@ -1,0 +1,119 @@
+name: Deploy development
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Development verification gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - run: make bootstrap
+      - run: make verify
+
+  publish:
+    name: Publish signed development images
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    outputs:
+      backend: ${{ steps.refs.outputs.backend }}
+      web: ${{ steps.refs.outputs.web }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v2.5.3
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve registry names
+        id: names
+        run: |
+          owner=$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "backend=ghcr.io/$owner/geoguessme-backend:dev-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$owner/geoguessme-web:dev-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Build and push backend with SBOM and provenance
+        id: backend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deployment/docker/backend.Dockerfile
+          push: true
+          tags: ${{ steps.names.outputs.backend }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=dev-backend
+          cache-to: type=gha,mode=max,scope=dev-backend
+      - name: Build and push web with SBOM and provenance
+        id: web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deployment/docker/frontend.Dockerfile
+          push: true
+          tags: ${{ steps.names.outputs.web }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=dev-web
+          cache-to: type=gha,mode=max,scope=dev-web
+      - name: Sign immutable images
+        env:
+          BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+        run: |
+          cosign sign --yes -a "revision=$GITHUB_SHA" "$BACKEND"
+          cosign sign --yes -a "revision=$GITHUB_SHA" "$WEB"
+      - name: Export immutable references
+        id: refs
+        run: |
+          echo "backend=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          echo "web=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy development digest
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: development
+    concurrency:
+      group: geoguessme-host-deployment
+      cancel-in-progress: false
+    steps:
+      - name: Install pinned cloudflared
+        run: |
+          curl -fsSLo cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb
+          echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  cloudflared.deb' | sha256sum -c -
+          sudo dpkg -i cloudflared.deb
+      - name: Deploy through Cloudflare Access
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          BACKEND: ${{ needs.publish.outputs.backend }}
+          WEB: ${{ needs.publish.outputs.web }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/deploy ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
+            -o ProxyCommand='cloudflared access ssh --hostname %h' \
+            deploy@deploy.geoguessme.com \
+            "deploy $BACKEND $WEB $GITHUB_SHA"

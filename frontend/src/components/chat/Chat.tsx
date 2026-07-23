@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Message } from '../../types';
+import Icon from '../ui/Icon';
 import './Chat.css';
 
 interface ChatProps {
@@ -34,7 +35,7 @@ export default function Chat({
 
     return (
         <div className="chat-container">
-            <div className="chat-status visually-hidden" role="status" aria-live="polite">
+            <div className={`chat-status ${connectionStatus}`} role="status" aria-live="polite">
                 {connectionStatus === 'connected'
                     ? 'Connected'
                     : connectionStatus === 'connecting'
@@ -43,9 +44,9 @@ export default function Chat({
             </div>
             <div className="messages-list">
                 {messages.length === 0 && (
-                    <div className="empty-state">
-                        <div className="empty-icon">💬</div>
-                        <p>No messages yet</p>
+                    <div className="chat-empty-state">
+                        <img src="/chat_bubbl_icon.png" alt="" className="chat-empty-icon" />
+                        <h2>No messages yet</h2>
                         <p className="empty-subtitle">Start chatting with your group!</p>
                     </div>
                 )}
@@ -147,7 +148,7 @@ export default function Chat({
                     disabled={!input.trim() || connectionStatus !== 'connected'}
                     aria-label="Send message"
                 >
-                    <span className="send-icon">➤</span>
+                    <Icon name="send" className="send-icon" />
                 </button>
             </form>
         </div>

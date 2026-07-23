@@ -1,0 +1,9 @@
+cloudflare_account_id         = "replace-me"
+cloudflare_zone_id            = "replace-me"
+admin_ssh_public_key          = "ssh-ed25519 replace-me operator"
+dev_ci_ssh_public_key         = "ssh-ed25519 replace-me github-dev"
+production_ci_ssh_public_key = "ssh-ed25519 replace-me github-production"
+brevo_dns_records = {
+  # Fill the exact SPF/DKIM values shown by Brevo before the production plan.
+  # brevo_dkim = { name = "mail._domainkey", type = "TXT", content = "..." }
+}
