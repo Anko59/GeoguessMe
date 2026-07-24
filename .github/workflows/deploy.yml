@@ -146,4 +146,4 @@ jobs:
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
             deploy@deploy.geoguessme.com \
-            "deploy $BACKEND $WEB $GITHUB_SHA ${VAPID_PUBLIC_KEY:-} ${VAPID_PRIVATE_KEY:-} ${VAPID_SUBJECT:-}"
+            "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY VAPID_SUBJECT=$VAPID_SUBJECT deploy $BACKEND $WEB $GITHUB_SHA"

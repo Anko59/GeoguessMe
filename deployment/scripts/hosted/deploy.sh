@@ -9,9 +9,9 @@ environment=${1:-}
 backend_image=${2:-}
 web_image=${3:-}
 revision=${4:-}
-vapid_public=${5:-}
-vapid_private=${6:-}
-vapid_subject=${7:-}
+vapid_public="${VAPID_PUBLIC_KEY:-}"
+vapid_private="${VAPID_PRIVATE_KEY:-}"
+vapid_subject="${VAPID_SUBJECT:-}"
 validate_environment "$environment"
 
 validate_image_reference "$backend_image" backend
