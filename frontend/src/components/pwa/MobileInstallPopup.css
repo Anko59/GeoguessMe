@@ -51,7 +51,7 @@
     border: none;
     background: transparent;
     font-size: 1.5rem;
-    color: var(--ink-muted, #5d6683);
+    color: var(--ink, #1a237e);
     cursor: pointer;
     border-radius: var(--radius-pill, 999px);
 }
