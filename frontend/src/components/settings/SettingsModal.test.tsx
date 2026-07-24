@@ -48,11 +48,18 @@ describe('SettingsModal', () => {
         render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
-                    <SettingsModal isOpen onClose={onClose} groupCode="ABC123" groupName="Friends" groupId="group-1" />
+                    <SettingsModal
+                        isOpen
+                        onClose={onClose}
+                        groupCode="ABC123"
+                        groupName="Friends"
+                        groupId="group-1"
+                        currentUserName="alice"
+                    />
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.getByDisplayValue(`${window.location.origin}/group/join?code=ABC123`)).toBeInTheDocument();
+        expect(screen.getByDisplayValue(`${window.location.origin}/invite/ABC123?from=alice`)).toBeInTheDocument();
         fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
         expect(await screen.findByText('Copied!')).toBeInTheDocument();
         const membersToggle = screen.getByRole('button', { name: 'Group Members' });
@@ -69,7 +76,14 @@ describe('SettingsModal', () => {
         render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
-                    <SettingsModal isOpen onClose={vi.fn()} groupCode="ABC" groupName="Group" groupId="g" />
+                    <SettingsModal
+                        isOpen
+                        onClose={vi.fn()}
+                        groupCode="ABC"
+                        groupName="Group"
+                        groupId="g"
+                        currentUserName="bob"
+                    />
                 </MemoryRouter>
             </AuthContext.Provider>,
         );

@@ -137,6 +137,9 @@ func main() {
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
+	// Link-preview endpoint for group invites: unauthenticated, returns HTML
+	// with Open Graph meta tags for messengers and redirects browsers.
+	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)
 
 	registerSystemRoutes(mux, cfg, metrics, store)
 

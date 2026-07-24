@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"crypto/rand"
+	"fmt"
+	"html"
 	"math/big"
 	"net/http"
 	"strings"
@@ -141,4 +143,63 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		entries = []repository.LeaderboardEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// invitePageTemplate is a minimal HTML shell with Open Graph meta tags so
+// messengers render a rich preview when someone shares an invite link. It also
+// includes a meta refresh that redirects the browser to the join page.
+const invitePageTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta property="og:title" content="%s">
+<meta property="og:description" content="%s">
+<meta property="og:image" content="%s/logo.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="GeoGuessMe">
+<meta http-equiv="refresh" content="0;url=%s">
+<title>%s</title>
+</head>
+<body></body>
+</html>`
+
+// HandleInvitePreview renders Open Graph link preview metadata for group
+// invite links. Messengers and social platforms request the URL to produce a
+// rich card; browsers are redirected to the actual join page via meta refresh.
+// The route is unauthenticated so previews work even when the recipient is not
+// logged in.
+func HandleInvitePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(r.PathValue("code")))
+	if code == "" {
+		writeError(w, http.StatusBadRequest, "missing_code", "Group code is required")
+		return
+	}
+	group, err := repository.GetGroupByCodeContext(r.Context(), code)
+	if err != nil || group == nil {
+		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
+		return
+	}
+	inviterName := r.URL.Query().Get("from")
+	if inviterName != "" {
+		inviterName = html.EscapeString(inviterName)
+	}
+	groupName := html.EscapeString(group.Name)
+	title := fmt.Sprintf("Join %s on GeoGuessMe", groupName)
+	description := fmt.Sprintf("%s invites you to join the group %s on GeoGuessMe!", inviterName, groupName)
+	if inviterName == "" {
+		description = fmt.Sprintf("Join the group %s on GeoGuessMe!", groupName)
+	}
+	publicURL := ""
+	if RuntimeConfig != nil {
+		publicURL = strings.TrimRight(RuntimeConfig.PublicURL, "/")
+	}
+	redirectURL := fmt.Sprintf("%s/group/join?code=%s", publicURL, code)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write([]byte(fmt.Sprintf(invitePageTemplate, html.EscapeString(title), html.EscapeString(description), publicURL, redirectURL, html.EscapeString(title))))
 }
