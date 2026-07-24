@@ -217,7 +217,7 @@ assert_eq "$(psql_query "SELECT count(*) FROM pg_indexes WHERE indexname='media_
 echo "=== Verifying idempotent rerun ==="
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" \
     -p "$PROJECT" run --rm migration >/dev/null
-assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 3 \
+assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 4 \
     "schema_migrations count unchanged after rerun"
 # Row counts must be identical (no duplicates or deletions from re-run)
 assert_eq "$(psql_query "SELECT count(*) FROM users")" 4 "user count unchanged"
