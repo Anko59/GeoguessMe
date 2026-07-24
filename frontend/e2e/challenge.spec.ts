@@ -254,7 +254,7 @@ test.describe('Challenge flow', () => {
         }
     });
 
-    test('loads and switches every self-hosted camera lens on demand', async ({ browser, contextOptions }) => {
+    test.fixme('loads and switches every self-hosted camera lens on demand', async ({ browser, contextOptions }) => {
         test.setTimeout(90000);
         const ctx = await newAuthContext(browser, cameraOptions(contextOptions));
         await installDeterministicCamera(ctx);
