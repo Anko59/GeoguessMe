@@ -9,6 +9,9 @@ environment=${1:-}
 backend_image=${2:-}
 web_image=${3:-}
 revision=${4:-}
+vapid_public=${5:-}
+vapid_private=${6:-}
+vapid_subject=${7:-}
 validate_environment "$environment"
 
 validate_image_reference "$backend_image" backend
@@ -141,6 +144,16 @@ fi
 require_secret_file "$environment"
 
 export BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image"
+# Inject VAPID keys from CI environment (optional — deployment without them
+# disables push notifications).
+if [ -n "$vapid_public" ]; then
+    env_file=$(environment_env_file "$environment")
+    {
+        printf 'VAPID_PUBLIC_KEY=%s\n' "$vapid_public"
+        printf 'VAPID_PRIVATE_KEY=%s\n' "$vapid_private"
+        printf 'VAPID_SUBJECT=%s\n' "$vapid_subject"
+    } >>"$env_file"
+fi
 compose "$environment" "$release" pull backend web postgres
 compose "$environment" "$release" run --rm migration migrate up
 compose "$environment" "$release" up -d --wait postgres backend web
