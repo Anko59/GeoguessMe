@@ -46,6 +46,9 @@ validated. Never commit a real `.env` or production secret.
 | `LOG_LEVEL`              | string   | `info`                                        | All        | `debug`, `info`, `warn`, `error`                                                                                                                                |
 | `STORAGE_DRIVER`         | string   | — (uses S3)                                   | All        | Set to `local` to use local filesystem storage                                                                                                                  |
 | `METRICS_TOKEN`          | string   | —                                             | All        | Required in production. Must be ≥ 32 bytes (use `openssl rand -hex 32`). Bearer token for `/metrics`; compared in constant time. Whitespace is trimmed on load. |
+| `VAPID_PUBLIC_KEY`       | string   | —                                             | All        | Required in production. 65-byte P-256 uncompressed point (base64url). Generate with `geoguessme vapid-keys`.                                                    |
+| `VAPID_PRIVATE_KEY`      | string   | —                                             | All        | Required in production with PUBLIC_KEY. 32-byte P-256 scalar (base64url).                                                                                       |
+| `VAPID_SUBJECT`          | string   | —                                             | All        | Required in production. Push service contact, either `mailto:` or `https:` (e.g. `mailto:ops@example.com`).                                                     |
 
 ## Production validation
 
@@ -55,6 +58,9 @@ When `APP_ENV=production`, the following additional checks apply:
 - `SMTP_TLS` cannot be `off`
 - Authenticated SMTP (`SMTP_USERNAME` set) requires `starttls` or `tls`
 - `METRICS_TOKEN` is required and must be at least 32 bytes (after trimming)
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for
+  Web Push notifications (generate keys with `geoguessme vapid-keys`, set
+  `VAPID_SUBJECT=mailto:operator@example.com`)
 - S3 endpoint must use HTTPS and must not be local MinIO
 
 `APP_ENV` itself must be one of `development`, `production`, or `test` in every

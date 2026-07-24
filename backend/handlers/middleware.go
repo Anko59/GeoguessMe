@@ -49,3 +49,11 @@ func GetUserIDFromContext(r *http.Request) string {
 	userID, _ := r.Context().Value(userIDKey).(string)
 	return userID
 }
+
+// WithUserID returns a context carrying the authenticated user identifier. It is
+// the inverse of GetUserIDFromContext and lets packages that own handlers wired
+// behind AuthMiddleware (such as the push REST endpoints) populate a request
+// context in tests without depending on the unexported context key.
+func WithUserID(parent context.Context, userID string) context.Context {
+	return context.WithValue(parent, userIDKey, userID)
+}
