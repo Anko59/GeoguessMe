@@ -21,6 +21,11 @@ export default defineConfig({
                 // Infrastructure files that are not independently unit-testable
                 'src/setupTests.ts',
                 'src/main.tsx',
+                // Service worker and push registration are tested by the
+                // Dockerized Playwright E2E suite.
+                'src/push/serviceWorker.ts',
+                'src/push/usePushBootstrap.ts',
+                'src/push/push.ts',
             ],
             thresholds: { statements: 80, lines: 80, functions: 80, branches: 70 },
         },
