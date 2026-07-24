@@ -14,6 +14,7 @@ import (
 )
 
 type fakeStore struct {
+	mu            sync.Mutex
 	targets       []NotificationTarget
 	groupName     string
 	usernames     map[string]string
@@ -46,7 +47,9 @@ func (f *fakeStore) DeleteByID(_ context.Context, id string) error {
 	if f.deleteIDError != nil {
 		return f.deleteIDError
 	}
+	f.mu.Lock()
 	f.deletedIDs = append(f.deletedIDs, id)
+	f.mu.Unlock()
 	return nil
 }
 func (f *fakeStore) GroupTargets(_ context.Context, _, _ string) ([]NotificationTarget, error) {
@@ -195,10 +198,19 @@ func TestNotifyRemovesGoneSubscription(t *testing.T) {
 	}
 	// DeleteByID happens after the worker observes the gone error.
 	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && len(store.deletedIDs) == 0 {
+	for time.Now().Before(deadline) {
+		store.mu.Lock()
+		n := len(store.deletedIDs)
+		store.mu.Unlock()
+		if n > 0 {
+			break
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(store.deletedIDs) != 1 || store.deletedIDs[0] != "dead" {
+	store.mu.Lock()
+	ids := append([]string{}, store.deletedIDs...)
+	store.mu.Unlock()
+	if len(ids) != 1 || ids[0] != "dead" {
 		t.Fatalf("expected dead subscription removed, got %v", store.deletedIDs)
 	}
 }
