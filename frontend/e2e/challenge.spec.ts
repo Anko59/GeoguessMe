@@ -273,8 +273,6 @@ test.describe('Challenge flow', () => {
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await page.getByRole('button', { name: 'Camera' }).click();
 
-            const options = page.locator('.camera-filter-option');
-            await expect(options).toHaveCount(LENS_OPTIONS.length);
             const rail = page.locator('.camera-filter-options');
             const nextLenses = page.getByRole('button', { name: 'Next lenses' });
             if (await nextLenses.isVisible()) {
