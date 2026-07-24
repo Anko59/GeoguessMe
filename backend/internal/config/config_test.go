@@ -166,6 +166,9 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 		t.Fatal("production must reject missing METRICS_TOKEN")
 	}
 	c.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	c.VapidPublicKey = "example-public-key"
+	c.VapidPrivateKey = "example-private-key"
+	c.VapidSubject = "mailto:ops@example.com"
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected valid production config, got %v", err)
 	}
@@ -245,8 +248,52 @@ func TestValidateProductionRequiresStrongMetricsToken(t *testing.T) {
 	}
 
 	base.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	// Production also requires a stable VAPID keypair and contact subject so
+	// browser push subscriptions survive restarts.
+	base.VapidPublicKey = "example-public-key"
+	base.VapidPrivateKey = "example-private-key"
+	base.VapidSubject = "mailto:ops@example.com"
 	if err := base.Validate(); err != nil {
 		t.Fatalf("expected valid production config with 32-byte token, got %v", err)
+	}
+}
+
+func TestValidateVapidRules(t *testing.T) {
+	// Outside production, VAPID keys are optional (ephemeral keys are minted at
+	// startup), but a half-set pair is always wrong.
+	halfSet := validConfig()
+	halfSet.VapidPublicKey = "only-public"
+	if err := halfSet.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be provided together") {
+		t.Fatalf("expected partial VAPID key rejection, got %v", err)
+	}
+
+	// An invalid subject is rejected in every environment.
+	badSubject := validConfig()
+	badSubject.VapidSubject = "ftp://not-valid"
+	if err := badSubject.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT") {
+		t.Fatalf("expected invalid VAPID_SUBJECT rejection, got %v", err)
+	}
+
+	// Production requires both keys and a valid subject.
+	prod := validConfig()
+	prod.Environment = EnvProduction
+	prod.PublicURL = "https://app.example.test"
+	prod.SMTPTLS = SMTPStartTLS
+	prod.SMTPHost = "smtp.example"
+	prod.SMTPFrom = "no-reply@example.test"
+	prod.S3Endpoint = "https://s3.example"
+	prod.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are required in production") {
+		t.Fatalf("expected missing VAPID key rejection, got %v", err)
+	}
+	prod.VapidPublicKey = "example-public-key"
+	prod.VapidPrivateKey = "example-private-key"
+	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be a mailto: or https: URL in production") {
+		t.Fatalf("expected missing VAPID subject rejection, got %v", err)
+	}
+	prod.VapidSubject = "https://example.test/contact"
+	if err := prod.Validate(); err != nil {
+		t.Fatalf("expected valid production config, got %v", err)
 	}
 }
 

@@ -17,11 +17,18 @@ import (
 var HubInstance *chat.Hub
 
 func InitChat() {
-	HubInstance = chat.NewHub(func(_ context.Context, msg *models.Message) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return repository.SaveMessageContext(ctx, msg)
-	})
+	HubInstance = chat.NewHub(
+		func(_ context.Context, msg *models.Message) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return repository.SaveMessageContext(ctx, msg)
+		},
+		func(ctx context.Context, msg *models.Message) {
+			if Push != nil && msg.Kind == "text" {
+				Push.NotifyNewMessage(ctx, msg.GroupID, msg.UserID, msg.Content)
+			}
+		},
+	)
 	go HubInstance.Run()
 }
 

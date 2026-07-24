@@ -1,0 +1,74 @@
+.mobile-install-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(17, 26, 77, 0.5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: var(--space-4, 1rem);
+    animation: mobile-install-fade-in 0.3s ease-out;
+}
+
+@keyframes mobile-install-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.mobile-install-popup__card {
+    position: relative;
+    width: 100%;
+    max-width: 28rem;
+    background: var(--surface, #fff);
+    border-radius: var(--radius-lg, 1.5rem);
+    padding: var(--space-6, 1.5rem);
+    box-shadow: var(--shadow-lg, 0 28px 70px rgba(17, 26, 77, 0.16));
+    text-align: center;
+    animation: mobile-install-slide-up 0.35s ease-out;
+}
+
+@keyframes mobile-install-slide-up {
+    from {
+        transform: translateY(20%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.mobile-install-popup__close {
+    position: absolute;
+    top: var(--space-2, 0.5rem);
+    right: var(--space-2, 0.5rem);
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    background: transparent;
+    font-size: 1.5rem;
+    color: var(--ink-muted, #5d6683);
+    cursor: pointer;
+    border-radius: var(--radius-pill, 999px);
+}
+
+.mobile-install-popup__text {
+    margin: 0 0 var(--space-4, 1rem);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--ink, #1a237e);
+    line-height: 1.5;
+}
+
+.mobile-install-popup__steps {
+    text-align: left;
+    margin: 0 0 var(--space-3, 0.75rem);
+    padding-left: var(--space-5, 1.25rem);
+    color: var(--ink-muted, #5d6683);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}

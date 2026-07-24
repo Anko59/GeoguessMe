@@ -455,4 +455,41 @@ describe('Camera component', () => {
 
         expect(mocks.getUserMedia).not.toHaveBeenCalled();
     });
+
+    it('shows a camera switch button and switches to the back camera', async () => {
+        const enumerateDevices = vi.fn().mockResolvedValue([
+            { deviceId: 'cam1', kind: 'videoinput', label: 'Front Camera', groupId: 'g1' },
+            { deviceId: 'cam2', kind: 'videoinput', label: 'Back Camera', groupId: 'g2' },
+        ]);
+        const { trackStop } = stubUserMedia();
+        vi.stubGlobal('navigator', {
+            mediaDevices: { getUserMedia: mocks.getUserMedia, enumerateDevices },
+            geolocation: { getCurrentPosition: mocks.getCurrentPosition },
+        });
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        const switchBtn = screen.getByLabelText(/switch to back camera/i);
+        expect(trackStop).not.toHaveBeenCalled();
+        fireEvent.click(switchBtn);
+        await waitFor(() => expect(trackStop).toHaveBeenCalled());
+        const constraints = mocks.getUserMedia.mock.calls[1][0] as MediaStreamConstraints;
+        expect((constraints.video as { facingMode: string }).facingMode).toBe('environment');
+    });
+
+    it('toggles filter picker visibility when the filter toggle is clicked', async () => {
+        stubUserMedia();
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        const toggle = screen.getByRole('button', { name: 'Hide lenses' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(toggle);
+        expect(screen.getByRole('button', { name: 'Show lenses' })).toHaveAttribute('aria-expanded', 'false');
+    });
 });
