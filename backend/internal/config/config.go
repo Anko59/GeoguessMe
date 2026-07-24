@@ -59,6 +59,12 @@ type Config struct {
 	RateLimitWindow   time.Duration
 	LogLevel          string
 	MetricsToken      string
+
+	// VAPID keys (base64url) for Web Push. Required in production; when unset in
+	// development/test the backend mints ephemeral keys so push still works.
+	VapidPublicKey  string
+	VapidPrivateKey string
+	VapidSubject    string
 }
 
 // SMTP modes.
@@ -127,6 +133,10 @@ func Load() *Config {
 		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+
+		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
 	}
 }
 
@@ -211,6 +221,14 @@ func (c *Config) Validate() error {
 	if c.SMTPHost != "" && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
 		problems = append(problems, "SMTP_PORT must be an integer between 1 and 65535")
 	}
+	// VAPID keys are optional outside production (ephemeral keys are minted on
+	// startup), but a half-set pair is always a misconfiguration.
+	if (c.VapidPublicKey == "") != (c.VapidPrivateKey == "") {
+		problems = append(problems, "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be provided together")
+	}
+	if c.VapidSubject != "" && !isVapidSubject(c.VapidSubject) {
+		problems = append(problems, "VAPID_SUBJECT must be a mailto: or https: URL")
+	}
 
 	if strings.EqualFold(c.Environment, "production") {
 		if c.SMTPHost == "" || c.SMTPFrom == "" {
@@ -240,6 +258,15 @@ func (c *Config) Validate() error {
 		} else if len(c.MetricsToken) < minMetricsTokenBytes {
 			problems = append(problems, "METRICS_TOKEN must be at least 32 bytes in production")
 		}
+		// Web Push subscriptions are scoped to the configured VAPID key; rotating
+		// it invalidates every existing subscription, so production requires a
+		// stable, explicitly provided keypair rather than per-start ephemeral keys.
+		if c.VapidPublicKey == "" || c.VapidPrivateKey == "" {
+			problems = append(problems, "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are required in production (run: geoguessme vapid-keys)")
+		}
+		if !isVapidSubject(c.VapidSubject) {
+			problems = append(problems, "VAPID_SUBJECT must be a mailto: or https: URL in production")
+		}
 	}
 
 	if len(problems) > 0 {
@@ -259,6 +286,14 @@ func (c *Config) IsTest() bool { return c.Environment == EnvTest }
 // other than those two) is protected by default.
 func (c *Config) MetricsAuthRequired() bool {
 	return c.Environment != EnvDevelopment && c.Environment != EnvTest
+}
+
+// isVapidSubject reports whether value is an acceptable RFC 8292 VAPID contact:
+// a mailto: or https: URL. It is intentionally lightweight; deeper URL parsing
+// is unnecessary because the value is only ever echoed into a JWT claim.
+func isVapidSubject(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.HasPrefix(lower, "mailto:") || strings.HasPrefix(lower, "https://")
 }
 
 func LoadValidated() (*Config, error) {

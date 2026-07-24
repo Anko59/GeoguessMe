@@ -58,6 +58,12 @@ paths:
     $ref: ./openapi/paths/websocket.yaml#/ticket
   /ws:
     $ref: ./openapi/paths/websocket.yaml#/chat
+  /push/vapid-public-key:
+    $ref: ./openapi/paths/push.yaml#/vapidPublicKey
+  /push/subscribe:
+    $ref: ./openapi/paths/push.yaml#/subscribe
+  /push/unsubscribe:
+    $ref: ./openapi/paths/push.yaml#/unsubscribe
 components:
   securitySchemes:
     bearerAuth:

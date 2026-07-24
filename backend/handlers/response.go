@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -14,6 +15,19 @@ var (
 	MediaStore    storage.ObjectStore
 	Mailer        email.Sender = email.Noop{}
 )
+
+// PushNotifier fans Web Push notifications to group members. It is assigned by
+// main.go from the push.Service implementation; handlers reference it only via
+// this interface to avoid importing the push package and creating a cycle
+// (push imports handlers for context helpers, handlers must not import push).
+type PushNotifier interface {
+	NotifyNewChallenge(ctx context.Context, groupID, excludeUserID, photoID string)
+	NotifyNewMessage(ctx context.Context, groupID, senderUserID, content string)
+}
+
+// Push is the active notifier, or nil when push is disabled. Handlers must
+// nil-check before calling.
+var Push PushNotifier
 
 func Configure(cfg *config.Config, store storage.ObjectStore, sender email.Sender) {
 	RuntimeConfig = cfg

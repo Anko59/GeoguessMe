@@ -67,6 +67,7 @@ export default function GroupView() {
                 groupCode={group?.code ?? ''}
                 groupName={group?.name ?? ''}
                 groupId={id}
+                currentUserName={user?.username ?? ''}
             />
             <div className="tab-content">
                 {activeTab === 'camera' && (

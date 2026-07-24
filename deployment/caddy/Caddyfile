@@ -27,6 +27,28 @@
 		}
 	}
 
+	handle /invite/* {
+		reverse_proxy backend:8080 {
+			header_up Host {host}
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+			header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}
+		}
+	}
+
+	handle /manifest.webmanifest {
+		header Content-Type "application/manifest+json"
+		header Cache-Control "no-cache"
+		root * /srv
+		file_server
+	}
+
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		header Service-Worker-Allowed "/"
+		root * /srv
+		file_server
+	}
+
 	handle {
 		header /assets/* Cache-Control "public, max-age=31536000, immutable"
 		root * /srv
