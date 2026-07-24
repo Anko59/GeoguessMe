@@ -83,8 +83,8 @@ test "$second_status" -eq 0 || {
 docker rm "$first" "$second" >/dev/null
 echo "  PASS: both concurrent migrations succeeded"
 
-# All 3 migrations must be recorded
-assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 3 \
+# All 4 migrations must be recorded
+assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 4 \
     "schema_migrations entries after concurrent run"
 
 # -- 3. verify every backfill transformation --------------------------------
