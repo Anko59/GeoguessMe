@@ -331,7 +331,7 @@ reconnect-rehearsal: build-images ## Run the load/reconnect/catch-up rehearsal w
 	deployment/scripts/reconnect-rehearsal.sh
 
 migration-test: build-images ## Run concurrent, idempotent, and legacy-fixture migration tests.
-	deployment/scripts/migration-concurrency.sh || deployment/scripts/migration-concurrency.sh
+	deployment/scripts/migration-concurrency.sh || (docker builder prune -af >/dev/null 2>&1; deployment/scripts/migration-concurrency.sh)
 
 load-test: build-images ## Run the documented disposable load profile.
 	deployment/scripts/load-test.sh
