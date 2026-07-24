@@ -239,6 +239,59 @@
     gap: 0.65rem;
 }
 
+.camera-controls-top {
+    width: 100%;
+    padding: 0 0.6rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.camera-switch-btn,
+.filter-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    color: white;
+    background: rgba(5, 7, 18, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    backdrop-filter: blur(16px);
+    transition:
+        background var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+.camera-switch-btn:hover,
+.filter-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.54);
+}
+
+.camera-switch-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+}
+
+.filter-toggle-btn {
+    min-width: 4.5rem;
+    padding: 0.55rem 0.8rem;
+    display: none;
+}
+
+.filter-toggle-btn.active {
+    color: #16131f;
+    background: var(--brand-yellow);
+    border-color: white;
+}
+
 @media (pointer: coarse), (max-width: 40rem) {
     .camera-filter-rail {
         grid-template-columns: minmax(0, 1fr);
@@ -250,5 +303,9 @@
 
     .camera-filter-picker {
         width: calc(100% - 0.7rem);
+    }
+
+    .filter-toggle-btn {
+        display: inline-flex;
     }
 }

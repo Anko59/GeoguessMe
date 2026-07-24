@@ -2,14 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAPIErrorMessage } from '../../api';
 import { dataURLToBlob, fitDimensions, isFilterableImageType, uploadPhoto } from './cameraUtils';
 import './Camera.css';
-import { CameraErrorPanel, PreviewActions } from './CameraPanels';
-import FilterPicker from './FilterPicker';
-import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
+import CameraView from './CameraView';
 import type { FaceFrame } from './lenses/facePose';
 import type { FaceTracker as FaceTrackerInstance } from './lenses/faceTracker';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
 import type { LensId } from './lenses/lensCatalog';
 import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
+import { useCameraDevice } from './useCameraDevice';
 
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -22,6 +21,9 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const [filterError, setFilterError] = useState('');
     const [faceDetected, setFaceDetected] = useState(false);
     const [textBanner, setTextBanner] = useState<TextBanner>(EMPTY_TEXT_BANNER);
+    const [showFilters, setShowFilters] = useState(
+        () => !window.matchMedia('(pointer: coarse), (max-width: 40rem)').matches,
+    );
     const videoRef = useRef<HTMLVideoElement>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,6 +41,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const cameraAttemptRef = useRef(0);
     const initializedCameraAttemptRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
 
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
@@ -204,7 +207,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: 'user',
+                    facingMode: facingModeRef.current,
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
                     frameRate: { ideal: 30, max: 30 },
@@ -224,9 +227,8 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 setCameraReady(true);
                 if (initializedCameraAttemptRef.current === attempt) return;
                 initializedCameraAttemptRef.current = attempt;
-                if (selectedFilterRef.current !== 'none') {
+                if (selectedFilterRef.current !== 'none')
                     void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
-                }
             };
             video.onloadedmetadata = markCameraReady;
             video.onloadeddata = markCameraReady;
@@ -238,19 +240,22 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         } catch (requestError: unknown) {
             if (attempt !== cameraAttemptRef.current) return;
             const name = requestError instanceof DOMException ? requestError.name : '';
-            if (name === 'NotAllowedError' || name === 'SecurityError') {
+            if (name === 'NotAllowedError' || name === 'SecurityError')
                 setError('Camera access denied. Allow camera permissions and try again.');
-            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
                 setError('No camera was found. Connect a camera or upload a photo from your device.');
-            } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+            else if (name === 'NotReadableError' || name === 'TrackStartError')
                 setError('The camera is busy or unavailable. Close other camera apps and try again.');
-            } else {
-                setError('The camera could not be started. Try again or upload a photo from your device.');
-            }
+            else setError('The camera could not be started. Try again or upload a photo from your device.');
         }
-    }, [destroyEffects, initializeVideoEffects, stopCamera]);
+    }, [destroyEffects, initializeVideoEffects, stopCamera]); // eslint-disable-line react-hooks/exhaustive-deps -- facingModeRef is a ref
 
     useEffect(() => {
+        setRestart(() => {
+            stopCamera();
+            destroyEffects();
+            return startCamera();
+        });
         let active = true;
         queueMicrotask(() => {
             if (active) void startCamera();
@@ -261,7 +266,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             destroyEffects();
             stopCamera();
         };
-    }, [destroyEffects, startCamera, stopCamera]);
+    }, [setRestart, destroyEffects, startCamera, stopCamera]);
 
     const capturePhoto = () => {
         const video = videoRef.current;
@@ -351,7 +356,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             setError('');
             if (canPrepareFilter) void prepareImageFilter(reader.result);
         };
-        reader.onerror = () => setError('Failed to read the selected file.');
+        reader.onerror = () => {
+            preparedFileDataRef.current = null;
+            setError('Failed to read the selected file.');
+        };
         reader.readAsDataURL(file);
     };
 
@@ -364,10 +372,9 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         captureCanvas.width = sourceCanvas.width;
         captureCanvas.height = sourceCanvas.height;
         context.drawImage(sourceCanvas, 0, 0);
-        if (fileMode && preparedFileDataRef.current === capturedPhoto) {
-            const overlay = overlayCanvasRef.current;
+        if (fileMode && preparedFileDataRef.current === capturedPhoto && overlayCanvasRef.current) {
             rendererRef.current?.render(lastFrameRef.current);
-            if (overlay) context.drawImage(overlay, 0, 0, sourceCanvas.width, sourceCanvas.height);
+            context.drawImage(overlayCanvasRef.current, 0, 0, sourceCanvas.width, sourceCanvas.height);
         }
         drawTextBanner(context, captureCanvas.width, captureCanvas.height, textBanner);
         return captureCanvas.toDataURL('image/jpeg', 0.9);
@@ -420,81 +427,36 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         }
     };
 
-    const filterPicker = (
-        <FilterPicker
+    return (
+        <CameraView
+            videoRef={videoRef}
+            overlayCanvasRef={overlayCanvasRef}
+            captureCanvasRef={captureCanvasRef}
+            sourceCanvasRef={sourceCanvasRef}
+            fileInputRef={fileInputRef}
+            cameraReady={cameraReady}
+            capturedPhoto={capturedPhoto}
+            fileMode={fileMode}
+            error={error}
+            hasMultipleCameras={hasMultipleCameras}
+            facingMode={facingMode}
+            showFilters={showFilters}
             selectedFilter={selectedFilter}
             filterReady={filterReady}
             filterError={filterError}
             faceDetected={faceDetected}
-            onSelect={selectLens}
+            textBanner={textBanner}
+            uploading={uploading}
+            onStartCamera={() => void startCamera()}
+            onSetFileMode={() => setFileMode(true)}
+            onSwitchCamera={switchCamera}
+            onToggleFilters={() => setShowFilters((p) => !p)}
+            onSelectLens={selectLens}
+            onBannerChange={setTextBanner}
+            onCapturePhoto={capturePhoto}
+            onFileSelected={handleFileSelected}
+            onUpload={() => void handleUpload()}
+            onRetake={retake}
         />
-    );
-    const textEditor = <TextBannerEditor banner={textBanner} onChange={setTextBanner} />;
-
-    return (
-        <div className="camera-container">
-            <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`camera-video ${cameraReady && !capturedPhoto && !fileMode ? 'ready' : ''}`}
-            />
-            <canvas ref={captureCanvasRef} className="camera-capture-canvas" aria-hidden="true" />
-            <canvas ref={sourceCanvasRef} className="camera-source-canvas" aria-hidden="true" />
-            <CameraErrorPanel
-                error={error}
-                hasPhoto={Boolean(capturedPhoto)}
-                onRetry={() => void startCamera()}
-                onUseFile={() => setFileMode(true)}
-            />
-            {!capturedPhoto ? (
-                <div className="camera-view">
-                    <canvas ref={overlayCanvasRef} className="camera-filter-overlay" aria-hidden="true" />
-                    <TextBannerOverlay banner={textBanner} />
-                    {cameraReady && !fileMode && (
-                        <div className="camera-controls">
-                            {textEditor}
-                            {filterPicker}
-                            <button className="capture-button" onClick={capturePhoto} aria-label="Take photo">
-                                <div className="capture-inner"></div>
-                            </button>
-                        </div>
-                    )}
-                    {!cameraReady && !error && !fileMode && (
-                        <div className="camera-loading">
-                            <div className="spinner"></div>
-                            <p>Loading camera...</p>
-                        </div>
-                    )}
-                    {fileMode && (
-                        <div className="camera-file-fallback">
-                            <label className="btn btn-outline file-fallback-label" htmlFor="camera-file-input">
-                                Choose photo from device
-                            </label>
-                            <input
-                                id="camera-file-input"
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="camera-file-input"
-                                onChange={handleFileSelected}
-                            />
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className="photo-preview">
-                    <img src={capturedPhoto} alt="Captured" className="preview-image" />
-                    <canvas ref={overlayCanvasRef} className="photo-filter-overlay" aria-hidden="true" />
-                    <TextBannerOverlay banner={textBanner} />
-                    <div className="preview-composer">
-                        {textEditor}
-                        {fileMode && filterPicker}
-                    </div>
-                    <PreviewActions uploading={uploading} onRetake={retake} onSend={() => void handleUpload()} />
-                </div>
-            )}
-        </div>
     );
 }
