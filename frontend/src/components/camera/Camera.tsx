@@ -59,12 +59,12 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         effectAttemptRef.current += 1;
         if (trackingAnimationRef.current !== null) cancelAnimationFrame(trackingAnimationRef.current);
         trackingAnimationRef.current = null;
+        clearEffects();
         trackerRef.current?.close();
         rendererRef.current?.dispose();
         trackerRef.current = null;
         rendererRef.current = null;
         setFilterReady(false);
-        clearEffects();
     }, [clearEffects]);
 
     const createRenderer = useCallback(
