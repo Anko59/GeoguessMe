@@ -133,6 +133,9 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           BACKEND: ${{ needs.publish.outputs.backend }}
           WEB: ${{ needs.publish.outputs.web }}
         run: |
@@ -143,4 +146,4 @@ jobs:
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
             deploy@deploy.geoguessme.com \
-            "deploy $BACKEND $WEB $GITHUB_SHA"
+            "deploy $BACKEND $WEB $GITHUB_SHA ${VAPID_PUBLIC_KEY:-} ${VAPID_PRIVATE_KEY:-} ${VAPID_SUBJECT:-}"
