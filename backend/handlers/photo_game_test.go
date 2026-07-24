@@ -186,7 +186,7 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	}
 
 	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil)
+	HubInstance = chat.NewHub(nil, nil)
 	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
 	badOrigin.Header.Set("Origin", "http://evil.test")
 	recorder = httptest.NewRecorder()

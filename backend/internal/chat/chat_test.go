@@ -30,7 +30,7 @@ func TestHubPersistsAndBroadcastsByGroup(t *testing.T) {
 	hub := NewHub(func(_ context.Context, message *models.Message) error {
 		persisted <- *message
 		return nil
-	})
+	}, nil)
 	go hub.Run()
 	first := &Client{groupID: "group-a", send: make(chan models.Message, 1)}
 	second := &Client{groupID: "group-b", send: make(chan models.Message, 1)}
@@ -63,7 +63,7 @@ func TestHubPersistsAndBroadcastsByGroup(t *testing.T) {
 }
 
 func TestHubReportsPersistenceFailureToSender(t *testing.T) {
-	hub := NewHub(func(context.Context, *models.Message) error { return errors.New("database offline") })
+	hub := NewHub(func(context.Context, *models.Message) error { return errors.New("database offline") }, nil)
 	go hub.Run()
 	sender := &Client{groupID: "group-a", send: make(chan models.Message, 1)}
 	hub.register <- sender
@@ -79,12 +79,40 @@ func TestHubReportsPersistenceFailureToSender(t *testing.T) {
 	hub.Stop()
 }
 
+// TestHubNotifiesOnlyForTextMessages asserts the push callback fires for chat
+// messages but not for challenge broadcasts (notified by the upload handler) or
+// persistence failures.
+func TestHubNotifiesOnlyForTextMessages(t *testing.T) {
+	notified := make(chan models.Message, 4)
+	hub := NewHub(func(context.Context, *models.Message) error { return nil }, func(_ context.Context, msg *models.Message) {
+		notified <- *msg
+	})
+	go hub.Run()
+	hub.Broadcast(models.Message{GroupID: "group-a", Kind: "text", Content: "hi"})
+	challengeID := "photo-1"
+	hub.Broadcast(models.Message{GroupID: "group-a", Kind: "challenge", PhotoID: &challengeID})
+	select {
+	case message := <-notified:
+		if message.Kind != "text" || message.Content != "hi" {
+			t.Fatalf("only text messages should be notified, got %+v", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("text message was not notified")
+	}
+	select {
+	case message := <-notified:
+		t.Fatalf("challenge broadcast was notified: %+v", message)
+	case <-time.After(40 * time.Millisecond):
+	}
+	hub.Stop()
+}
+
 func TestServeWsValidatesMessagesAndBroadcasts(t *testing.T) {
 	persisted := make(chan models.Message, 1)
 	hub := NewHub(func(_ context.Context, message *models.Message) error {
 		persisted <- *message
 		return nil
-	})
+	}, nil)
 	go hub.Run()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ServeWs(hub, w, r, "group-a", "user-a", []string{"http://allowed.test"})

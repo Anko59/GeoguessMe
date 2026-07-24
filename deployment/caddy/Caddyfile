@@ -27,6 +27,20 @@
 		}
 	}
 
+	handle /manifest.webmanifest {
+		header Content-Type "application/manifest+json"
+		header Cache-Control "no-cache"
+		root * /srv
+		file_server
+	}
+
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		header Service-Worker-Allowed "/"
+		root * /srv
+		file_server
+	}
+
 	handle {
 		header /assets/* Cache-Control "public, max-age=31536000, immutable"
 		root * /srv

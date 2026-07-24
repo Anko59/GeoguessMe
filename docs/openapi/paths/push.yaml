@@ -1,0 +1,79 @@
+vapidPublicKey:
+  get:
+    operationId: getVapidPublicKey
+    summary: Get the active VAPID public key
+    tags: [Push]
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: The active application server public key in base64url.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              properties:
+                public_key:
+                  type: string
+                  description: 65-byte uncompressed P-256 point (base64url)
+      "401":
+        $ref: "../components/responses.yaml#/ErrorResponse"
+      "503":
+        description: Push notifications are disabled (no VAPID keys configured).
+        $ref: "../components/responses.yaml#/ErrorResponse"
+
+subscribe:
+  post:
+    operationId: subscribe
+    summary: Store a push subscription
+    tags: [Push]
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yaml#/PushSubscriptionRequest"
+    responses:
+      "201":
+        description: Subscription stored (upserted by user + endpoint).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+      "400":
+        $ref: "../components/responses.yaml#/ErrorResponse"
+      "401":
+        $ref: "../components/responses.yaml#/ErrorResponse"
+      "503":
+        description: Push disabled.
+        $ref: "../components/responses.yaml#/ErrorResponse"
+
+unsubscribe:
+  delete:
+    operationId: unsubscribe
+    summary: Remove a push subscription
+    tags: [Push]
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              endpoint: { type: string, format: uri }
+    responses:
+      "200":
+        description: Subscription(s) removed.
+      "401":
+        $ref: "../components/responses.yaml#/ErrorResponse"
+      "404":
+        description: The specified endpoint was not found.
+        $ref: "../components/responses.yaml#/ErrorResponse"
