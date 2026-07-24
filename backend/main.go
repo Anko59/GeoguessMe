@@ -28,15 +28,15 @@ func main() {
 	if len(os.Args) > 1 {
 		command = os.Args[1]
 	}
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
-		os.Exit(1)
-	}
-	// `vapid-keys` only prints a fresh Web Push keypair; it must not require a
-	// database or storage backend so operators can run it anywhere.
+	// `vapid-keys` only prints a fresh Web Push keypair; it must not require
+	// any database, storage, or configuration validation.
 	if command == "vapid-keys" {
 		printVapidKeys()
 		return
+	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
+		os.Exit(1)
 	}
 	if err := database.ConnectWithLimits(cfg.DatabaseURL, cfg.DatabaseMinConns, cfg.DatabaseMaxConns); err != nil {
 		fmt.Fprintf(os.Stderr, "database error: %v\n", err)
