@@ -36,6 +36,30 @@ assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
 assert_contains "$FORCED" '[ "$#" -eq 4 ]'
 assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
+
+# Both workflows must match the forced command's arity. PRs #56 and #57 extended
+# this command string with VAPID material while forced-command.sh was untouched,
+# so every development deployment was rejected with exit 126.
+assert_forced_command_arity() {
+    workflow=$1
+    command_string=$(sed -n 's/.*"\(deploy \$BACKEND \$WEB \$GITHUB_SHA\)".*/\1/p' "$workflow")
+    [ -n "$command_string" ] ||
+        fail "$workflow must send exactly: deploy \$BACKEND \$WEB \$GITHUB_SHA"
+    # shellcheck disable=SC2086
+    set -- $command_string
+    [ "$#" -eq 4 ] || fail "$workflow sends $# fields; the forced command accepts 4"
+}
+assert_forced_command_arity "$ROOT/.github/workflows/deploy.yml"
+assert_forced_command_arity "$ROOT/.github/workflows/release.yml"
+
+# sshd never interprets an environment-variable prefix in a forced command and
+# the forced command rejects extra positional fields, so secrets cannot travel
+# this way. They belong in the SOPS-encrypted dotenv.
+if grep -nE 'VAPID' "$ROOT/.github/workflows/deploy.yml" \
+    "$ROOT/.github/workflows/release.yml" "$DEPLOY"; then
+    fail 'VAPID material must travel in the encrypted dotenv, not the deploy protocol'
+fi
+
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.production.yaml"'
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.hosted.yaml"'
 assert_contains "$DEPLOY" 'workflows/deploy\.yml@refs/heads/dev'
@@ -81,6 +105,20 @@ assert_contains "$BACKUP" '--keep-hourly 24 --keep-daily 14 --keep-weekly 8 --ke
 assert_contains "$BACKUP" 'gzip -t'
 assert_contains "$ROOT/deployment/env/dev.env.example" 'geoguessme-database-backups/dev'
 assert_contains "$ROOT/deployment/env/production.env.example" 'geoguessme-database-backups/production'
+
+# Both hosted templates declare APP_ENV=production, so the backend enforces every
+# production requirement against each of them. Their key sets must stay identical:
+# PR #40 added the Web Push keys to production.env.example only, which made the
+# hosted development backend refuse to start on every deployment thereafter.
+env_keys() {
+    sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$1" | sort
+}
+assert_contains "$ROOT/deployment/env/dev.env.example" 'APP_ENV=production'
+assert_contains "$ROOT/deployment/env/production.env.example" 'APP_ENV=production'
+if [ "$(env_keys "$ROOT/deployment/env/dev.env.example")" != \
+    "$(env_keys "$ROOT/deployment/env/production.env.example")" ]; then
+    fail 'dev.env.example and production.env.example must declare the same keys'
+fi
 assert_contains "$SECRET_GENERATOR" 'RESTIC_REPOSITORY=s3:https://%s.r2.cloudflarestorage.com/geoguessme-database-backups/%s'
 assert_contains "$ROOT/Makefile" 'generate-hosted-secret.sh |'
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
@@ -95,7 +133,9 @@ generated=$(TARGET_ENV=dev \
     GHCR_USERNAME=registry-user GHCR_TOKEN=registry-token \
     MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
     BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
-    CLOUDFLARE_ACCOUNT_ID=account-id "$SECRET_GENERATOR")
+    CLOUDFLARE_ACCOUNT_ID=account-id \
+    VAPID_PUBLIC_KEY=vapid-public VAPID_PRIVATE_KEY=vapid-private \
+    VAPID_SUBJECT=mailto:contract@example.invalid "$SECRET_GENERATOR")
 case "$generated" in
     *replace-* | *ACCOUNT_ID*) fail 'generated secret payload contains a template placeholder' ;;
 esac
@@ -105,6 +145,22 @@ printf '%s\n' "$generated" | grep -Fq 'S3_ACCESS_KEY=media-key' ||
     fail 'generated secret payload omitted the media credential'
 printf '%s\n' "$generated" | grep -Fq 'geoguessme-database-backups/dev' ||
     fail 'generated secret payload omitted the isolated backup prefix'
+printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
+    fail 'generated secret payload omitted the supplied Web Push keypair'
+
+# A missing Web Push key must stop generation rather than emit the template
+# placeholder, which is non-empty and so would satisfy the backend's production
+# validation while breaking every push delivery at runtime.
+if VAPID_PUBLIC_KEY='' TARGET_ENV=dev \
+    BREVO_SMTP_USERNAME=smtp-user BREVO_SMTP_PASSWORD=smtp-password \
+    GHCR_USERNAME=registry-user GHCR_TOKEN=registry-token \
+    MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
+    BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
+    CLOUDFLARE_ACCOUNT_ID=account-id VAPID_PRIVATE_KEY=vapid-private \
+    VAPID_SUBJECT=mailto:contract@example.invalid \
+    "$SECRET_GENERATOR" >/dev/null 2>&1; then
+    fail 'secret generation accepted a missing Web Push public key'
+fi
 
 # Backup age is calculated from epoch markers without wall-clock sleeps.
 marker=$(mktemp)

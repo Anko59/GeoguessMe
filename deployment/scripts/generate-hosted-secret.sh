@@ -19,6 +19,13 @@ esac
 : "${BACKUP_ACCESS_KEY_ID:?BACKUP_ACCESS_KEY_ID is required}"
 : "${BACKUP_SECRET_ACCESS_KEY:?BACKUP_SECRET_ACCESS_KEY is required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+# Web Push keys are supplied rather than minted here because they must stay
+# stable: rotating them invalidates every existing browser subscription. Both
+# hosted templates set APP_ENV=production, so the backend refuses to start
+# without them. Generate a pair once with `make vapid-keys`.
+: "${VAPID_PUBLIC_KEY:?VAPID_PUBLIC_KEY is required (run: make vapid-keys)}"
+: "${VAPID_PRIVATE_KEY:?VAPID_PRIVATE_KEY is required (run: make vapid-keys)}"
+: "${VAPID_SUBJECT:?VAPID_SUBJECT is required (a mailto: or https: contact URL)}"
 
 random_hex() {
     bytes=$1
@@ -55,6 +62,9 @@ while IFS= read -r line || [ -n "$line" ]; do
         METRICS_TOKEN=*) printf 'METRICS_TOKEN=%s\n' "$metrics_token" ;;
         GHCR_USERNAME=*) printf 'GHCR_USERNAME=%s\n' "$GHCR_USERNAME" ;;
         GHCR_TOKEN=*) printf 'GHCR_TOKEN=%s\n' "$GHCR_TOKEN" ;;
+        VAPID_PUBLIC_KEY=*) printf 'VAPID_PUBLIC_KEY=%s\n' "$VAPID_PUBLIC_KEY" ;;
+        VAPID_PRIVATE_KEY=*) printf 'VAPID_PRIVATE_KEY=%s\n' "$VAPID_PRIVATE_KEY" ;;
+        VAPID_SUBJECT=*) printf 'VAPID_SUBJECT=%s\n' "$VAPID_SUBJECT" ;;
         RESTIC_REPOSITORY=*)
             printf 'RESTIC_REPOSITORY=s3:https://%s.r2.cloudflarestorage.com/geoguessme-database-backups/%s\n' \
                 "$CLOUDFLARE_ACCOUNT_ID" "$environment"
