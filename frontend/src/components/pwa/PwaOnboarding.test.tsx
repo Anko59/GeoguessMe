@@ -84,6 +84,15 @@ describe('PwaOnboarding', () => {
         expect(container.firstChild).toBeNull();
     });
 
+    it('lets an installed iOS app request notifications', () => {
+        mocks.installed = true;
+        mocks.dismissed = true;
+        mocks.isIosSafari = true;
+        mocks.isPushSupported.mockReturnValue(true);
+        renderWithAuth();
+        expect(screen.getByRole('button', { name: 'Enable' })).toBeInTheDocument();
+    });
+
     it('renders nothing when dismissed', () => {
         mocks.dismissed = true;
         const { container } = renderWithAuth();
