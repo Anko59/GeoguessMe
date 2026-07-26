@@ -39,10 +39,16 @@ export const refreshAccessToken = async (): Promise<string | null> => {
     return response?.access_token ?? null;
 };
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     const isSameOriginAPI = !config.url?.startsWith('http');
-    if (accessToken && isSameOriginAPI) {
-        config.headers.Authorization = `Bearer ${accessToken}`;
+    const isAuthEndpoint = config.url?.startsWith('/auth/') ?? false;
+    if (isSameOriginAPI && !isAuthEndpoint) {
+        // Cached PWA screens can render before the memory-only access token is
+        // restored. Hold protected requests behind the existing single-flight
+        // refresh so their first attempt has the token and error handling sees
+        // the response it actually requested.
+        const token = accessToken ?? (await refreshAccessToken());
+        if (token) config.headers.Authorization = `Bearer ${token}`;
     }
     if (!isSameOriginAPI) config.withCredentials = false;
     return config;

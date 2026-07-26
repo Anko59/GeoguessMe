@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '../types';
+import { saveCachedMessages } from '../utils/pwaSessionCache';
 import { useGroupMessages } from './useGroupMessages';
 
 const mocks = vi.hoisted(() => ({
@@ -73,6 +74,7 @@ function message(id: string, createdAt: string, content = id): Message {
 const ids = (messages: Message[]): string[] => messages.map((m) => m.id);
 
 beforeEach(() => {
+    localStorage.clear();
     mocks.get.mockReset();
     mocks.post.mockReset();
     MockWebSocket.instances = [];
@@ -84,6 +86,17 @@ afterEach(() => {
 });
 
 describe('useGroupMessages reconnect sequence', () => {
+    it('renders cached messages before the socket refresh completes', async () => {
+        saveCachedMessages('user-1', 'group-1', [message('cached', '2026-01-01T00:00:00Z')]);
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValue({ data: { items: [message('cached', '2026-01-01T00:00:00Z')] } });
+
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+
+        expect(ids(result.current.messages)).toEqual(['cached']);
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    });
+
     it('merges catch-up and live delivery without loss or duplicates', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
         // Catch-up returns a and b; live delivery repeats b and adds c.

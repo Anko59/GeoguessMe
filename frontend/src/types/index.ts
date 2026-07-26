@@ -41,6 +41,8 @@ export interface LeaderboardEntry {
     average_score: number;
 }
 
+export type LeaderboardPeriod = 'week' | 'month' | 'all';
+
 export interface Member {
     id: string;
     username: string;

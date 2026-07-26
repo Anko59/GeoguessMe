@@ -38,6 +38,7 @@ const authResponse: AuthResponse = {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     routeRef.current = '/';
     window.history.pushState({}, '', '/');
     apiMocks.get.mockReset();
