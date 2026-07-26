@@ -69,17 +69,10 @@ Browser               Backend               Push Service
 
 ### VAPID keys
 
-Generate a stable keypair once per deployment:
+Generate a stable keypair once per deployed environment:
 
-```bash
-make migrate-up  # start the stack first, then:
-docker compose -f deployment/compose.prod.yaml exec backend geoguessme vapid-keys
-```
-
-Or run locally:
-
-```bash
-go run . vapid-keys
+```text
+make vapid-keys
 ```
 
 The output is three `env` lines (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and a
@@ -94,7 +87,15 @@ VAPID_SUBJECT=mailto:operator@example.com
 In development and test environments the backend mints ephemeral keys at
 startup. Browser subscriptions created under ephemeral keys are invalidated on
 the next restart, so operators must set stable keys in any environment where
-push delivery matters.
+push delivery matters. In production, leaving all three variables unset
+explicitly disables Push: the public-key endpoint responds with `503`, no
+subscriptions are accepted, and no delivery workers are started. This prevents
+an accidental ephemeral production keypair from silently invalidating users'
+subscriptions after a restart.
+
+Hosted operators add a stable keypair when generating the encrypted environment
+file; follow the [hosted deployment runbook](runbooks/hosted-deployment.md) and
+never commit a plaintext dotenv file or keypair.
 
 ### Endpoints
 

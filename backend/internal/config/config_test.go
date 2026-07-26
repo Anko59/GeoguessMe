@@ -267,14 +267,14 @@ func TestValidateVapidRules(t *testing.T) {
 		t.Fatalf("expected partial VAPID key rejection, got %v", err)
 	}
 
-	// An invalid subject is rejected in every environment.
+	// A subject is rejected unless a complete keypair enables push.
 	badSubject := validConfig()
 	badSubject.VapidSubject = "ftp://not-valid"
-	if err := badSubject.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT") {
-		t.Fatalf("expected invalid VAPID_SUBJECT rejection, got %v", err)
+	if err := badSubject.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT requires") {
+		t.Fatalf("expected VAPID subject without keys rejection, got %v", err)
 	}
 
-	// Production requires both keys and a valid subject.
+	// Production without VAPID keys is valid: push is explicitly disabled.
 	prod := validConfig()
 	prod.Environment = EnvProduction
 	prod.PublicURL = "https://app.example.test"
@@ -283,13 +283,18 @@ func TestValidateVapidRules(t *testing.T) {
 	prod.SMTPFrom = "no-reply@example.test"
 	prod.S3Endpoint = "https://s3.example"
 	prod.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
-	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are required in production") {
-		t.Fatalf("expected missing VAPID key rejection, got %v", err)
+	if err := prod.Validate(); err != nil {
+		t.Fatalf("expected valid production config without VAPID, got %v", err)
 	}
+	// A complete keypair requires a syntactically valid RFC 8292 contact.
 	prod.VapidPublicKey = "example-public-key"
 	prod.VapidPrivateKey = "example-private-key"
-	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be a mailto: or https: URL in production") {
+	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be") {
 		t.Fatalf("expected missing VAPID subject rejection, got %v", err)
+	}
+	prod.VapidSubject = "mailto:"
+	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be") {
+		t.Fatalf("expected malformed VAPID subject rejection, got %v", err)
 	}
 	prod.VapidSubject = "https://example.test/contact"
 	if err := prod.Validate(); err != nil {

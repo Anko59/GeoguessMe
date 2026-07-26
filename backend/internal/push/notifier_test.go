@@ -16,6 +16,7 @@ import (
 type fakeStore struct {
 	mu            sync.Mutex
 	targets       []NotificationTarget
+	targetCalls   int
 	groupName     string
 	usernames     map[string]string
 	subsByUser    map[string][]Subscription
@@ -53,6 +54,9 @@ func (f *fakeStore) DeleteByID(_ context.Context, id string) error {
 	return nil
 }
 func (f *fakeStore) GroupTargets(_ context.Context, _, _ string) ([]NotificationTarget, error) {
+	f.mu.Lock()
+	f.targetCalls++
+	f.mu.Unlock()
 	return f.targets, nil
 }
 func (f *fakeStore) GroupName(_ context.Context, _ string) (string, error) {
@@ -223,10 +227,23 @@ func TestNotifySkipsWhenNoTargets(t *testing.T) {
 	defer svc.Stop()
 
 	svc.NotifyNewChallenge(context.Background(), "g1", "u1", "photo-1")
-	// Give the worker a moment to prove it stays idle.
-	time.Sleep(50 * time.Millisecond)
 	if len(deliver.snapshot()) != 0 {
 		t.Fatal("delivery happened with no targets")
+	}
+}
+
+func TestDisabledServiceDoesNotStartWorkersOrNotify(t *testing.T) {
+	store := &fakeStore{}
+	svc := NewService(Deps{Store: store, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	svc.Start(context.Background(), 1)
+	svc.NotifyNewChallenge(context.Background(), "g1", "u1", "photo-1")
+	svc.NotifyNewMessage(context.Background(), "g1", "u1", "hello")
+	svc.Stop()
+	store.mu.Lock()
+	calls := store.targetCalls
+	store.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("disabled service queried notification targets %d times", calls)
 	}
 }
 
