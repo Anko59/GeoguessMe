@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties, type PointerEvent, type WheelEvent } from 'react';
+import { useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from 'react';
 import { LENS_OPTIONS, type LensId } from './lenses/lensCatalog';
 
 interface FilterPickerProps {
@@ -20,6 +20,16 @@ export default function FilterPicker({
     const optionsRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef({ pointerId: -1, startX: 0, scrollLeft: 0, dragging: false });
     const suppressClickRef = useRef(false);
+    const [requestedPreviews, setRequestedPreviews] = useState<ReadonlySet<LensId>>(
+        () => new Set(selectedFilter === 'none' ? [] : [selectedFilter]),
+    );
+
+    const requestPreview = (lens: LensId) => {
+        setRequestedPreviews((current) => {
+            if (current.has(lens)) return current;
+            return new Set(current).add(lens);
+        });
+    };
 
     const scrollOptions = (direction: -1 | 1) => {
         const options = optionsRef.current;
@@ -93,37 +103,43 @@ export default function FilterPicker({
                     onPointerCancel={finishDrag}
                     onWheel={wheel}
                 >
-                    {LENS_OPTIONS.map((option) => (
-                        <button
-                            key={option.id}
-                            type="button"
-                            className={`camera-filter-option ${selectedFilter === option.id ? 'selected' : ''}`}
-                            style={
-                                {
-                                    '--lens-accent': option.accent,
-                                    '--lens-preview': option.preview ? `url("${option.preview}")` : 'none',
-                                } as CSSProperties
-                            }
-                            aria-pressed={selectedFilter === option.id}
-                            aria-label={option.label}
-                            title={option.label}
-                            onClick={() => {
-                                if (suppressClickRef.current) {
-                                    suppressClickRef.current = false;
-                                    return;
+                    {LENS_OPTIONS.map((option) => {
+                        const previewRequested = Boolean(option.preview && requestedPreviews.has(option.id));
+                        return (
+                            <button
+                                key={option.id}
+                                type="button"
+                                className={`camera-filter-option ${selectedFilter === option.id ? 'selected' : ''}`}
+                                style={
+                                    {
+                                        '--lens-accent': option.accent,
+                                        '--lens-preview': previewRequested ? `url("${option.preview}")` : 'none',
+                                    } as CSSProperties
                                 }
-                                onSelect(option.id);
-                            }}
-                        >
-                            <span
-                                className={`camera-filter-icon ${option.preview ? 'has-preview' : ''}`}
-                                aria-hidden="true"
+                                aria-pressed={selectedFilter === option.id}
+                                aria-label={option.label}
+                                title={option.label}
+                                onFocus={() => requestPreview(option.id)}
+                                onPointerEnter={() => requestPreview(option.id)}
+                                onClick={() => {
+                                    if (suppressClickRef.current) {
+                                        suppressClickRef.current = false;
+                                        return;
+                                    }
+                                    requestPreview(option.id);
+                                    onSelect(option.id);
+                                }}
                             >
-                                {option.preview ? null : option.icon}
-                            </span>
-                            <span className="camera-filter-option-label">{option.label}</span>
-                        </button>
-                    ))}
+                                <span
+                                    className={`camera-filter-icon ${previewRequested ? 'has-preview' : ''}`}
+                                    aria-hidden="true"
+                                >
+                                    {previewRequested ? null : option.icon}
+                                </span>
+                                <span className="camera-filter-option-label">{option.label}</span>
+                            </button>
+                        );
+                    })}
                 </div>
                 <button
                     type="button"
