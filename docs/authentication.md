@@ -45,6 +45,12 @@ concurrent API failures from consuming the same one-time refresh cookie twice.
 Hard reloads therefore restore the session in Chromium and Firefox as long as
 the refresh cookie is present and valid.
 
+For a faster installed-PWA startup, the frontend keeps a local hint of the last
+authenticated profile. It is never an access token and does not bypass refresh:
+the refresh cookie is still checked in the background before new requests are
+authorized. A failed refresh or logout removes the hint and that user's cached
+chat records.
+
 ## Verification
 
 - `POST /api/v1/auth/verify/request` (authenticated) sends a verification email.

@@ -46,6 +46,9 @@ describe('Leaderboard', () => {
             );
         });
         expect(await screen.findByText('No scores yet')).toBeInTheDocument();
+        expect(mocks.get).toHaveBeenCalledWith('/group/leaderboard', {
+            params: { group_id: 'group-1', period: 'week' },
+        });
         emptyLeaderboard!.unmount();
 
         mocks.get.mockResolvedValueOnce({
@@ -83,5 +86,29 @@ describe('Leaderboard', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         });
         errorLeaderboard!.unmount();
+    });
+
+    it('switches between weekly, monthly, and all-time rankings', async () => {
+        mocks.get
+            .mockResolvedValueOnce({
+                data: [{ user_id: 'user-1', username: 'alice', score: 100, guess_count: 1, average_score: 100 }],
+            })
+            .mockResolvedValueOnce({
+                data: [{ user_id: 'user-2', username: 'bob', score: 80, guess_count: 1, average_score: 80 }],
+            });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <Leaderboard groupID="group-1" />
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByText('alice')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: 'This month' }));
+
+        expect(await screen.findByText('bob')).toBeInTheDocument();
+        expect(mocks.get).toHaveBeenLastCalledWith('/group/leaderboard', {
+            params: { group_id: 'group-1', period: 'month' },
+        });
+        expect(screen.getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
     });
 });

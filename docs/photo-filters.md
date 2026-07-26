@@ -17,11 +17,12 @@ inflation, Doomscroll damage, and Budget facelift. Several lenses react to
 expressions such as mouth opening, and animated particles continue rendering
 while the camera is active.
 
-The lens rail supports touch swiping, mouse dragging, mouse-wheel scrolling, and
-desktop previous/next controls. The text tool adds an editable banner before or
-after capture, with Classic, Neon, and Clean themes and adjustable vertical
-placement. Banner text is rendered into the final JPEG rather than uploaded as
-separate metadata.
+The compact, camera-first lens rail uses circular previews and keeps the
+selected lens name in a small chip above the rail. It supports touch swiping,
+mouse dragging, mouse-wheel scrolling, and desktop previous/next controls. The
+text tool adds an editable banner before or after capture, with Classic, Neon,
+and Clean themes and adjustable vertical placement. Banner text is rendered into
+the final JPEG rather than uploaded as separate metadata.
 
 The model, WebAssembly runtime, and rendering code are hosted by the
 application. Camera frames and selected files remain in the browser; the

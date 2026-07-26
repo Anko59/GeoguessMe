@@ -276,6 +276,8 @@ test.describe('Challenge flow', () => {
             await expect(filterPicker.or(showLenses)).toBeVisible();
             if (await showLenses.isVisible()) await showLenses.click();
             await expect(filterPicker).toBeVisible();
+            const filterPickerHeight = await filterPicker.evaluate((element) => element.getBoundingClientRect().height);
+            expect(filterPickerHeight).toBeLessThan(125);
             const nextLenses = page.getByRole('button', { name: 'Next lenses' });
             if (await nextLenses.isVisible()) {
                 const initialScroll = await rail.evaluate((element) => element.scrollLeft);
@@ -299,13 +301,11 @@ test.describe('Challenge flow', () => {
                 timeout: 30000,
             });
             expect(await page.locator('.camera-filter-overlay').evaluate((canvas) => canvas.width > 1)).toBe(true);
-
             for (const lens of LENS_OPTIONS.filter(({ id }) => id !== 'none')) {
                 const button = page.getByRole('button', { name: lens.label });
                 await button.click();
                 await expect(button).toHaveAttribute('aria-pressed', 'true');
             }
-
             await expect.poll(() => EXPECTED_LENS_ASSETS.every((path) => loadedLensAssets.has(path))).toBe(true);
             expect(pageErrors).toEqual([]);
         } finally {

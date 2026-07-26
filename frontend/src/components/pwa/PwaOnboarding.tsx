@@ -23,7 +23,7 @@ export default function PwaOnboarding() {
     const canEnableNotifications = pushSupported && (installed || !isIosSafari());
     const showNotifications = canEnableNotifications && permission !== 'granted';
 
-    if (!auth.isAuthenticated || auth.loading || installed || dismissed) {
+    if (!auth.isAuthenticated || auth.loading || (dismissed && !installed)) {
         return null;
     }
     if (!installable && !iosGuide && !showNotifications) {
@@ -36,7 +36,7 @@ export default function PwaOnboarding() {
         try {
             const subscription = await subscribePushNotifications();
             setPermission(pushPermissionState());
-            setNotice(subscription ? 'Notifications enabled.' : 'Notifications were not enabled.');
+            setNotice(subscription ? 'Notifications enabled.' : 'Notifications are not available on this server yet.');
         } catch {
             setPermission(pushPermissionState());
             setNotice('Unable to enable notifications right now.');
@@ -54,14 +54,16 @@ export default function PwaOnboarding() {
 
     return (
         <aside className="pwa-onboarding" role="dialog" aria-label="Install GeoGuessMe">
-            <button
-                type="button"
-                className="pwa-onboarding__close"
-                aria-label="Dismiss install prompt"
-                onClick={dismiss}
-            >
-                ×
-            </button>
+            {!installed && (
+                <button
+                    type="button"
+                    className="pwa-onboarding__close"
+                    aria-label="Dismiss install prompt"
+                    onClick={dismiss}
+                >
+                    ×
+                </button>
+            )}
             <div className="pwa-onboarding__body">
                 {installable && (
                     <div className="pwa-onboarding__row">

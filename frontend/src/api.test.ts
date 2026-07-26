@@ -40,6 +40,20 @@ describe('api client', () => {
         post.mockRestore();
     });
 
+    it('restores a memory-only token before sending a protected startup request', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'fresh' } } as never);
+        setAccessToken(null);
+
+        const request = await api.interceptors.request.handlers![0]!.fulfilled!({
+            url: '/user/groups',
+            headers: {},
+        } as never);
+
+        expect(request.headers.Authorization).toBe('Bearer fresh');
+        expect(post).toHaveBeenCalledWith('/api/v1/auth/refresh', undefined, { withCredentials: true });
+        post.mockRestore();
+    });
+
     it('returns useful error messages', () => {
         expect(getAPIErrorMessage(new Error('plain'), 'fallback')).toBe('plain');
         expect(getAPIErrorMessage({ response: { data: { error: { message: 'api error' } } } }, 'fallback')).toBe(

@@ -21,7 +21,13 @@ export default function GroupView() {
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [groupError, setGroupError] = useState('');
-    const { messages, connectionStatus, wsRef, error: messagesError, updateChallengeStatus } = useGroupMessages(id);
+    const {
+        messages,
+        connectionStatus,
+        wsRef,
+        error: messagesError,
+        updateChallengeStatus,
+    } = useGroupMessages(id, user?.id);
 
     useEffect(() => {
         if (!id) return;
@@ -88,7 +94,7 @@ export default function GroupView() {
                 )}
                 {activeTab === 'leaderboard' && (
                     <div className="tab-panel fade-in">
-                        <Leaderboard groupID={id} />
+                        <Leaderboard key={id} groupID={id} />
                     </div>
                 )}
             </div>

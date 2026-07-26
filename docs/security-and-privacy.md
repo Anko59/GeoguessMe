@@ -44,15 +44,15 @@ through authenticated handlers:
 
 ## Data inventory
 
-| Data                           | Storage            | Retention                                              | Notes                                                    |
-| ------------------------------ | ------------------ | ------------------------------------------------------ | -------------------------------------------------------- |
-| Username, email, password hash | PostgreSQL (users) | Until account deletion                                 | Password hashed with bcrypt (`BCRYPT_COST=12` default)   |
-| Photos and locations           | PostgreSQL + S3    | Until `PHOTO_RETENTION` (default 30 days) after upload | Actual coordinates stored only in DB; media stored in S3 |
-| Guesses and scores             | PostgreSQL         | Indefinitely                                           | Aggregate leaderboard rows remain after media cleanup    |
-| Messages                       | PostgreSQL         | Indefinitely                                           |                                                          |
-| Refresh sessions               | PostgreSQL         | 30 days after expiry/revocation                        | Hashed (SHA-256)                                         |
-| One-time tokens                | PostgreSQL         | 1 day after use; at TTL otherwise                      | Hashed (SHA-256)                                         |
-| WebSocket tickets              | PostgreSQL         | 1 day after use; 60s TTL otherwise                     | Hashed (SHA-256)                                         |
+| Data                           | Storage                            | Retention                                                              | Notes                                                                                   |
+| ------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Username, email, password hash | PostgreSQL (users)                 | Until account deletion                                                 | Password hashed with bcrypt (`BCRYPT_COST=12` default)                                  |
+| Photos and locations           | PostgreSQL + S3                    | Until `PHOTO_RETENTION` (default 30 days) after upload                 | Actual coordinates stored only in DB; media stored in S3                                |
+| Guesses and scores             | PostgreSQL                         | Indefinitely                                                           | Aggregate leaderboard rows remain after media cleanup                                   |
+| Messages                       | PostgreSQL + browser local storage | Server: indefinitely; browser: latest 200 per signed-in user and group | PWA startup cache has text/challenge metadata only; cleared on logout or failed refresh |
+| Refresh sessions               | PostgreSQL                         | 30 days after expiry/revocation                                        | Hashed (SHA-256)                                                                        |
+| One-time tokens                | PostgreSQL                         | 1 day after use; at TTL otherwise                                      | Hashed (SHA-256)                                                                        |
+| WebSocket tickets              | PostgreSQL                         | 1 day after use; 60s TTL otherwise                                     | Hashed (SHA-256)                                                                        |
 
 ## Account deletion
 
