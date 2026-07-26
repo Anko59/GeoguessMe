@@ -47,6 +47,13 @@ test.describe('Keyboard navigation', () => {
         await page.goto('/');
         await expect(page.getByRole('heading', { name: /geoguess/i })).toBeVisible({ timeout: 10000 });
 
+        // Dismiss the mobile install popup if it appears so it does not
+        // capture focus during keyboard navigation checks.
+        const popupClose = page.getByRole('button', { name: 'Close' });
+        if (await popupClose.isVisible().catch(() => false)) {
+            await popupClose.click();
+        }
+
         const getStarted = page.getByRole('link', { name: /get started/i });
         const loginLink = page.getByRole('link', { name: /login/i });
 
@@ -363,6 +370,7 @@ test.describe('Authenticated page Axe checks', () => {
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await page.getByRole('button', { name: /leaderboard/i }).click();
             await expect(page.locator('.leaderboard-container')).toBeVisible();
+            await expect(page.locator('.tab-panel')).toHaveCSS('opacity', '1');
             await expectAccessible(page);
         } finally {
             await ctx.context.close();

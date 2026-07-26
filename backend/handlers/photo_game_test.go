@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -186,7 +187,7 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	}
 
 	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil)
+	HubInstance = chat.NewHub(nil, nil)
 	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
 	badOrigin.Header.Set("Origin", "http://evil.test")
 	recorder = httptest.NewRecorder()
@@ -229,5 +230,54 @@ func TestUploadStorageFailureAndChallengeErrors(t *testing.T) {
 		if recorder.Code == http.StatusOK {
 			t.Fatalf("challenge error %v returned success", expected)
 		}
+	}
+}
+
+func TestHandleInvitePreview(t *testing.T) {
+	setupHandlers(t)
+	RuntimeConfig = handlerConfig()
+	RuntimeConfig.PublicURL = "https://geoguessme.com"
+	mock := handlerMock(t)
+	now := time.Now().UTC()
+	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
+		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
+	)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/invite/ABC123?from=Alice", nil)
+	req.SetPathValue("code", "ABC123")
+	HandleInvitePreview(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invite preview status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if rec.Header().Get("Content-Type") != "text/html; charset=utf-8" {
+		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
+	}
+	mustContain := []string{"og:title", "og:description", "Join Paris on GeoGuessMe", "Alice invites you", "og:image", "https://geoguessme.com/logo.png", "/group/join?code=ABC123"}
+	for _, want := range mustContain {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, got:\n%s", want, body)
+		}
+	}
+}
+
+func TestHandleInvitePreviewWithoutInviter(t *testing.T) {
+	setupHandlers(t)
+	RuntimeConfig = handlerConfig()
+	mock := handlerMock(t)
+	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "DEF456", CreatedAt: time.Now().UTC()}
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
+		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
+	)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/invite/DEF456", nil)
+	req.SetPathValue("code", "DEF456")
+	HandleInvitePreview(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invite preview status = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Join the group Paris on GeoGuessMe!") {
+		t.Fatalf("expected fallback message, got %s", rec.Body.String())
 	}
 }

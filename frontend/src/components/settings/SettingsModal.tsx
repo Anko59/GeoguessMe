@@ -12,9 +12,17 @@ interface SettingsModalProps {
     groupCode: string;
     groupName: string;
     groupId: string;
+    currentUserName: string;
 }
 
-export default function SettingsModal({ isOpen, onClose, groupCode, groupName, groupId }: SettingsModalProps) {
+export default function SettingsModal({
+    isOpen,
+    onClose,
+    groupCode,
+    groupName,
+    groupId,
+    currentUserName,
+}: SettingsModalProps) {
     const [copiedItem, setCopiedItem] = useState<'link' | 'code' | null>(null);
     const [membersExpanded, setMembersExpanded] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
@@ -42,7 +50,7 @@ export default function SettingsModal({ isOpen, onClose, groupCode, groupName, g
 
     if (!isOpen) return null;
 
-    const inviteLink = `${window.location.origin}/group/join?code=${groupCode}`;
+    const inviteLink = `${window.location.origin}/invite/${groupCode}?from=${encodeURIComponent(currentUserName)}`;
 
     const copyInviteLink = () => {
         navigator.clipboard.writeText(inviteLink);

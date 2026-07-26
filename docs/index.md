@@ -35,8 +35,12 @@ submit one server-timed guess.
 - [Security and privacy](security-and-privacy.md) — model, data inventory,
   operator obligations
 - [Troubleshooting](troubleshooting.md) — frequent issues and solutions
+- [PWA and Web Push](pwa-and-push.md) — installable app, push notifications, iOS
+  guidance, VAPID key generation
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
+- [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
+  record, corrected safeguards, and release checklist
 
 ## Repository
 

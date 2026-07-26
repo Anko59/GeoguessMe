@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,5 +82,24 @@ func TestReadinessSuccess(t *testing.T) {
 	}
 	if err := ready(context.Background(), store); err != nil {
 		t.Fatalf("ready returned an error for healthy dependencies: %v", err)
+	}
+}
+
+func TestConfigurePushDisablesProductionWithoutVapidKeys(t *testing.T) {
+	cfg := &config.Config{Environment: config.EnvProduction}
+	svc := configurePush(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if svc.Keys() != nil {
+		t.Fatal("production without VAPID keys must disable Push")
+	}
+}
+
+func TestConfigurePushMintsDevelopmentKeysWithContact(t *testing.T) {
+	cfg := &config.Config{Environment: config.EnvDevelopment}
+	svc := configurePush(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if svc.Keys() == nil {
+		t.Fatal("development without VAPID keys must receive ephemeral Push keys")
+	}
+	if cfg.VapidSubject != "mailto:dev@geoguessme.invalid" {
+		t.Fatalf("development VAPID subject = %q", cfg.VapidSubject)
 	}
 }

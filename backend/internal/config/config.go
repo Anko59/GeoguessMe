@@ -59,6 +59,13 @@ type Config struct {
 	RateLimitWindow   time.Duration
 	LogLevel          string
 	MetricsToken      string
+
+	// VAPID keys (base64url) enable Web Push. A complete keypair and contact
+	// subject are required when push is enabled. Production may leave all three
+	// unset to disable push explicitly while the rest of the application runs.
+	VapidPublicKey  string
+	VapidPrivateKey string
+	VapidSubject    string
 }
 
 // SMTP modes.
@@ -127,6 +134,10 @@ func Load() *Config {
 		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+
+		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
+		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
+		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
 	}
 }
 
@@ -211,6 +222,20 @@ func (c *Config) Validate() error {
 	if c.SMTPHost != "" && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
 		problems = append(problems, "SMTP_PORT must be an integer between 1 and 65535")
 	}
+	// VAPID is opt-in in production and ephemeral in development/test. A partial
+	// configuration must never be interpreted as either mode.
+	hasVapidPublicKey := c.VapidPublicKey != ""
+	hasVapidPrivateKey := c.VapidPrivateKey != ""
+	hasVapidKeyPair := hasVapidPublicKey && hasVapidPrivateKey
+	if hasVapidPublicKey != hasVapidPrivateKey {
+		problems = append(problems, "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be provided together")
+	}
+	if hasVapidKeyPair && !isVapidSubject(c.VapidSubject) {
+		problems = append(problems, "VAPID_SUBJECT must be a mailto: or https: URL when VAPID keys are configured")
+	}
+	if !hasVapidKeyPair && c.VapidSubject != "" {
+		problems = append(problems, "VAPID_SUBJECT requires VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY")
+	}
 
 	if strings.EqualFold(c.Environment, "production") {
 		if c.SMTPHost == "" || c.SMTPFrom == "" {
@@ -259,6 +284,23 @@ func (c *Config) IsTest() bool { return c.Environment == EnvTest }
 // other than those two) is protected by default.
 func (c *Config) MetricsAuthRequired() bool {
 	return c.Environment != EnvDevelopment && c.Environment != EnvTest
+}
+
+// isVapidSubject reports whether value is an acceptable RFC 8292 VAPID contact:
+// a non-empty mailto address or HTTPS URL with a host.
+func isVapidSubject(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "mailto":
+		return parsed.Opaque != ""
+	case "https":
+		return parsed.Host != ""
+	default:
+		return false
+	}
 }
 
 func LoadValidated() (*Config, error) {

@@ -17,6 +17,7 @@ import (
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
 	"geoguessme/internal/middleware"
+	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 )
@@ -26,6 +27,12 @@ func main() {
 	command := "serve"
 	if len(os.Args) > 1 {
 		command = os.Args[1]
+	}
+	// `vapid-keys` only prints a fresh Web Push keypair; it must not require
+	// any database, storage, or configuration validation.
+	if command == "vapid-keys" {
+		printVapidKeys()
+		return
 	}
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
@@ -92,6 +99,10 @@ func main() {
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: logger, Backlog: metrics.SetCleanupBacklog}).Run(workerCtx)
+	pushSvc := configurePush(cfg, logger)
+	pushSvc.Start(workerCtx, 2)
+	handlers.Push = pushSvc
+	pushHTTP := push.NewHTTP(pushSvc)
 
 	mux := http.NewServeMux()
 	authLimit := middleware.RateLimitByIdentity(cfg.RateLimitRequests, cfg.RateLimitWindow, cfg.TrustedProxyCIDRs)
@@ -119,10 +130,16 @@ func main() {
 	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto))
 	mux.Handle("/api/v1/ws/ticket", protected(handlers.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", handlers.HandleChat)
+	mux.Handle("/api/v1/push/subscribe", protected(pushHTTP.Subscribe))
+	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
+	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(handlers.AcceptChallenge))
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
+	// Link-preview endpoint for group invites: unauthenticated, returns HTML
+	// with Open Graph meta tags for messengers and redirects browsers.
+	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)
 
 	registerSystemRoutes(mux, cfg, metrics, store)
 
@@ -151,6 +168,10 @@ func main() {
 	if handlers.HubInstance != nil {
 		handlers.HubInstance.Stop()
 	}
+	// Cancel background worker contexts so in-flight cleanup and push delivery
+	// stop promptly, then drain the push queue. Stop is idempotent.
+	stopWorkers()
+	pushSvc.Stop()
 }
 
 func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
@@ -158,6 +179,45 @@ func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
 		return storage.NewLocalStore(cfg.UploadDir)
 	}
 	return storage.NewS3Store(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UsePathStyle)
+}
+
+// configurePush builds the async push notification service. Production treats
+// an omitted VAPID configuration as an explicit opt-out: minting a new keypair
+// there would invalidate every subscription on the next restart. Development
+// and test retain ephemeral keys for convenient local end-to-end coverage.
+func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
+	if cfg.Environment == config.EnvProduction && cfg.VapidPublicKey == "" && cfg.VapidPrivateKey == "" {
+		logger.Info("Web Push is disabled because no VAPID keypair is configured")
+		return push.NewService(push.Deps{Config: cfg, Logger: logger})
+	}
+	keyPair, ephemeral, err := push.ResolveKeyPair(cfg.VapidPublicKey, cfg.VapidPrivateKey)
+	if err != nil {
+		logger.Error("VAPID key configuration is invalid; push notifications disabled", "error", err)
+		return push.NewService(push.Deps{Config: cfg, Logger: logger})
+	}
+	if ephemeral {
+		cfg.VapidSubject = "mailto:dev@geoguessme.invalid"
+		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
+	}
+	cfg.VapidPublicKey = keyPair.PublicKeyBase64URL()
+	cfg.VapidPrivateKey = keyPair.PrivateKeyBase64URL()
+	sender := push.NewSender(keyPair, cfg.VapidSubject, nil)
+	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
+}
+
+// printVapidKeys generates a fresh Web Push keypair and prints it in the
+// KEY=value form used by the environment files. Operators run `geoguessme
+// vapid-keys` once per deployment and store the output in production.env.
+func printVapidKeys() {
+	keyPair, err := push.GenerateKeyPair()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to generate VAPID keys: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("VAPID_PUBLIC_KEY=%s\n", keyPair.PublicKeyBase64URL())
+	fmt.Printf("VAPID_PRIVATE_KEY=%s\n", keyPair.PrivateKeyBase64URL())
+	fmt.Println("# Set VAPID_SUBJECT to a mailto: or https: contact URL, e.g.")
+	fmt.Println("# VAPID_SUBJECT=mailto:operator@example.com")
 }
 
 func parseLevel(value string) slog.Level {
