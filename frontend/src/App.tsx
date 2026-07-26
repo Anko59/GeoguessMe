@@ -11,61 +11,71 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import AccountSettings from './pages/account/AccountSettings';
+import PwaOnboarding from './components/pwa/PwaOnboarding';
+import { usePushBootstrap } from './push/usePushBootstrap';
+
+function AppChrome() {
+    usePushBootstrap();
+    return (
+        <div className="app-root">
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route
+                    path="/groups"
+                    element={
+                        <ProtectedRoute>
+                            <GroupsList />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/group/join"
+                    element={
+                        <ProtectedRoute>
+                            <GroupJoin />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/group/create"
+                    element={
+                        <ProtectedRoute>
+                            <GroupJoin />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/group/:id"
+                    element={
+                        <ProtectedRoute>
+                            <GroupView />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/settings"
+                    element={
+                        <ProtectedRoute>
+                            <AccountSettings />
+                        </ProtectedRoute>
+                    }
+                />
+            </Routes>
+            <PwaOnboarding />
+        </div>
+    );
+}
 
 function App() {
     return (
         <Router>
             <AuthProvider>
-                <div className="app-root">
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/signup" element={<Signup />} />
-                        <Route path="/forgot-password" element={<ForgotPassword />} />
-                        <Route path="/reset-password" element={<ResetPassword />} />
-                        <Route path="/verify-email" element={<VerifyEmail />} />
-                        <Route
-                            path="/groups"
-                            element={
-                                <ProtectedRoute>
-                                    <GroupsList />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/group/join"
-                            element={
-                                <ProtectedRoute>
-                                    <GroupJoin />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/group/create"
-                            element={
-                                <ProtectedRoute>
-                                    <GroupJoin />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/group/:id"
-                            element={
-                                <ProtectedRoute>
-                                    <GroupView />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/settings"
-                            element={
-                                <ProtectedRoute>
-                                    <AccountSettings />
-                                </ProtectedRoute>
-                            }
-                        />
-                    </Routes>
-                </div>
+                <AppChrome />
             </AuthProvider>
         </Router>
     );

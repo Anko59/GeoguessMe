@@ -52,9 +52,16 @@ make hosted-config
 Cloud-init creates independent age identities for dev and production. SOPS
 encrypted dotenv files are tracked as `deployment/secrets/*.env.enc`; decrypted
 files exist only as mode-0600 files under `/etc/geoguessme` on the host.
-`secrets-generate` requires the documented SMTP, GHCR, media-R2, backup-R2, and
-Cloudflare account variables and streams plaintext directly between the pinned
-tool and SOPS containers, so no plaintext dotenv file is created locally.
+`secrets-generate` requires the documented SMTP, GHCR, media-R2, backup-R2,
+Cloudflare account and optional Web Push variables and streams plaintext
+directly between the pinned tool and SOPS containers, so no plaintext dotenv
+file is created locally. Both hosted environments run with `APP_ENV=production`.
+Web Push is disabled when all three VAPID variables are absent; to enable it,
+mint a stable pair per environment with `make vapid-keys` and set
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` together before
+generating that environment's secret. A partial configuration is rejected.
+Rotating a keypair invalidates every existing browser subscription, so reuse the
+stored values whenever an environment's secret is regenerated.
 
 The host deployment command accepts only an environment fixed in
 `authorized_keys`, two digest-qualified image references, and a 40-character

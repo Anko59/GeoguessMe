@@ -1,3 +1,42 @@
+export function CameraTopControls({
+    hasMultipleCameras,
+    facingMode,
+    showFilters,
+    onSwitchCamera,
+    onToggleFilters,
+}: {
+    hasMultipleCameras: boolean;
+    facingMode: 'user' | 'environment';
+    showFilters: boolean;
+    onSwitchCamera: () => void;
+    onToggleFilters: () => void;
+}) {
+    return (
+        <div className="camera-controls-top">
+            {hasMultipleCameras && (
+                <button
+                    type="button"
+                    className="camera-switch-btn"
+                    onClick={onSwitchCamera}
+                    aria-label={`Switch to ${facingMode === 'user' ? 'back' : 'front'} camera`}
+                >
+                    🔄
+                </button>
+            )}
+            <button
+                type="button"
+                className={`filter-toggle-btn${showFilters ? ' active' : ''}`}
+                onClick={onToggleFilters}
+                aria-label={showFilters ? 'Hide lenses' : 'Show lenses'}
+                aria-expanded={showFilters}
+            >
+                <span aria-hidden="true">🎭</span>
+                <span>{showFilters ? 'Hide' : 'Lenses'}</span>
+            </button>
+        </div>
+    );
+}
+
 export function CameraErrorPanel({
     error,
     hasPhoto,

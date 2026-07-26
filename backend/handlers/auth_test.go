@@ -393,7 +393,7 @@ func TestAuthValidationAndUnauthenticatedBranches(t *testing.T) {
 	previous := HubInstance
 	HubInstance = nil
 	requireStatus(t, HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
-	HubInstance = chat.NewHub(nil)
+	HubInstance = chat.NewHub(nil, nil)
 	requireStatus(t, HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusUnauthorized)
 	HubInstance = previous
 

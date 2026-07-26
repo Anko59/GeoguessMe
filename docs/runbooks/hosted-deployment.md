@@ -54,12 +54,22 @@ and `TUNNEL_SERVICE_TOKEN_SECRET` before using this non-interactive operator
 route. Do not place either value on the command line. Read the two generated
 public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
 environment example with unique database/JWT/metrics/Restic credentials and its
-dedicated R2/Brevo values, then run:
+dedicated R2/Brevo values. Web Push is optional: leave all three VAPID variables
+absent to disable it, or mint one stable keypair per environment and export all
+three alongside the other credentials:
 
 ```text
+make vapid-keys
+export VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:...
 make secrets-generate ENV=dev RECIPIENT=age1...
 make secrets-generate ENV=production RECIPIENT=age1...
 ```
+
+Both environments set `APP_ENV=production`. The backend disables Push when all
+three VAPID variables are absent, but rejects a partial keypair or invalid
+contact subject. Store each configured environment's pair outside the
+repository: rotating it invalidates every browser subscription, so the same
+values must be reused whenever that secret file is regenerated.
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
 age private keys. Unless both GHCR packages are public, add a read-only
@@ -69,7 +79,10 @@ outputs, SSH private key, and SSH known-host line as environment-scoped GitHub
 secrets named `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`,
 `DEPLOY_SSH_PRIVATE_KEY`, and `DEPLOY_SSH_KNOWN_HOSTS`. Put the same two
 read-only Access values in the `monitoring` environment; it contains no SSH key
-and is restricted to scheduled health checks from `main`.
+and is restricted to scheduled health checks. Its deployment-branch policy must
+allow `dev`, because GitHub runs scheduled workflows from the default branch and
+`dev` is the default branch. A policy that allows only `main` makes every
+`Hosted health` run fail immediately with no steps executed.
 
 Dev and production use independent Restic repositories at the `/dev` and
 `/production` prefixes of the shared private backup bucket. Keep their

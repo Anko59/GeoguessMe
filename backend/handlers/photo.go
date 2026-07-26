@@ -94,6 +94,9 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		photoIDCopy := photo.ID
 		HubInstance.Broadcast(models.Message{ID: uuid.NewString(), GroupID: groupID, UserID: userID, Kind: "challenge", PhotoID: &photoIDCopy, Content: "", CreatedAt: now})
 	}
+	if Push != nil {
+		Push.NotifyNewChallenge(r.Context(), groupID, userID, photo.ID)
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": photo.ID, "group_id": photo.GroupID, "expires_at": photo.ExpiresAt, "created_at": photo.CreatedAt, "server_time": now})
 }
 

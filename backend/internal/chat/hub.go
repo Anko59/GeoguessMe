@@ -12,6 +12,11 @@ import (
 
 type PersistFunc func(context.Context, *models.Message) error
 
+// NotifyFunc is invoked after a message is persisted and broadcast. It is used
+// to fan push notifications for new chat messages; the callback must be
+// non-blocking. It receives the final message (with ID/timestamp assigned).
+type NotifyFunc func(context.Context, *models.Message)
+
 type event struct {
 	message models.Message
 	sender  *Client
@@ -25,11 +30,12 @@ type Hub struct {
 	stop       chan struct{}
 	stopped    chan struct{}
 	persist    PersistFunc
+	notify     NotifyFunc
 	once       sync.Once
 }
 
-func NewHub(persist PersistFunc) *Hub {
-	return &Hub{broadcast: make(chan event, 128), register: make(chan *Client), unregister: make(chan *Client), clients: make(map[*Client]bool), stop: make(chan struct{}), stopped: make(chan struct{}), persist: persist}
+func NewHub(persist PersistFunc, notify NotifyFunc) *Hub {
+	return &Hub{broadcast: make(chan event, 128), register: make(chan *Client), unregister: make(chan *Client), clients: make(map[*Client]bool), stop: make(chan struct{}), stopped: make(chan struct{}), persist: persist, notify: notify}
 }
 
 func (h *Hub) Run() {
@@ -71,6 +77,12 @@ func (h *Hub) Run() {
 				default:
 					h.remove(client)
 				}
+			}
+			// Fan a push notification for ordinary chat messages only. Challenge
+			// broadcasts are notified from the upload handler, and system messages
+			// (errors) are not user-facing.
+			if h.notify != nil && message.Kind == "text" {
+				h.notify(context.Background(), &message)
 			}
 		case <-h.stop:
 			for client := range h.clients {

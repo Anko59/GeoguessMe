@@ -143,3 +143,15 @@ Guess:
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }
+
+PushSubscriptionRequest:
+  type: object
+  required: [endpoint, keys]
+  properties:
+    endpoint: { type: string, format: uri }
+    keys:
+      type: object
+      required: [p256dh, auth]
+      properties:
+        p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
+        auth: { type: string, description: "Base64url 16-byte authentication secret" }
