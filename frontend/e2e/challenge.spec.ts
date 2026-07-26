@@ -36,7 +36,6 @@ async function createScenario(browser: Browser, contextOptions: BrowserContextOp
     const guesserContext = await newAuthContext(browser, options);
     await installDeterministicCamera(uploaderContext);
     await installDeterministicGeolocation(uploaderContext);
-
     const uploader = await uploaderContext.newPage();
     await signupViaUI(uploader);
     await uploader.goto('/group/create');
@@ -44,7 +43,6 @@ async function createScenario(browser: Browser, contextOptions: BrowserContextOp
     await uploader.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
     await uploader.waitForURL(/\/group\/[0-9a-f-]{36}$/);
     const groupId = uploader.url().split('/group/')[1];
-
     await uploader.getByRole('button', { name: 'Open group settings' }).click();
     const settings = uploader.getByRole('dialog');
     const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
@@ -272,9 +270,12 @@ test.describe('Challenge flow', () => {
             await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await page.getByRole('button', { name: 'Camera' }).click();
+            const filterPicker = page.getByRole('group', { name: 'Photo filters' });
             const rail = page.locator('.camera-filter-options');
-            await page.getByRole('button', { name: 'Show lenses' }).click();
-            await expect(rail).toBeVisible();
+            const showLenses = page.getByRole('button', { name: 'Show lenses' });
+            await expect(filterPicker.or(showLenses)).toBeVisible();
+            if (await showLenses.isVisible()) await showLenses.click();
+            await expect(filterPicker).toBeVisible();
             const nextLenses = page.getByRole('button', { name: 'Next lenses' });
             if (await nextLenses.isVisible()) {
                 const initialScroll = await rail.evaluate((element) => element.scrollLeft);
