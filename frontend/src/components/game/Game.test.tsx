@@ -112,4 +112,34 @@ describe('Game', () => {
         withGame(<Game gameMessage={message({ photo_id: 'photo-3', kind: 'challenge' })} onClose={vi.fn()} />);
         expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
     });
+
+    it('opens a result photo full screen and closes it with Escape', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-4',
+                group_id: 'group-1',
+                actual_lat: 48,
+                actual_long: 2,
+                media_available: true,
+                media_url: 'https://example.test/result.jpg',
+                guesses: [],
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-4', kind: 'challenge' })}
+                onClose={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'View challenge photo full screen' }));
+        expect(screen.getByRole('dialog', { name: 'Challenge photo full screen' })).toBeInTheDocument();
+        expect(screen.getByAltText('Challenge location full screen')).toHaveAttribute(
+            'src',
+            'https://example.test/result.jpg',
+        );
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Challenge photo full screen' })).not.toBeInTheDocument();
+    });
 });
