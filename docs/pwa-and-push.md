@@ -76,12 +76,14 @@ make vapid-keys
 ```
 
 The output is three `env` lines (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and a
-suggested `VAPID_SUBJECT`). Set them in the production environment:
+suggested `VAPID_SUBJECT`). Set them in the production environment. The subject
+may be a monitored `mailto:` address or an HTTPS operator contact URL such as
+the public site:
 
 ```bash
 VAPID_PUBLIC_KEY=<base64url output>
 VAPID_PRIVATE_KEY=<base64url output>
-VAPID_SUBJECT=mailto:operator@example.com
+VAPID_SUBJECT=https://geoguessme.com
 ```
 
 In development and test environments the backend mints ephemeral keys at
@@ -97,6 +99,8 @@ Hosted operators add a stable keypair when generating the encrypted environment
 file; follow the [hosted deployment runbook](runbooks/hosted-deployment.md) and
 never commit a plaintext dotenv file or keypair. Supplying only part of the
 three-variable keypair is a configuration error; it is not treated as disabled.
+The client distinguishes that deliberate disabled state from an ordinary
+network/service failure and never presents either as a successful subscription.
 
 ### Endpoints
 
