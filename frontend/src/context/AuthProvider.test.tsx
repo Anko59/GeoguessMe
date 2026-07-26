@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from './AuthContext';
 import AuthProvider from './AuthProvider';
 import type { AuthResponse } from '../types';
@@ -38,6 +38,7 @@ const authResponse: AuthResponse = {
 };
 
 beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     mocks.get.mockReset();
     mocks.post.mockReset();
@@ -45,6 +46,8 @@ beforeEach(() => {
     mocks.token = null;
     mocks.refreshAuthSession.mockReset();
 });
+
+afterEach(() => localStorage.clear());
 
 describe('AuthProvider', () => {
     it('restores, logs in, and logs out through AuthProvider', async () => {
@@ -89,5 +92,25 @@ describe('AuthProvider', () => {
         );
         expect(await screen.findByText('no')).toBeInTheDocument();
         expect(() => render(<Consumer />)).toThrow('useAuth must be used inside AuthProvider');
+    });
+
+    it('renders a cached session immediately while it refreshes in the background', async () => {
+        localStorage.setItem('geoguessme:pwa-session:v1', JSON.stringify(authResponse.user));
+        mocks.refreshAuthSession.mockResolvedValue(authResponse);
+        function Consumer() {
+            const auth = useAuth();
+            return <output>{auth.loading ? 'loading' : (auth.user?.username ?? 'signed-out')}</output>;
+        }
+
+        render(
+            <MemoryRouter>
+                <AuthProvider>
+                    <Consumer />
+                </AuthProvider>
+            </MemoryRouter>,
+        );
+
+        expect(screen.getByText('alice')).toBeInTheDocument();
+        await waitFor(() => expect(mocks.refreshAuthSession).toHaveBeenCalledTimes(1));
     });
 });

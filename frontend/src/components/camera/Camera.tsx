@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAPIErrorMessage } from '../../api';
-import { dataURLToBlob, fitDimensions, isFilterableImageType, uploadPhoto } from './cameraUtils';
+import { dataURLToBlob, fitDimensions, getCurrentPosition, isFilterableImageType, uploadPhoto } from './cameraUtils';
 import './Camera.css';
 import CameraView from './CameraView';
 import type { FaceFrame } from './lenses/facePose';
@@ -41,6 +41,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const cameraAttemptRef = useRef(0);
     const initializedCameraAttemptRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
     const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
 
     const updateFaceDetected = useCallback((detected: boolean) => {
@@ -48,6 +49,20 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         faceDetectedRef.current = detected;
         setFaceDetected(detected);
     }, []);
+
+    const requestLocation = useCallback(() => {
+        if (locationRequestRef.current) return locationRequestRef.current;
+        const request = getCurrentPosition();
+        locationRequestRef.current = request;
+        void request.catch(() => {
+            if (locationRequestRef.current === request) locationRequestRef.current = null;
+        });
+        return request;
+    }, []);
+
+    useEffect(() => {
+        void requestLocation();
+    }, [requestLocation]);
 
     const clearEffects = useCallback(() => {
         lastFrameRef.current = null;
@@ -386,7 +401,9 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         setUploading(true);
         setError('');
         try {
-            await uploadPhoto(dataURLToBlob(photo), fileMode ? 'upload.jpg' : 'capture.jpg', groupID);
+            const blob = dataURLToBlob(photo);
+            const position = await requestLocation();
+            await uploadPhoto(blob, fileMode ? 'upload.jpg' : 'capture.jpg', groupID, position);
             destroyEffects();
             stopCamera();
             setCapturedPhoto(null);

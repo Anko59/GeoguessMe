@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api, { getAPIErrorMessage } from '../api';
 import type { Message, MessagesPage } from '../types';
+import { readCachedMessages, saveCachedMessages } from '../utils/pwaSessionCache';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'offline';
 
@@ -54,24 +55,26 @@ function compareMessages(a: Message, b: Message): number {
  * superseded, so messages from a stale socket or an abandoned catch-up can
  * never corrupt the live view or schedule a second overlapping reconnect.
  */
-export function useGroupMessages(groupId: string | undefined): UseGroupMessagesResult {
-    const [messages, setMessages] = useState<Message[]>([]);
+export function useGroupMessages(groupId: string | undefined, userID?: string): UseGroupMessagesResult {
+    const cacheIdentity = groupId && userID ? `${userID}:${groupId}` : '';
+    const [messages, setMessages] = useState<Message[]>(() => readCachedMessages(userID, groupId));
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [error, setError] = useState('');
-    const [activeGroup, setActiveGroup] = useState<string | undefined>(groupId);
+    const [activeCacheIdentity, setActiveCacheIdentity] = useState(cacheIdentity);
     const wsRef = useRef<WebSocket | null>(null);
     const messagesRef = useRef<Message[]>([]);
     const generationRef = useRef(0);
     const stoppedRef = useRef(true);
     const retryRef = useRef(0);
     const reconnectTimerRef = useRef<number | undefined>(undefined);
+    const hasConnectedRef = useRef(false);
 
     // Reset per-group state when the group changes. Adjusting state during
     // render (rather than in an effect) is the React idiom for resetting state
     // tied to a prop and avoids a flash of the previous group's messages.
-    if (groupId !== activeGroup) {
-        setActiveGroup(groupId);
-        setMessages([]);
+    if (cacheIdentity !== activeCacheIdentity) {
+        setActiveCacheIdentity(cacheIdentity);
+        setMessages(readCachedMessages(userID, groupId));
         setConnectionStatus('connecting');
         setError('');
     }
@@ -110,6 +113,10 @@ export function useGroupMessages(groupId: string | undefined): UseGroupMessagesR
         messagesRef.current = messages;
     }, [messages]);
 
+    useEffect(() => {
+        saveCachedMessages(userID, groupId, messages);
+    }, [groupId, messages, userID]);
+
     const lastStableCursor = useCallback((): string => {
         const list = messagesRef.current;
         return list.length > 0 ? list[list.length - 1].id : '';
@@ -143,6 +150,7 @@ export function useGroupMessages(groupId: string | undefined): UseGroupMessagesR
         stoppedRef.current = false;
         generationRef.current = 0;
         retryRef.current = 0;
+        hasConnectedRef.current = false;
 
         const clearReconnectTimer = (): void => {
             if (reconnectTimerRef.current !== undefined) {
@@ -185,7 +193,12 @@ export function useGroupMessages(groupId: string | undefined): UseGroupMessagesR
                     // Catch up only after the socket is registered so messages
                     // created during the REST window are also delivered live
                     // and deduplicated by id.
-                    void loadAfter(cursor, generation);
+                    // A local cache makes the first screen immediate, but the
+                    // first server sync still reloads the recent page so edited
+                    // challenge state cannot remain stale. Later reconnects use
+                    // the cursor-only path to stay lossless and inexpensive.
+                    void loadAfter(hasConnectedRef.current ? cursor : '', generation);
+                    hasConnectedRef.current = true;
                 };
                 socket.onmessage = (event: MessageEvent<string>) => {
                     if (stoppedRef.current || generation !== generationRef.current) return;

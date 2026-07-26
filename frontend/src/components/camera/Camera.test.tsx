@@ -171,7 +171,6 @@ describe('Camera component', () => {
         await act(async () => {
             fireEvent.change(input, { target: { files: [file] } });
         });
-
         await waitFor(() => {
             expect(screen.getByAltText('Captured')).toBeInTheDocument();
         });
@@ -241,6 +240,12 @@ describe('Camera component', () => {
 
         await waitFor(() => {
             expect(mocks.post).toHaveBeenCalled();
+        });
+        expect(mocks.getCurrentPosition).toHaveBeenCalledOnce();
+        expect(mocks.getCurrentPosition).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), {
+            enableHighAccuracy: false,
+            timeout: 10_000,
+            maximumAge: 60_000,
         });
         const formData = mocks.post.mock.calls[0][1] as FormData;
         expect(formData.get('group_id')).toBe('group-1');

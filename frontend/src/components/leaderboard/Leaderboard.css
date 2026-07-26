@@ -33,6 +33,35 @@
     object-fit: contain;
 }
 
+.leaderboard-period-tabs {
+    width: min(100%, 52rem);
+    margin: 0 auto var(--space-5);
+    padding: 0.25rem;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.25rem;
+    background: rgba(26, 35, 126, 0.08);
+    border-radius: var(--radius-pill);
+}
+
+.leaderboard-period-tab {
+    min-height: 2.4rem;
+    padding: 0.4rem;
+    color: var(--ink-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-pill);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.leaderboard-period-tab.selected {
+    color: var(--brand-navy);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+}
+
 .loading-state,
 .leaderboard-empty-state {
     min-height: 24rem;

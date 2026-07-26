@@ -146,7 +146,20 @@ describe('VAPID and subscription lifecycle', () => {
         const browser = installPushBrowser({ subscription: null });
         api.get.mockRejectedValue(new Error('disabled'));
         await expect(subscribePushNotifications()).resolves.toBeNull();
+        expect(browser.requestPermission).not.toHaveBeenCalled();
         expect(browser.subscribe).not.toHaveBeenCalled();
+    });
+
+    it('creates a subscription when permission was granted before the app was installed', async () => {
+        const nextSubscription = mockSubscription('https://push.example/installed');
+        const browser = installPushBrowser({ subscription: null, nextSubscription });
+        api.get.mockResolvedValue({ data: { public_key: 'VGVzdA' } });
+        api.post.mockResolvedValue({});
+
+        await expect(syncPushSubscription()).resolves.toBe(nextSubscription);
+        expect(browser.requestPermission).not.toHaveBeenCalled();
+        expect(browser.subscribe).toHaveBeenCalledOnce();
+        expect(api.post).toHaveBeenCalledWith('/push/subscribe', expect.any(Object));
     });
 
     it('reconciles an existing subscription and removes one locally', async () => {

@@ -47,15 +47,15 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ### Groups
 
-| Method | Path                                              | Auth   | Description                 |
-| ------ | ------------------------------------------------- | ------ | --------------------------- |
-| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups          |
-| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`       |
-| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`         |
-| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only) |
-| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)  |
-| GET    | `/api/v1/group/leaderboard?group_id=`             | Bearer | Leaderboard (member only)   |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages          |
+| Method | Path                                              | Auth   | Description                                               |
+| ------ | ------------------------------------------------- | ------ | --------------------------------------------------------- |
+| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                        |
+| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                     |
+| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                       |
+| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                               |
+| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                |
+| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Calendar week/month or all-time leaderboard (member only) |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                        |
 
 ### Challenges
 

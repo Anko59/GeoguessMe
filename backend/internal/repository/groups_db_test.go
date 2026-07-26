@@ -89,3 +89,18 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 		t.Fatalf("GetGroupLeaderboard = %+v, %v", entries, err)
 	}
 }
+
+func TestLeaderboardPeriodStart(t *testing.T) {
+	now := time.Date(2026, time.July, 26, 18, 45, 0, 0, time.FixedZone("CEST", 2*60*60))
+	week := leaderboardPeriodStart(LeaderboardWeek, now)
+	month := leaderboardPeriodStart(LeaderboardMonth, now)
+	if week == nil || !week.Equal(time.Date(2026, time.July, 20, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("week start = %v", week)
+	}
+	if month == nil || !month.Equal(time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("month start = %v", month)
+	}
+	if start := leaderboardPeriodStart(LeaderboardAllTime, now); start != nil {
+		t.Fatalf("all-time start = %v", start)
+	}
+}

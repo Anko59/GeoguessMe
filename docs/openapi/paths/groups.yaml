@@ -84,6 +84,12 @@ leaderboard:
     security: [{ bearerAuth: [] }]
     parameters:
       - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - {
+          name: period,
+          in: query,
+          description: "Calendar period in UTC. Omit for all time.",
+          schema: { type: string, enum: [week, month, all], default: all },
+        }
     responses:
       "200":
         {
