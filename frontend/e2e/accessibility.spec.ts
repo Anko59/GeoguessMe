@@ -370,6 +370,7 @@ test.describe('Authenticated page Axe checks', () => {
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await page.getByRole('button', { name: /leaderboard/i }).click();
             await expect(page.locator('.leaderboard-container')).toBeVisible();
+            await expect(page.locator('.tab-panel')).toHaveCSS('opacity', '1');
             await expectAccessible(page);
         } finally {
             await ctx.context.close();
