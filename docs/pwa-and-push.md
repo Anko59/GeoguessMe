@@ -119,8 +119,12 @@ is full, the message is dropped and logged. Permanently invalid subscriptions
 
 ### Subscription lifecycle
 
-- **Permission**: the browser requests notification permission on the first
-  subscription. If denied, the enable button shows "Blocked in settings".
+- **Permission**: the installed PWA retains its notification affordance even
+  when the browser onboarding was dismissed. The browser requests permission
+  only after the backend confirms a VAPID key is available; if permission was
+  granted before installation, the next authenticated app load creates the
+  missing subscription without prompting again. If denied, the enable button
+  shows "Blocked in settings".
 - **Expiration / rotation**: the browser can silently replace a subscriber's
   `p256dh` key. The service worker reports `pushsubscriptionchange`, and every
   authenticated page load syncs the active subscription via

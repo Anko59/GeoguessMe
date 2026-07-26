@@ -99,15 +99,15 @@ export async function subscribePushNotifications(): Promise<PushSubscription | n
     if (!isPushSupported()) {
         return null;
     }
+    const vapidPublicKey = await getVapidPublicKey();
+    if (!vapidPublicKey) {
+        return null;
+    }
     if (Notification.permission !== 'granted') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             return null;
         }
-    }
-    const vapidPublicKey = await getVapidPublicKey();
-    if (!vapidPublicKey) {
-        return null;
     }
     const registration = await navigator.serviceWorker.ready;
     const existing = await registration.pushManager.getSubscription();
@@ -161,7 +161,12 @@ export async function syncPushSubscription(): Promise<PushSubscription | null> {
     const registration = await navigator.serviceWorker.ready;
     const existing = await registration.pushManager.getSubscription();
     if (!existing) {
-        return null;
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlB64ToUint8Array(vapidPublicKey) as BufferSource,
+        });
+        await postSubscriptionToBackend(subscription);
+        return subscription;
     }
     const applicationServerKey = urlB64ToUint8Array(vapidPublicKey) as BufferSource;
     // Resubscribe if the endpoint expired or the subscription is bound to an old

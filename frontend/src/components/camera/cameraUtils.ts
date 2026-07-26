@@ -1,5 +1,11 @@
 import api from '../../api';
 
+export const LOCATION_OPTIONS: PositionOptions = {
+    enableHighAccuracy: false,
+    timeout: 10_000,
+    maximumAge: 60_000,
+};
+
 export function dataURLToBlob(dataURL: string): Blob {
     const [header, encoded] = dataURL.split(',', 2);
     const binary = atob(encoded);
@@ -18,15 +24,19 @@ export function isFilterableImageType(mimeType: string): boolean {
     return FILTERABLE_IMAGE_TYPES.has(mimeType.toLowerCase());
 }
 
-export function getCurrentPosition(): Promise<GeolocationPosition> {
+export function getCurrentPosition(options: PositionOptions = LOCATION_OPTIONS): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('Geolocation is not supported by your browser'));
-        navigator.geolocation.getCurrentPosition(resolve, reject);
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
     });
 }
 
-export async function uploadPhoto(blob: Blob, filename: string, groupID: string): Promise<void> {
-    const position = await getCurrentPosition();
+export async function uploadPhoto(
+    blob: Blob,
+    filename: string,
+    groupID: string,
+    position: GeolocationPosition,
+): Promise<void> {
     const formData = new FormData();
     formData.append('photo', blob, filename);
     formData.append('group_id', groupID);
