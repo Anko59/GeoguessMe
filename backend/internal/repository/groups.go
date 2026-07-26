@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"geoguessme/internal/database"
 	"geoguessme/internal/models"
@@ -72,11 +73,48 @@ type LeaderboardEntry struct {
 	Average    float64 `json:"average_score"`
 }
 
+type LeaderboardPeriod string
+
+const (
+	LeaderboardAllTime LeaderboardPeriod = "all"
+	LeaderboardWeek    LeaderboardPeriod = "week"
+	LeaderboardMonth   LeaderboardPeriod = "month"
+)
+
+func ParseLeaderboardPeriod(value string) (LeaderboardPeriod, bool) {
+	switch LeaderboardPeriod(value) {
+	case LeaderboardAllTime, LeaderboardWeek, LeaderboardMonth:
+		return LeaderboardPeriod(value), true
+	default:
+		return "", false
+	}
+}
+
+func leaderboardPeriodStart(period LeaderboardPeriod, now time.Time) *time.Time {
+	now = now.UTC()
+	switch period {
+	case LeaderboardWeek:
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		start = start.AddDate(0, 0, -(int(start.Weekday())+6)%7)
+		return &start
+	case LeaderboardMonth:
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return &start
+	default:
+		return nil
+	}
+}
+
 func GetGroupLeaderboard(groupID string) ([]LeaderboardEntry, error) {
 	return GetGroupLeaderboardContext(context.Background(), groupID)
 }
 
 func GetGroupLeaderboardContext(ctx context.Context, groupID string) ([]LeaderboardEntry, error) {
+	return GetGroupLeaderboardForPeriodContext(ctx, groupID, LeaderboardAllTime)
+}
+
+func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, period LeaderboardPeriod) ([]LeaderboardEntry, error) {
+	start := leaderboardPeriodStart(period, time.Now())
 	query := `
 		SELECT u.id, u.username,
 		       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
@@ -87,7 +125,21 @@ func GetGroupLeaderboardContext(ctx context.Context, groupID string) ([]Leaderbo
 		WHERE gm.group_id = $1
 		GROUP BY u.id, u.username
 		ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
-	rows, err := database.DB.Query(ctx, query, groupID)
+	args := []any{groupID}
+	if start != nil {
+		query = `
+			SELECT u.id, u.username,
+			       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
+			       COUNT(g.id), COALESCE(AVG(g.score), 0)
+			FROM group_members gm
+			JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
+			LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id AND g.created_at >= $2
+			WHERE gm.group_id = $1
+			GROUP BY u.id, u.username
+			ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
+		args = append(args, *start)
+	}
+	rows, err := database.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

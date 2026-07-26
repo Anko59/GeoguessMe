@@ -2,23 +2,27 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import api, { refreshAuthSession, setAccessToken } from '../api';
 import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthResponse } from '../types';
+import { clearCachedSession, readSessionHint, saveSessionHint } from '../utils/pwaSessionCache';
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<AuthContextValue['user']>(null);
-    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState<AuthContextValue['user']>(() => readSessionHint());
+    const [loading, setLoading] = useState(() => readSessionHint() === null);
 
     const login = useCallback((response: AuthResponse): void => {
         setAccessToken(response.access_token);
         setUser(response.user);
+        saveSessionHint(response.user);
     }, []);
     const refreshSession = useCallback(async (): Promise<boolean> => {
         const response = await refreshAuthSession();
         if (!response) {
             setAccessToken(null);
             setUser(null);
+            clearCachedSession();
             return false;
         }
         setUser(response.user);
+        saveSessionHint(response.user);
         return true;
     }, []);
     const logout = useCallback(async (): Promise<void> => {
@@ -27,6 +31,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
             setAccessToken(null);
             setUser(null);
+            clearCachedSession();
         }
     }, []);
     useEffect(() => {

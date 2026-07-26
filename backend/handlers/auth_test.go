@@ -399,6 +399,7 @@ func TestAuthValidationAndUnauthenticatedBranches(t *testing.T) {
 
 	requireStatus(t, CreateWebSocketTicket, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/?group_id=group-1&period=year", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetGroupMessages, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)

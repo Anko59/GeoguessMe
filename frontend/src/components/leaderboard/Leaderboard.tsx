@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { LeaderboardEntry } from '../../types';
+import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
 import './Leaderboard.css';
 
 interface LeaderboardProps {
@@ -10,6 +10,7 @@ interface LeaderboardProps {
 
 export default function Leaderboard({ groupID }: LeaderboardProps) {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [period, setPeriod] = useState<LeaderboardPeriod>('week');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const mountedRef = useRef(true);
@@ -20,7 +21,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         if (!mountedRef.current) return;
         setError('');
         try {
-            const res = await api.get(`/group/leaderboard?group_id=${groupID}`);
+            const res = await api.get('/group/leaderboard', { params: { group_id: groupID, period } });
             if (!mountedRef.current) return;
             setLeaderboard(res.data || []);
         } catch {
@@ -29,7 +30,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         } finally {
             if (mountedRef.current) setLoading(false);
         }
-    }, [groupID]);
+    }, [groupID, period]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -67,40 +68,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="leaderboard-container">
-                <div className="loading-state">
-                    <div className="spinner"></div>
-                    <p>Loading rankings...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (error)
-        return (
-            <div className="leaderboard-container">
-                <div className="loading-state" role="alert">
-                    <p>{error}</p>
-                    <button className="btn btn-secondary" onClick={() => void fetchLeaderboard()}>
-                        Retry
-                    </button>
-                </div>
-            </div>
-        );
-
-    if (leaderboard.length === 0) {
-        return (
-            <div className="leaderboard-container">
-                <div className="leaderboard-empty-state">
-                    <img src="/cup_icon.png" alt="" className="leaderboard-empty-icon" />
-                    <h2>No scores yet</h2>
-                    <p className="empty-subtitle">Be the first to guess a location!</p>
-                </div>
-            </div>
-        );
-    }
+    const periodLabel: Record<LeaderboardPeriod, string> = { week: 'This week', month: 'This month', all: 'All time' };
 
     return (
         <div className="leaderboard-container">
@@ -112,9 +80,53 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                 </div>
             </div>
 
-            <div className="leaderboard-list">
-                {Array.isArray(leaderboard) &&
-                    leaderboard.map((entry, index) => {
+            <div className="leaderboard-period-tabs" role="tablist" aria-label="Leaderboard period">
+                {(Object.keys(periodLabel) as LeaderboardPeriod[]).map((option) => (
+                    <button
+                        key={option}
+                        type="button"
+                        role="tab"
+                        aria-selected={period === option}
+                        className={`leaderboard-period-tab${period === option ? ' selected' : ''}`}
+                        onClick={() => {
+                            setLoading(true);
+                            setPeriod(option);
+                        }}
+                    >
+                        {periodLabel[option]}
+                    </button>
+                ))}
+            </div>
+
+            {loading ? (
+                <div className="loading-state">
+                    <div className="spinner"></div>
+                    <p>Loading {periodLabel[period].toLowerCase()} rankings...</p>
+                </div>
+            ) : error ? (
+                <div className="loading-state" role="alert">
+                    <p>{error}</p>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                            setLoading(true);
+                            void fetchLeaderboard();
+                        }}
+                    >
+                        Retry
+                    </button>
+                </div>
+            ) : leaderboard.length === 0 ? (
+                <div className="leaderboard-empty-state">
+                    <img src="/cup_icon.png" alt="" className="leaderboard-empty-icon" />
+                    <h2>No scores yet</h2>
+                    <p className="empty-subtitle">
+                        Be the first to guess a location {periodLabel[period].toLowerCase()}.
+                    </p>
+                </div>
+            ) : (
+                <div className="leaderboard-list">
+                    {leaderboard.map((entry, index) => {
                         const rank = index + 1;
                         const isCurrentUser = entry.user_id === currentUserId;
                         const rankEmoji = getRankEmoji(rank);
@@ -154,7 +166,8 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                             </div>
                         );
                     })}
-            </div>
+                </div>
+            )}
         </div>
     );
 }

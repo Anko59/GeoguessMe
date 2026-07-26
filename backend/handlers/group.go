@@ -130,11 +130,20 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
+	period, validPeriod := repository.ParseLeaderboardPeriod(r.URL.Query().Get("period"))
+	if r.URL.Query().Get("period") == "" {
+		period = repository.LeaderboardAllTime
+		validPeriod = true
+	}
+	if !validPeriod {
+		writeError(w, http.StatusBadRequest, "invalid_period", "period must be week, month, or all")
+		return
+	}
 	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
 		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		return
 	}
-	entries, err := repository.GetGroupLeaderboardContext(r.Context(), groupID)
+	entries, err := repository.GetGroupLeaderboardForPeriodContext(r.Context(), groupID, period)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load leaderboard")
 		return
