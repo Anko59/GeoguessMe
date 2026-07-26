@@ -149,6 +149,8 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-1").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
+	countedStore := &countingStore{ObjectStore: store}
+	MediaStore = countedStore
 	recorder = httptest.NewRecorder()
 	acceptRequest := requestWithUser(http.MethodPost, "/", "", "user-1")
 	acceptRequest.SetPathValue("photoID", photo.ID)
@@ -167,6 +169,25 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "data" {
 		t.Fatalf("media response = %d %q", recorder.Code, recorder.Body.String())
 	}
+	if countedStore.getCalls != 1 || countedStore.statCalls != 0 {
+		t.Fatalf("media storage calls = get:%d stat:%d, want get:1 stat:0", countedStore.getCalls, countedStore.statCalls)
+	}
+}
+
+type countingStore struct {
+	storage.ObjectStore
+	getCalls  int
+	statCalls int
+}
+
+func (s *countingStore) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	s.getCalls++
+	return s.ObjectStore.Get(ctx, key)
+}
+
+func (s *countingStore) Stat(ctx context.Context, key string) (int64, error) {
+	s.statCalls++
+	return s.ObjectStore.Stat(ctx, key)
 }
 
 func TestChallengeResultsAndChatRejection(t *testing.T) {

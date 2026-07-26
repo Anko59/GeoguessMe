@@ -51,6 +51,8 @@
 
 	handle {
 		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		header /lenses/generated/* Cache-Control "public, max-age=31536000, immutable"
+		header /avatars/* Cache-Control "public, max-age=31536000, immutable"
 		root * /srv
 		try_files {path} /index.html
 		file_server

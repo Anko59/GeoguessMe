@@ -181,15 +181,8 @@ func ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusGone, "media_removed", "The original image is no longer available")
 		return
 	}
-	// Detect a missing object before committing a successful response.
-	if _, err := MediaStore.Stat(r.Context(), photo.StorageKey); err != nil {
-		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusGone, "media_removed", "The original image is no longer available")
-			return
-		}
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
-		return
-	}
+	// Get verifies an object before returning a reader. Avoid a separate Stat
+	// round trip here: the S3 implementation already probes its lazy reader.
 	object, err := MediaStore.Get(r.Context(), photo.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {

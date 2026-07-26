@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import type { Group, Message } from '../../types';
 import Chat from '../../components/chat/Chat';
 import Leaderboard from '../../components/leaderboard/Leaderboard';
+import { prefetchLeaderboard } from '../../components/leaderboard/leaderboardCache';
 import Camera from '../../components/camera/Camera';
 import Game from '../../components/game/Game';
 import SettingsModal from '../../components/settings/SettingsModal';
@@ -36,6 +37,11 @@ export default function GroupView() {
             .then((response) => setGroup(response.data))
             .catch((requestError: unknown) => setGroupError(getAPIErrorMessage(requestError, 'Unable to load group')));
     }, [id]);
+
+    useEffect(() => {
+        if (!id || !user) return;
+        prefetchLeaderboard(user.id, id);
+    }, [id, user]);
 
     const error = groupError || messagesError;
 
