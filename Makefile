@@ -399,6 +399,9 @@ terraform-apply: ## Apply the exact reviewed plan; requires CONFIRM=apply.
 	@test -f infra/terraform/geoguessme.tfplan || { echo 'run make terraform-plan first'; exit 2; }
 	$(TERRAFORM) apply geoguessme.tfplan
 
+vapid-keys: ## Print a fresh Web Push keypair for VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
+	@$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go run . vapid-keys'
+
 secrets-encrypt: ## Encrypt ENV=dev|production from its example using RECIPIENT.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
@@ -415,6 +418,7 @@ secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plai
 		-e TARGET_ENV=$(ENV) -e BREVO_SMTP_USERNAME -e BREVO_SMTP_PASSWORD \
 		-e GHCR_USERNAME -e GHCR_TOKEN -e MEDIA_ACCESS_KEY_ID -e MEDIA_SECRET_ACCESS_KEY \
 		-e BACKUP_ACCESS_KEY_ID -e BACKUP_SECRET_ACCESS_KEY -e CLOUDFLARE_ACCOUNT_ID \
+		-e VAPID_PUBLIC_KEY -e VAPID_PRIVATE_KEY -e VAPID_SUBJECT \
 		go-tools sh /workspace/deployment/scripts/generate-hosted-secret.sh | \
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \
 		--input-type dotenv --output-type dotenv --age "$(RECIPIENT)" /dev/stdin' \
