@@ -99,7 +99,7 @@ func main() {
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: logger, Backlog: metrics.SetCleanupBacklog}).Run(workerCtx)
-	pushSvc, _ := configurePush(cfg, logger)
+	pushSvc := configurePush(cfg, logger)
 	pushSvc.Start(workerCtx, 2)
 	handlers.Push = pushSvc
 	pushHTTP := push.NewHTTP(pushSvc)
@@ -181,23 +181,28 @@ func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
 	return storage.NewS3Store(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UsePathStyle)
 }
 
-// configurePush resolves the VAPID keypair (explicit or ephemeral for dev/test)
-// and builds the async push notification service. The resolved base64url keys
-// are written back into cfg so the HTTP public-key endpoint and the service
-// agree even when ephemeral keys were minted at startup.
-func configurePush(cfg *config.Config, logger *slog.Logger) (*push.Service, *push.KeyPair) {
+// configurePush builds the async push notification service. Production treats
+// an omitted VAPID configuration as an explicit opt-out: minting a new keypair
+// there would invalidate every subscription on the next restart. Development
+// and test retain ephemeral keys for convenient local end-to-end coverage.
+func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
+	if cfg.Environment == config.EnvProduction && cfg.VapidPublicKey == "" && cfg.VapidPrivateKey == "" {
+		logger.Info("Web Push is disabled because no VAPID keypair is configured")
+		return push.NewService(push.Deps{Config: cfg, Logger: logger})
+	}
 	keyPair, ephemeral, err := push.ResolveKeyPair(cfg.VapidPublicKey, cfg.VapidPrivateKey)
 	if err != nil {
 		logger.Error("VAPID key configuration is invalid; push notifications disabled", "error", err)
-		return push.NewService(push.Deps{Config: cfg, Logger: logger}), nil
+		return push.NewService(push.Deps{Config: cfg, Logger: logger})
 	}
 	if ephemeral {
+		cfg.VapidSubject = "mailto:dev@geoguessme.invalid"
 		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
 	}
 	cfg.VapidPublicKey = keyPair.PublicKeyBase64URL()
 	cfg.VapidPrivateKey = keyPair.PrivateKeyBase64URL()
 	sender := push.NewSender(keyPair, cfg.VapidSubject, nil)
-	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger}), keyPair
+	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
 }
 
 // printVapidKeys generates a fresh Web Push keypair and prints it in the

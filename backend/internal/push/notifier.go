@@ -69,6 +69,9 @@ func (s *Service) Keys() *KeyPair { return s.keys }
 // Start launches background delivery workers. Workers stop when ctx is cancelled
 // and the pending job queue is drained.
 func (s *Service) Start(ctx context.Context, workers int) {
+	if s.keys == nil {
+		return
+	}
 	if workers < 1 {
 		workers = 2
 	}
@@ -137,6 +140,9 @@ func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []b
 
 // NotifyNewChallenge alerts a group about a freshly uploaded challenge.
 func (s *Service) NotifyNewChallenge(ctx context.Context, groupID, excludeUserID, photoID string) {
+	if s.keys == nil {
+		return
+	}
 	targets, groupName, uploader := s.resolveChallenge(ctx, groupID, excludeUserID, photoID)
 	if len(targets) == 0 {
 		return
@@ -147,6 +153,9 @@ func (s *Service) NotifyNewChallenge(ctx context.Context, groupID, excludeUserID
 
 // NotifyNewMessage alerts a group about a new chat message from a member.
 func (s *Service) NotifyNewMessage(ctx context.Context, groupID, senderUserID, content string) {
+	if s.keys == nil {
+		return
+	}
 	targets, groupName, sender := s.resolveMessage(ctx, groupID, senderUserID)
 	if len(targets) == 0 {
 		return
