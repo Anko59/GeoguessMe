@@ -33,6 +33,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     const [selectedLocation, setSelectedLocation] = useState<Position | null>(null);
     const [clock, setClock] = useState(() => Date.now());
     const [loadingMedia, setLoadingMedia] = useState(false);
+    const [expandedResultImage, setExpandedResultImage] = useState<string | null>(null);
 
     const remaining = useMemo(
         () => (state.deadline ? Math.max(0, Math.ceil((state.deadline - (clock + state.serverOffset)) / 1000)) : 0),
@@ -166,6 +167,15 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             if (!resultsAvailable) await acceptChallenge(photoId);
         })();
     }, [acceptChallenge, gameMessage, loadResults, user]);
+
+    useEffect(() => {
+        if (!expandedResultImage) return undefined;
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setExpandedResultImage(null);
+        };
+        window.addEventListener('keydown', closeOnEscape);
+        return () => window.removeEventListener('keydown', closeOnEscape);
+    }, [expandedResultImage]);
     if (state.status === 'idle') return null;
     if (state.status === 'accepting')
         return (
@@ -238,6 +248,24 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 </div>
             </div>
         );
+    if (expandedResultImage)
+        return (
+            <div className="game-image-dialog" role="dialog" aria-modal="true" aria-label="Challenge photo full screen">
+                <button
+                    type="button"
+                    className="game-image-dialog-close"
+                    onClick={() => setExpandedResultImage(null)}
+                    aria-label="Close full-screen photo"
+                >
+                    ×
+                </button>
+                <img
+                    src={expandedResultImage}
+                    alt="Challenge location full screen"
+                    className="game-image-dialog-photo"
+                />
+            </div>
+        );
     if (state.status === 'results' && state.results)
         return (
             <div className="game-overlay">
@@ -256,7 +284,14 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     <div className="result-content">
                         <div className="result-details">
                             {state.mediaUrl && (
-                                <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
+                                <button
+                                    type="button"
+                                    className="result-image-button"
+                                    onClick={() => setExpandedResultImage(state.mediaUrl ?? null)}
+                                    aria-label="View challenge photo full screen"
+                                >
+                                    <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
+                                </button>
                             )}
                             {!state.results.media_available && (
                                 <p className="result-notice">
