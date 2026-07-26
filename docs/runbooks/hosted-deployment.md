@@ -41,7 +41,10 @@ changes explicitly to the running host and verify them, or use the documented
 backup/restore replacement procedure; a newly created host always receives the
 current template.
 
-Use the Access-protected operator SSH route:
+Use the Access-protected operator SSH route. Store the corresponding private
+operator key in the team's password manager (not this repository) and retain a
+documented recovery copy. The server-only age identity is deliberately not an
+operator credential and must never be copied off-host:
 
 ```text
 ssh -i /path/to/operator-key \
@@ -70,6 +73,25 @@ three VAPID variables are absent, but rejects a partial keypair or invalid
 contact subject. Store each configured environment's pair outside the
 repository: rotating it invalidates every browser subscription, so the same
 values must be reused whenever that secret file is regenerated.
+
+### Credential and Push recovery
+
+- Cloudflare only reveals an Access service-token secret at creation or
+  rotation. If it is unavailable locally, rotate the existing token, update
+  `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` in the `development`,
+  `production`, and `monitoring` GitHub environments in one maintenance window,
+  then verify a deployment before its overlap expires.
+- If the operator SSH private key is missing, use a planned Hetzner rescue-mode
+  reboot to install a newly generated public key in
+  `/home/ops/.ssh/authorized_keys`. Restrict temporary SSH ingress to the
+  operator's `/32`, verify Access-routed SSH and public readiness after normal
+  boot, then remove that firewall rule.
+- To enable Push on an already-deployed host, generate one stable VAPID pair,
+  add all three values to its existing production dotenv, re-encrypt that exact
+  dotenv with `/etc/geoguessme/age/production-recipient.txt`, commit only the
+  encrypted file, and restart the production application stack. Never rerun
+  `secrets-generate` for this operation: it rotates unrelated database, JWT, and
+  backup values.
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
 age private keys. Unless both GHCR packages are public, add a read-only
