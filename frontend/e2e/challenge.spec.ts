@@ -272,8 +272,9 @@ test.describe('Challenge flow', () => {
             await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             await page.getByRole('button', { name: 'Camera' }).click();
-
             const rail = page.locator('.camera-filter-options');
+            await page.getByRole('button', { name: 'Show lenses' }).click();
+            await expect(rail).toBeVisible();
             const nextLenses = page.getByRole('button', { name: 'Next lenses' });
             if (await nextLenses.isVisible()) {
                 const initialScroll = await rail.evaluate((element) => element.scrollLeft);
@@ -282,12 +283,12 @@ test.describe('Challenge flow', () => {
             } else {
                 expect(await rail.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
             }
-
             await page.getByRole('button', { name: /text/i }).click();
             await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
             await page.getByRole('button', { name: 'Neon', exact: true }).click();
             await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
-
+            await page.getByRole('button', { name: 'Text', exact: true }).click();
+            await expect(page.getByPlaceholder('Say something dangerous…')).toBeHidden();
             const modelResponse = page.waitForResponse((response) =>
                 response.url().endsWith('/vendor/mediapipe/face_landmarker.task'),
             );
