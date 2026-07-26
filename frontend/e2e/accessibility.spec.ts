@@ -354,7 +354,7 @@ test.describe('Authenticated page Axe checks', () => {
         }
     });
 
-    test.fixme('group view leaderboard tab has no serious or critical Axe violations', async ({
+    test('group view leaderboard tab has no serious or critical Axe violations', async ({
         browser,
         contextOptions,
     }) => {
