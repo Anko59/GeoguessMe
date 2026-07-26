@@ -54,8 +54,9 @@ and `TUNNEL_SERVICE_TOKEN_SECRET` before using this non-interactive operator
 route. Do not place either value on the command line. Read the two generated
 public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
 environment example with unique database/JWT/metrics/Restic credentials and its
-dedicated R2/Brevo values, then mint one Web Push keypair per environment and
-export it alongside the other credentials:
+dedicated R2/Brevo values. Web Push is optional: leave all three VAPID variables
+absent to disable it, or mint one stable keypair per environment and export all
+three alongside the other credentials:
 
 ```text
 make vapid-keys
@@ -64,10 +65,11 @@ make secrets-generate ENV=dev RECIPIENT=age1...
 make secrets-generate ENV=production RECIPIENT=age1...
 ```
 
-Both environments set `APP_ENV=production`, so the backend refuses to start
-without a complete keypair and contact subject. Store each environment's pair
-outside the repository: rotating it invalidates every browser subscription, so
-the same values must be reused whenever that secret file is regenerated.
+Both environments set `APP_ENV=production`. The backend disables Push when all
+three VAPID variables are absent, but rejects a partial keypair or invalid
+contact subject. Store each configured environment's pair outside the
+repository: rotating it invalidates every browser subscription, so the same
+values must be reused whenever that secret file is regenerated.
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
 age private keys. Unless both GHCR packages are public, add a read-only

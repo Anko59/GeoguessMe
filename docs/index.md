@@ -39,6 +39,8 @@ submit one server-timed guess.
   guidance, VAPID key generation
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
+- [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
+  record, corrected safeguards, and release checklist
 
 ## Repository
 

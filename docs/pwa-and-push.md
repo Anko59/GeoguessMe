@@ -95,7 +95,8 @@ subscriptions after a restart.
 
 Hosted operators add a stable keypair when generating the encrypted environment
 file; follow the [hosted deployment runbook](runbooks/hosted-deployment.md) and
-never commit a plaintext dotenv file or keypair.
+never commit a plaintext dotenv file or keypair. Supplying only part of the
+three-variable keypair is a configuration error; it is not treated as disabled.
 
 ### Endpoints
 
