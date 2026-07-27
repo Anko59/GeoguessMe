@@ -79,25 +79,33 @@ func TestHubReportsPersistenceFailureToSender(t *testing.T) {
 	hub.Stop()
 }
 
-// TestHubNotifiesOnlyForTextMessages asserts the push callback fires for chat
-// messages but not for challenge broadcasts (notified by the upload handler) or
-// persistence failures.
-func TestHubNotifiesOnlyForTextMessages(t *testing.T) {
+// TestHubNotifiesOnlyForChatMessages asserts the push callback fires for text
+// and media chat messages but not for challenges (notified by their handler).
+func TestHubNotifiesOnlyForChatMessages(t *testing.T) {
 	notified := make(chan models.Message, 4)
 	hub := NewHub(func(context.Context, *models.Message) error { return nil }, func(_ context.Context, msg *models.Message) {
 		notified <- *msg
 	})
 	go hub.Run()
 	hub.Broadcast(models.Message{GroupID: "group-a", Kind: "text", Content: "hi"})
+	hub.BroadcastPersisted(models.Message{GroupID: "group-a", Kind: "media", Content: "photo"})
 	challengeID := "photo-1"
 	hub.Broadcast(models.Message{GroupID: "group-a", Kind: "challenge", PhotoID: &challengeID})
 	select {
 	case message := <-notified:
 		if message.Kind != "text" || message.Content != "hi" {
-			t.Fatalf("only text messages should be notified, got %+v", message)
+			t.Fatalf("text message was not notified, got %+v", message)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("text message was not notified")
+	}
+	select {
+	case message := <-notified:
+		if message.Kind != "media" || message.Content != "photo" {
+			t.Fatalf("media message was not notified: %+v", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("media message was not notified")
 	}
 	select {
 	case message := <-notified:

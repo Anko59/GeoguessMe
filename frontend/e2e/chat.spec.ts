@@ -84,6 +84,34 @@ test.describe('Chat via WebSocket', () => {
         }
     });
 
+    test('chat sends and receives a private photo attachment', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
+        const member = await addMember(browser, contextOptions, scenario);
+        try {
+            const caption = `shared-photo-${Date.now()}`;
+            const png = Buffer.from(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+                'base64',
+            );
+            await scenario.owner.locator('#chat-attachment').setInputFiles({
+                name: 'shared.png',
+                mimeType: 'image/png',
+                buffer: png,
+            });
+            await scenario.owner.locator('#chat-message').fill(caption);
+            await scenario.owner.getByRole('button', { name: 'Send attachment' }).click();
+
+            await expect(scenario.owner.locator('.message-container').filter({ hasText: caption })).toBeVisible();
+            await expect(member.page.locator('.message-container').filter({ hasText: caption })).toBeVisible();
+            await expect(
+                member.page.locator('.message-container').filter({ hasText: caption }).locator('img.chat-attachment'),
+            ).toBeVisible();
+        } finally {
+            await member.context.close();
+            await scenario.ownerContext.close();
+        }
+    });
+
     test('browser WebSocket recovery: disconnect, renewed ticket, cursor catch-up, overlapping live delivery, exact-once rendering', async ({
         browser,
         contextOptions,

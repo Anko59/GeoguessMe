@@ -16,9 +16,9 @@ import (
 // the order given, so pagination assertions read in the exact order the
 // database would return them.
 func messageRowsByID(ids []string, times []time.Time) *pgxmock.Rows {
-	rows := pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "reply_to_id", "content", "created_at"})
+	rows := pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"})
 	for i, id := range ids {
-		rows.AddRow(id, "group-1", "user-1", "alice", "avatar.png", "text", nil, nil, "hello", times[i])
+		rows.AddRow(id, "group-1", "user-1", "alice", "avatar.png", "text", nil, nil, nil, nil, "hello", times[i])
 	}
 	return rows
 }

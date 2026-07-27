@@ -64,8 +64,10 @@ Message:
     user_id: { type: string, format: uuid }
     username: { type: string }
     avatar: { type: string }
-    kind: { type: string, enum: [text, challenge, system] }
+    kind: { type: string, enum: [text, challenge, media, system] }
     photo_id: { type: [string, "null"], format: uuid }
+    media_id: { type: [string, "null"], format: uuid }
+    media_type: { type: string, enum: [image/jpeg, image/png, video/mp4, video/webm] }
     reply_to_id: { type: [string, "null"], format: uuid }
     content: { type: string }
     created_at: { type: string, format: date-time }

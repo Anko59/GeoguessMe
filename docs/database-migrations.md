@@ -27,6 +27,7 @@ Migrations are stored in `backend/internal/database/migrations/`:
 004_push_subscriptions.sql
 005_leaderboard_lookup_index.sql
 006_message_replies.sql
+007_chat_media.sql
 ```
 
 New migrations:

@@ -93,6 +93,7 @@ export default function GroupView() {
                             messages={messages}
                             wsRef={wsRef}
                             currentUserId={user?.id ?? ''}
+                            groupID={id}
                             connectionStatus={connectionStatus}
                             onChallengeMessage={setGameMessage}
                         />
