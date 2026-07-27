@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Member } from '../../types';
+import Avatar from '../common/Avatar';
 import LogoutButton from '../navigation/LogoutButton';
 import Icon from '../ui/Icon';
 import './SettingsModal.css';
@@ -163,9 +164,10 @@ export default function SettingsModal({
                             ) : members.length > 0 ? (
                                 members.map((member) => (
                                     <div key={member.id} className="member-item">
-                                        <img
-                                            src={`/avatars/${member.avatar || 'avatar.png'}`}
-                                            alt=""
+                                        <Avatar
+                                            userID={member.id}
+                                            avatar={member.avatar}
+                                            username={member.username}
                                             className="member-avatar"
                                         />
                                         <span className="member-name">{member.username}</span>

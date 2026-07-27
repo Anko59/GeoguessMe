@@ -245,6 +245,15 @@ func UpdatePassword(ctx context.Context, userID, passwordHash string) error {
 	return err
 }
 
+// SetUserAvatar stores the avatar marker for a user without touching any
+// other profile field. It backs the authenticated avatar upload endpoint.
+func SetUserAvatar(ctx context.Context, userID, avatar string) error {
+	_, err := database.DB.Exec(ctx,
+		`UPDATE users SET avatar = $1, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = $2 AND deleted_at IS NULL`, avatar, userID)
+	return err
+}
+
 // UpdateProfile changes the public account fields. Changing the email address
 // clears verification so the new address must be verified independently.
 func UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
