@@ -19,6 +19,14 @@ type Image struct {
 	PixelHeight int
 }
 
+// Upload is a validated challenge asset. Images are decoded and re-encoded to
+// remove metadata; browser-recorded videos are kept as their validated source
+// bytes because this service deliberately has no transcoding runtime.
+type Upload struct {
+	Data     []byte
+	MIMEType string
+}
+
 func NormalizeUpload(file multipart.File, declaredSize, maxBytes int64, maxPixels uint64) (*Image, error) {
 	if declaredSize <= 0 || declaredSize > maxBytes {
 		return nil, fmt.Errorf("image must be between 1 byte and %d bytes", maxBytes)
@@ -30,6 +38,34 @@ func NormalizeUpload(file multipart.File, declaredSize, maxBytes int64, maxPixel
 	if int64(len(data)) > maxBytes {
 		return nil, fmt.Errorf("image exceeds %d bytes", maxBytes)
 	}
+	return normalizeImageData(data, maxPixels)
+}
+
+// NormalizeChallengeUpload accepts normalized images and camera-recorded MP4
+// or WebM clips. The server determines the media type from container bytes,
+// rather than relying on the multipart content type supplied by a client.
+func NormalizeChallengeUpload(file multipart.File, declaredSize, maxBytes int64, maxPixels uint64) (*Upload, error) {
+	if declaredSize <= 0 || declaredSize > maxBytes {
+		return nil, fmt.Errorf("media must be between 1 byte and %d bytes", maxBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read media: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("media exceeds %d bytes", maxBytes)
+	}
+	if mimeType := recordedVideoMIMEType(data); mimeType != "" {
+		return &Upload{Data: data, MIMEType: mimeType}, nil
+	}
+	image, err := normalizeImageData(data, maxPixels)
+	if err != nil {
+		return nil, err
+	}
+	return &Upload{Data: image.Data, MIMEType: image.MIMEType}, nil
+}
+
+func normalizeImageData(data []byte, maxPixels uint64) (*Image, error) {
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("invalid image: %w", err)
@@ -61,4 +97,36 @@ func NormalizeUpload(file multipart.File, declaredSize, maxBytes int64, maxPixel
 		return nil, fmt.Errorf("unsupported image format")
 	}
 	return &Image{Data: output.Bytes(), MIMEType: mimeType, PixelWidth: config.Width, PixelHeight: config.Height}, nil
+}
+
+func recordedVideoMIMEType(data []byte) string {
+	if isMP4(data) {
+		return "video/mp4"
+	}
+	if isWebM(data) {
+		return "video/webm"
+	}
+	return ""
+}
+
+func isMP4(data []byte) bool {
+	if len(data) < 12 || string(data[4:8]) != "ftyp" {
+		return false
+	}
+	// ISO base media file brands used by current browser MediaRecorder
+	// implementations. Do not accept a generic ftyp box as video.
+	switch string(data[8:12]) {
+	case "isom", "iso2", "mp41", "mp42", "avc1", "M4V ":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWebM(data []byte) bool {
+	if len(data) < 8 || !bytes.Equal(data[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) {
+		return false
+	}
+	limit := min(len(data), 4096)
+	return bytes.Contains(data[:limit], []byte("webm"))
 }

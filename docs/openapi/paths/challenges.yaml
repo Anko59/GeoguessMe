@@ -1,7 +1,7 @@
 upload:
   post:
     operationId: uploadPhotoChallenge
-    summary: Upload a photo challenge.
+    summary: Upload a photo or camera-recorded video challenge.
     tags: [Challenges]
     security: [{ bearerAuth: [] }]
     requestBody:
@@ -54,11 +54,13 @@ media:
       - { name: result, in: query, schema: { type: string, enum: ["1"] } }
     responses:
       "200":
-        description: Image bytes.
+        description: Image or video bytes.
         content:
           image/jpeg: { schema: { type: string, format: binary } }
           image/png: { schema: { type: string, format: binary } }
           image/webp: { schema: { type: string, format: binary } }
+          video/mp4: { schema: { type: string, format: binary } }
+          video/webm: { schema: { type: string, format: binary } }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
 

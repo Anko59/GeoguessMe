@@ -87,17 +87,21 @@ func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
 }
 
 func multipartUpload(t *testing.T, groupID string) (*http.Request, error) {
+	return multipartMediaUpload(t, groupID, "photo.png", mustDecodeBase64(onePixelPNG))
+}
+
+func multipartMediaUpload(t *testing.T, groupID, filename string, payload []byte) (*http.Request, error) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	_ = writer.WriteField("group_id", groupID)
 	_ = writer.WriteField("lat", "48.8566")
 	_ = writer.WriteField("long", "2.3522")
-	part, err := writer.CreateFormFile("photo", "photo.png")
+	part, err := writer.CreateFormFile("photo", filename)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := part.Write(mustDecodeBase64(onePixelPNG)); err != nil {
+	if _, err := part.Write(payload); err != nil {
 		return nil, err
 	}
 	if err := writer.Close(); err != nil {
@@ -171,6 +175,29 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	}
 	if countedStore.getCalls != 1 || countedStore.statCalls != 0 {
 		t.Fatalf("media storage calls = get:%d stat:%d, want get:1 stat:0", countedStore.getCalls, countedStore.statCalls)
+	}
+}
+
+func TestUploadRecordedVideo(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	mock := handlerMock(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
+	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	UploadPhoto(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("video upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
 

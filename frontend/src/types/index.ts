@@ -59,6 +59,7 @@ export interface ChallengeNotice {
 export interface ChallengeAcceptance {
     photo_id: string;
     media_url: string;
+    media_type: string;
     accepted_at: string;
     view_expires_at: string;
     guess_after: string;
@@ -96,6 +97,7 @@ export interface ChallengeResults {
     guesses: ChallengeGuess[];
     media_available: boolean;
     media_url?: string;
+    media_type?: string;
     server_time: string;
 }
 

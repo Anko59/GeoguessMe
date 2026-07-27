@@ -81,7 +81,7 @@ export function PreviewActions({
                 Retake
             </button>
             <button className="btn btn-primary" onClick={onSend} disabled={uploading}>
-                {uploading ? 'Sending...' : 'Send 📸'}
+                {uploading ? 'Sending...' : 'Send'}
             </button>
         </div>
     );

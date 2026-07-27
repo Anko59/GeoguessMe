@@ -2,13 +2,13 @@
 
 ## Challenge lifecycle
 
-A photo challenge moves through these states:
+A photo or video challenge moves through these states:
 
 ```text
 ready → accepted → viewing window → guessable → expired → removed
 ```
 
-1. **ready** — The photo is uploaded. No group member can see the image yet.
+1. **ready** — The media is uploaded. No group member can see it yet.
 2. **accepted** — A member calls `POST /api/v1/challenges/{photoID}/accept`.
    This opens a per-member viewing window (default 10 seconds).
 3. **viewing window** — The media is available at
@@ -20,8 +20,9 @@ ready → accepted → viewing window → guessable → expired → removed
 5. **expired** — The challenge reaches `expires_at` (created_at +
    CHALLENGE_TTL). No more guesses can be submitted.
 6. **removed** — After `retention_at` (created_at + PHOTO_RETENTION), the
-   cleanup worker marks the photo `removed`, nulls the storage key, and enqueues
-   a durable object-deletion job. The media bytes are no longer available.
+   cleanup worker marks the challenge `removed`, nulls the storage key, and
+   enqueues a durable object-deletion job. The media bytes are no longer
+   available.
 
 ## Timing
 
@@ -33,6 +34,15 @@ ready → accepted → viewing window → guessable → expired → removed
 
 The view window is capped at `CHALLENGE_TTL` even if `PHOTO_VIEW_WINDOW` is
 longer. A re-acceptance does not extend access beyond the original window.
+
+## Capture media
+
+The camera shutter captures a photo when tapped. Holding the same shutter for
+300 ms starts a video recording; releasing it stops the clip and opens the
+normal preview before sending. The application requests microphone access only
+for a held video capture. Recorded MP4 and WebM clips share the configured
+`UPLOAD_MAX_BYTES` limit (10 MiB by default); selected files remain photo-only
+so that video uploads originate from the privacy-preserving camera flow.
 
 ## Scoring
 
@@ -54,7 +64,9 @@ off.
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 `actual_lat`, `actual_long`, all guesses with `username`, `score`, `distance`,
-and a `media_url` (with `?result=1`) if the media is still available.
+and `media_url` plus `media_type` (with `?result=1`) if the media is still
+available. Result photos can be opened full screen; videos retain playback
+controls in the result panel.
 
 ## Group join codes
 

@@ -93,10 +93,12 @@ ChallengeCreated:
 
 ChallengeAccepted:
   type: object
-  required: [photo_id, media_url, accepted_at, view_expires_at, guess_after, challenge_expires_at, server_time]
+  required:
+    [photo_id, media_url, media_type, accepted_at, view_expires_at, guess_after, challenge_expires_at, server_time]
   properties:
     photo_id: { type: string, format: uuid }
     media_url: { type: string }
+    media_type: { type: string, enum: [image/jpeg, image/png, video/mp4, video/webm] }
     accepted_at: { type: string, format: date-time }
     view_expires_at: { type: string, format: date-time }
     guess_after: { type: string, format: date-time }
@@ -126,6 +128,7 @@ ChallengeResults:
     guesses: { type: array, items: { $ref: "#/Guess" } }
     media_available: { type: boolean }
     media_url: { type: [string, "null"] }
+    media_type: { type: [string, "null"], enum: [image/jpeg, image/png, video/mp4, video/webm, null] }
     server_time: { type: string, format: date-time }
 
 Guess:

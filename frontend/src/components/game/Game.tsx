@@ -15,6 +15,7 @@ interface GameState {
     status: Status;
     photoId?: string;
     mediaUrl?: string;
+    mediaType?: string;
     deadline?: number;
     serverOffset: number;
     results?: ChallengeResults;
@@ -69,6 +70,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     status: 'viewing',
                     photoId,
                     mediaUrl,
+                    mediaType: data.media_type,
                     deadline: Date.parse(data.view_expires_at),
                     serverOffset: offset,
                 });
@@ -97,6 +99,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     status: 'results',
                     photoId,
                     mediaUrl,
+                    mediaType: results.media_type,
                     serverOffset: Date.parse(results.server_time) - Date.now(),
                     results,
                 });
@@ -202,7 +205,17 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         return (
             <div className="game-overlay">
                 <div className="photo-view scale-in">
-                    <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
+                    {state.mediaType?.startsWith('video/') ? (
+                        <video
+                            src={state.mediaUrl}
+                            className="game-photo"
+                            controls
+                            playsInline
+                            aria-label="Challenge video"
+                        />
+                    ) : (
+                        <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
+                    )}
                     <div className="timer-overlay">
                         <div className="timer-container">
                             <img src="/timer_icon.png" alt="" className="timer-icon" />
@@ -283,7 +296,16 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     </div>
                     <div className="result-content">
                         <div className="result-details">
-                            {state.mediaUrl && (
+                            {state.mediaUrl && state.mediaType?.startsWith('video/') && (
+                                <video
+                                    src={state.mediaUrl}
+                                    className="result-image"
+                                    controls
+                                    playsInline
+                                    aria-label="Challenge result video"
+                                />
+                            )}
+                            {state.mediaUrl && !state.mediaType?.startsWith('video/') && (
                                 <button
                                     type="button"
                                     className="result-image-button"
@@ -295,7 +317,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                             )}
                             {!state.results.media_available && (
                                 <p className="result-notice">
-                                    The original image has been removed; scores remain available.
+                                    The original media has been removed; scores remain available.
                                 </p>
                             )}
                             <div className="score-list" aria-label="Submitted scores">
