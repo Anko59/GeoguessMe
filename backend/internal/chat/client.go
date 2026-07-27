@@ -30,7 +30,8 @@ type Client struct {
 }
 
 type incomingMessage struct {
-	Content string `json:"content"`
+	Content   string  `json:"content"`
+	ReplyToID *string `json:"reply_to_id,omitempty"`
 }
 
 func (c *Client) readPump() {
@@ -55,7 +56,7 @@ func (c *Client) readPump() {
 			sendSystem(c, "invalid_message", "Message is empty or too long")
 			continue
 		}
-		c.hub.BroadcastFrom(c, models.Message{GroupID: c.groupID, UserID: c.userID, Kind: "text", Content: input.Content, CreatedAt: time.Now()})
+		c.hub.BroadcastFrom(c, models.Message{GroupID: c.groupID, UserID: c.userID, Kind: "text", ReplyToID: input.ReplyToID, Content: input.Content, CreatedAt: time.Now()})
 	}
 }
 

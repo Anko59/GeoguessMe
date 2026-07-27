@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var ErrInvalidMessageReply = errors.New("invalid message reply")
+
 func SaveMessage(msg *models.Message) error {
 	return SaveMessageContext(context.Background(), msg)
 }
@@ -28,11 +30,20 @@ func SaveMessageContext(ctx context.Context, msg *models.Message) error {
 			msg.Username, msg.Avatar = username, avatar
 		}
 	}
-	_, err := database.DB.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, content, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.Content, msg.CreatedAt)
+	if msg.ReplyToID != nil {
+		var exists bool
+		if err := database.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND group_id = $2)`, *msg.ReplyToID, msg.GroupID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrInvalidMessageReply
+		}
+	}
+	_, err := database.DB.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, reply_to_id, content, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.ReplyToID, msg.Content, msg.CreatedAt)
 	return err
 }
 
-const messageColumns = "m.id, m.group_id, m.user_id, u.username, u.avatar, m.kind, m.photo_id, m.content, m.created_at"
+const messageColumns = "m.id, m.group_id, m.user_id, u.username, u.avatar, m.kind, m.photo_id, m.media_id, cm.mime_type, m.reply_to_id, m.content, m.created_at"
 
 // MessagesPage is the cursor-paginated result of GetGroupMessagesPage.
 type MessagesPage struct {
@@ -54,7 +65,7 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 	}
 
 	if cursor == "" {
-		query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id WHERE m.group_id = $1 ORDER BY m.created_at DESC, m.id DESC LIMIT $2`
+		query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 ORDER BY m.created_at DESC, m.id DESC LIMIT $2`
 		rows, err := database.DB.Query(ctx, query, groupID, limit)
 		if err != nil {
 			return MessagesPage{}, err
@@ -72,7 +83,7 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 	if err != nil {
 		return MessagesPage{}, fmt.Errorf("invalid message cursor: %w", err)
 	}
-	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) > ROW($2, $3) ORDER BY m.created_at ASC, m.id ASC LIMIT $4`
+	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) > ROW($2, $3) ORDER BY m.created_at ASC, m.id ASC LIMIT $4`
 	rows, err := database.DB.Query(ctx, query, groupID, createdAt, id, limit+1)
 	if err != nil {
 		return MessagesPage{}, err
@@ -151,7 +162,8 @@ func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {
 	for rows.Next() {
 		var msg models.Message
 		var username, avatar sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &msg.Content, &msg.CreatedAt); err != nil {
+		var mediaID, mediaType, replyToID sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &mediaID, &mediaType, &replyToID, &msg.Content, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
 		if username.Valid {
@@ -159,6 +171,15 @@ func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {
 		}
 		if avatar.Valid {
 			msg.Avatar = avatar.String
+		}
+		if replyToID.Valid {
+			msg.ReplyToID = &replyToID.String
+		}
+		if mediaID.Valid {
+			msg.MediaID = &mediaID.String
+		}
+		if mediaType.Valid {
+			msg.MediaType = mediaType.String
 		}
 		messages = append(messages, msg)
 	}
@@ -239,4 +260,61 @@ func decodeMessageCursor(cursor string) (time.Time, string, error) {
 // Ensure the explicit timestamp is always initialized by server code.
 func NewTextMessage(groupID, userID, content string, now time.Time) *models.Message {
 	return &models.Message{ID: uuid.NewString(), GroupID: groupID, UserID: userID, Kind: "text", Content: content, CreatedAt: now}
+}
+
+// CreateChatMediaMessage atomically records an uploaded private attachment and
+// its message. The caller stores the object first and compensates that object
+// if this transaction fails, matching the challenge-upload durability model.
+func CreateChatMediaMessage(ctx context.Context, msg *models.Message, asset *models.ChatMedia) error {
+	if msg == nil || asset == nil || msg.ID == "" || asset.ID == "" || msg.GroupID != asset.GroupID || msg.UserID != asset.UserID {
+		return errors.New("invalid chat media message")
+	}
+	tx, err := database.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if msg.Username == "" {
+		if err := tx.QueryRow(ctx, `SELECT username, avatar FROM users WHERE id = $1`, msg.UserID).Scan(&msg.Username, &msg.Avatar); err != nil {
+			return err
+		}
+	}
+	if msg.ReplyToID != nil {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND group_id = $2)`, *msg.ReplyToID, msg.GroupID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrInvalidMessageReply
+		}
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO chat_media(id, group_id, user_id, storage_key, mime_type, byte_size, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, asset.ID, asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, media_id, reply_to_id, content, created_at) VALUES ($1,$2,$3,'media',$4,$5,$6,$7)`, msg.ID, msg.GroupID, msg.UserID, asset.ID, msg.ReplyToID, msg.Content, msg.CreatedAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	msg.Kind = "media"
+	msg.MediaID = &asset.ID
+	msg.MediaType = asset.MIMEType
+	return nil
+}
+
+// GetChatMedia returns only an attachment already referenced by a message.
+// Unattached storage records are never readable, including by their uploader.
+func GetChatMedia(ctx context.Context, mediaID string) (*models.ChatMedia, error) {
+	asset := &models.ChatMedia{ID: mediaID}
+	err := database.DB.QueryRow(ctx, `SELECT cm.group_id, cm.user_id, cm.storage_key, cm.mime_type, cm.byte_size, cm.created_at FROM chat_media cm JOIN messages m ON m.media_id = cm.id WHERE cm.id = $1`, mediaID).
+		Scan(&asset.GroupID, &asset.UserID, &asset.StorageKey, &asset.MIMEType, &asset.ByteSize, &asset.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return asset, nil
 }

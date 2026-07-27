@@ -128,3 +128,43 @@ messages:
         description: Message page.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MessagesPage" } } }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+messageMediaUpload:
+  post:
+    operationId: uploadGroupMessageMedia
+    summary: Send a private image or recorded video in group chat.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [group_id, media]
+            properties:
+              group_id: { type: string, format: uuid }
+              media: { type: string, format: binary }
+              content: { type: string, maxLength: 1000 }
+              reply_to_id: { type: string, format: uuid }
+    responses:
+      "201":
+        {
+          description: Persisted media message,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Message" } } },
+        }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+messageMedia:
+  get:
+    operationId: getGroupMessageMedia
+    summary: Stream a private chat attachment for a current group member.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: mediaID, in: path, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200": { description: "Image or video bytes; Cache-Control is private, no-store." }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

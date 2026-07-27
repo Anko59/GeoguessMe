@@ -81,6 +81,8 @@ run "hosted_plan" {
       var.domain == "geoguessme.com" &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]") &&
       length(regexall("defer: true", file("../cloud-init/cloud-config.yaml.tftpl"))) == 2 &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
@@ -88,6 +90,6 @@ run "hosted_plan" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.production.yaml")
     )
-    error_message = "Cloud-init must disable password SSH and schedule backups."
+    error_message = "Cloud-init must secure SSH, recreate volatile locks, and schedule backups."
   }
 }

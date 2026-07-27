@@ -295,7 +295,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT u.id, u.username").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "score", "count", "average"}).AddRow("user-1", "alice", 10, 1, 10.0))
+	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("user-1", "alice", "avatar.png", 10, 1, 10.0))
 	recorder = httptest.NewRecorder()
 	GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
@@ -310,7 +310,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "content", "created_at"}))
+	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "reply_to_id", "content", "created_at"}))
 	recorder = httptest.NewRecorder()
 	GetGroupMessages(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {

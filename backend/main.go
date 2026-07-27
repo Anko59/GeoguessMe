@@ -118,6 +118,7 @@ func main() {
 	mux.Handle("/api/v1/auth/password/reset", authLimit(http.HandlerFunc(handlers.ResetPassword)))
 	mux.Handle("/api/v1/auth/password/change", authLimit(protected(handlers.ChangePassword)))
 	mux.Handle("/api/v1/auth/profile", authLimit(protected(handlers.UpdateProfile)))
+	mux.Handle("/api/v1/auth/profile/avatar", authLimit(protected(handlers.UploadAvatar)))
 	mux.Handle("/api/v1/auth/account", protected(handlers.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(handlers.GetUserGroups))
@@ -127,6 +128,8 @@ func main() {
 	mux.Handle("/api/v1/group/members", protected(handlers.GetGroupMembers))
 	mux.Handle("/api/v1/group/leaderboard", protected(handlers.GetLeaderboard))
 	mux.Handle("/api/v1/group/messages", protected(handlers.GetGroupMessages))
+	mux.Handle("/api/v1/group/messages/media", protected(handlers.UploadChatMedia))
+	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(handlers.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto))
 	mux.Handle("/api/v1/ws/ticket", protected(handlers.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", handlers.HandleChat)
@@ -137,6 +140,7 @@ func main() {
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
+	mux.Handle("/api/v1/users/{userID}/avatar", protected(handlers.ServeUserAvatar))
 	// Link-preview endpoint for group invites: unauthenticated, returns HTML
 	// with Open Graph meta tags for messengers and redirects browsers.
 	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)

@@ -10,6 +10,9 @@ type Message struct {
 	Avatar          string    `json:"avatar"`
 	Kind            string    `json:"kind"`
 	PhotoID         *string   `json:"photo_id,omitempty"`
+	MediaID         *string   `json:"media_id,omitempty"`
+	MediaType       string    `json:"media_type,omitempty"`
+	ReplyToID       *string   `json:"reply_to_id,omitempty"`
 	ErrorCode       string    `json:"error_code,omitempty"`
 	Content         string    `json:"content"`
 	CreatedAt       time.Time `json:"created_at"`

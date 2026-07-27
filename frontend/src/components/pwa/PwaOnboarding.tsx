@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
+    getPushConfiguration,
     isPushSupported,
     pushPermissionState,
     subscribePushNotifications,
@@ -34,9 +35,18 @@ export default function PwaOnboarding() {
         setSubscribing(true);
         setNotice(null);
         try {
-            const subscription = await subscribePushNotifications();
+            const configuration = await getPushConfiguration();
+            if (!configuration.available) {
+                setNotice(
+                    configuration.reason === 'disabled'
+                        ? 'Notifications are temporarily disabled by the server administrator.'
+                        : 'Notifications cannot be reached right now. Please try again.',
+                );
+                return;
+            }
+            const subscription = await subscribePushNotifications(configuration.publicKey);
             setPermission(pushPermissionState());
-            setNotice(subscription ? 'Notifications enabled.' : 'Notifications are not available on this server yet.');
+            setNotice(subscription ? 'Notifications enabled.' : 'Notification permission was not granted.');
         } catch {
             setPermission(pushPermissionState());
             setNotice('Unable to enable notifications right now.');

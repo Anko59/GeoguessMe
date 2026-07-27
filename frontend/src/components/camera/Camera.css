@@ -328,6 +328,24 @@
     transform: scale(0.86);
 }
 
+.capture-button.recording .capture-inner {
+    width: 72%;
+    height: 72%;
+    background: #ee4050;
+    border-radius: 0.72rem;
+}
+
+.capture-button.recording {
+    border-color: #ff6b76;
+    animation: recording-pulse 1s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+    50% {
+        box-shadow: 0 0 0 0.5rem rgba(238, 64, 80, 0.25);
+    }
+}
+
 .camera-flash {
     position: fixed;
     inset: 0;

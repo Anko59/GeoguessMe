@@ -47,26 +47,28 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ### Groups
 
-| Method | Path                                              | Auth   | Description                                               |
-| ------ | ------------------------------------------------- | ------ | --------------------------------------------------------- |
-| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                        |
-| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                     |
-| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                       |
-| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                               |
-| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                |
-| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Calendar week/month or all-time leaderboard (member only) |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                        |
+| Method | Path                                              | Auth   | Description                                                  |
+| ------ | ------------------------------------------------- | ------ | ------------------------------------------------------------ |
+| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                           |
+| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                        |
+| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                          |
+| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                                  |
+| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                   |
+| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Calendar week/month or all-time leaderboard (member only)    |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                           |
+| POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                  |
+| GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`) |
 
 ### Challenges
 
-| Method | Path                                          | Auth   | Description                                       |
-| ------ | --------------------------------------------- | ------ | ------------------------------------------------- |
-| POST   | `/api/v1/photo/upload`                        | Bearer | Upload photo `multipart(photo,group_id,lat,long)` |
-| POST   | `/api/v1/challenges/{photoID}/accept`         | Bearer | Accept challenge, start view window               |
-| GET    | `/api/v1/challenges/{photoID}/media`          | Bearer | Stream media (during view window)                 |
-| GET    | `/api/v1/challenges/{photoID}/media?result=1` | Bearer | Stream media (results visible)                    |
-| POST   | `/api/v1/challenges/{photoID}/guess`          | Bearer | Submit guess `{lat, long}`                        |
-| GET    | `/api/v1/challenges/{photoID}/results`        | Bearer | Get results                                       |
+| Method | Path                                          | Auth   | Description                                                                   |
+| ------ | --------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
+| POST   | `/api/v1/photo/upload`                        | Bearer | Upload photo or camera-recorded MP4/WebM `multipart(photo,group_id,lat,long)` |
+| POST   | `/api/v1/challenges/{photoID}/accept`         | Bearer | Accept challenge, start view window                                           |
+| GET    | `/api/v1/challenges/{photoID}/media`          | Bearer | Stream media (during view window)                                             |
+| GET    | `/api/v1/challenges/{photoID}/media?result=1` | Bearer | Stream media (results visible)                                                |
+| POST   | `/api/v1/challenges/{photoID}/guess`          | Bearer | Submit guess `{lat, long}`                                                    |
+| GET    | `/api/v1/challenges/{photoID}/results`        | Bearer | Get results                                                                   |
 
 ### WebSocket
 
@@ -108,32 +110,32 @@ Available metrics:
 
 ## API error codes
 
-| Code                    | Meaning                            |
-| ----------------------- | ---------------------------------- |
-| `invalid_username`      | Username validation failed         |
-| `invalid_email`         | Email validation failed            |
-| `invalid_password`      | Password validation failed         |
-| `username_taken`        | Username already in use            |
-| `email_taken`           | Email already in use               |
-| `authentication_failed` | Bad credentials                    |
-| `unauthorized`          | Missing or invalid auth            |
-| `forbidden`             | Not a member of the required group |
-| `not_found`             | Resource not found                 |
-| `group_not_found`       | Group not found                    |
-| `already_member`        | Already a member                   |
-| `invalid_group_name`    | Group name validation failed       |
-| `invalid_group_code`    | Group code validation failed       |
-| `invalid_upload`        | Upload too large or malformed      |
-| `invalid_image`         | Image type or size invalid         |
-| `invalid_coordinates`   | Invalid lat/long                   |
-| `invalid_request`       | Request body malformed             |
-| `challenge_expired`     | Challenge is past its TTL          |
-| `viewing_window_open`   | Must wait for view window to end   |
-| `media_expired`         | Viewing window has expired         |
-| `media_removed`         | Original image no longer available |
-| `results_not_available` | Results not yet visible            |
-| `origin_not_allowed`    | WebSocket origin rejected          |
-| `rate_limited`          | Rate limit exceeded                |
-| `internal_error`        | Unexpected server error            |
-| `storage_unavailable`   | Media storage unavailable          |
-| `storage_error`         | Backend storage error              |
+| Code                    | Meaning                             |
+| ----------------------- | ----------------------------------- |
+| `invalid_username`      | Username validation failed          |
+| `invalid_email`         | Email validation failed             |
+| `invalid_password`      | Password validation failed          |
+| `username_taken`        | Username already in use             |
+| `email_taken`           | Email already in use                |
+| `authentication_failed` | Bad credentials                     |
+| `unauthorized`          | Missing or invalid auth             |
+| `forbidden`             | Not a member of the required group  |
+| `not_found`             | Resource not found                  |
+| `group_not_found`       | Group not found                     |
+| `already_member`        | Already a member                    |
+| `invalid_group_name`    | Group name validation failed        |
+| `invalid_group_code`    | Group code validation failed        |
+| `invalid_upload`        | Upload too large or malformed       |
+| `invalid_media`         | Photo or video type or size invalid |
+| `invalid_coordinates`   | Invalid lat/long                    |
+| `invalid_request`       | Request body malformed              |
+| `challenge_expired`     | Challenge is past its TTL           |
+| `viewing_window_open`   | Must wait for view window to end    |
+| `media_expired`         | Viewing window has expired          |
+| `media_removed`         | Original media no longer available  |
+| `results_not_available` | Results not yet visible             |
+| `origin_not_allowed`    | WebSocket origin rejected           |
+| `rate_limited`          | Rate limit exceeded                 |
+| `internal_error`        | Unexpected server error             |
+| `storage_unavailable`   | Media storage unavailable           |
+| `storage_error`         | Backend storage error               |

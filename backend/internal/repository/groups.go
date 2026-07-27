@@ -68,6 +68,7 @@ func IsGroupMemberContext(ctx context.Context, groupID, userID string) (bool, er
 type LeaderboardEntry struct {
 	UserID     string  `json:"user_id"`
 	Username   string  `json:"username"`
+	Avatar     string  `json:"avatar"`
 	Score      int     `json:"score"`
 	GuessCount int     `json:"guess_count"`
 	Average    float64 `json:"average_score"`
@@ -116,26 +117,26 @@ func GetGroupLeaderboardContext(ctx context.Context, groupID string) ([]Leaderbo
 func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, period LeaderboardPeriod) ([]LeaderboardEntry, error) {
 	start := leaderboardPeriodStart(period, time.Now())
 	query := `
-		SELECT u.id, u.username,
+		SELECT u.id, u.username, u.avatar,
 		       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
 		       COUNT(g.id), COALESCE(AVG(g.score), 0)
 		FROM group_members gm
 		JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 		LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id
 		WHERE gm.group_id = $1
-		GROUP BY u.id, u.username
+		GROUP BY u.id, u.username, u.avatar
 		ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 	args := []any{groupID}
 	if start != nil {
 		query = `
-			SELECT u.id, u.username,
+			SELECT u.id, u.username, u.avatar,
 			       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
 			       COUNT(g.id), COALESCE(AVG(g.score), 0)
 			FROM group_members gm
 			JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 			LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id AND g.created_at >= $2
 			WHERE gm.group_id = $1
-			GROUP BY u.id, u.username
+			GROUP BY u.id, u.username, u.avatar
 			ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 		args = append(args, *start)
 	}
@@ -147,7 +148,7 @@ func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, pe
 	var result []LeaderboardEntry
 	for rows.Next() {
 		var entry LeaderboardEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Score, &entry.GuessCount, &entry.Average); err != nil {
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Avatar, &entry.Score, &entry.GuessCount, &entry.Average); err != nil {
 			return nil, err
 		}
 		result = append(result, entry)

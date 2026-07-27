@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import api from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
+import Avatar from '../common/Avatar';
+import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
 import './Leaderboard.css';
 
 interface LeaderboardProps {
@@ -18,19 +19,27 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
     const currentUserId = user?.id;
 
     const fetchLeaderboard = useCallback(async () => {
+        if (!currentUserId) return;
         if (!mountedRef.current) return;
         setError('');
+        const cached = getCachedLeaderboard(currentUserId, groupID, period);
+        if (cached) {
+            setLeaderboard(cached);
+            setLoading(false);
+        } else {
+            setLoading(true);
+        }
         try {
-            const res = await api.get('/group/leaderboard', { params: { group_id: groupID, period } });
+            const leaderboard = await refreshLeaderboard(currentUserId, groupID, period);
             if (!mountedRef.current) return;
-            setLeaderboard(res.data || []);
+            setLeaderboard(leaderboard);
         } catch {
             if (!mountedRef.current) return;
             setError('Unable to load rankings. Try again.');
         } finally {
             if (mountedRef.current) setLoading(false);
         }
-    }, [groupID, period]);
+    }, [currentUserId, groupID, period]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -89,7 +98,6 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                         aria-selected={period === option}
                         className={`leaderboard-period-tab${period === option ? ' selected' : ''}`}
                         onClick={() => {
-                            setLoading(true);
                             setPeriod(option);
                         }}
                     >
@@ -141,7 +149,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 <div className="entry-rank">{rankEmoji || `#${rank}`}</div>
 
                                 <div className="entry-avatar">
-                                    <img src="/avatar.png" alt={entry.username} />
+                                    <Avatar userID={entry.user_id} avatar={entry.avatar} username={entry.username} />
                                 </div>
 
                                 <div className="entry-info">

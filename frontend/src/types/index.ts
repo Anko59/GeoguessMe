@@ -18,8 +18,11 @@ export interface Message {
     user_id: string;
     username?: string;
     avatar?: string;
-    kind: 'text' | 'challenge' | 'system';
+    kind: 'text' | 'challenge' | 'media' | 'system';
     photo_id?: string;
+    media_id?: string;
+    media_type?: 'image/jpeg' | 'image/png' | 'video/mp4' | 'video/webm';
+    reply_to_id?: string;
     error_code?: string;
     content: string;
     created_at: string;
@@ -36,6 +39,7 @@ export interface Group {
 export interface LeaderboardEntry {
     user_id: string;
     username: string;
+    avatar: string;
     score: number;
     guess_count: number;
     average_score: number;
@@ -59,6 +63,7 @@ export interface ChallengeNotice {
 export interface ChallengeAcceptance {
     photo_id: string;
     media_url: string;
+    media_type: string;
     accepted_at: string;
     view_expires_at: string;
     guess_after: string;
@@ -96,6 +101,7 @@ export interface ChallengeResults {
     guesses: ChallengeGuess[];
     media_available: boolean;
     media_url?: string;
+    media_type?: string;
     server_time: string;
 }
 

@@ -170,6 +170,47 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 	return result.ID
 }
 
+type chatMediaMessage struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	MediaID   string `json:"media_id"`
+	MediaType string `json:"media_type"`
+	Content   string `json:"content"`
+}
+
+func uploadChatMedia(t *testing.T, bearer, groupID, content string) chatMediaMessage {
+	t.Helper()
+	image, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	require.NoError(t, err)
+	return uploadChatMediaFile(t, bearer, groupID, content, "shared.png", image)
+}
+
+func uploadChatMediaFile(t *testing.T, bearer, groupID, content, filename string, payload []byte) chatMediaMessage {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("media", filename)
+	require.NoError(t, err)
+	_, err = part.Write(payload)
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("content", content))
+	require.NoError(t, writer.Close())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/group/messages/media", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "chat-media upload %d: %s", resp.StatusCode, data)
+	var result chatMediaMessage
+	require.NoError(t, json.Unmarshal(data, &result))
+	return result
+}
+
 // serverNow reads the gateway's HTTP Date header so tests can wait on server
 // time without relying on local clock drift.
 func serverNow(t *testing.T) time.Time {

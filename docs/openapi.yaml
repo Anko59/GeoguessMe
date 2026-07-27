@@ -44,6 +44,10 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/leaderboard
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
+  /group/messages/media:
+    $ref: ./openapi/paths/groups.yaml#/messageMediaUpload
+  /group/messages/media/{mediaID}:
+    $ref: ./openapi/paths/groups.yaml#/messageMedia
   /photo/upload:
     $ref: ./openapi/paths/challenges.yaml#/upload
   /challenges/{photoID}/accept:

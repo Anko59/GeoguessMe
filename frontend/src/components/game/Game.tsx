@@ -15,6 +15,7 @@ interface GameState {
     status: Status;
     photoId?: string;
     mediaUrl?: string;
+    mediaType?: string;
     deadline?: number;
     serverOffset: number;
     results?: ChallengeResults;
@@ -33,6 +34,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     const [selectedLocation, setSelectedLocation] = useState<Position | null>(null);
     const [clock, setClock] = useState(() => Date.now());
     const [loadingMedia, setLoadingMedia] = useState(false);
+    const [expandedResultImage, setExpandedResultImage] = useState<string | null>(null);
 
     const remaining = useMemo(
         () => (state.deadline ? Math.max(0, Math.ceil((state.deadline - (clock + state.serverOffset)) / 1000)) : 0),
@@ -68,6 +70,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     status: 'viewing',
                     photoId,
                     mediaUrl,
+                    mediaType: data.media_type,
                     deadline: Date.parse(data.view_expires_at),
                     serverOffset: offset,
                 });
@@ -96,6 +99,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     status: 'results',
                     photoId,
                     mediaUrl,
+                    mediaType: results.media_type,
                     serverOffset: Date.parse(results.server_time) - Date.now(),
                     results,
                 });
@@ -166,6 +170,15 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             if (!resultsAvailable) await acceptChallenge(photoId);
         })();
     }, [acceptChallenge, gameMessage, loadResults, user]);
+
+    useEffect(() => {
+        if (!expandedResultImage) return undefined;
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setExpandedResultImage(null);
+        };
+        window.addEventListener('keydown', closeOnEscape);
+        return () => window.removeEventListener('keydown', closeOnEscape);
+    }, [expandedResultImage]);
     if (state.status === 'idle') return null;
     if (state.status === 'accepting')
         return (
@@ -192,7 +205,17 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         return (
             <div className="game-overlay">
                 <div className="photo-view scale-in">
-                    <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
+                    {state.mediaType?.startsWith('video/') ? (
+                        <video
+                            src={state.mediaUrl}
+                            className="game-photo"
+                            controls
+                            playsInline
+                            aria-label="Challenge video"
+                        />
+                    ) : (
+                        <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
+                    )}
                     <div className="timer-overlay">
                         <div className="timer-container">
                             <img src="/timer_icon.png" alt="" className="timer-icon" />
@@ -238,6 +261,24 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 </div>
             </div>
         );
+    if (expandedResultImage)
+        return (
+            <div className="game-image-dialog" role="dialog" aria-modal="true" aria-label="Challenge photo full screen">
+                <button
+                    type="button"
+                    className="game-image-dialog-close"
+                    onClick={() => setExpandedResultImage(null)}
+                    aria-label="Close full-screen photo"
+                >
+                    ×
+                </button>
+                <img
+                    src={expandedResultImage}
+                    alt="Challenge location full screen"
+                    className="game-image-dialog-photo"
+                />
+            </div>
+        );
     if (state.status === 'results' && state.results)
         return (
             <div className="game-overlay">
@@ -255,12 +296,28 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     </div>
                     <div className="result-content">
                         <div className="result-details">
-                            {state.mediaUrl && (
-                                <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
+                            {state.mediaUrl && state.mediaType?.startsWith('video/') && (
+                                <video
+                                    src={state.mediaUrl}
+                                    className="result-image"
+                                    controls
+                                    playsInline
+                                    aria-label="Challenge result video"
+                                />
+                            )}
+                            {state.mediaUrl && !state.mediaType?.startsWith('video/') && (
+                                <button
+                                    type="button"
+                                    className="result-image-button"
+                                    onClick={() => setExpandedResultImage(state.mediaUrl ?? null)}
+                                    aria-label="View challenge photo full screen"
+                                >
+                                    <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
+                                </button>
                             )}
                             {!state.results.media_available && (
                                 <p className="result-notice">
-                                    The original image has been removed; scores remain available.
+                                    The original media has been removed; scores remain available.
                                 </p>
                             )}
                             <div className="score-list" aria-label="Submitted scores">

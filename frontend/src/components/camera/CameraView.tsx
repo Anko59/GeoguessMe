@@ -13,6 +13,8 @@ interface CameraViewProps {
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     cameraReady: boolean;
     capturedPhoto: string | null;
+    capturedVideo: string | null;
+    recording: boolean;
     fileMode: boolean;
     error: string;
     hasMultipleCameras: boolean;
@@ -30,7 +32,10 @@ interface CameraViewProps {
     onToggleFilters: () => void;
     onSelectLens: (lens: LensId) => void;
     onBannerChange: (banner: TextBanner) => void;
-    onCapturePhoto: () => void;
+    onCaptureButtonClick: () => void;
+    onCaptureButtonPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
+    onCaptureButtonPointerUp: () => void;
+    onCaptureButtonPointerCancel: () => void;
     onFileSelected: (event: React.ChangeEvent<HTMLInputElement>) => void;
     onUpload: () => void;
     onRetake: () => void;
@@ -44,6 +49,8 @@ export default function CameraView({
     fileInputRef,
     cameraReady,
     capturedPhoto,
+    capturedVideo,
+    recording,
     fileMode,
     error,
     hasMultipleCameras,
@@ -61,7 +68,10 @@ export default function CameraView({
     onToggleFilters,
     onSelectLens,
     onBannerChange,
-    onCapturePhoto,
+    onCaptureButtonClick,
+    onCaptureButtonPointerDown,
+    onCaptureButtonPointerUp,
+    onCaptureButtonPointerCancel,
     onFileSelected,
     onUpload,
     onRetake,
@@ -84,32 +94,42 @@ export default function CameraView({
                 autoPlay
                 playsInline
                 muted
-                className={`camera-video ${cameraReady && !capturedPhoto && !fileMode ? 'ready' : ''}`}
+                className={`camera-video ${cameraReady && !capturedPhoto && !capturedVideo && !fileMode ? 'ready' : ''}`}
             />
             <canvas ref={captureCanvasRef} className="camera-capture-canvas" aria-hidden="true" />
             <canvas ref={sourceCanvasRef} className="camera-source-canvas" aria-hidden="true" />
             <CameraErrorPanel
                 error={error}
-                hasPhoto={Boolean(capturedPhoto)}
+                hasPhoto={Boolean(capturedPhoto || capturedVideo)}
                 onRetry={onStartCamera}
                 onUseFile={onSetFileMode}
             />
-            {!capturedPhoto ? (
+            {!capturedPhoto && !capturedVideo ? (
                 <div className="camera-view">
                     <canvas ref={overlayCanvasRef} className="camera-filter-overlay" aria-hidden="true" />
                     <TextBannerOverlay banner={textBanner} />
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
-                            <CameraTopControls
-                                hasMultipleCameras={hasMultipleCameras}
-                                facingMode={facingMode}
-                                showFilters={showFilters}
-                                onSwitchCamera={onSwitchCamera}
-                                onToggleFilters={onToggleFilters}
-                            />
+                            {!recording && (
+                                <CameraTopControls
+                                    hasMultipleCameras={hasMultipleCameras}
+                                    facingMode={facingMode}
+                                    showFilters={showFilters}
+                                    onSwitchCamera={onSwitchCamera}
+                                    onToggleFilters={onToggleFilters}
+                                />
+                            )}
                             {showFilters && filterPicker}
                             {textEditor}
-                            <button className="capture-button" onClick={onCapturePhoto} aria-label="Take photo">
+                            <button
+                                className={`capture-button${recording ? ' recording' : ''}`}
+                                onClick={onCaptureButtonClick}
+                                onPointerDown={onCaptureButtonPointerDown}
+                                onPointerUp={onCaptureButtonPointerUp}
+                                onPointerCancel={onCaptureButtonPointerCancel}
+                                aria-label="Take photo"
+                                title={recording ? 'Recording video' : 'Hold to record video'}
+                            >
                                 <div className="capture-inner"></div>
                             </button>
                         </div>
@@ -138,13 +158,19 @@ export default function CameraView({
                 </div>
             ) : (
                 <div className="photo-preview">
-                    <img src={capturedPhoto} alt="Captured" className="preview-image" />
-                    <canvas ref={overlayCanvasRef} className="photo-filter-overlay" aria-hidden="true" />
-                    <TextBannerOverlay banner={textBanner} />
-                    <div className="preview-composer">
-                        {textEditor}
-                        {fileMode && filterPicker}
-                    </div>
+                    {capturedPhoto ? (
+                        <>
+                            <img src={capturedPhoto} alt="Captured" className="preview-image" />
+                            <canvas ref={overlayCanvasRef} className="photo-filter-overlay" aria-hidden="true" />
+                            <TextBannerOverlay banner={textBanner} />
+                            <div className="preview-composer">
+                                {textEditor}
+                                {fileMode && filterPicker}
+                            </div>
+                        </>
+                    ) : (
+                        <video src={capturedVideo ?? undefined} className="preview-image" controls playsInline />
+                    )}
                     <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
                 </div>
             )}

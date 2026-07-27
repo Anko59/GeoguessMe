@@ -1,8 +1,8 @@
 # GeoGuessMe Documentation
 
 GeoGuessMe is a real-time multiplayer location game: group members share
-private, short-lived photo challenges, view each photo for ten seconds, and
-submit one server-timed guess.
+private, short-lived photo or video challenges, view each one for ten seconds,
+and submit one server-timed guess.
 
 ## Audience guide
 

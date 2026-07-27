@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import Avatar from '../../components/common/Avatar';
+import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
 import './AccountSettings.css';
 
@@ -13,6 +15,9 @@ export default function AccountSettings() {
     const [username, setUsername] = useState(user?.username ?? '');
     const [email, setEmail] = useState(user?.email ?? '');
     const [avatar, setAvatar] = useState(user?.avatar ?? 'avatar.png');
+    const [avatarVersion, setAvatarVersion] = useState(0);
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [profilePassword, setProfilePassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [password, setPassword] = useState('');
@@ -23,6 +28,30 @@ export default function AccountSettings() {
     const clearNotice = () => {
         setMessage('');
         setError('');
+    };
+
+    const uploadPhoto = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        clearNotice();
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('photo', file);
+            await api.post('/auth/profile/avatar', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            if (user) bustAvatarCache(user.id);
+            setAvatar('custom');
+            setAvatarVersion((value) => value + 1);
+            await refresh();
+            setMessage('Profile photo updated.');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Unable to upload photo'));
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const saveProfile = async (): Promise<void> => {
@@ -91,6 +120,26 @@ export default function AccountSettings() {
                     <div className="account-section-heading">
                         <h2>Profile</h2>
                         <p>How friends see you in groups and results.</p>
+                    </div>
+                    <div className="avatar-preview">
+                        <Avatar
+                            key={avatarVersion}
+                            userID={user?.id ?? ''}
+                            avatar={avatar}
+                            username={user?.username}
+                            className="avatar-preview-img"
+                        />
+                        <label className={`btn btn-secondary avatar-upload${uploading ? ' is-loading' : ''}`}>
+                            {uploading ? 'Uploading…' : 'Upload a photo'}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                hidden
+                                onChange={(event) => void uploadPhoto(event)}
+                                disabled={uploading}
+                            />
+                        </label>
                     </div>
                     <div className="avatar-picker" role="radiogroup" aria-label="Profile image">
                         {avatars.map((candidate) => (

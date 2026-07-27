@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
@@ -71,6 +71,30 @@ describe('AccountSettings', () => {
             }),
         );
         expect(await screen.findByRole('status')).toHaveTextContent('Profile updated');
+    });
+
+    it('uploads a profile photo and refreshes the session', async () => {
+        mocks.post.mockResolvedValueOnce({ data: { ...user, avatar: 'custom' } });
+        mocks.get.mockResolvedValue({ data: new Blob(['x'], { type: 'image/jpeg' }) });
+        const { container } = render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+        const file = new File(['pixel'], 'me.png', { type: 'image/png' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [file] } });
+        });
+        await waitFor(() =>
+            expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData), {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            }),
+        );
+        expect(refresh).toHaveBeenCalled();
+        expect(await screen.findByRole('status')).toHaveTextContent('Profile photo updated');
     });
 
     it('changes the password and signs out all sessions', async () => {

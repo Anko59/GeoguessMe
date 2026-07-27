@@ -5,6 +5,7 @@ import type { AuthContextValue } from '../../context/AuthContext';
 import type { PushSubscriptionState } from '../../push/push';
 
 const mocks = vi.hoisted(() => ({
+    getPushConfiguration: vi.fn(),
     isPushSupported: vi.fn(() => false),
     pushPermissionState: vi.fn<() => PushSubscriptionState>(() => 'default'),
     subscribePushNotifications: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../push/push', () => ({
+    getPushConfiguration: mocks.getPushConfiguration,
     isPushSupported: mocks.isPushSupported,
     pushPermissionState: mocks.pushPermissionState,
     subscribePushNotifications: mocks.subscribePushNotifications,
@@ -65,6 +67,7 @@ beforeEach(() => {
     mocks.pushPermissionState.mockReturnValue('default');
     mocks.isIosSafari = false;
     mocks.subscribePushNotifications.mockReset();
+    mocks.getPushConfiguration.mockResolvedValue({ available: true, publicKey: 'VGVzdA' });
 });
 
 describe('PwaOnboarding', () => {
@@ -127,6 +130,19 @@ describe('PwaOnboarding', () => {
         mocks.pushPermissionState.mockReturnValue('denied');
         renderWithAuth();
         expect(screen.getByText('Blocked in settings')).toBeInTheDocument();
+    });
+
+    it('explains when the server has intentionally disabled Push', async () => {
+        mocks.isPushSupported.mockReturnValue(true);
+        mocks.getPushConfiguration.mockResolvedValue({ available: false, reason: 'disabled' });
+        renderWithAuth();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Enable' }));
+
+        expect(
+            screen.getByText('Notifications are temporarily disabled by the server administrator.'),
+        ).toBeInTheDocument();
+        expect(mocks.subscribePushNotifications).not.toHaveBeenCalled();
     });
 
     it('dismiss button is present and removes the banner', async () => {
