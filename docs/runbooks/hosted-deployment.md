@@ -41,6 +41,14 @@ changes explicitly to the running host and verify them, or use the documented
 backup/restore replacement procedure; a newly created host always receives the
 current template.
 
+The deployment and backup locks live below `/run`, which is cleared at boot.
+Cloud-init installs `/etc/tmpfiles.d/geoguessme.conf` so systemd recreates
+`/run/lock/geoguessme` as `deploy:deploy` with mode `0750`. When applying this
+bootstrap improvement to an existing host, install that same tmpfiles rule and
+run `systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf` through the
+Access-protected operator route before rerunning a deployment. Do not broaden
+the restricted CI deployment key into shell access for this repair.
+
 Use the Access-protected operator SSH route. Store the corresponding private
 operator key in the team's password manager (not this repository) and retain a
 documented recovery copy. The server-only age identity is deliberately not an
