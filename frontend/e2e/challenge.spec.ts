@@ -379,13 +379,13 @@ test.describe('Challenge flow', () => {
                     status: 502,
                     contentType: 'application/json',
                     body: JSON.stringify({
-                        error: { code: 'storage_error', message: 'Unable to store image' },
+                        error: { code: 'storage_error', message: 'Unable to store media' },
                     }),
                 });
             });
 
             await page.getByRole('button', { name: /Send/ }).click();
-            await expect(page.locator('.camera-error')).toContainText('Unable to store image');
+            await expect(page.locator('.camera-error')).toContainText('Unable to store media');
             await expect(page.locator('.preview-image')).toBeVisible();
             await expect(page.getByRole('button', { name: 'Retake' })).toBeVisible();
         } finally {

@@ -87,7 +87,7 @@ describe('Game', () => {
             />,
         );
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
-        expect(screen.getByText('The original image has been removed; scores remain available.')).toBeInTheDocument();
+        expect(screen.getByText('The original media has been removed; scores remain available.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(onClose).toHaveBeenCalled();
 
@@ -141,5 +141,22 @@ describe('Game', () => {
         );
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByRole('dialog', { name: 'Challenge photo full screen' })).not.toBeInTheDocument();
+    });
+
+    it('renders recorded video challenges with playback controls', async () => {
+        mocks.get.mockRejectedValueOnce(new Error('results not ready'));
+        mocks.post.mockResolvedValueOnce({
+            data: {
+                media_url: 'https://example.test/challenge.webm',
+                media_type: 'video/webm',
+                server_time: new Date().toISOString(),
+                view_expires_at: new Date(Date.now() + 2000).toISOString(),
+            },
+        });
+        withGame(<Game gameMessage={message({ photo_id: 'video-1', kind: 'challenge' })} onClose={vi.fn()} />);
+        expect(await screen.findByLabelText('Challenge video')).toHaveAttribute(
+            'src',
+            'https://example.test/challenge.webm',
+        );
     });
 });

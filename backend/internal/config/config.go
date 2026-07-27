@@ -123,7 +123,7 @@ func Load() *Config {
 		AllowedOrigins:    splitList(getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")),
 		TrustedProxyCIDRs: splitList(os.Getenv("TRUSTED_PROXY_CIDRS")),
 
-		UploadMaxBytes:  getEnvAsInt64("UPLOAD_MAX_BYTES", 5*1024*1024),
+		UploadMaxBytes:  getEnvAsInt64("UPLOAD_MAX_BYTES", 10*1024*1024),
 		UploadMaxPixels: uint64(getEnvAsInt64("UPLOAD_MAX_PIXELS", 25_000_000)),
 		ChallengeTTL:    getEnvAsDuration("CHALLENGE_TTL", 24*time.Hour),
 		ViewWindow:      getEnvAsDuration("PHOTO_VIEW_WINDOW", 10*time.Second),

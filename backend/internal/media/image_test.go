@@ -71,3 +71,30 @@ func TestNormalizeUploadReencodesJPEG(t *testing.T) {
 		t.Fatalf("unexpected normalized JPEG: %+v", result)
 	}
 }
+
+func TestNormalizeChallengeUploadAcceptsRecordedVideoContainers(t *testing.T) {
+	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
+	result, err := NormalizeChallengeUpload(uploadFile{bytes.NewReader(webm)}, int64(len(webm)), 1024, 25_000_000)
+	if err != nil {
+		t.Fatalf("normalize WebM: %v", err)
+	}
+	if result.MIMEType != "video/webm" || !bytes.Equal(result.Data, webm) {
+		t.Fatalf("WebM result = %#v", result)
+	}
+
+	mp4 := append([]byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'}, make([]byte, 12)...)
+	result, err = NormalizeChallengeUpload(uploadFile{bytes.NewReader(mp4)}, int64(len(mp4)), 1024, 25_000_000)
+	if err != nil {
+		t.Fatalf("normalize MP4: %v", err)
+	}
+	if result.MIMEType != "video/mp4" || !bytes.Equal(result.Data, mp4) {
+		t.Fatalf("MP4 result = %#v", result)
+	}
+}
+
+func TestNormalizeChallengeUploadRejectsUnsupportedMedia(t *testing.T) {
+	data := []byte("not a supported media file")
+	if _, err := NormalizeChallengeUpload(uploadFile{bytes.NewReader(data)}, int64(len(data)), 1024, 25_000_000); err == nil {
+		t.Fatal("expected unsupported media to be rejected")
+	}
+}
