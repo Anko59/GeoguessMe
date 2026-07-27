@@ -46,10 +46,11 @@ Member:
 
 LeaderboardEntry:
   type: object
-  required: [user_id, username, score, guess_count, average_score]
+  required: [user_id, username, avatar, score, guess_count, average_score]
   properties:
     user_id: { type: string, format: uuid }
     username: { type: string }
+    avatar: { type: string }
     score: { type: integer }
     guess_count: { type: integer }
     average_score: { type: number }
