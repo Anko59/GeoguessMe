@@ -53,10 +53,38 @@ describe('Leaderboard', () => {
 
         mocks.get.mockResolvedValueOnce({
             data: [
-                { user_id: 'user-1', username: 'alice', score: 100, guess_count: 1, average_score: 100 },
-                { user_id: 'user-2', username: 'bob', score: 80, guess_count: 1, average_score: 80 },
-                { user_id: 'user-3', username: 'eve', score: 60, guess_count: 1, average_score: 60 },
-                { user_id: 'user-4', username: 'dan', score: 40, guess_count: 1, average_score: 40 },
+                {
+                    user_id: 'user-1',
+                    username: 'alice',
+                    avatar: 'avatar2.png',
+                    score: 100,
+                    guess_count: 1,
+                    average_score: 100,
+                },
+                {
+                    user_id: 'user-2',
+                    username: 'bob',
+                    avatar: 'avatar3.png',
+                    score: 80,
+                    guess_count: 1,
+                    average_score: 80,
+                },
+                {
+                    user_id: 'user-3',
+                    username: 'eve',
+                    avatar: 'avatar4.png',
+                    score: 60,
+                    guess_count: 1,
+                    average_score: 60,
+                },
+                {
+                    user_id: 'user-4',
+                    username: 'dan',
+                    avatar: 'avatar5.png',
+                    score: 40,
+                    guess_count: 1,
+                    average_score: 40,
+                },
             ],
         });
         let rankedLeaderboard: ReturnType<typeof render>;
@@ -70,6 +98,7 @@ describe('Leaderboard', () => {
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));
@@ -91,10 +120,28 @@ describe('Leaderboard', () => {
     it('switches between weekly, monthly, and all-time rankings', async () => {
         mocks.get
             .mockResolvedValueOnce({
-                data: [{ user_id: 'user-1', username: 'alice', score: 100, guess_count: 1, average_score: 100 }],
+                data: [
+                    {
+                        user_id: 'user-1',
+                        username: 'alice',
+                        avatar: 'avatar2.png',
+                        score: 100,
+                        guess_count: 1,
+                        average_score: 100,
+                    },
+                ],
             })
             .mockResolvedValueOnce({
-                data: [{ user_id: 'user-2', username: 'bob', score: 80, guess_count: 1, average_score: 80 }],
+                data: [
+                    {
+                        user_id: 'user-2',
+                        username: 'bob',
+                        avatar: 'avatar3.png',
+                        score: 80,
+                        guess_count: 1,
+                        average_score: 80,
+                    },
+                ],
             });
         render(
             <AuthContext.Provider value={authValue}>

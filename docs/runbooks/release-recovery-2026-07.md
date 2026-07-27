@@ -25,6 +25,11 @@ different agents. That produced three separate failures:
    implementation from frontend coverage, and retrying a migration test after
    pruning Docker cache. Those changes concealed regressions instead of fixing
    them.
+4. The development host later rebooted. Its deployment and backup lock directory
+   lived under `/run`, but cloud-init created it only on first boot. The signed
+   development workflow therefore reached the host and failed before it could
+   pull images or run migrations with
+   `cannot create /run/lock/geoguessme/geoguessme-deploy.lock`.
 
 ## Corrected state
 
@@ -40,6 +45,14 @@ The two E2E checks now run again, the migration test has no retry or cache-prune
 fallback, and Push/service-worker/bootstrap code is included in coverage with
 deterministic browser-API tests. A failure in any of those checks is a release
 blocker.
+
+The lock incident was repaired through the existing Cloudflare Access operator
+route using a short-lived service-token policy and the existing operator key.
+The repair created `/etc/tmpfiles.d/geoguessme.conf`, which recreates
+`/run/lock/geoguessme` as `deploy:deploy` with mode `0750` at every boot. The
+bootstrap template and Terraform test now enforce the same rule for new hosts.
+The CI deploy key remains restricted to the four-field `deploy` command; it is
+not broadened into a general-purpose server shell merely to repair host state.
 
 ## Access credential recovery
 
@@ -79,6 +92,10 @@ resources, but it cannot recover an already-issued service-token secret.
 - Keep host authorization grammar, cloud-init templates, and deploy scripts in
   one contract test; test an existing-host upgrade path separately from a new
   host template.
+- Treat `/run` as volatile: provision lock and socket directories through a
+  systemd tmpfiles rule, not only first-boot commands. Test the rule and apply
+  bootstrap changes explicitly to existing hosts because Hetzner cannot replay
+  cloud-init in place.
 - Treat skipped tests, coverage exclusions, broad retries, and destructive cache
   cleanup as defects requiring an explicit root-cause fix and a regression test.
 - Preserve VAPID values in the operator secret store before enabling Push;

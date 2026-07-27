@@ -30,6 +30,11 @@ write_files:
       KbdInteractiveAuthentication no
       PermitRootLogin no
       AllowUsers ops deploy
+  - path: /etc/tmpfiles.d/geoguessme.conf
+    permissions: "0644"
+    content: |
+      # /run is cleared at boot; deployment and backup locks must survive it.
+      d /run/lock/geoguessme 0750 deploy deploy -
   - path: /home/ops/.ssh/authorized_keys
     owner: ops:ops
     permissions: "0600"
@@ -175,8 +180,9 @@ write_files:
       ExecStart=/opt/geoguessme/bin/alert.sh %i
 
 runcmd:
-  - [mkdir, -p, /etc/geoguessme/age, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases, /run/lock/geoguessme]
-  - [chown, -R, deploy:deploy, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme, /run/lock/geoguessme]
+  - [mkdir, -p, /etc/geoguessme/age, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases]
+  - [chown, -R, deploy:deploy, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme]
+  - [systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]
   - [chmod, "0555", /opt/geoguessme/bin, /opt/geoguessme/config]
   - [chown, deploy:deploy, /etc/geoguessme]
   - [sh, -c, "set -eu; umask 077; age-keygen -o /etc/geoguessme/age/dev.txt; age-keygen -y /etc/geoguessme/age/dev.txt > /etc/geoguessme/age/dev-recipient.txt; age-keygen -o /etc/geoguessme/age/production.txt; age-keygen -y /etc/geoguessme/age/production.txt > /etc/geoguessme/age/production-recipient.txt"]

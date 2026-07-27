@@ -62,20 +62,20 @@ func UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo", "An image is required")
+		writeError(w, http.StatusBadRequest, "missing_photo", "A photo or video is required")
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeUpload(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
+	normalized, err := media.NormalizeChallengeUpload(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_image", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
 	now := time.Now()
 	photoID := uuid.NewString()
 	key := "photos/" + uuid.NewString()
 	if err := MediaStore.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store image")
+		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
 		return
 	}
 	photo := &models.Photo{ID: photoID, UserID: userID, GroupID: groupID, StorageKey: key, MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), Lat: lat, Long: long, LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(RuntimeConfig.ChallengeTTL), RetentionAt: now.Add(RuntimeConfig.PhotoRetention)}
@@ -118,6 +118,7 @@ func AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"photo_id":             photo.ID,
 		"media_url":            mediaURL(photo, false),
+		"media_type":           photo.MIMEType,
 		"accepted_at":          view.AcceptedAt,
 		"view_expires_at":      view.ViewExpiresAt,
 		"guess_after":          view.ViewExpiresAt,
@@ -178,22 +179,15 @@ func ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if photo.LifecycleStatus == "removed" {
-		writeError(w, http.StatusGone, "media_removed", "The original image is no longer available")
+		writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 		return
 	}
-	// Detect a missing object before committing a successful response.
-	if _, err := MediaStore.Stat(r.Context(), photo.StorageKey); err != nil {
-		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusGone, "media_removed", "The original image is no longer available")
-			return
-		}
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
-		return
-	}
+	// Get verifies an object before returning a reader. Avoid a separate Stat
+	// round trip here: the S3 implementation already probes its lazy reader.
 	object, err := MediaStore.Get(r.Context(), photo.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusGone, "media_removed", "The original image is no longer available")
+			writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read media")

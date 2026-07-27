@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import api, { getAPIErrorMessage } from '../../api';
 import type { Message } from '../../types';
+import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
+import ChatAttachment from './ChatAttachment';
 import './Chat.css';
 
 interface ChatProps {
     messages: Message[];
     wsRef: React.RefObject<WebSocket | null>;
     currentUserId: string;
+    groupID: string;
     connectionStatus?: 'connecting' | 'connected' | 'offline';
     onChallengeMessage?: (message: Message) => void;
 }
@@ -15,10 +19,15 @@ export default function Chat({
     messages,
     wsRef,
     currentUserId,
+    groupID,
     connectionStatus = 'offline',
     onChallengeMessage,
 }: ChatProps) {
     const [input, setInput] = useState('');
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [attachment, setAttachment] = useState<File | null>(null);
+    const [uploadError, setUploadError] = useState('');
+    const [uploading, setUploading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -28,9 +37,32 @@ export default function Chat({
     const sendMessage = (event: React.FormEvent): void => {
         event.preventDefault();
         const content = input.trim();
-        if (!content || wsRef.current?.readyState !== WebSocket.OPEN) return;
-        wsRef.current.send(JSON.stringify({ content }));
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+        if (attachment) {
+            const body = new FormData();
+            body.set('group_id', groupID);
+            body.set('media', attachment);
+            if (content) body.set('content', content);
+            if (replyingTo) body.set('reply_to_id', replyingTo.id);
+            setUploading(true);
+            setUploadError('');
+            void api
+                .post('/group/messages/media', body)
+                .then(() => {
+                    setAttachment(null);
+                    setInput('');
+                    setReplyingTo(null);
+                })
+                .catch((requestError: unknown) =>
+                    setUploadError(getAPIErrorMessage(requestError, 'Unable to send attachment')),
+                )
+                .finally(() => setUploading(false));
+            return;
+        }
+        if (!content) return;
+        wsRef.current.send(JSON.stringify({ content, ...(replyingTo ? { reply_to_id: replyingTo.id } : {}) }));
         setInput('');
+        setReplyingTo(null);
     };
 
     return (
@@ -54,6 +86,9 @@ export default function Chat({
                     const isMe = message.user_id === currentUserId;
                     const isSystem = message.kind === 'system';
                     const showAvatar = index === 0 || messages[index - 1].user_id !== message.user_id;
+                    const replyTarget = message.reply_to_id
+                        ? messages.find((candidate) => candidate.id === message.reply_to_id)
+                        : undefined;
                     if (message.kind === 'challenge') {
                         return (
                             <div
@@ -63,7 +98,12 @@ export default function Chat({
                             >
                                 {!isMe && showAvatar && (
                                     <div className="avatar-container">
-                                        <img src={`/avatars/${message.avatar || 'avatar.png'}`} alt="" />
+                                        <Avatar
+                                            userID={message.user_id}
+                                            avatar={message.avatar}
+                                            username={message.username}
+                                            className="avatar"
+                                        />
                                     </div>
                                 )}
                                 <div className="message-wrapper">
@@ -100,6 +140,14 @@ export default function Chat({
                                             </span>
                                         </span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="reply-action"
+                                        onClick={() => setReplyingTo(message)}
+                                        aria-label={`Reply to ${message.username || 'message'}`}
+                                    >
+                                        Reply
+                                    </button>
                                 </div>
                             </div>
                         );
@@ -112,16 +160,42 @@ export default function Chat({
                         >
                             {!isMe && !isSystem && showAvatar && (
                                 <div className="avatar-container">
-                                    <img src={`/avatars/${message.avatar || 'avatar.png'}`} alt="" className="avatar" />
+                                    <Avatar
+                                        userID={message.user_id}
+                                        avatar={message.avatar}
+                                        username={message.username}
+                                        className="avatar"
+                                    />
                                 </div>
                             )}
                             <div className="message-wrapper">
                                 {!isMe && !isSystem && (
                                     <div className="message-username">{message.username || 'Unknown User'}</div>
                                 )}
-                                <div className={`message-content ${isSystem ? 'system-message' : 'text'}`}>
-                                    {message.content}
+                                <div
+                                    className={`message-content ${isSystem ? 'system-message' : message.kind === 'media' ? 'media-message' : 'text'}`}
+                                >
+                                    {message.reply_to_id && (
+                                        <div className="reply-context">
+                                            <strong>{replyTarget?.username || 'Original message'}</strong>
+                                            <span>{replyTarget?.content || 'Message unavailable'}</span>
+                                        </div>
+                                    )}
+                                    {message.kind === 'media' && message.media_id && message.media_type && (
+                                        <ChatAttachment mediaID={message.media_id} mediaType={message.media_type} />
+                                    )}
+                                    {message.content && <p className="message-caption">{message.content}</p>}
                                 </div>
+                                {!isSystem && (
+                                    <button
+                                        type="button"
+                                        className="reply-action"
+                                        onClick={() => setReplyingTo(message)}
+                                        aria-label={`Reply to ${message.username || 'message'}`}
+                                    >
+                                        Reply
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
@@ -129,6 +203,41 @@ export default function Chat({
                 <div ref={messagesEndRef} />
             </div>
             <form onSubmit={sendMessage} className="message-input-container">
+                {replyingTo && (
+                    <div className="reply-composer" role="status">
+                        <span>
+                            Replying to <strong>{replyingTo.username || 'message'}</strong>
+                        </span>
+                        <button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply">
+                            Cancel
+                        </button>
+                    </div>
+                )}
+                {uploadError && (
+                    <p className="chat-upload-error" role="alert">
+                        {uploadError}
+                    </p>
+                )}
+                {attachment && (
+                    <div className="attachment-composer" role="status">
+                        <span>{attachment.name}</span>
+                        <button type="button" onClick={() => setAttachment(null)} disabled={uploading}>
+                            Remove
+                        </button>
+                    </div>
+                )}
+                <label className="attachment-button" htmlFor="chat-attachment">
+                    <span className="visually-hidden">Attach photo or video</span>
+                    <input
+                        id="chat-attachment"
+                        aria-label="Attach photo or video"
+                        type="file"
+                        accept="image/jpeg,image/png,video/mp4,video/webm"
+                        onChange={(event) => setAttachment(event.target.files?.[0] ?? null)}
+                        disabled={connectionStatus !== 'connected' || uploading}
+                    />
+                    <span aria-hidden="true">+</span>
+                </label>
                 <label htmlFor="chat-message" className="visually-hidden">
                     Message
                 </label>
@@ -140,13 +249,13 @@ export default function Chat({
                     placeholder="Type a message…"
                     className="message-input"
                     maxLength={1000}
-                    disabled={connectionStatus !== 'connected'}
+                    disabled={connectionStatus !== 'connected' || uploading}
                 />
                 <button
                     type="submit"
                     className="send-button"
-                    disabled={!input.trim() || connectionStatus !== 'connected'}
-                    aria-label="Send message"
+                    disabled={(!input.trim() && !attachment) || connectionStatus !== 'connected' || uploading}
+                    aria-label={attachment ? 'Send attachment' : 'Send message'}
                 >
                     <Icon name="send" className="send-icon" />
                 </button>

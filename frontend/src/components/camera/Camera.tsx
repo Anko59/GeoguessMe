@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAPIErrorMessage } from '../../api';
-import { dataURLToBlob, fitDimensions, getCurrentPosition, isFilterableImageType, uploadPhoto } from './cameraUtils';
+import { dataURLToBlob, getCurrentPosition, isFilterableImageType, uploadPhoto } from './cameraUtils';
 import './Camera.css';
 import CameraView from './CameraView';
+import { capturePhotoFrame, prepareImageForFilters } from './capture/cameraImagePreparation';
 import type { FaceFrame } from './lenses/facePose';
 import type { FaceTracker as FaceTrackerInstance } from './lenses/faceTracker';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
 import type { LensId } from './lenses/lensCatalog';
 import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
 import { useCameraDevice } from './useCameraDevice';
-
+import { useHoldToRecord } from './capture/useHoldToRecord';
+import { useVideoRecording } from './capture/useVideoRecording';
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -43,13 +45,14 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const fileInputRef = useRef<HTMLInputElement>(null);
     const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
     const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
-
+    const recordingError = useCallback((message: string) => setError(message), []);
+    const { recordedVideo, recording, startRecording, stopRecording, discardRecording } =
+        useVideoRecording(recordingError);
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
         faceDetectedRef.current = detected;
         setFaceDetected(detected);
     }, []);
-
     const requestLocation = useCallback(() => {
         if (locationRequestRef.current) return locationRequestRef.current;
         const request = getCurrentPosition();
@@ -59,17 +62,14 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         });
         return request;
     }, []);
-
     useEffect(() => {
         void requestLocation();
     }, [requestLocation]);
-
     const clearEffects = useCallback(() => {
         lastFrameRef.current = null;
         rendererRef.current?.clear();
         updateFaceDetected(false);
     }, [updateFaceDetected]);
-
     const destroyEffects = useCallback(() => {
         effectAttemptRef.current += 1;
         if (trackingAnimationRef.current !== null) cancelAnimationFrame(trackingAnimationRef.current);
@@ -81,7 +81,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         rendererRef.current = null;
         setFilterReady(false);
     }, [clearEffects]);
-
     const createRenderer = useCallback(
         async (
             source: HTMLVideoElement | HTMLCanvasElement,
@@ -201,75 +200,102 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
     }, []);
-    const startCamera = useCallback(async () => {
-        const attempt = ++cameraAttemptRef.current;
-        filePreparationAttemptRef.current += 1;
-        preparedFileDataRef.current = null;
-        setFileMode(false);
-        setCapturedPhoto(null);
-        setCameraReady(false);
-        setError('');
-        setFilterError('');
-        if (sourceCanvasRef.current) sourceCanvasRef.current.width = 0;
-        stopCamera();
-        destroyEffects();
-        if (!navigator.mediaDevices?.getUserMedia) {
-            setError(
-                'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
-            );
+
+    const startCamera = useCallback(
+        async (captureAudio = false): Promise<MediaStream | null> => {
+            const attempt = ++cameraAttemptRef.current;
+            filePreparationAttemptRef.current += 1;
+            preparedFileDataRef.current = null;
+            setFileMode(false);
+            setCapturedPhoto(null);
+            discardRecording();
+            setCameraReady(false);
+            setError('');
+            setFilterError('');
+            if (sourceCanvasRef.current) sourceCanvasRef.current.width = 0;
+            stopCamera();
+            destroyEffects();
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setError(
+                    'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
+                );
+                return null;
+            }
+            try {
+                const mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingModeRef.current,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30, max: 30 },
+                    },
+                    audio: captureAudio,
+                });
+                if (attempt !== cameraAttemptRef.current) {
+                    mediaStream.getTracks().forEach((track) => track.stop());
+                    return null;
+                }
+                streamRef.current = mediaStream;
+                const video = videoRef.current;
+                if (!video) {
+                    mediaStream.getTracks().forEach((track) => track.stop());
+                    streamRef.current = null;
+                    return null;
+                }
+                video.srcObject = mediaStream;
+                const markCameraReady = () => {
+                    if (attempt !== cameraAttemptRef.current || video.videoWidth === 0 || video.readyState < 2) return;
+                    setCameraReady(true);
+                    if (initializedCameraAttemptRef.current === attempt) return;
+                    initializedCameraAttemptRef.current = attempt;
+                    if (selectedFilterRef.current !== 'none')
+                        void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
+                };
+                video.onloadedmetadata = markCameraReady;
+                video.onloadeddata = markCameraReady;
+                video.oncanplay = markCameraReady;
+                void video
+                    .play()
+                    .then(markCameraReady)
+                    .catch(() => undefined);
+                return mediaStream;
+            } catch (requestError: unknown) {
+                if (attempt !== cameraAttemptRef.current) return null;
+                const name = requestError instanceof DOMException ? requestError.name : '';
+                if (name === 'NotAllowedError' || name === 'SecurityError')
+                    setError(
+                        captureAudio
+                            ? 'Camera or microphone access denied. Allow both permissions and try again.'
+                            : 'Camera access denied. Allow camera permissions and try again.',
+                    );
+                else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
+                    setError('No camera was found. Connect a camera or upload a photo from your device.');
+                else if (name === 'NotReadableError' || name === 'TrackStartError')
+                    setError('The camera is busy or unavailable. Close other camera apps and try again.');
+                else setError('The camera could not be started. Try again or upload a photo from your device.');
+                return null;
+            }
+        },
+        [destroyEffects, discardRecording, facingModeRef, initializeVideoEffects, stopCamera],
+    );
+    const startHeldVideo = async (isStillPressed: () => boolean) => {
+        const stream = await startCamera(true);
+        if (!stream) return;
+        if (!isStillPressed()) {
+            stopCamera();
             return;
         }
-        try {
-            const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: facingModeRef.current,
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 30, max: 30 },
-                },
-                audio: false,
-            });
-            if (attempt !== cameraAttemptRef.current) {
-                mediaStream.getTracks().forEach((track) => track.stop());
-                return;
-            }
-            streamRef.current = mediaStream;
-            const video = videoRef.current;
-            if (!video) return;
-            video.srcObject = mediaStream;
-            const markCameraReady = () => {
-                if (attempt !== cameraAttemptRef.current || video.videoWidth === 0 || video.readyState < 2) return;
-                setCameraReady(true);
-                if (initializedCameraAttemptRef.current === attempt) return;
-                initializedCameraAttemptRef.current = attempt;
-                if (selectedFilterRef.current !== 'none')
-                    void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
-            };
-            video.onloadedmetadata = markCameraReady;
-            video.onloadeddata = markCameraReady;
-            video.oncanplay = markCameraReady;
-            void video
-                .play()
-                .then(markCameraReady)
-                .catch(() => undefined);
-        } catch (requestError: unknown) {
-            if (attempt !== cameraAttemptRef.current) return;
-            const name = requestError instanceof DOMException ? requestError.name : '';
-            if (name === 'NotAllowedError' || name === 'SecurityError')
-                setError('Camera access denied. Allow camera permissions and try again.');
-            else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
-                setError('No camera was found. Connect a camera or upload a photo from your device.');
-            else if (name === 'NotReadableError' || name === 'TrackStartError')
-                setError('The camera is busy or unavailable. Close other camera apps and try again.');
-            else setError('The camera could not be started. Try again or upload a photo from your device.');
-        }
-    }, [destroyEffects, initializeVideoEffects, stopCamera]); // eslint-disable-line react-hooks/exhaustive-deps -- facingModeRef is a ref
-
+        setError('');
+        startRecording(stream, () => {
+            destroyEffects();
+            stopCamera();
+        });
+    };
     useEffect(() => {
         setRestart(() => {
             stopCamera();
             destroyEffects();
-            return startCamera();
+            return startCamera().then(() => undefined);
         });
         let active = true;
         queueMicrotask(() => {
@@ -282,37 +308,27 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             stopCamera();
         };
     }, [setRestart, destroyEffects, startCamera, stopCamera]);
-
     const capturePhoto = () => {
-        const video = videoRef.current;
-        const overlay = overlayCanvasRef.current;
-        const captureCanvas = captureCanvasRef.current;
-        if (!video || !overlay || !captureCanvas || video.videoWidth === 0) return;
-        const context = captureCanvas.getContext('2d');
-        if (!context) return;
-        rendererRef.current?.render(lastFrameRef.current);
-        captureCanvas.width = video.videoWidth;
-        captureCanvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-        context.drawImage(overlay, 0, 0, captureCanvas.width, captureCanvas.height);
-        const sourceCanvas = sourceCanvasRef.current;
-        const sourceContext = sourceCanvas?.getContext('2d');
-        if (sourceCanvas && sourceContext) {
-            sourceCanvas.width = captureCanvas.width;
-            sourceCanvas.height = captureCanvas.height;
-            sourceContext.drawImage(captureCanvas, 0, 0);
-        }
+        const photo = capturePhotoFrame({
+            video: videoRef.current,
+            overlay: overlayCanvasRef.current,
+            captureCanvas: captureCanvasRef.current,
+            sourceCanvas: sourceCanvasRef.current,
+            renderer: rendererRef.current,
+            frame: lastFrameRef.current,
+        });
+        if (!photo) return;
         const flash = document.createElement('div');
         flash.className = 'camera-flash';
         document.body.appendChild(flash);
         setTimeout(() => flash.remove(), 300);
-        setCapturedPhoto(captureCanvas.toDataURL('image/jpeg', 0.9));
+        setCapturedPhoto(photo);
         destroyEffects();
         stopCamera();
     };
-
     const retake = () => {
         setCapturedPhoto(null);
+        discardRecording();
         destroyEffects();
         if (fileMode) {
             filePreparationAttemptRef.current += 1;
@@ -323,35 +339,22 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             void startCamera();
         }
     };
-
-    const prepareImageFilter = async (dataURL: string) => {
+    const prepareImageFilter = (dataURL: string) => {
         const preparationAttempt = filePreparationAttemptRef.current;
-        const image = new Image();
-        image.onload = async () => {
-            if (preparationAttempt !== filePreparationAttemptRef.current) return;
-            const sourceCanvas = sourceCanvasRef.current;
-            if (!sourceCanvas) return;
-            const dimensions = fitDimensions(image.naturalWidth, image.naturalHeight);
-            sourceCanvas.width = dimensions.width;
-            sourceCanvas.height = dimensions.height;
-            const context = sourceCanvas.getContext('2d');
-            if (!context) return;
-            context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
-            preparedFileDataRef.current = dataURL;
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-            if (preparationAttempt !== filePreparationAttemptRef.current) return;
-            if (selectedFilterRef.current !== 'none') {
-                await initializeImageEffects(sourceCanvas, dimensions.width, dimensions.height);
-            }
-        };
-        image.onerror = () => {
-            if (preparationAttempt !== filePreparationAttemptRef.current) return;
-            preparedFileDataRef.current = null;
-            setError('Failed to read the selected file.');
-        };
-        image.src = dataURL;
+        prepareImageForFilters({
+            dataURL,
+            isCurrent: () => preparationAttempt === filePreparationAttemptRef.current,
+            sourceCanvas: sourceCanvasRef.current,
+            onPrepared: async (sourceCanvas, width, height) => {
+                preparedFileDataRef.current = dataURL;
+                if (selectedFilterRef.current !== 'none') await initializeImageEffects(sourceCanvas, width, height);
+            },
+            onError: () => {
+                preparedFileDataRef.current = null;
+                setError('Failed to read the selected file.');
+            },
+        });
     };
-
     const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -377,7 +380,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         };
         reader.readAsDataURL(file);
     };
-
     const renderFinalPhoto = (): string | null => {
         const sourceCanvas = sourceCanvasRef.current;
         const captureCanvas = captureCanvasRef.current;
@@ -394,19 +396,29 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         drawTextBanner(context, captureCanvas.width, captureCanvas.height, textBanner);
         return captureCanvas.toDataURL('image/jpeg', 0.9);
     };
-
     const handleUpload = async () => {
-        const photo = renderFinalPhoto();
-        if (!photo) return;
+        const video = recordedVideo;
+        const photo = video ? null : renderFinalPhoto();
+        if (!video && !photo) return;
         setUploading(true);
         setError('');
         try {
-            const blob = dataURLToBlob(photo);
             const position = await requestLocation();
-            await uploadPhoto(blob, fileMode ? 'upload.jpg' : 'capture.jpg', groupID, position);
+            if (video) {
+                const extension = video.blob.type === 'video/mp4' ? 'mp4' : 'webm';
+                await uploadPhoto(video.blob, `capture.${extension}`, groupID, position);
+            } else {
+                await uploadPhoto(
+                    dataURLToBlob(photo as string),
+                    fileMode ? 'upload.jpg' : 'capture.jpg',
+                    groupID,
+                    position,
+                );
+            }
             destroyEffects();
             stopCamera();
             setCapturedPhoto(null);
+            discardRecording();
             setFileMode(false);
             onUploadComplete();
         } catch (requestError: unknown) {
@@ -420,7 +432,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             setUploading(false);
         }
     };
-
     const selectLens = (lens: LensId) => {
         selectedFilterRef.current = lens;
         setSelectedFilter(lens);
@@ -443,6 +454,11 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
         }
     };
+    const captureGesture = useHoldToRecord({
+        onHold: startHeldVideo,
+        onStop: stopRecording,
+        onTap: capturePhoto,
+    });
 
     return (
         <CameraView
@@ -453,6 +469,8 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             fileInputRef={fileInputRef}
             cameraReady={cameraReady}
             capturedPhoto={capturedPhoto}
+            capturedVideo={recordedVideo?.url ?? null}
+            recording={recording}
             fileMode={fileMode}
             error={error}
             hasMultipleCameras={hasMultipleCameras}
@@ -470,7 +488,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onToggleFilters={() => setShowFilters((p) => !p)}
             onSelectLens={selectLens}
             onBannerChange={setTextBanner}
-            onCapturePhoto={capturePhoto}
+            onCaptureButtonClick={captureGesture.onClick}
+            onCaptureButtonPointerDown={captureGesture.onPointerDown}
+            onCaptureButtonPointerUp={captureGesture.onPointerUp}
+            onCaptureButtonPointerCancel={captureGesture.onPointerCancel}
             onFileSelected={handleFileSelected}
             onUpload={() => void handleUpload()}
             onRetake={retake}

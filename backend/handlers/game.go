@@ -86,6 +86,7 @@ func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "actual_lat": photo.Lat, "actual_long": photo.Long, "guesses": guesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
 	if photo.LifecycleStatus != "removed" {
 		response["media_url"] = mediaURL(photo, true)
+		response["media_type"] = photo.MIMEType
 	}
 	writeJSON(w, http.StatusOK, response)
 }

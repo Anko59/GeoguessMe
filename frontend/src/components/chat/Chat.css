@@ -151,6 +151,54 @@
     box-shadow: var(--shadow-xs);
 }
 
+.message-content.media-message {
+    padding: 0.35rem;
+    color: var(--ink-strong);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-xs);
+}
+
+.message-container.own .message-content.media-message {
+    border-bottom-right-radius: 0.35rem;
+}
+
+.message-container.other .message-content.media-message {
+    border-bottom-left-radius: 0.35rem;
+}
+
+.chat-attachment {
+    width: min(18rem, 66vw);
+    max-height: 22rem;
+    display: block;
+    object-fit: contain;
+    background: #111;
+    border-radius: 0.9rem;
+}
+
+.chat-attachment-loading,
+.chat-attachment-error,
+.message-caption,
+.chat-upload-error {
+    margin: 0;
+}
+
+.chat-attachment-loading,
+.chat-attachment-error {
+    padding: 0.35rem;
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+}
+
+.chat-attachment-error,
+.chat-upload-error {
+    color: var(--danger);
+}
+
+.message-caption {
+    padding: 0.3rem 0.3rem 0.1rem;
+}
+
 .message-container.own .message-content.text {
     color: var(--brand-navy);
     background: var(--gradient-blue);
@@ -169,6 +217,40 @@
     border: 1px solid rgba(0, 119, 182, 0.12);
     font-size: 0.78rem;
     text-align: center;
+}
+
+.reply-context {
+    margin: -0.1rem -0.25rem 0.45rem;
+    padding: 0.35rem 0.5rem;
+    display: grid;
+    gap: 0.1rem;
+    color: var(--ink-muted);
+    background: rgb(17 26 77 / 6%);
+    border-left: 3px solid currentcolor;
+    border-radius: 0.35rem;
+    font-size: 0.75rem;
+}
+
+.reply-context span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reply-action {
+    margin: 0.25rem 0.4rem 0;
+    padding: 0.2rem 0.35rem;
+    align-self: flex-start;
+    color: var(--ink-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.message-container.own .reply-action {
+    align-self: flex-end;
 }
 
 .message-content.photo-challenge {
@@ -229,6 +311,7 @@
     margin-inline: auto;
     padding: 0.75rem clamp(0.75rem, 3vw, 1.5rem) 1rem;
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--line);
@@ -238,12 +321,79 @@
     backdrop-filter: blur(14px);
 }
 
+.reply-composer {
+    width: 100%;
+    padding: 0 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+}
+
+.reply-composer button {
+    padding: 0.2rem 0.35rem;
+    color: var(--brand-blue-accessible);
+    background: transparent;
+    border: 0;
+    font: inherit;
+    font-weight: 800;
+}
+
 .message-input {
     min-width: 0;
     flex: 1;
     background: var(--surface-soft);
     border-color: transparent;
     border-radius: var(--radius-pill);
+}
+
+.attachment-button {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    flex: none;
+    color: var(--brand-blue-accessible);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.attachment-button input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.attachment-composer,
+.chat-upload-error {
+    width: 100%;
+    padding: 0 0.25rem;
+    font-size: 0.78rem;
+}
+
+.attachment-composer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-muted);
+}
+
+.attachment-composer button {
+    padding: 0.2rem 0.35rem;
+    color: var(--brand-blue-accessible);
+    background: transparent;
+    border: 0;
+    font: inherit;
+    font-weight: 800;
 }
 
 .send-button {

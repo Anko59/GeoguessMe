@@ -107,6 +107,9 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func isAvailableAvatar(avatar string) bool {
+	if IsCustomAvatar(avatar) {
+		return true
+	}
 	for _, candidate := range availableAvatars {
 		if avatar == candidate {
 			return true

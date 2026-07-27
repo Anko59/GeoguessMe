@@ -6,6 +6,7 @@ vi.mock('../api', () => ({ default: api }));
 
 import {
     getActiveSubscription,
+    getPushConfiguration,
     getVapidPublicKey,
     isPushSupported,
     pushPermissionState,
@@ -102,10 +103,16 @@ describe('browser capability helpers', () => {
 });
 
 describe('VAPID and subscription lifecycle', () => {
-    it('returns null when Push is disabled by the backend', async () => {
-        api.get.mockRejectedValue(new Error('disabled'));
+    it('distinguishes an explicit server opt-out from a transient VAPID failure', async () => {
+        api.get.mockRejectedValue({ response: { status: 503 } });
+        await expect(getPushConfiguration()).resolves.toEqual({ available: false, reason: 'disabled' });
         await expect(getVapidPublicKey()).resolves.toBeNull();
+
+        api.get.mockRejectedValue(new Error('network unavailable'));
+        await expect(getPushConfiguration()).resolves.toEqual({ available: false, reason: 'unavailable' });
+
         api.get.mockResolvedValue({ data: { public_key: '' } });
+        await expect(getPushConfiguration()).resolves.toEqual({ available: false, reason: 'disabled' });
         await expect(getVapidPublicKey()).resolves.toBeNull();
     });
 
@@ -136,6 +143,14 @@ describe('VAPID and subscription lifecycle', () => {
             endpoint: 'https://push.example/new',
             keys: { p256dh: 'public-key', auth: 'auth-key' },
         });
+    });
+
+    it('reuses a VAPID key already confirmed by the onboarding UI', async () => {
+        const browser = installPushBrowser({ subscription: null });
+        api.post.mockResolvedValue({});
+
+        await expect(subscribePushNotifications('VGVzdA')).resolves.toBe(browser.subscription);
+        expect(api.get).not.toHaveBeenCalled();
     });
 
     it('does not subscribe when permission is denied or VAPID is disabled', async () => {

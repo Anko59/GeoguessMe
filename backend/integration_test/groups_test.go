@@ -65,6 +65,7 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 type leaderboardEntry struct {
 	UserID     string  `json:"user_id"`
 	Username   string  `json:"username"`
+	Avatar     string  `json:"avatar"`
 	Score      int     `json:"score"`
 	GuessCount int     `json:"guess_count"`
 	Average    float64 `json:"average_score"`
@@ -108,6 +109,7 @@ func TestCrossGroupIsolation(t *testing.T) {
 
 	bobA := findEntry(aEntries, "bob")
 	require.NotNil(t, bobA, "bob must be a Group A member")
+	require.NotEmpty(t, bobA.Avatar, "leaderboard entries must include the member avatar")
 	require.Equal(t, 1, bobA.GuessCount)
 	require.Greater(t, bobA.Score, 0)
 

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import api from '../../api';
 import Chat from './Chat';
 import type { Message } from '../../types';
 
@@ -40,6 +41,7 @@ describe('Chat', () => {
                 ]}
                 wsRef={wsRef}
                 currentUserId="user-1"
+                groupID="group-1"
                 connectionStatus="connected"
                 onChallengeMessage={onChallenge}
             />,
@@ -51,8 +53,43 @@ describe('Chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledWith(JSON.stringify({ content: 'hi' }));
 
-        render(<Chat messages={[]} wsRef={{ current: null }} currentUserId="user-1" connectionStatus="offline" />);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Reply to bob' })[0]);
+        expect(screen.getAllByRole('status')[1]).toHaveTextContent('Replying to bob');
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'same here' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        expect(send).toHaveBeenLastCalledWith(JSON.stringify({ content: 'same here', reply_to_id: 'message-1' }));
+
+        render(
+            <Chat
+                messages={[]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+                connectionStatus="offline"
+            />,
+        );
         expect(screen.getByText('Offline — retrying')).toBeInTheDocument();
         expect(screen.getByText('No messages yet')).toBeInTheDocument();
+    });
+
+    it('uploads a selected photo through the authenticated chat-media endpoint', async () => {
+        const send = vi.fn();
+        const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} });
+        const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;
+        render(
+            <Chat messages={[]} wsRef={wsRef} currentUserId="user-1" groupID="group-1" connectionStatus="connected" />,
+        );
+
+        const file = new File(['image'], 'shared.png', { type: 'image/png' });
+        const picker = screen.getByLabelText('Attach photo or video');
+        fireEvent.change(picker, { target: { files: [file] } });
+        expect(screen.getByText('shared.png')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Send attachment' }));
+
+        await waitFor(() => expect(post).toHaveBeenCalledWith('/group/messages/media', expect.any(FormData)));
+        const form = post.mock.calls[0][1] as FormData;
+        expect(form.get('group_id')).toBe('group-1');
+        expect(form.get('media')).toBe(file);
+        expect(send).not.toHaveBeenCalled();
     });
 });

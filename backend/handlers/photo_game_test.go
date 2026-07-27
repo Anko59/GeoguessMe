@@ -87,17 +87,21 @@ func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
 }
 
 func multipartUpload(t *testing.T, groupID string) (*http.Request, error) {
+	return multipartMediaUpload(t, groupID, "photo.png", mustDecodeBase64(onePixelPNG))
+}
+
+func multipartMediaUpload(t *testing.T, groupID, filename string, payload []byte) (*http.Request, error) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	_ = writer.WriteField("group_id", groupID)
 	_ = writer.WriteField("lat", "48.8566")
 	_ = writer.WriteField("long", "2.3522")
-	part, err := writer.CreateFormFile("photo", "photo.png")
+	part, err := writer.CreateFormFile("photo", filename)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := part.Write(mustDecodeBase64(onePixelPNG)); err != nil {
+	if _, err := part.Write(payload); err != nil {
 		return nil, err
 	}
 	if err := writer.Close(); err != nil {
@@ -107,6 +111,32 @@ func multipartUpload(t *testing.T, groupID string) (*http.Request, error) {
 	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	return request, nil
+}
+
+func multipartChatMediaUpload(t *testing.T, groupID, filename string, payload []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("group_id", groupID); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("content", "look at this"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := writer.CreateFormFile("media", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := requestWithUser(http.MethodPost, "/", "", "user-1")
+	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	return request
 }
 
 func mustDecodeBase64(value string) []byte {
@@ -149,6 +179,8 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-1").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
+	countedStore := &countingStore{ObjectStore: store}
+	MediaStore = countedStore
 	recorder = httptest.NewRecorder()
 	acceptRequest := requestWithUser(http.MethodPost, "/", "", "user-1")
 	acceptRequest.SetPathValue("photoID", photo.ID)
@@ -167,6 +199,139 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "data" {
 		t.Fatalf("media response = %d %q", recorder.Code, recorder.Body.String())
 	}
+	if countedStore.getCalls != 1 || countedStore.statCalls != 0 {
+		t.Fatalf("media storage calls = get:%d stat:%d, want get:1 stat:0", countedStore.getCalls, countedStore.statCalls)
+	}
+}
+
+func TestUploadRecordedVideo(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	mock := handlerMock(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
+	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	UploadPhoto(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("video upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestUploadAndServeChatMedia(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	HubInstance = chat.NewHub(nil, nil)
+	go HubInstance.Run()
+	t.Cleanup(HubInstance.Stop)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	mock := handlerMock(t)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
+	mock.ExpectExec("INSERT INTO chat_media").WithArgs(pgxmock.AnyArg(), groupID, "user-1", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO messages").WithArgs(pgxmock.AnyArg(), groupID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg(), "look at this", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	recorder := httptest.NewRecorder()
+	UploadChatMedia(recorder, multipartChatMediaUpload(t, groupID, "chat.png", mustDecodeBase64(onePixelPNG)))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("chat upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+
+	assetID := "00000000-0000-0000-0000-000000000002"
+	asset := &models.ChatMedia{ID: assetID, GroupID: groupID, UserID: "user-2", StorageKey: "chat-media/known", MIMEType: "video/webm", ByteSize: 4, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	if err := store.Put(context.Background(), asset.StorageKey, bytes.NewReader([]byte("data")), asset.ByteSize, asset.MIMEType); err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(assetID).WillReturnRows(
+		pgxmock.NewRows([]string{"group_id", "user_id", "storage_key", "mime_type", "byte_size", "created_at"}).AddRow(asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt),
+	)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	recorder = httptest.NewRecorder()
+	request := requestWithUser(http.MethodGet, "/", "", "user-1")
+	request.SetPathValue("mediaID", assetID)
+	ServeChatMedia(recorder, request)
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "data" {
+		t.Fatalf("chat media response = %d %q", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("chat media cache policy = %q", got)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "video/webm" {
+		t.Fatalf("chat media type = %q", got)
+	}
+
+	requireStatus(t, UploadChatMedia, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusMethodNotAllowed)
+	requireStatus(t, ServeChatMedia, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusMethodNotAllowed)
+}
+
+func TestChatMediaFailureResponses(t *testing.T) {
+	setupHandlers(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	payload := mustDecodeBase64(onePixelPNG)
+	requireStatus(t, UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusServiceUnavailable)
+
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	HubInstance = chat.NewHub(nil, nil)
+	go HubInstance.Run()
+	t.Cleanup(HubInstance.Stop)
+	mock := handlerMock(t)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	requireStatus(t, UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusForbidden)
+
+	mediaID := "00000000-0000-0000-0000-000000000002"
+	serve := func() *http.Request {
+		request := requestWithUser(http.MethodGet, "/", "", "user-1")
+		request.SetPathValue("mediaID", mediaID)
+		return request
+	}
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnError(pgx.ErrNoRows)
+	requireStatus(t, ServeChatMedia, serve(), http.StatusNotFound)
+
+	asset := &models.ChatMedia{ID: mediaID, GroupID: groupID, UserID: "user-2", StorageKey: "chat-media/missing", MIMEType: "image/png", ByteSize: 4, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	assetRows := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"group_id", "user_id", "storage_key", "mime_type", "byte_size", "created_at"}).AddRow(asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt)
+	}
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	requireStatus(t, ServeChatMedia, serve(), http.StatusForbidden)
+
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	requireStatus(t, ServeChatMedia, serve(), http.StatusGone)
+}
+
+type countingStore struct {
+	storage.ObjectStore
+	getCalls  int
+	statCalls int
+}
+
+func (s *countingStore) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	s.getCalls++
+	return s.ObjectStore.Get(ctx, key)
+}
+
+func (s *countingStore) Stat(ctx context.Context, key string) (int64, error) {
+	s.statCalls++
+	return s.ObjectStore.Stat(ctx, key)
 }
 
 func TestChallengeResultsAndChatRejection(t *testing.T) {

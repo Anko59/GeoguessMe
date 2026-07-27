@@ -17,6 +17,9 @@ interface VapidKeyResponse {
     public_key: string;
 }
 
+export type PushConfiguration =
+    { available: true; publicKey: string } | { available: false; reason: 'disabled' | 'unavailable' };
+
 /** Whether the current browser can use Web Push at all. */
 export function isPushSupported(): boolean {
     return (
@@ -54,14 +57,26 @@ export function urlB64ToUint8Array(base64String: string): Uint8Array {
     return output;
 }
 
-/** Fetch the configured VAPID public key from the backend, or null if disabled. */
-export async function getVapidPublicKey(): Promise<string | null> {
+/**
+ * Resolve the configured VAPID key without requesting browser permission.
+ * A 503 is the backend's explicit, operator-controlled Push opt-out; every
+ * other failure is transient from the user's point of view.
+ */
+export async function getPushConfiguration(): Promise<PushConfiguration> {
     try {
         const response = await api.get<VapidKeyResponse>('/push/vapid-public-key');
-        return response.data.public_key || null;
-    } catch {
-        return null;
+        const publicKey = response.data.public_key;
+        return publicKey ? { available: true, publicKey } : { available: false, reason: 'disabled' };
+    } catch (error) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        return { available: false, reason: status === 503 ? 'disabled' : 'unavailable' };
     }
+}
+
+/** Fetch the configured VAPID public key from the backend, or null if unavailable. */
+export async function getVapidPublicKey(): Promise<string | null> {
+    const configuration = await getPushConfiguration();
+    return configuration.available ? configuration.publicKey : null;
 }
 
 function toBackendSubscription(subscription: PushSubscription): BackendSubscription {
@@ -95,12 +110,12 @@ export async function getActiveSubscription(): Promise<PushSubscription | null> 
  * the subscription on success or null if the user denied permission or push is
  * unavailable.
  */
-export async function subscribePushNotifications(): Promise<PushSubscription | null> {
+export async function subscribePushNotifications(vapidPublicKey?: string): Promise<PushSubscription | null> {
     if (!isPushSupported()) {
         return null;
     }
-    const vapidPublicKey = await getVapidPublicKey();
-    if (!vapidPublicKey) {
+    const publicKey = vapidPublicKey ?? (await getVapidPublicKey());
+    if (!publicKey) {
         return null;
     }
     if (Notification.permission !== 'granted') {
@@ -117,7 +132,7 @@ export async function subscribePushNotifications(): Promise<PushSubscription | n
     }
     const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlB64ToUint8Array(vapidPublicKey) as BufferSource,
+        applicationServerKey: urlB64ToUint8Array(publicKey) as BufferSource,
     });
     await postSubscriptionToBackend(subscription);
     return subscription;

@@ -24,13 +24,17 @@ Migrations are stored in `backend/internal/database/migrations/`:
 001_initial.sql
 002_auth_version_and_object_deletion.sql
 003_unique_active_media_deletion_job.sql
+004_push_subscriptions.sql
+005_leaderboard_lookup_index.sql
+006_message_replies.sql
+007_chat_media.sql
 ```
 
 New migrations:
 
 ```bash
 make migration-new NAME=add_thing
-# Creates backend/internal/database/migrations/004_add_thing.sql
+# Creates backend/internal/database/migrations/007_add_thing.sql
 ```
 
 ## Migration commands

@@ -24,6 +24,24 @@ describe('FilterPicker', () => {
         expect(onSelect).toHaveBeenCalledWith('butterfly');
     });
 
+    it('defers compact lens-preview downloads until a lens receives attention', () => {
+        render(
+            <FilterPicker
+                selectedFilter="none"
+                filterReady={false}
+                filterError=""
+                faceDetected={false}
+                onSelect={vi.fn()}
+            />,
+        );
+
+        const lens = screen.getByRole('button', { name: 'HR nightmare' });
+        expect(lens).toHaveStyle({ '--lens-preview': 'none' });
+
+        fireEvent.focus(lens);
+        expect(lens).toHaveStyle({ '--lens-preview': 'url("/lenses/generated/hr-nightmare.thumb.webp")' });
+    });
+
     it('scrolls the lens rail with desktop arrows and a vertical mouse wheel', () => {
         const { container } = render(
             <FilterPicker
