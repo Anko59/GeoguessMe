@@ -11,7 +11,7 @@ import type { LensId } from './lenses/lensCatalog';
 import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
 import { useCameraDevice } from './useCameraDevice';
 import { useHoldToRecord } from './capture/useHoldToRecord';
-import { useVideoRecording } from './capture/useVideoRecording';
+import { useVideoCapture } from './capture/useVideoCapture';
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -46,8 +46,9 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
     const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
     const recordingError = useCallback((message: string) => setError(message), []);
-    const { recordedVideo, recording, startRecording, stopRecording, discardRecording } =
-        useVideoRecording(recordingError);
+    const { recordedVideo, recording, startHeldRecording, stopRecording, discardRecording } = useVideoCapture({
+        onError: recordingError,
+    });
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
         faceDetectedRef.current = detected;
@@ -201,92 +202,82 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         streamRef.current = null;
     }, []);
 
-    const startCamera = useCallback(
-        async (captureAudio = false): Promise<MediaStream | null> => {
-            const attempt = ++cameraAttemptRef.current;
-            filePreparationAttemptRef.current += 1;
-            preparedFileDataRef.current = null;
-            setFileMode(false);
-            setCapturedPhoto(null);
-            discardRecording();
-            setCameraReady(false);
-            setError('');
-            setFilterError('');
-            if (sourceCanvasRef.current) sourceCanvasRef.current.width = 0;
-            stopCamera();
-            destroyEffects();
-            if (!navigator.mediaDevices?.getUserMedia) {
-                setError(
-                    'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
-                );
-                return null;
-            }
-            try {
-                const mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: facingModeRef.current,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        frameRate: { ideal: 30, max: 30 },
-                    },
-                    audio: captureAudio,
-                });
-                if (attempt !== cameraAttemptRef.current) {
-                    mediaStream.getTracks().forEach((track) => track.stop());
-                    return null;
-                }
-                streamRef.current = mediaStream;
-                const video = videoRef.current;
-                if (!video) {
-                    mediaStream.getTracks().forEach((track) => track.stop());
-                    streamRef.current = null;
-                    return null;
-                }
-                video.srcObject = mediaStream;
-                const markCameraReady = () => {
-                    if (attempt !== cameraAttemptRef.current || video.videoWidth === 0 || video.readyState < 2) return;
-                    setCameraReady(true);
-                    if (initializedCameraAttemptRef.current === attempt) return;
-                    initializedCameraAttemptRef.current = attempt;
-                    if (selectedFilterRef.current !== 'none')
-                        void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
-                };
-                video.onloadedmetadata = markCameraReady;
-                video.onloadeddata = markCameraReady;
-                video.oncanplay = markCameraReady;
-                void video
-                    .play()
-                    .then(markCameraReady)
-                    .catch(() => undefined);
-                return mediaStream;
-            } catch (requestError: unknown) {
-                if (attempt !== cameraAttemptRef.current) return null;
-                const name = requestError instanceof DOMException ? requestError.name : '';
-                if (name === 'NotAllowedError' || name === 'SecurityError')
-                    setError(
-                        captureAudio
-                            ? 'Camera or microphone access denied. Allow both permissions and try again.'
-                            : 'Camera access denied. Allow camera permissions and try again.',
-                    );
-                else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
-                    setError('No camera was found. Connect a camera or upload a photo from your device.');
-                else if (name === 'NotReadableError' || name === 'TrackStartError')
-                    setError('The camera is busy or unavailable. Close other camera apps and try again.');
-                else setError('The camera could not be started. Try again or upload a photo from your device.');
-                return null;
-            }
-        },
-        [destroyEffects, discardRecording, facingModeRef, initializeVideoEffects, stopCamera],
-    );
-    const startHeldVideo = async (isStillPressed: () => boolean) => {
-        const stream = await startCamera(true);
-        if (!stream) return;
-        if (!isStillPressed()) {
-            stopCamera();
-            return;
-        }
+    const startCamera = useCallback(async (): Promise<MediaStream | null> => {
+        const attempt = ++cameraAttemptRef.current;
+        filePreparationAttemptRef.current += 1;
+        preparedFileDataRef.current = null;
+        setFileMode(false);
+        setCapturedPhoto(null);
+        discardRecording();
+        setCameraReady(false);
         setError('');
-        startRecording(stream, () => {
+        setFilterError('');
+        if (sourceCanvasRef.current) sourceCanvasRef.current.width = 0;
+        stopCamera();
+        destroyEffects();
+        if (!navigator.mediaDevices?.getUserMedia) {
+            setError(
+                'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
+            );
+            return null;
+        }
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: facingModeRef.current,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 30, max: 30 },
+                },
+                audio: false,
+            });
+            if (attempt !== cameraAttemptRef.current) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                return null;
+            }
+            streamRef.current = mediaStream;
+            const video = videoRef.current;
+            if (!video) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
+                return null;
+            }
+            video.srcObject = mediaStream;
+            const markCameraReady = () => {
+                if (attempt !== cameraAttemptRef.current || video.videoWidth === 0 || video.readyState < 2) return;
+                setCameraReady(true);
+                if (initializedCameraAttemptRef.current === attempt) return;
+                initializedCameraAttemptRef.current = attempt;
+                if (selectedFilterRef.current !== 'none')
+                    void initializeVideoEffects(video, video.videoWidth, video.videoHeight);
+            };
+            video.onloadedmetadata = markCameraReady;
+            video.onloadeddata = markCameraReady;
+            video.oncanplay = markCameraReady;
+            void video
+                .play()
+                .then(markCameraReady)
+                .catch(() => undefined);
+            return mediaStream;
+        } catch (requestError: unknown) {
+            if (attempt !== cameraAttemptRef.current) return null;
+            const name = requestError instanceof DOMException ? requestError.name : '';
+            if (name === 'NotAllowedError' || name === 'SecurityError')
+                setError('Camera access denied. Allow camera permissions and try again.');
+            else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
+                setError('No camera was found. Connect a camera or upload a photo from your device.');
+            else if (name === 'NotReadableError' || name === 'TrackStartError')
+                setError('The camera is busy or unavailable. Close other camera apps and try again.');
+            else setError('The camera could not be started. Try again or upload a photo from your device.');
+            return null;
+        }
+    }, [destroyEffects, discardRecording, facingModeRef, initializeVideoEffects, stopCamera]);
+    const startHeldVideo = async (isStillPressed: () => boolean) => {
+        if (recording) return;
+        const videoStream = streamRef.current;
+        if (!videoStream) return;
+        setError('');
+        await startHeldRecording(videoStream, isStillPressed, () => {
             destroyEffects();
             stopCamera();
         });
@@ -459,6 +450,8 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         onStop: stopRecording,
         onTap: capturePhoto,
     });
+    // While recording, tapping the capture button stops the clip instead of taking a photo.
+    const captureButtonClick = recording ? stopRecording : captureGesture.onClick;
 
     return (
         <CameraView
@@ -488,7 +481,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onToggleFilters={() => setShowFilters((p) => !p)}
             onSelectLens={selectLens}
             onBannerChange={setTextBanner}
-            onCaptureButtonClick={captureGesture.onClick}
+            onCaptureButtonClick={captureButtonClick}
             onCaptureButtonPointerDown={captureGesture.onPointerDown}
             onCaptureButtonPointerUp={captureGesture.onPointerUp}
             onCaptureButtonPointerCancel={captureGesture.onPointerCancel}
