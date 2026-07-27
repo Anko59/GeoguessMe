@@ -148,7 +148,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 <div className="entry-rank">{rankEmoji || `#${rank}`}</div>
 
                                 <div className="entry-avatar">
-                                    <img src="/avatar.png" alt={entry.username} />
+                                    <img src={`/avatars/${entry.avatar || 'avatar.png'}`} alt={entry.username} />
                                 </div>
 
                                 <div className="entry-info">

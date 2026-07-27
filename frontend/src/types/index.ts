@@ -36,6 +36,7 @@ export interface Group {
 export interface LeaderboardEntry {
     user_id: string;
     username: string;
+    avatar: string;
     score: number;
     guess_count: number;
     average_score: number;

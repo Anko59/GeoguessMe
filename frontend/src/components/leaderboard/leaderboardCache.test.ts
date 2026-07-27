@@ -19,6 +19,7 @@ describe('leaderboardCache', () => {
             data: Array<{
                 user_id: string;
                 username: string;
+                avatar: string;
                 score: number;
                 guess_count: number;
                 average_score: number;
@@ -37,10 +38,28 @@ describe('leaderboardCache', () => {
             params: { group_id: 'group-a', period: 'week' },
         });
 
-        resolve({ data: [{ user_id: 'user-a', username: 'alice', score: 10, guess_count: 1, average_score: 10 }] });
+        resolve({
+            data: [
+                {
+                    user_id: 'user-a',
+                    username: 'alice',
+                    avatar: 'avatar2.png',
+                    score: 10,
+                    guess_count: 1,
+                    average_score: 10,
+                },
+            ],
+        });
         await expect(first).resolves.toEqual(await second);
         expect(getCachedLeaderboard('user-a', 'group-a', 'week')).toEqual([
-            { user_id: 'user-a', username: 'alice', score: 10, guess_count: 1, average_score: 10 },
+            {
+                user_id: 'user-a',
+                username: 'alice',
+                avatar: 'avatar2.png',
+                score: 10,
+                guess_count: 1,
+                average_score: 10,
+            },
         ]);
         expect(getCachedLeaderboard('user-b', 'group-a', 'week')).toBeUndefined();
     });
