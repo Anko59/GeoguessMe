@@ -24,7 +24,7 @@ describe('FilterPicker', () => {
         expect(onSelect).toHaveBeenCalledWith('butterfly');
     });
 
-    it('defers large lens-preview downloads until a lens receives attention', () => {
+    it('defers compact lens-preview downloads until a lens receives attention', () => {
         render(
             <FilterPicker
                 selectedFilter="none"
@@ -39,7 +39,7 @@ describe('FilterPicker', () => {
         expect(lens).toHaveStyle({ '--lens-preview': 'none' });
 
         fireEvent.focus(lens);
-        expect(lens).toHaveStyle({ '--lens-preview': 'url("/lenses/generated/hr-nightmare.webp")' });
+        expect(lens).toHaveStyle({ '--lens-preview': 'url("/lenses/generated/hr-nightmare.thumb.webp")' });
     });
 
     it('scrolls the lens rail with desktop arrows and a vertical mouse wheel', () => {
