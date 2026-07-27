@@ -114,6 +114,31 @@
     border-radius: 50%;
 }
 
+.avatar-preview {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.avatar-preview-img {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+}
+
+.avatar-preview-img.avatar--placeholder {
+    display: inline-block;
+    background: var(--surface);
+    border: 2px dashed var(--border);
+}
+
+.avatar-upload {
+    cursor: pointer;
+}
+
 .account-verification {
     margin-top: var(--space-6);
     padding: var(--space-4) var(--space-5);

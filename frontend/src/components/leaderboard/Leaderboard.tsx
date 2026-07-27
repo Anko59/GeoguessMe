@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
+import Avatar from '../common/Avatar';
 import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
 import './Leaderboard.css';
 
@@ -148,7 +149,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 <div className="entry-rank">{rankEmoji || `#${rank}`}</div>
 
                                 <div className="entry-avatar">
-                                    <img src={`/avatars/${entry.avatar || 'avatar.png'}`} alt={entry.username} />
+                                    <Avatar userID={entry.user_id} avatar={entry.avatar} username={entry.username} />
                                 </div>
 
                                 <div className="entry-info">

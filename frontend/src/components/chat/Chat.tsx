@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import type { Message } from '../../types';
+import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
 import './Chat.css';
@@ -97,7 +98,12 @@ export default function Chat({
                             >
                                 {!isMe && showAvatar && (
                                     <div className="avatar-container">
-                                        <img src={`/avatars/${message.avatar || 'avatar.png'}`} alt="" />
+                                        <Avatar
+                                            userID={message.user_id}
+                                            avatar={message.avatar}
+                                            username={message.username}
+                                            className="avatar"
+                                        />
                                     </div>
                                 )}
                                 <div className="message-wrapper">
@@ -154,7 +160,12 @@ export default function Chat({
                         >
                             {!isMe && !isSystem && showAvatar && (
                                 <div className="avatar-container">
-                                    <img src={`/avatars/${message.avatar || 'avatar.png'}`} alt="" className="avatar" />
+                                    <Avatar
+                                        userID={message.user_id}
+                                        avatar={message.avatar}
+                                        username={message.username}
+                                        className="avatar"
+                                    />
                                 </div>
                             )}
                             <div className="message-wrapper">

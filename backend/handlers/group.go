@@ -154,6 +154,66 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+func GetGroupDetails(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	groupID := r.URL.Query().Get("id")
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "id is required")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	group, err := repository.GetGroupByID(groupID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, group)
+}
+
+func GetGroupMembers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	groupID := r.URL.Query().Get("id")
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "id is required")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	members, err := repository.GetGroupMembers(groupID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load members")
+		return
+	}
+	writeJSON(w, http.StatusOK, members)
+}
+
+func GetUserGroups(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	groups, err := repository.GetUserGroups(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load groups")
+		return
+	}
+	writeJSON(w, http.StatusOK, groups)
+}
+
 // invitePageTemplate is a minimal HTML shell with Open Graph meta tags so
 // messengers render a rich preview when someone shares an invite link. It also
 // includes a meta refresh that redirects the browser to the join page.
