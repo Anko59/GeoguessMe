@@ -18,8 +18,9 @@ type PersistFunc func(context.Context, *models.Message) error
 type NotifyFunc func(context.Context, *models.Message)
 
 type event struct {
-	message models.Message
-	sender  *Client
+	message          models.Message
+	sender           *Client
+	alreadyPersisted bool
 }
 
 type Hub struct {
@@ -60,7 +61,7 @@ func (h *Hub) Run() {
 			if message.Kind == "" {
 				message.Kind = "text"
 			}
-			if h.persist != nil {
+			if !incoming.alreadyPersisted && h.persist != nil {
 				if err := h.persist(context.Background(), &message); err != nil {
 					if incoming.sender != nil {
 						sendSystem(incoming.sender, "message_not_saved", "Message could not be sent")
@@ -81,7 +82,7 @@ func (h *Hub) Run() {
 			// Fan a push notification for ordinary chat messages only. Challenge
 			// broadcasts are notified from the upload handler, and system messages
 			// (errors) are not user-facing.
-			if h.notify != nil && message.Kind == "text" {
+			if h.notify != nil && (message.Kind == "text" || message.Kind == "media") {
 				h.notify(context.Background(), &message)
 			}
 		case <-h.stop:
@@ -104,6 +105,14 @@ func (h *Hub) remove(client *Client) {
 func (h *Hub) Broadcast(message models.Message) { h.broadcast <- event{message: message} }
 func (h *Hub) BroadcastFrom(client *Client, message models.Message) {
 	h.broadcast <- event{message: message, sender: client}
+}
+
+// BroadcastPersisted delivers a message whose database transaction has already
+// committed (for example, an HTTP multipart upload). It must never attempt a
+// second persistence pass, but otherwise follows the ordinary broadcast and
+// notification path.
+func (h *Hub) BroadcastPersisted(message models.Message) {
+	h.broadcast <- event{message: message, alreadyPersisted: true}
 }
 
 func (h *Hub) Stop() {

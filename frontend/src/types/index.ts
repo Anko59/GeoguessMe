@@ -18,8 +18,10 @@ export interface Message {
     user_id: string;
     username?: string;
     avatar?: string;
-    kind: 'text' | 'challenge' | 'system';
+    kind: 'text' | 'challenge' | 'media' | 'system';
     photo_id?: string;
+    media_id?: string;
+    media_type?: 'image/jpeg' | 'image/png' | 'video/mp4' | 'video/webm';
     reply_to_id?: string;
     error_code?: string;
     content: string;
