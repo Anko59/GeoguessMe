@@ -66,6 +66,7 @@ Message:
     avatar: { type: string }
     kind: { type: string, enum: [text, challenge, system] }
     photo_id: { type: [string, "null"], format: uuid }
+    reply_to_id: { type: [string, "null"], format: uuid }
     content: { type: string }
     created_at: { type: string, format: date-time }
     challenge_status:

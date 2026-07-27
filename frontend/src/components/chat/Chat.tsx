@@ -19,6 +19,7 @@ export default function Chat({
     onChallengeMessage,
 }: ChatProps) {
     const [input, setInput] = useState('');
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -29,8 +30,9 @@ export default function Chat({
         event.preventDefault();
         const content = input.trim();
         if (!content || wsRef.current?.readyState !== WebSocket.OPEN) return;
-        wsRef.current.send(JSON.stringify({ content }));
+        wsRef.current.send(JSON.stringify({ content, ...(replyingTo ? { reply_to_id: replyingTo.id } : {}) }));
         setInput('');
+        setReplyingTo(null);
     };
 
     return (
@@ -54,6 +56,9 @@ export default function Chat({
                     const isMe = message.user_id === currentUserId;
                     const isSystem = message.kind === 'system';
                     const showAvatar = index === 0 || messages[index - 1].user_id !== message.user_id;
+                    const replyTarget = message.reply_to_id
+                        ? messages.find((candidate) => candidate.id === message.reply_to_id)
+                        : undefined;
                     if (message.kind === 'challenge') {
                         return (
                             <div
@@ -100,6 +105,14 @@ export default function Chat({
                                             </span>
                                         </span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="reply-action"
+                                        onClick={() => setReplyingTo(message)}
+                                        aria-label={`Reply to ${message.username || 'message'}`}
+                                    >
+                                        Reply
+                                    </button>
                                 </div>
                             </div>
                         );
@@ -120,8 +133,24 @@ export default function Chat({
                                     <div className="message-username">{message.username || 'Unknown User'}</div>
                                 )}
                                 <div className={`message-content ${isSystem ? 'system-message' : 'text'}`}>
+                                    {message.reply_to_id && (
+                                        <div className="reply-context">
+                                            <strong>{replyTarget?.username || 'Original message'}</strong>
+                                            <span>{replyTarget?.content || 'Message unavailable'}</span>
+                                        </div>
+                                    )}
                                     {message.content}
                                 </div>
+                                {!isSystem && (
+                                    <button
+                                        type="button"
+                                        className="reply-action"
+                                        onClick={() => setReplyingTo(message)}
+                                        aria-label={`Reply to ${message.username || 'message'}`}
+                                    >
+                                        Reply
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
@@ -129,6 +158,16 @@ export default function Chat({
                 <div ref={messagesEndRef} />
             </div>
             <form onSubmit={sendMessage} className="message-input-container">
+                {replyingTo && (
+                    <div className="reply-composer" role="status">
+                        <span>
+                            Replying to <strong>{replyingTo.username || 'message'}</strong>
+                        </span>
+                        <button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply">
+                            Cancel
+                        </button>
+                    </div>
+                )}
                 <label htmlFor="chat-message" className="visually-hidden">
                     Message
                 </label>

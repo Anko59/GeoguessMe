@@ -20,6 +20,7 @@ export interface Message {
     avatar?: string;
     kind: 'text' | 'challenge' | 'system';
     photo_id?: string;
+    reply_to_id?: string;
     error_code?: string;
     content: string;
     created_at: string;

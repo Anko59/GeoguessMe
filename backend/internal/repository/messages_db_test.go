@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,9 +16,9 @@ import (
 // the order given, so pagination assertions read in the exact order the
 // database would return them.
 func messageRowsByID(ids []string, times []time.Time) *pgxmock.Rows {
-	rows := pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "content", "created_at"})
+	rows := pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "reply_to_id", "content", "created_at"})
 	for i, id := range ids {
-		rows.AddRow(id, "group-1", "user-1", "alice", "avatar.png", "text", nil, "hello", times[i])
+		rows.AddRow(id, "group-1", "user-1", "alice", "avatar.png", "text", nil, nil, "hello", times[i])
 	}
 	return rows
 }
@@ -26,14 +27,28 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	var photoID *string
+	var replyToID *string
 	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
-	mock.ExpectExec("INSERT INTO messages").WithArgs("message-1", "group-1", "user-1", "text", photoID, "hello", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO messages").WithArgs("message-1", "group-1", "user-1", "text", photoID, replyToID, "hello", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	message := &models.Message{ID: "message-1", GroupID: "group-1", UserID: "user-1", Kind: "text", Content: "hello", CreatedAt: now}
 	if err := SaveMessageContext(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
 	if message.Username != "alice" || message.Avatar != "avatar.png" {
 		t.Fatalf("message profile = %+v", message)
+	}
+	replyID := "message-parent"
+	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(replyID, "group-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO messages").WithArgs("message-2", "group-1", "user-1", "text", photoID, &replyID, "reply", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	if err := SaveMessageContext(context.Background(), &models.Message{ID: "message-2", GroupID: "group-1", UserID: "user-1", Kind: "text", ReplyToID: &replyID, Content: "reply", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	missing := "missing"
+	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(missing, "group-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	if err := SaveMessageContext(context.Background(), &models.Message{ID: "message-3", GroupID: "group-1", UserID: "user-1", Kind: "text", ReplyToID: &missing, Content: "reply", CreatedAt: now}); !errors.Is(err, ErrInvalidMessageReply) {
+		t.Fatalf("invalid reply = %v", err)
 	}
 
 	// Four messages ordered oldest -> newest.

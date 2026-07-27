@@ -171,6 +171,40 @@
     text-align: center;
 }
 
+.reply-context {
+    margin: -0.1rem -0.25rem 0.45rem;
+    padding: 0.35rem 0.5rem;
+    display: grid;
+    gap: 0.1rem;
+    color: var(--ink-muted);
+    background: rgb(17 26 77 / 6%);
+    border-left: 3px solid currentcolor;
+    border-radius: 0.35rem;
+    font-size: 0.75rem;
+}
+
+.reply-context span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reply-action {
+    margin: 0.25rem 0.4rem 0;
+    padding: 0.2rem 0.35rem;
+    align-self: flex-start;
+    color: var(--ink-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.message-container.own .reply-action {
+    align-self: flex-end;
+}
+
 .message-content.photo-challenge {
     min-width: min(17rem, 72vw);
     padding: 0;
@@ -229,6 +263,7 @@
     margin-inline: auto;
     padding: 0.75rem clamp(0.75rem, 3vw, 1.5rem) 1rem;
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--line);
@@ -236,6 +271,25 @@
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     box-shadow: 0 -8px 24px rgba(17, 26, 77, 0.06);
     backdrop-filter: blur(14px);
+}
+
+.reply-composer {
+    width: 100%;
+    padding: 0 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+}
+
+.reply-composer button {
+    padding: 0.2rem 0.35rem;
+    color: var(--brand-blue-accessible);
+    background: transparent;
+    border: 0;
+    font: inherit;
+    font-weight: 800;
 }
 
 .message-input {

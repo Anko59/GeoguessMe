@@ -310,7 +310,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "content", "created_at"}))
+	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "reply_to_id", "content", "created_at"}))
 	recorder = httptest.NewRecorder()
 	GetGroupMessages(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
