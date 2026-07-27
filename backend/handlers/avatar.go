@@ -12,10 +12,7 @@ import (
 	"geoguessme/internal/storage"
 )
 
-const (
-	customAvatarMarker = "custom"
-	avatarMaxBytes     = 2 << 20 // 2 MiB upload limit
-)
+const customAvatarMarker = "custom"
 
 func avatarStorageKey(userID string) string { return "avatars/user/" + userID }
 
@@ -28,13 +25,19 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	if MediaStore == nil {
+	if MediaStore == nil || RuntimeConfig == nil {
 		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Avatar storage is unavailable")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	r.Body = http.MaxBytesReader(w, r.Body, avatarMaxBytes+1024*1024)
-	if err := r.ParseMultipartForm(avatarMaxBytes); err != nil {
+	// Avatars are resized to a small thumbnail server-side, but the upload must
+	// still accept a full-resolution phone photo. Reuse the shared runtime
+	// upload limit (same as challenge uploads) instead of a separate cap that
+	// rejected ordinary 3-8 MiB phone photos before normalization could shrink
+	// them.
+	maxBytes := RuntimeConfig.UploadMaxBytes
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
 		return
 	}
@@ -44,7 +47,7 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeAvatar(file, header.Size, avatarMaxBytes)
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_avatar", err.Error())
 		return

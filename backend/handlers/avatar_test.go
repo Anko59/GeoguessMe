@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/jpeg"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -214,6 +217,54 @@ func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
 	// Object should have been cleaned up.
 	if _, err := store.Get(context.Background(), avatarStorageKey("user-1")); err == nil {
 		t.Fatal("object should have been deleted after db error")
+	}
+}
+
+// largeAvatarJPEG renders an incompressible random JPEG of at least minBytes,
+// reproducing a real phone photo that exceeds the former hardcoded avatar cap.
+func largeAvatarJPEG(t *testing.T, minBytes int) []byte {
+	t.Helper()
+	rng := rand.New(rand.NewSource(1))
+	for size := 2048; size <= 4608; size += 256 {
+		img := image.NewRGBA(image.Rect(0, 0, size, size))
+		for i := 0; i < len(img.Pix); i += 4 {
+			img.Pix[i] = byte(rng.Intn(256))
+			img.Pix[i+1] = byte(rng.Intn(256))
+			img.Pix[i+2] = byte(rng.Intn(256))
+			img.Pix[i+3] = 255
+		}
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 92}); err != nil {
+			t.Fatal(err)
+		}
+		if buf.Len() >= minBytes {
+			return buf.Bytes()
+		}
+	}
+	t.Fatalf("could not render a JPEG >= %d bytes", minBytes)
+	return nil
+}
+
+func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	// A normal phone photo is larger than the former 2 MiB avatar cap. The
+	// handler must accept it and normalize it down to a small thumbnail.
+	photo := largeAvatarJPEG(t, 3<<20)
+	RuntimeConfig.UploadMaxBytes = int64(len(photo)) + 1<<20
+	mock := handlerMock(t)
+	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
+	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(updated))
+
+	recorder := httptest.NewRecorder()
+	UploadAvatar(recorder, avatarUploadRequest(t, photo))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("large photo upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
 
