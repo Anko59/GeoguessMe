@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var ErrInvalidMessageReply = errors.New("invalid message reply")
+
 func SaveMessage(msg *models.Message) error {
 	return SaveMessageContext(context.Background(), msg)
 }
@@ -28,11 +30,20 @@ func SaveMessageContext(ctx context.Context, msg *models.Message) error {
 			msg.Username, msg.Avatar = username, avatar
 		}
 	}
-	_, err := database.DB.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, content, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.Content, msg.CreatedAt)
+	if msg.ReplyToID != nil {
+		var exists bool
+		if err := database.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND group_id = $2)`, *msg.ReplyToID, msg.GroupID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrInvalidMessageReply
+		}
+	}
+	_, err := database.DB.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, reply_to_id, content, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.ReplyToID, msg.Content, msg.CreatedAt)
 	return err
 }
 
-const messageColumns = "m.id, m.group_id, m.user_id, u.username, u.avatar, m.kind, m.photo_id, m.content, m.created_at"
+const messageColumns = "m.id, m.group_id, m.user_id, u.username, u.avatar, m.kind, m.photo_id, m.reply_to_id, m.content, m.created_at"
 
 // MessagesPage is the cursor-paginated result of GetGroupMessagesPage.
 type MessagesPage struct {
@@ -151,7 +162,8 @@ func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {
 	for rows.Next() {
 		var msg models.Message
 		var username, avatar sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &msg.Content, &msg.CreatedAt); err != nil {
+		var replyToID sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.GroupID, &msg.UserID, &username, &avatar, &msg.Kind, &msg.PhotoID, &replyToID, &msg.Content, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
 		if username.Valid {
@@ -159,6 +171,9 @@ func scanMessageRows(rows pgx.Rows) ([]models.Message, error) {
 		}
 		if avatar.Valid {
 			msg.Avatar = avatar.String
+		}
+		if replyToID.Valid {
+			msg.ReplyToID = &replyToID.String
 		}
 		messages = append(messages, msg)
 	}

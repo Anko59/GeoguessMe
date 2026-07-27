@@ -51,6 +51,12 @@ describe('Chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledWith(JSON.stringify({ content: 'hi' }));
 
+        fireEvent.click(screen.getAllByRole('button', { name: 'Reply to bob' })[0]);
+        expect(screen.getAllByRole('status')[1]).toHaveTextContent('Replying to bob');
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'same here' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        expect(send).toHaveBeenLastCalledWith(JSON.stringify({ content: 'same here', reply_to_id: 'message-1' }));
+
         render(<Chat messages={[]} wsRef={{ current: null }} currentUserId="user-1" connectionStatus="offline" />);
         expect(screen.getByText('Offline — retrying')).toBeInTheDocument();
         expect(screen.getByText('No messages yet')).toBeInTheDocument();

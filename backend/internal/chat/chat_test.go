@@ -137,12 +137,12 @@ func TestServeWsValidatesMessagesAndBroadcasts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading validation response: %v", err)
 	}
-	if err := conn.WriteJSON(map[string]string{"content": "hello over websocket"}); err != nil {
+	if err := conn.WriteJSON(map[string]string{"content": "hello over websocket", "reply_to_id": "parent-message"}); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case message := <-persisted:
-		if message.Content != "hello over websocket" || message.UserID != "user-a" {
+		if message.Content != "hello over websocket" || message.UserID != "user-a" || message.ReplyToID == nil || *message.ReplyToID != "parent-message" {
 			t.Fatalf("unexpected persisted websocket message: %+v", message)
 		}
 	case <-time.After(time.Second):
