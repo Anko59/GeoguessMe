@@ -31,9 +31,11 @@ The model, WebAssembly runtime, and rendering code are hosted by the
 application. Camera frames and selected files remain in the browser; the
 composited JPEG is the only image uploaded, and only after the user presses
 Send. The same lens picker works for the live front-facing camera and JPEG, PNG,
-or WebP files. Production's Content Security Policy permits WebAssembly
-compilation with `wasm-unsafe-eval`; it does not permit general JavaScript
-string evaluation.
+or WebP files. The live camera preview and its lens overlay use the camera's
+natural orientation, so the scene on screen matches the photo that will be
+uploaded. Production's Content Security Policy permits WebAssembly compilation
+with `wasm-unsafe-eval`; it does not permit general JavaScript string
+evaluation.
 
 WebGL is required for 3D rendering. MediaPipe attempts GPU inference first and
 falls back to CPU inference when necessary. If tracking or rendering is

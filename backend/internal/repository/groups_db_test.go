@@ -2,13 +2,99 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"geoguessme/internal/models"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 )
+
+func TestGroupPhotoAndNotificationPersistence(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	photo := &models.GroupPhoto{
+		GroupID: "group-1", StorageKey: "groups/group-1/photo/new",
+		MIMEType: "image/webp", ByteSize: 1234, CreatedAt: now,
+	}
+
+	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").
+		WithArgs(photo.GroupID).
+		WillReturnRows(pgxmock.NewRows([]string{"group_id", "storage_key", "mime_type", "byte_size", "created_at"}).
+			AddRow(photo.GroupID, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.CreatedAt))
+	got, err := GetGroupPhotoContext(ctx, photo.GroupID)
+	if err != nil || got == nil || *got != *photo {
+		t.Fatalf("group photo = %+v, %v", got, err)
+	}
+
+	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").
+		WithArgs("missing").
+		WillReturnError(pgx.ErrNoRows)
+	got, err = GetGroupPhotoContext(ctx, "missing")
+	if err != nil || got != nil {
+		t.Fatalf("missing group photo = %+v, %v", got, err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT storage_key FROM group_photos").
+		WithArgs(photo.GroupID).
+		WillReturnRows(pgxmock.NewRows([]string{"storage_key"}).AddRow("groups/group-1/photo/old"))
+	mock.ExpectExec("INSERT INTO group_photos").
+		WithArgs(photo.GroupID, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.CreatedAt).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	previous, err := SetGroupPhotoContext(ctx, photo)
+	if err != nil || previous != "groups/group-1/photo/old" {
+		t.Fatalf("set group photo = %q, %v", previous, err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT storage_key FROM group_photos").
+		WithArgs(photo.GroupID).
+		WillReturnError(pgx.ErrNoRows)
+	mock.ExpectExec("INSERT INTO group_photos").
+		WithArgs(photo.GroupID, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.CreatedAt).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	previous, err = SetGroupPhotoContext(ctx, photo)
+	if err != nil || previous != "" {
+		t.Fatalf("create group photo = %q, %v", previous, err)
+	}
+
+	mock.ExpectQuery("SELECT COALESCE").
+		WithArgs(photo.GroupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"enabled"}).AddRow(false))
+	enabled, err := GetGroupNotificationPreferenceContext(ctx, photo.GroupID, "user-1")
+	if err != nil || enabled {
+		t.Fatalf("notification preference = %v, %v", enabled, err)
+	}
+	mock.ExpectExec("INSERT INTO group_notification_preferences").
+		WithArgs(photo.GroupID, "user-1", true).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	if err := SetGroupNotificationPreferenceContext(ctx, photo.GroupID, "user-1", true); err != nil {
+		t.Fatalf("set notification preference: %v", err)
+	}
+}
+
+func TestSetGroupPhotoRollsBackOnPersistenceFailure(t *testing.T) {
+	mock := newMockPool(t)
+	photo := &models.GroupPhoto{GroupID: "group-1", StorageKey: "new", MIMEType: "image/webp", ByteSize: 12, CreatedAt: time.Now()}
+	persistErr := errors.New("write failed")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT storage_key FROM group_photos").
+		WithArgs(photo.GroupID).
+		WillReturnRows(pgxmock.NewRows([]string{"storage_key"}).AddRow("old"))
+	mock.ExpectExec("INSERT INTO group_photos").
+		WithArgs(photo.GroupID, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.CreatedAt).
+		WillReturnError(persistErr)
+	mock.ExpectRollback()
+	if _, err := SetGroupPhotoContext(context.Background(), photo); !errors.Is(err, persistErr) {
+		t.Fatalf("set group photo error = %v", err)
+	}
+}
 
 func TestGroupQueriesAndMembership(t *testing.T) {
 	mock := newMockPool(t)

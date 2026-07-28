@@ -19,6 +19,11 @@ import (
 
 var ErrInvalidMessageReply = errors.New("invalid message reply")
 
+var (
+	ErrMessageNotFound = errors.New("message not found")
+	ErrInvalidReaction = errors.New("invalid reaction")
+)
+
 func SaveMessage(msg *models.Message) error {
 	return SaveMessageContext(context.Background(), msg)
 }
@@ -108,8 +113,14 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 // restore the same action shown in the chat without client-only assumptions.
 func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, limit int, viewerID string) (MessagesPage, error) {
 	page, err := GetGroupMessagesPage(ctx, groupID, cursor, limit)
-	if err != nil || viewerID == "" || len(page.Items) == 0 {
+	if err != nil || len(page.Items) == 0 {
 		return page, err
+	}
+	if err := enrichMessageReactions(ctx, page.Items, viewerID); err != nil {
+		return MessagesPage{}, err
+	}
+	if viewerID == "" {
+		return page, nil
 	}
 	photoIDs := make([]string, 0, len(page.Items))
 	for _, message := range page.Items {
@@ -128,7 +139,8 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 				WHEN p.expires_at <= NOW() THEN 'expired'
 				WHEN EXISTS (SELECT 1 FROM challenge_views v WHERE v.photo_id = p.id AND v.user_id = $2) THEN 'accepted'
 				ELSE 'available'
-			END AS challenge_status
+			END AS challenge_status,
+			EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id) AS challenge_resolved
 		FROM photos p
 		WHERE p.id = ANY($1)`, photoIDs, viewerID)
 	if err != nil {
@@ -138,10 +150,16 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 	statuses := make(map[string]string, len(photoIDs))
 	for rows.Next() {
 		var photoID, status string
-		if err := rows.Scan(&photoID, &status); err != nil {
+		var resolved bool
+		if err := rows.Scan(&photoID, &status, &resolved); err != nil {
 			return MessagesPage{}, err
 		}
 		statuses[photoID] = status
+		for index := range page.Items {
+			if page.Items[index].PhotoID != nil && *page.Items[index].PhotoID == photoID {
+				page.Items[index].ChallengeResolved = resolved
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return MessagesPage{}, err
@@ -152,6 +170,114 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 		}
 	}
 	return page, nil
+}
+
+func enrichMessageReactions(ctx context.Context, messages []models.Message, viewerID string) error {
+	messageIDs := make([]string, 0, len(messages))
+	for index, message := range messages {
+		messages[index].Reactions = []models.Reaction{}
+		messageIDs = append(messageIDs, message.ID)
+	}
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	rows, err := database.DB.Query(ctx, `
+		SELECT message_id, emoji, COUNT(*)::INTEGER, COALESCE(BOOL_OR(user_id = $2), FALSE)
+		FROM message_reactions
+		WHERE message_id = ANY($1)
+		GROUP BY message_id, emoji
+		ORDER BY message_id, emoji`, messageIDs, viewerID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	reactions := make(map[string][]models.Reaction)
+	for rows.Next() {
+		var messageID string
+		var reaction models.Reaction
+		if err := rows.Scan(&messageID, &reaction.Emoji, &reaction.Count, &reaction.Reacted); err != nil {
+			return err
+		}
+		reactions[messageID] = append(reactions[messageID], reaction)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for index := range messages {
+		if items := reactions[messages[index].ID]; len(items) > 0 {
+			messages[index].Reactions = items
+		}
+	}
+	return nil
+}
+
+func GetMessageForViewer(ctx context.Context, messageID, viewerID string) (*models.Message, error) {
+	rows, err := database.DB.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.id = $1`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := scanMessageRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	if err := enrichMessageReactions(ctx, messages, viewerID); err != nil {
+		return nil, err
+	}
+	return &messages[0], nil
+}
+
+// GetChallengeMessageForViewer returns the persisted chat message associated
+// with a challenge. Guess submission uses it to publish a live resolved-state
+// update without creating another message or push notification.
+func GetChallengeMessageForViewer(ctx context.Context, photoID, viewerID string) (*models.Message, error) {
+	rows, err := database.DB.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.photo_id = $1 AND m.kind = 'challenge'`, photoID)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := scanMessageRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	if err := enrichMessageReactions(ctx, messages, viewerID); err != nil {
+		return nil, err
+	}
+	return &messages[0], nil
+}
+
+func SetMessageReaction(ctx context.Context, messageID, userID, emoji string) error {
+	if emoji == "" {
+		return ErrInvalidReaction
+	}
+	var exists int
+	if err := database.DB.QueryRow(ctx, `SELECT 1 FROM messages WHERE id = $1`, messageID).Scan(&exists); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrMessageNotFound
+		}
+		return err
+	}
+	_, err := database.DB.Exec(ctx, `INSERT INTO message_reactions(message_id, user_id, emoji) VALUES ($1, $2, $3) ON CONFLICT (message_id, user_id, emoji) DO NOTHING`, messageID, userID, emoji)
+	return err
+}
+
+func DeleteMessageReaction(ctx context.Context, messageID, userID, emoji string) error {
+	if emoji == "" {
+		return ErrInvalidReaction
+	}
+	var exists int
+	if err := database.DB.QueryRow(ctx, `SELECT 1 FROM messages WHERE id = $1`, messageID).Scan(&exists); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrMessageNotFound
+		}
+		return err
+	}
+	_, err := database.DB.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`, messageID, userID, emoji)
+	return err
 }
 
 // scanMessageRows drains a message result set (closing it) into a slice in the

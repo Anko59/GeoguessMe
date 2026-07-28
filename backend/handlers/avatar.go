@@ -12,10 +12,7 @@ import (
 	"geoguessme/internal/storage"
 )
 
-const (
-	customAvatarMarker = "custom"
-	avatarMaxBytes     = 2 << 20 // 2 MiB upload limit
-)
+const customAvatarMarker = "custom"
 
 func avatarStorageKey(userID string) string { return "avatars/user/" + userID }
 
@@ -28,13 +25,19 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	if MediaStore == nil {
+	if MediaStore == nil || RuntimeConfig == nil {
 		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Avatar storage is unavailable")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	r.Body = http.MaxBytesReader(w, r.Body, avatarMaxBytes+1024*1024)
-	if err := r.ParseMultipartForm(avatarMaxBytes); err != nil {
+	// Avatars are resized to a small thumbnail server-side, but the upload must
+	// still accept a full-resolution phone photo. Reuse the shared runtime
+	// upload limit (same as challenge uploads) instead of a separate cap that
+	// rejected ordinary 3-8 MiB phone photos before normalization could shrink
+	// them.
+	maxBytes := RuntimeConfig.UploadMaxBytes
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
 		return
 	}
@@ -44,19 +47,45 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeAvatar(file, header.Size, avatarMaxBytes)
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_avatar", err.Error())
 		return
 	}
 	key := avatarStorageKey(userID)
+	current, err := repository.GetUserByID(r.Context(), userID)
+	if err != nil || current == nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load current avatar")
+		return
+	}
+	var previous []byte
+	if IsCustomAvatar(current.Avatar) {
+		object, getErr := MediaStore.Get(r.Context(), key)
+		if getErr == nil {
+			previous, getErr = io.ReadAll(io.LimitReader(object, maxBytes+1))
+			closeErr := object.Close()
+			if getErr == nil {
+				getErr = closeErr
+			}
+		}
+		if getErr != nil && !errors.Is(getErr, storage.ErrObjectNotFound) {
+			writeError(w, http.StatusBadGateway, "storage_error", "Unable to preserve current avatar")
+			return
+		}
+	}
 	if err := MediaStore.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), "image/jpeg"); err != nil {
 		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store avatar")
 		return
 	}
 	if err := repository.SetUserAvatar(r.Context(), userID, customAvatarMarker); err != nil {
-		if deleteErr := MediaStore.Delete(r.Context(), key); deleteErr != nil {
-			slog.Error("failed to clean up avatar after database error", "user_id", userID, "storage_key", key, "delete_error", deleteErr)
+		var compensationErr error
+		if previous != nil {
+			compensationErr = MediaStore.Put(r.Context(), key, bytes.NewReader(previous), int64(len(previous)), "image/jpeg")
+		} else {
+			compensationErr = MediaStore.Delete(r.Context(), key)
+		}
+		if compensationErr != nil {
+			slog.Error("failed to restore avatar after database error", "user_id", userID, "storage_key", key, "compensation_error", compensationErr)
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save avatar")
 		return

@@ -42,9 +42,19 @@ test.describe('Authentication', () => {
 
     test('invalid login credentials show error', async ({ page }) => {
         await page.goto('/login');
-        await page.fill('#login-username', 'nonexistent_user');
-        await page.fill('#login-password', 'WrongPass1');
-        await page.click('button.btn-primary[type="submit"]');
+        const submit = page.locator('button.btn-primary[type="submit"]');
+        await expect(submit).toBeEnabled();
+        await page.fill('#login-username', `missing_${uniqueUsername()}`);
+        const password = page.locator('#login-password');
+        await password.fill('WrongPass1');
+        const loginResponse = page.waitForResponse(
+            (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+        );
+        // The valid-login scenario above covers pointer submission. Submit
+        // this error-path scenario through the keyboard so Firefox cannot lose
+        // a synthetic click while the full multi-browser suite is under load.
+        await password.press('Enter');
+        expect((await loginResponse).status()).toBe(401);
 
         // Wait for error message
         await expect(page.locator('.auth-error')).toBeVisible();

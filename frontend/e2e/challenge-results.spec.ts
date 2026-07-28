@@ -156,7 +156,7 @@ test.describe('Challenge result authorization', () => {
 
             // Click the challenge button to open results via UI.
             const ownerChallenge = uploader.locator('button.photo-challenge[data-photo-id="' + photoId + '"]');
-            await expect(ownerChallenge).toContainText('Challenge sent');
+            await expect(ownerChallenge).toContainText('Resolved challenge');
             await ownerChallenge.click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
 

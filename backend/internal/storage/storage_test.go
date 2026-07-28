@@ -66,6 +66,16 @@ func TestLocalStoreLifecycleAndKeyValidation(t *testing.T) {
 			t.Errorf("Get(%q) unexpectedly succeeded", key)
 		}
 	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(store.Root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(context.Background(), "link/escape", bytes.NewReader(content), int64(len(content)), ""); err == nil {
+		t.Fatal("Put through an escaping symlink unexpectedly succeeded")
+	}
+	if _, err := store.Get(context.Background(), "link/escape"); err == nil {
+		t.Fatal("Get through an escaping symlink unexpectedly succeeded")
+	}
 }
 
 func TestLocalStoreRejectsPartialWritesAndCanceledHealth(t *testing.T) {

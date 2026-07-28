@@ -23,6 +23,14 @@ type Group struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type GroupPhoto struct {
+	GroupID    string    `json:"group_id"`
+	StorageKey string    `json:"-"`
+	MIMEType   string    `json:"mime_type"`
+	ByteSize   int64     `json:"byte_size"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type GroupMember struct {
 	GroupID  string    `json:"group_id"`
 	UserID   string    `json:"user_id"`

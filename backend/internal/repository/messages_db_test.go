@@ -23,6 +23,93 @@ func messageRowsByID(ids []string, times []time.Time) *pgxmock.Rows {
 	return rows
 }
 
+func singleMessageRow(id, kind string, photoID *string, createdAt time.Time) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}).
+		AddRow(id, "group-1", "user-1", "alice", "avatar.png", kind, photoID, nil, nil, nil, "hello", createdAt)
+}
+
+func TestViewerMessageStateAndReactions(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	photoID := "photo-1"
+
+	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").
+		WithArgs("group-1", 10).
+		WillReturnRows(singleMessageRow("message-1", "challenge", &photoID, now))
+	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+		WithArgs([]string{"message-1"}, "viewer-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}).
+			AddRow("message-1", "👍", 2, true))
+	mock.ExpectQuery("SELECT p.id,").
+		WithArgs([]string{photoID}, "viewer-1").
+		WillReturnRows(pgxmock.NewRows([]string{"id", "challenge_status", "challenge_resolved"}).
+			AddRow(photoID, "guessed", true))
+	page, err := GetGroupMessagesPageForViewer(ctx, "group-1", "", 10, "viewer-1")
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("viewer message page = %+v, %v", page, err)
+	}
+	message := page.Items[0]
+	if message.ChallengeStatus != "guessed" || !message.ChallengeResolved ||
+		len(message.Reactions) != 1 || !message.Reactions[0].Reacted || message.Reactions[0].Count != 2 {
+		t.Fatalf("enriched message = %+v", message)
+	}
+
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").
+		WithArgs("message-1").
+		WillReturnRows(singleMessageRow("message-1", "text", nil, now))
+	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+		WithArgs([]string{"message-1"}, "viewer-2").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+	loaded, err := GetMessageForViewer(ctx, "message-1", "viewer-2")
+	if err != nil || loaded == nil || loaded.Reactions == nil {
+		t.Fatalf("message for viewer = %+v, %v", loaded, err)
+	}
+
+	mock.ExpectQuery("SELECT .*FROM messages.*m.photo_id").
+		WithArgs(photoID).
+		WillReturnRows(singleMessageRow("challenge-message", "challenge", &photoID, now))
+	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+		WithArgs([]string{"challenge-message"}, "").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+	loaded, err = GetChallengeMessageForViewer(ctx, photoID, "")
+	if err != nil || loaded == nil || loaded.ID != "challenge-message" {
+		t.Fatalf("challenge message = %+v, %v", loaded, err)
+	}
+}
+
+func TestMessageReactionPersistence(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	if err := SetMessageReaction(ctx, "message-1", "user-1", ""); !errors.Is(err, ErrInvalidReaction) {
+		t.Fatalf("empty set reaction = %v", err)
+	}
+	if err := DeleteMessageReaction(ctx, "message-1", "user-1", ""); !errors.Is(err, ErrInvalidReaction) {
+		t.Fatalf("empty delete reaction = %v", err)
+	}
+
+	mock.ExpectQuery("SELECT 1 FROM messages").WithArgs("missing").WillReturnError(pgx.ErrNoRows)
+	if err := SetMessageReaction(ctx, "missing", "user-1", "👍"); !errors.Is(err, ErrMessageNotFound) {
+		t.Fatalf("missing reaction message = %v", err)
+	}
+	mock.ExpectQuery("SELECT 1 FROM messages").WithArgs("message-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
+	mock.ExpectExec("INSERT INTO message_reactions").
+		WithArgs("message-1", "user-1", "👍").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	if err := SetMessageReaction(ctx, "message-1", "user-1", "👍"); err != nil {
+		t.Fatalf("set reaction: %v", err)
+	}
+	mock.ExpectQuery("SELECT 1 FROM messages").WithArgs("message-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
+	mock.ExpectExec("DELETE FROM message_reactions").
+		WithArgs("message-1", "user-1", "👍").
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	if err := DeleteMessageReaction(ctx, "message-1", "user-1", "👍"); err != nil {
+		t.Fatalf("delete reaction: %v", err)
+	}
+}
+
 func TestMessagePersistenceAndPagination(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)

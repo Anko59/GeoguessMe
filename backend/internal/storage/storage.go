@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,10 +45,10 @@ func NewLocalStore(root string) (*LocalStore, error) {
 
 func (s *LocalStore) path(key string) (string, error) {
 	clean := filepath.Clean(key)
-	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+	if clean == "." || clean != key || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
 		return "", errors.New("invalid storage key")
 	}
-	return filepath.Join(s.Root, clean), nil
+	return clean, nil
 }
 
 func (s *LocalStore) Put(_ context.Context, key string, body io.Reader, size int64, _ string) error {
@@ -55,10 +56,15 @@ func (s *LocalStore) Put(_ context.Context, key string, body io.Reader, size int
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
 		return err
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	defer root.Close()
+	if err := mkdirAll(root, filepath.Dir(path)); err != nil {
+		return err
+	}
+	file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -78,7 +84,12 @@ func (s *LocalStore) Delete(_ context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -89,13 +100,19 @@ func (s *LocalStore) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(path); err != nil {
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
+		return nil, err
+	}
+	file, err := root.Open(path)
+	if err != nil {
+		_ = root.Close()
 		if os.IsNotExist(err) {
 			return nil, ErrObjectNotFound
 		}
 		return nil, err
 	}
-	return os.Open(path)
+	return &rootedFile{File: file, root: root}, nil
 }
 
 func (s *LocalStore) Stat(_ context.Context, key string) (int64, error) {
@@ -103,7 +120,12 @@ func (s *LocalStore) Stat(_ context.Context, key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	info, err := os.Stat(path)
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
+		return 0, err
+	}
+	defer root.Close()
+	info, err := root.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, ErrObjectNotFound
@@ -111,6 +133,34 @@ func (s *LocalStore) Stat(_ context.Context, key string) (int64, error) {
 		return 0, err
 	}
 	return info.Size(), nil
+}
+
+func mkdirAll(root *os.Root, path string) error {
+	if path == "." {
+		return nil
+	}
+	current := ""
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		if err := root.Mkdir(current, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+type rootedFile struct {
+	*os.File
+	root *os.Root
+}
+
+func (f *rootedFile) Close() error {
+	fileErr := f.File.Close()
+	rootErr := f.root.Close()
+	if fileErr != nil {
+		return fileErr
+	}
+	return rootErr
 }
 
 func (s *LocalStore) Health(ctx context.Context) error {
