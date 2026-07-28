@@ -53,6 +53,7 @@ describe('Chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledWith(JSON.stringify({ content: 'hi' }));
 
+        fireEvent.mouseEnter(screen.getByText('Hello').closest('[data-message-id]') as HTMLElement);
         fireEvent.click(screen.getAllByRole('button', { name: 'Reply to bob' })[0]);
         expect(screen.getAllByRole('status')[1]).toHaveTextContent('Replying to bob');
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'same here' } });
@@ -70,6 +71,33 @@ describe('Chat', () => {
         );
         expect(screen.getByText('Offline — retrying')).toBeInTheDocument();
         expect(screen.getByText('No messages yet')).toBeInTheDocument();
+    });
+
+    it('reveals message actions and saves emoji reactions', async () => {
+        const put = vi.spyOn(api, 'put').mockResolvedValue({
+            data: message({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
+        });
+        const onMessageUpdated = vi.fn();
+        const wsRef = { current: null } as unknown as React.RefObject<WebSocket | null>;
+        render(
+            <Chat
+                messages={[message()]}
+                wsRef={wsRef}
+                currentUserId="user-1"
+                groupID="group-1"
+                connectionStatus="connected"
+                onMessageUpdated={onMessageUpdated}
+            />,
+        );
+
+        const messageElement = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
+        fireEvent.mouseEnter(messageElement);
+        fireEvent.click(screen.getByRole('button', { name: 'React with thumbs up' }));
+
+        await waitFor(() => expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { emoji: '👍' }));
+        expect(onMessageUpdated).toHaveBeenCalledWith(
+            expect.objectContaining({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
+        );
     });
 
     it('uploads a selected photo through the authenticated chat-media endpoint', async () => {

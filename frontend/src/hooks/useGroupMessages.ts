@@ -16,6 +16,7 @@ export interface UseGroupMessagesResult {
     wsRef: React.RefObject<WebSocket | null>;
     error: string;
     updateChallengeStatus: (photoId: string, status: NonNullable<Message['challenge_status']>) => void;
+    updateMessage: (message: Message) => void;
 }
 
 // reconnectPlan derives the next backoff delay and the incremented retry
@@ -87,11 +88,26 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 if (message.id) byId.set(message.id, message);
             }
             for (const message of incoming) {
-                if (message.id) byId.set(message.id, message);
+                if (!message.id) continue;
+                const previous = byId.get(message.id);
+                byId.set(message.id, {
+                    ...previous,
+                    ...message,
+                    challenge_status: message.challenge_status ?? previous?.challenge_status,
+                    challenge_resolved: Boolean(message.challenge_resolved || previous?.challenge_resolved),
+                    reactions: message.reactions ?? previous?.reactions,
+                });
             }
             return [...byId.values()].sort(compareMessages);
         });
     }, []);
+
+    const updateMessage = useCallback(
+        (message: Message): void => {
+            mergeMessages([message]);
+        },
+        [mergeMessages],
+    );
 
     const updateChallengeStatus = useCallback(
         (photoId: string, status: NonNullable<Message['challenge_status']>): void => {
@@ -248,5 +264,5 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
         };
     }, [groupId, lastStableCursor, loadAfter, mergeMessages]);
 
-    return { messages, connectionStatus, wsRef, error, updateChallengeStatus };
+    return { messages, connectionStatus, wsRef, error, updateChallengeStatus, updateMessage };
 }

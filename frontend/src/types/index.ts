@@ -27,6 +27,14 @@ export interface Message {
     content: string;
     created_at: string;
     challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
+    challenge_resolved?: boolean;
+    reactions?: Reaction[];
+}
+
+export interface Reaction {
+    emoji: string;
+    count: number;
+    reacted: boolean;
 }
 
 export interface Group {

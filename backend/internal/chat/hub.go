@@ -21,6 +21,7 @@ type event struct {
 	message          models.Message
 	sender           *Client
 	alreadyPersisted bool
+	notify           bool
 }
 
 type Hub struct {
@@ -82,7 +83,7 @@ func (h *Hub) Run() {
 			// Fan a push notification for ordinary chat messages only. Challenge
 			// broadcasts are notified from the upload handler, and system messages
 			// (errors) are not user-facing.
-			if h.notify != nil && (message.Kind == "text" || message.Kind == "media") {
+			if incoming.notify && h.notify != nil && (message.Kind == "text" || message.Kind == "media") {
 				h.notify(context.Background(), &message)
 			}
 		case <-h.stop:
@@ -102,9 +103,9 @@ func (h *Hub) remove(client *Client) {
 	}
 }
 
-func (h *Hub) Broadcast(message models.Message) { h.broadcast <- event{message: message} }
+func (h *Hub) Broadcast(message models.Message) { h.broadcast <- event{message: message, notify: true} }
 func (h *Hub) BroadcastFrom(client *Client, message models.Message) {
-	h.broadcast <- event{message: message, sender: client}
+	h.broadcast <- event{message: message, sender: client, notify: true}
 }
 
 // BroadcastPersisted delivers a message whose database transaction has already
@@ -112,6 +113,13 @@ func (h *Hub) BroadcastFrom(client *Client, message models.Message) {
 // second persistence pass, but otherwise follows the ordinary broadcast and
 // notification path.
 func (h *Hub) BroadcastPersisted(message models.Message) {
+	h.broadcast <- event{message: message, alreadyPersisted: true, notify: true}
+}
+
+// BroadcastUpdate delivers a persisted message update without treating it as
+// a new chat message. Reactions use this path so updating a message cannot
+// trigger another push notification.
+func (h *Hub) BroadcastUpdate(message models.Message) {
 	h.broadcast <- event{message: message, alreadyPersisted: true}
 }
 
