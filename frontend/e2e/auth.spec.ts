@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { signupViaUI, loginViaUI, uniqueUsername, uniqueEmail, resetRateLimiter } from './helpers';
+import {
+    deterministicTestImage,
+    signupViaUI,
+    loginViaUI,
+    uniqueUsername,
+    uniqueEmail,
+    resetRateLimiter,
+} from './helpers';
 
 test.describe('Authentication', () => {
     test('signup creates account and redirects to groups', async ({ page }) => {
@@ -183,6 +190,24 @@ test.describe('Duplicate registration', () => {
 });
 
 test.describe('Session lifecycle', () => {
+    test('uploads an authenticated profile photo and reports success', async ({ page }) => {
+        await signupViaUI(page);
+        await page.goto('/settings');
+
+        const uploadResponse = page.waitForResponse(
+            (response) =>
+                response.url().endsWith('/api/v1/auth/profile/avatar') && response.request().method() === 'POST',
+        );
+        await page.locator('input[type="file"]').setInputFiles({
+            name: 'profile.png',
+            mimeType: 'image/png',
+            buffer: deterministicTestImage(),
+        });
+
+        expect((await uploadResponse).status()).toBe(200);
+        await expect(page.getByRole('status')).toHaveText('Profile photo updated.');
+    });
+
     test('page reload restores authenticated session', async ({ page }) => {
         await signupViaUI(page);
         await expect(page.locator('.groups-header')).toBeVisible();

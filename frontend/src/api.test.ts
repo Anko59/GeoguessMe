@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 import api, { getAPIErrorMessage, getAccessToken, setAccessToken } from './api';
 
@@ -24,6 +24,21 @@ describe('api client', () => {
             headers: {},
         } as never);
         expect(external.withCredentials).toBe(false);
+    });
+
+    it('keeps protected auth routes authenticated while leaving public auth routes open', async () => {
+        setAccessToken('token');
+        const request = await api.interceptors.request.handlers![0]!.fulfilled!({
+            url: '/auth/profile/avatar',
+            headers: {},
+        } as never);
+        expect(request.headers.Authorization).toBe('Bearer token');
+
+        const publicRequest = await api.interceptors.request.handlers![0]!.fulfilled!({
+            url: '/auth/login',
+            headers: {},
+        } as never);
+        expect(publicRequest.headers.Authorization).toBeUndefined();
     });
 
     it('refreshes a failed request once and coalesces refresh calls', async () => {
@@ -56,8 +71,9 @@ describe('api client', () => {
 
     it('returns useful error messages', () => {
         expect(getAPIErrorMessage(new Error('plain'), 'fallback')).toBe('plain');
+        expect(getAPIErrorMessage(new AxiosError('request failed'), 'fallback')).toBe('fallback');
         expect(getAPIErrorMessage({ response: { data: { error: { message: 'api error' } } } }, 'fallback')).toBe(
-            'fallback',
+            'api error',
         );
         expect(getAPIErrorMessage(null, 'fallback')).toBe('fallback');
         expect(getAPIErrorMessage('unknown', 'fallback')).toBe('fallback');
