@@ -27,7 +27,9 @@ func TestUploadAvatarSuccess(t *testing.T) {
 	}
 	MediaStore = store
 	mock := handlerMock(t)
+	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
 	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(updated))
 	request := avatarUploadRequest(t, mustDecodeBase64(onePixelPNG))
@@ -207,6 +209,8 @@ func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
 	}
 	MediaStore = store
 	mock := handlerMock(t)
+	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
 	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnError(errors.New("db error"))
 	request := avatarUploadRequest(t, mustDecodeBase64(onePixelPNG))
 	recorder := httptest.NewRecorder()
@@ -217,6 +221,42 @@ func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
 	// Object should have been cleaned up.
 	if _, err := store.Get(context.Background(), avatarStorageKey("user-1")); err == nil {
 		t.Fatal("object should have been deleted after db error")
+	}
+}
+
+func TestUploadAvatarDBErrorRestoresPreviousCustomAvatar(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	key := avatarStorageKey("user-1")
+	previous := []byte("previous-avatar")
+	if err := store.Put(context.Background(), key, bytes.NewReader(previous), int64(len(previous)), "image/jpeg"); err != nil {
+		t.Fatal(err)
+	}
+	mock := handlerMock(t)
+	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
+	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnError(errors.New("db error"))
+
+	recorder := httptest.NewRecorder()
+	UploadAvatar(recorder, avatarUploadRequest(t, mustDecodeBase64(onePixelPNG)))
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("db error status = %d", recorder.Code)
+	}
+	reader, err := store.Get(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	restored, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored, previous) {
+		t.Fatalf("restored avatar = %q, want %q", restored, previous)
 	}
 }
 
@@ -256,8 +296,11 @@ func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
 	// handler must accept it and normalize it down to a small thumbnail.
 	photo := largeAvatarJPEG(t, 3<<20)
 	RuntimeConfig.UploadMaxBytes = int64(len(photo)) + 1<<20
+	RuntimeConfig.UploadMaxPixels = 25_000_000
 	mock := handlerMock(t)
+	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
 	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(updated))
 

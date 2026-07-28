@@ -146,6 +146,66 @@ describe('useGroupMessages reconnect sequence', () => {
         await waitFor(() => expect(ids(result.current.messages)).toEqual(['early', 'later']));
     });
 
+    it('keeps reaction selection viewer-specific while applying live counts and removals', async () => {
+        const initial = message('reacted', '2026-01-01T00:00:00Z');
+        initial.reactions = [{ emoji: '👍', count: 1, reacted: false }];
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValue({ data: { items: [initial] } });
+
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.fireOpen());
+        await waitFor(() => expect(result.current.messages[0]?.reactions?.[0].count).toBe(1));
+
+        act(() =>
+            socket.fireMessage({
+                ...initial,
+                reactions: [{ emoji: '👍', count: 2, reacted: true }],
+                reaction_update: { user_id: 'user-2', emoji: '👍', active: true },
+            }),
+        );
+        expect(result.current.messages[0].reactions).toEqual([{ emoji: '👍', count: 2, reacted: false }]);
+
+        act(() =>
+            socket.fireMessage({
+                ...initial,
+                reactions: [{ emoji: '👍', count: 3, reacted: true }],
+                reaction_update: { user_id: 'user-1', emoji: '👍', active: true },
+            }),
+        );
+        expect(result.current.messages[0].reactions).toEqual([{ emoji: '👍', count: 3, reacted: true }]);
+
+        act(() =>
+            result.current.updateMessage({
+                ...initial,
+                reactions: [],
+            }),
+        );
+        expect(result.current.messages[0].reactions).toEqual([]);
+    });
+
+    it('applies a live resolved challenge update without losing the viewer action', async () => {
+        const challenge = {
+            ...message('challenge', '2026-01-01T00:00:00Z'),
+            kind: 'challenge' as const,
+            photo_id: 'photo-1',
+            challenge_status: 'available' as const,
+        };
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValue({ data: { items: [challenge] } });
+
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.fireOpen());
+        await waitFor(() => expect(result.current.messages[0]?.challenge_status).toBe('available'));
+
+        act(() => socket.fireMessage({ ...challenge, challenge_status: undefined, challenge_resolved: true }));
+        expect(result.current.messages[0].challenge_resolved).toBe(true);
+        expect(result.current.messages[0].challenge_status).toBe('available');
+    });
+
     it('ignores stale messages from a superseded reconnect generation', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
         // First generation catch-up returns a; the renewed generation returns c.

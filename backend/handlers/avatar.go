@@ -47,19 +47,45 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes)
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_avatar", err.Error())
 		return
 	}
 	key := avatarStorageKey(userID)
+	current, err := repository.GetUserByID(r.Context(), userID)
+	if err != nil || current == nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load current avatar")
+		return
+	}
+	var previous []byte
+	if IsCustomAvatar(current.Avatar) {
+		object, getErr := MediaStore.Get(r.Context(), key)
+		if getErr == nil {
+			previous, getErr = io.ReadAll(io.LimitReader(object, maxBytes+1))
+			closeErr := object.Close()
+			if getErr == nil {
+				getErr = closeErr
+			}
+		}
+		if getErr != nil && !errors.Is(getErr, storage.ErrObjectNotFound) {
+			writeError(w, http.StatusBadGateway, "storage_error", "Unable to preserve current avatar")
+			return
+		}
+	}
 	if err := MediaStore.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), "image/jpeg"); err != nil {
 		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store avatar")
 		return
 	}
 	if err := repository.SetUserAvatar(r.Context(), userID, customAvatarMarker); err != nil {
-		if deleteErr := MediaStore.Delete(r.Context(), key); deleteErr != nil {
-			slog.Error("failed to clean up avatar after database error", "user_id", userID, "storage_key", key, "delete_error", deleteErr)
+		var compensationErr error
+		if previous != nil {
+			compensationErr = MediaStore.Put(r.Context(), key, bytes.NewReader(previous), int64(len(previous)), "image/jpeg")
+		} else {
+			compensationErr = MediaStore.Delete(r.Context(), key)
+		}
+		if compensationErr != nil {
+			slog.Error("failed to restore avatar after database error", "user_id", userID, "storage_key", key, "compensation_error", compensationErr)
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save avatar")
 		return

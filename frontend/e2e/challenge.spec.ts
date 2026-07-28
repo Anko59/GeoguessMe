@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
-import { EXPECTED_LENS_ASSETS } from './cameraAssertions';
+import { expectNaturalCameraOrientation, EXPECTED_LENS_ASSETS } from './cameraAssertions';
 import {
     deterministicTestImage,
     installDeterministicCamera,
@@ -13,7 +13,6 @@ import {
     unsupportedFormatBytes,
 } from './helpers';
 import { LENS_OPTIONS } from '../src/components/camera/lenses/lensCatalog';
-
 interface Scenario {
     uploader: Page;
     guesser: Page;
@@ -77,6 +76,7 @@ test.describe('Challenge flow', () => {
             const { uploader, guesser } = scenario;
             await uploader.getByRole('button', { name: 'Camera' }).click();
             await expect(uploader.locator('.capture-button')).toBeVisible();
+            await expectNaturalCameraOrientation(uploader);
             await uploader.locator('.capture-button').click();
             await expect(uploader.locator('.preview-image')).toBeVisible();
 
@@ -126,7 +126,7 @@ test.describe('Challenge flow', () => {
             expect(guessResponse.status()).toBe(201);
             await expect(guesser.locator('.result-view')).toContainText('Challenge results');
 
-            await expect(exactChallenge).toContainText('Challenge sent');
+            await expect(exactChallenge).toContainText('Resolved challenge');
             await exactChallenge.click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
         } finally {

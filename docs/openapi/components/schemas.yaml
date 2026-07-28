@@ -94,6 +94,7 @@ Message:
       }
     challenge_resolved: { type: boolean, description: Whether any group member has answered the challenge }
     reactions: { type: array, items: { $ref: "#/MessageReaction" } }
+    reaction_update: { $ref: "#/MessageReactionUpdate" }
 
 MessageReaction:
   type: object
@@ -108,6 +109,15 @@ MessageReactionRequest:
   required: [emoji]
   properties:
     emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+
+MessageReactionUpdate:
+  type: object
+  description: WebSocket-only reaction mutation metadata used to preserve each recipient's viewer-specific state.
+  required: [user_id, emoji, active]
+  properties:
+    user_id: { type: string, format: uuid }
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    active: { type: boolean }
 
 MessagesPage:
   type: object

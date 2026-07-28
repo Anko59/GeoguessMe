@@ -74,7 +74,13 @@ export default function Chat({
     const handleMessagePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         const press = pressRef.current;
         if (!press || press.messageID !== event.currentTarget.dataset.messageId) return;
-        if (Math.abs(event.clientX - press.startX) > 28 || Math.abs(event.clientY - press.startY) > 28) {
+        const horizontal = Math.abs(event.clientX - press.startX);
+        const vertical = Math.abs(event.clientY - press.startY);
+        if (vertical > 20 && vertical > horizontal) {
+            clearPress();
+            return;
+        }
+        if (horizontal > 28 && horizontal > vertical) {
             setActionsMessageID(press.messageID);
             clearPress();
         }
@@ -92,6 +98,7 @@ export default function Chat({
                 ? await api.delete<Message>(`/group/message-reactions/${message.id}`, { data: { emoji } })
                 : await api.put<Message>(`/group/message-reactions/${message.id}`, { emoji });
             onMessageUpdated?.(response.data);
+            setActionsMessageID(null);
         } catch (requestError: unknown) {
             setReactionError(getAPIErrorMessage(requestError, 'Unable to save reaction'));
         } finally {

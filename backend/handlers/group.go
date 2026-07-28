@@ -295,7 +295,7 @@ func uploadGroupPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes)
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_photo", err.Error())
 		return

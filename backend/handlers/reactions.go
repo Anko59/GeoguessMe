@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"geoguessme/internal/auth"
+	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 )
 
@@ -87,7 +88,13 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if HubInstance != nil {
-		HubInstance.BroadcastUpdate(*updated)
+		broadcast := *updated
+		broadcast.ReactionUpdate = &models.ReactionUpdate{
+			UserID: userID,
+			Emoji:  req.Emoji,
+			Active: r.Method == http.MethodPut,
+		}
+		HubInstance.BroadcastUpdate(broadcast)
 	}
 	writeJSON(w, http.StatusOK, updated)
 }
