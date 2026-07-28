@@ -14,7 +14,7 @@
 
 .message-actions {
     margin-top: 0.3rem;
-    display: flex;
+    display: none;
     align-items: center;
     gap: 0.25rem;
     opacity: 0;
@@ -30,6 +30,7 @@
 .message-container.actions-visible .message-actions,
 .message-container:hover .message-actions,
 .message-container:focus-within .message-actions {
+    display: flex;
     opacity: 1;
     pointer-events: auto;
     visibility: visible;

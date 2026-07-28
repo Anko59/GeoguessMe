@@ -112,6 +112,42 @@ test.describe('Chat via WebSocket', () => {
         }
     });
 
+    test('hidden message actions do not reserve layout space', async ({ browser, contextOptions }) => {
+        const scenario = await createScenario(browser, contextOptions);
+        try {
+            const firstText = `first-${Date.now()}`;
+            const secondText = `second-${Date.now()}`;
+            for (const text of [firstText, secondText]) {
+                await scenario.owner.locator('#chat-message').fill(text);
+                await scenario.owner
+                    .locator('form.message-input-container')
+                    .getByRole('button', { name: 'Send' })
+                    .click();
+            }
+
+            const firstMessage = scenario.owner.locator('.message-container').filter({ hasText: firstText });
+            const secondMessage = scenario.owner.locator('.message-container').filter({ hasText: secondText });
+            await expect(firstMessage).toBeVisible();
+            await expect(secondMessage).toBeVisible();
+
+            const actions = firstMessage.locator('.message-actions');
+            await expect(actions).toBeHidden();
+            expect(await actions.boundingBox()).toBeNull();
+
+            const firstBox = await firstMessage.boundingBox();
+            const secondBox = await secondMessage.boundingBox();
+            expect(firstBox).not.toBeNull();
+            expect(secondBox).not.toBeNull();
+            expect(secondBox!.y - (firstBox!.y + firstBox!.height)).toBeLessThan(24);
+
+            await firstMessage.hover();
+            await expect(actions).toBeVisible();
+            expect(await actions.boundingBox()).not.toBeNull();
+        } finally {
+            await scenario.ownerContext.close();
+        }
+    });
+
     test('browser WebSocket recovery: disconnect, renewed ticket, cursor catch-up, overlapping live delivery, exact-once rendering', async ({
         browser,
         contextOptions,

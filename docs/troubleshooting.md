@@ -50,6 +50,25 @@ and `make migrate-status` to verify the restored schema.
 - Verify the `Origin` header is in `ALLOWED_ORIGINS`
 - Check that CORS preflight (OPTIONS) returns 200
 
+## Profile photo uploads
+
+**Symptom**: A profile photo upload returns `Authentication required`, or the
+page appears to do nothing.
+
+- Protected profile routes such as `/api/v1/auth/profile/avatar` still require
+  the bearer access token; only login, signup, verification, and password
+  recovery routes are public.
+- Upload through the shared API client so its request interceptor can restore a
+  session after a PWA reload. Do not set `Content-Type: multipart/form-data`
+  manually: the browser must add the multipart boundary.
+- The account settings page displays the server's structured error message in an
+  alert. Check the browser Network panel for the response status and the backend
+  logs with `make logs-backend` if storage fails.
+
+The authenticated browser regression is covered by the profile-photo scenario in
+`frontend/e2e/auth.spec.ts`; run it with
+`GEOGUESSME_E2E_SPEC=auth.spec.ts make test-e2e-pr`.
+
 ## WebSockets
 
 **Symptom**: WebSocket connection fails.
@@ -74,6 +93,30 @@ and `make migrate-status` to verify the restored schema.
 - HTTPS required (except localhost)
 - Check browser permissions
 - The app uses `navigator.geolocation.getCurrentPosition`
+
+## Recorded video playback
+
+Camera recordings and challenge media use browser-created `blob:` URLs before
+and during playback. The production gateway must allow `blob:` in `media-src`;
+allowing it only in `img-src` makes Chromium reject a valid WebM recording with
+“No videos with supported format and MIME type found”. The camera preview now
+reports a readable error if media playback still fails. Verify the complete path
+with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
+
+## Message actions
+
+Reply and emoji actions are intentionally revealed on hover, keyboard focus,
+hold, or horizontal swipe. Hidden actions use no layout space, so adjacent
+messages keep the normal chat gap. The browser regression is covered by the chat
+E2E suite.
+
+## Group photos in the groups list
+
+Group photos are private authenticated media. The group view and each card on
+`/groups` resolve them through the same cached photo hook; the list must not
+render the static group icon for a card. If a photo is unset or unavailable, the
+hook falls back to `/logo.png`. Verify upload followed by a fresh groups
+navigation with `GEOGUESSME_E2E_SPEC=groups.spec.ts make test-e2e-pr`.
 
 ## Migrations
 
@@ -100,6 +143,22 @@ and `make migrate-status` to verify the restored schema.
   conditions, or missing test data
 - The test stack uses `PHOTO_VIEW_WINDOW=1s` — if tests expect real-time timing,
   check assertions allow for clock skew
+
+## Docker disk exhaustion during tests
+
+**Symptom**: A local E2E run fails with `ENOSPC`, especially while writing a
+trace, screenshot, or other diagnostic artifact.
+
+- Check available space with `df -h /home` and inspect Docker usage with
+  `docker system df`
+- Remove only repository-generated artifacts and dangling BuildKit layers with
+  `make artifacts-clean build-cache-prune`
+- Rerun the focused Make target after cleanup; do not remove the named database
+  or object-storage volumes unless the test data itself is intentionally being
+  reset
+
+The full local run is not a valid product result when the host reports `ENOSPC`;
+record the infrastructure failure separately from application test failures.
 
 ## Rate limiting
 
