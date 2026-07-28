@@ -66,6 +66,15 @@ else
     fail "test script does not reference the fixture file"
 fi
 
+# -- migration count follows the committed migration set ---------------------
+expected_count_references=$(grep -c "EXPECTED_MIGRATIONS" "$SCRIPT")
+if [ "$expected_count_references" -ge 3 ] &&
+    grep -q 'MIGRATION_FILES=.*migrations/\*.sql' "$SCRIPT"; then
+    pass "migration count is derived and checked for concurrent and idempotent runs"
+else
+    fail "migration count must be derived from committed SQL files and used by both assertions"
+fi
+
 # -- script asserts on expected backfill labels --------------------------------
 for label in \
     "email backfill" \
