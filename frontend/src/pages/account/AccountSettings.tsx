@@ -38,9 +38,10 @@ export default function AccountSettings() {
         try {
             const formData = new FormData();
             formData.append('photo', file);
-            await api.post('/auth/profile/avatar', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            // Let XMLHttpRequest add the multipart boundary. Setting the
+            // content type manually omits that boundary in some browsers and
+            // makes the server reject an otherwise valid form.
+            await api.post('/auth/profile/avatar', formData);
             if (user) bustAvatarCache(user.id);
             setAvatar('custom');
             setAvatarVersion((value) => value + 1);

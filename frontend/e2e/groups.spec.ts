@@ -37,6 +37,32 @@ test.describe('Group operations', () => {
         }
     });
 
+    test('uploaded group photo appears in groups list', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            await owner.page.getByRole('button', { name: 'Open group settings' }).click();
+            const settings = owner.page.getByRole('dialog');
+            const png = Buffer.from(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+                'base64',
+            );
+            await settings.locator('input[type="file"]').setInputFiles({
+                name: 'group-photo.png',
+                mimeType: 'image/png',
+                buffer: png,
+            });
+            await expect(owner.page.locator('.header-logo')).toHaveAttribute('src', /^blob:/);
+            await settings.getByRole('button', { name: 'Close settings' }).click();
+
+            await owner.page.goto('/groups');
+            const card = owner.page.locator(`.group-card[data-group-id="${owner.groupID}"]`);
+            await expect(card).toBeVisible();
+            await expect(card.locator('.group-icon')).toHaveAttribute('src', /^blob:/);
+        } finally {
+            await owner.context.close();
+        }
+    });
+
     test('second user can join the group via code and see it', async ({ browser, contextOptions }) => {
         const owner = await createOwnerScenario(browser, contextOptions);
         const joinerContext = await newAuthContext(browser, contextOptions);

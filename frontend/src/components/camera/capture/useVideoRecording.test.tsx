@@ -9,6 +9,7 @@ class FakeMediaRecorder {
     ondataavailable: ((event: BlobEvent) => void) | null = null;
     onerror: ((event: Event) => void) | null = null;
     onstop: ((event: Event) => void) | null = null;
+    mimeType = 'video/webm;codecs=vp8,opus';
 
     constructor(stream: MediaStream, options: MediaRecorderOptions) {
         void stream;
@@ -51,5 +52,25 @@ describe('useVideoRecording', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
 
         expect(screen.getByText(/^video\/webm/)).toBeInTheDocument();
+    });
+
+    it('uses the container MIME emitted by the recorder', () => {
+        class RecorderWithContainerMIME extends FakeMediaRecorder {
+            override mimeType = 'video/mp4';
+
+            override stop() {
+                this.state = 'inactive';
+                this.ondataavailable?.({ data: new Blob(['clip'], { type: 'video/mp4' }) } as BlobEvent);
+                this.onstop?.(new Event('stop'));
+            }
+        }
+        vi.stubGlobal('MediaRecorder', RecorderWithContainerMIME);
+        vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:recorded-video'), revokeObjectURL: vi.fn() });
+        render(<Recorder />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+
+        expect(screen.getByText('video/mp4')).toBeInTheDocument();
     });
 });

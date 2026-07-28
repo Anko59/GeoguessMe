@@ -39,6 +39,7 @@ interface CameraViewProps {
     onFileSelected: (event: React.ChangeEvent<HTMLInputElement>) => void;
     onUpload: () => void;
     onRetake: () => void;
+    onCapturedVideoError: () => void;
 }
 
 export default function CameraView({
@@ -75,7 +76,9 @@ export default function CameraView({
     onFileSelected,
     onUpload,
     onRetake,
+    onCapturedVideoError,
 }: CameraViewProps) {
+    const mirrorLivePreview = facingMode === 'user';
     const filterPicker = (
         <FilterPicker
             selectedFilter={selectedFilter}
@@ -94,7 +97,7 @@ export default function CameraView({
                 autoPlay
                 playsInline
                 muted
-                className={`camera-video ${cameraReady && !capturedPhoto && !capturedVideo && !fileMode ? 'ready' : ''}`}
+                className={`camera-video${mirrorLivePreview ? ' mirrored' : ''}${cameraReady && !capturedPhoto && !capturedVideo && !fileMode ? ' ready' : ''}`}
             />
             <canvas ref={captureCanvasRef} className="camera-capture-canvas" aria-hidden="true" />
             <canvas ref={sourceCanvasRef} className="camera-source-canvas" aria-hidden="true" />
@@ -106,7 +109,11 @@ export default function CameraView({
             />
             {!capturedPhoto && !capturedVideo ? (
                 <div className="camera-view">
-                    <canvas ref={overlayCanvasRef} className="camera-filter-overlay" aria-hidden="true" />
+                    <canvas
+                        ref={overlayCanvasRef}
+                        className={`camera-filter-overlay${mirrorLivePreview ? ' mirrored' : ''}`}
+                        aria-hidden="true"
+                    />
                     <TextBannerOverlay banner={textBanner} />
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
@@ -169,7 +176,14 @@ export default function CameraView({
                             </div>
                         </>
                     ) : (
-                        <video src={capturedVideo ?? undefined} className="preview-image" controls playsInline />
+                        <video
+                            src={capturedVideo ?? undefined}
+                            className="preview-image"
+                            controls
+                            playsInline
+                            aria-label="Recorded video preview"
+                            onError={onCapturedVideoError}
+                        />
                     )}
                     <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
                 </div>

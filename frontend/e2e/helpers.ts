@@ -80,6 +80,15 @@ export async function installDeterministicCamera(context: BrowserContext): Promi
         canvasContext.font = '20px sans-serif';
         canvasContext.fillText('TEST', 120, 120);
         const stream = canvas.captureStream(30);
+        let frame = 0;
+        const renderFrame = () => {
+            canvasContext.fillStyle = '#4A90D9';
+            canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+            canvasContext.fillStyle = '#FFFFFF';
+            canvasContext.fillText(`TEST ${frame++}`, 120, 120);
+            requestAnimationFrame(renderFrame);
+        };
+        requestAnimationFrame(renderFrame);
         const getUserMedia = async () => stream;
         if (!navigator.mediaDevices) {
             Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });

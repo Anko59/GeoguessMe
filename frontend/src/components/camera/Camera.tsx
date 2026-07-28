@@ -12,6 +12,7 @@ import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner
 import { useCameraDevice } from './useCameraDevice';
 import { useHoldToRecord } from './capture/useHoldToRecord';
 import { useVideoCapture } from './capture/useVideoCapture';
+import { useFaceTrackerPreload } from './lenses/useFaceTrackerPreload';
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -46,9 +47,14 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
     const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
     const recordingError = useCallback((message: string) => setError(message), []);
+    const capturedVideoError = useCallback(
+        () => setError('The recorded video could not be played. Please record a new clip and try again.'),
+        [],
+    );
     const { recordedVideo, recording, startHeldRecording, stopRecording, discardRecording } = useVideoCapture({
         onError: recordingError,
     });
+    useFaceTrackerPreload();
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
         faceDetectedRef.current = detected;
@@ -488,6 +494,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onFileSelected={handleFileSelected}
             onUpload={() => void handleUpload()}
             onRetake={retake}
+            onCapturedVideoError={capturedVideoError}
         />
     );
 }

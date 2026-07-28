@@ -1,114 +1,200 @@
 # GeoGuessMe
 
-GeoGuessMe is a real-time multiplayer photo-location guessing game. Group
-members share short-lived private photo challenges, view each photo during a
-server-controlled window, and submit one guess.
+<div align="center">
+  <img src="frontend/public/logo.png" alt="GeoGuessMe logo" width="128" />
+  <h2>Guess the place. Share the story. 🌍</h2>
+  <p>Turn everyday photos into quick, friendly geography challenges.</p>
+  <p>
+    <a href="https://geoguessme.com"><strong>🎮 Play GeoGuessMe</strong></a>
+    ·
+    <a href="docs/gameplay.md">📖 How the game works</a>
+    ·
+    <a href="CONTRIBUTING.md">🤝 Contribute</a>
+  </p>
+</div>
 
-## Supported workflow
+<p align="center">
+  <a href="https://github.com/Anko59/GeGuessMe/actions/workflows/ci.yml?query=branch%3Adev"><img src="https://github.com/Anko59/GeGuessMe/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1d9bf0.svg" alt="MIT license" /></a>
+  <a href="docs/testing.md"><img src="https://img.shields.io/badge/tests-Dockerized-2ea44f.svg" alt="Dockerized tests" /></a>
+</p>
 
-The only host prerequisites are Git, Make, Docker, and Docker Compose. Go, Node,
-npm, Playwright, Python, linters, formatters, and migration tools run only in
-the pinned Docker tool containers.
+<p align="center">
+  <img src="docs/assets/geoguessme-home.png" alt="GeoGuessMe welcome screen" width="900" />
+</p>
 
-```text
+## 🧭 Welcome to GeoGuessMe
+
+GeoGuessMe is a multiplayer location game for the moments that deserve a story.
+Create a private group, send a photo or video challenge, and let your friends
+guess where it was taken. Every guess becomes part of the group’s leaderboard.
+
+The app is a responsive, installable web app: open
+**[geoguessme.com](https://geoguessme.com)** in a browser, or add it to your
+phone’s home screen for a more app-like experience. No native install is
+required.
+
+## 🎥 See it in action
+
+<p align="center">
+  <video controls muted loop playsinline poster="docs/assets/geoguessme-home.png" width="900">
+    <source src="docs/assets/geoguessme-demo.webm" type="video/webm" />
+    <a href="docs/assets/geoguessme-demo.webm">▶️ Watch the GeoGuessMe demo</a>
+  </video>
+</p>
+
+The screenshots and walkthrough above are captured from the running app. The
+illustrations below are part of GeoGuessMe’s own visual language.
+
+<p align="center">
+  <img src="frontend/public/welcome_banner.png" alt="Two players sharing a map challenge" width="47%" />
+  <img src="frontend/public/challenge_banner.png" alt="Two location pins meeting over a map" width="47%" />
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/geoguessme-signup.png" alt="GeoGuessMe account creation screen" /></td>
+    <td width="50%"><strong>Ready for your group?</strong><br /><br />Create an account, invite friends with a private group code, and start sending places worth guessing.</td>
+  </tr>
+</table>
+
+## 🎮 How a round works
+
+1. **Create or join a group.** Share the group code or invite link with your
+   friends.
+2. **Capture a moment.** Send a photo or a short video from the camera, with
+   optional face-tracking lenses and banners.
+3. **Accept the challenge.** Each member gets a server-controlled viewing window
+   for the media.
+4. **Drop a pin.** Place one guess on the map before the challenge expires.
+5. **Compare the results.** See the distance, score, actual location, and the
+   group leaderboard when results are available.
+
+## ✨ What you can do
+
+- **Challenge your people** with private, short-lived photo and video prompts.
+- **Keep the conversation moving** with messenger-style hidden message actions,
+  emoji reactions, and replies.
+- **Make groups feel like yours** with a group photo and independent
+  notification settings for every group.
+- **Have fun with the camera** using on-device face tracking, playful lenses,
+  editable text banners, and press-and-hold video capture.
+- **Play fairly** with server-timed viewing windows, one guess per challenge,
+  distance-based scoring, and resolved challenge states.
+- **Stay in the loop** with installable PWA support and optional Web Push
+  notifications.
+
+<details>
+<summary><strong>🔐 Privacy and retention</strong></summary>
+
+Camera frames and selected media stay in the browser until you choose to send
+them. Challenge media is stored privately, is available only to authorized group
+members during the relevant viewing window, and is removed according to the
+configured retention policy. See
+[Security and privacy](docs/security-and-privacy.md) and
+[Gameplay](docs/gameplay.md) for the full contract.
+
+</details>
+
+## 🛠️ Developer quick start
+
+The supported host prerequisites are **Git, Make, Docker, and Docker Compose**.
+Go, Node, npm, Playwright, linters, formatters, and migration tools run inside
+the repository’s pinned Docker containers.
+
+<details open>
+<summary><strong>🚀 Start the local app</strong></summary>
+
+```bash
 make bootstrap
 make dev
 ```
 
-make bootstrap builds or pulls the pinned tool images, populates named
-dependency caches from the lockfiles, installs the tracked hooks, and runs a
-tool self-test. make dev starts PostgreSQL, MinIO, Mailpit, the backend, and the
-Vite development server. It refreshes the frontend's anonymous dependency volume
-after rebuilding while preserving named database and media volumes.
+Open [http://localhost:5173](http://localhost:5173). The local stack includes
+the Vite frontend, Go backend, PostgreSQL, MinIO-compatible media storage, and
+Mailpit. Use `make status`, `make logs`, and `make down` to manage it.
 
-## Canonical commands
+</details>
 
-| Command                               | Purpose                                                                          |
-| ------------------------------------- | -------------------------------------------------------------------------------- |
-| make bootstrap                        | Prepare the Docker-only toolchain and hooks                                      |
-| make bootstrap-integration            | Prepare the focused backend integration toolchain                                |
-| make bootstrap-e2e                    | Prepare the focused browser toolchain                                            |
-| make dev                              | Start the development stack                                                      |
-| make format / make format-check       | Format or check tracked files                                                    |
-| make preflight                        | Fast local/PR lint, contract, audit, type, and unit gate                         |
-| make quality                          | Run all quality gates (structure, lint, audit, unit, race, coverage, build)      |
-| make verify                           | Run the complete release gate (quality + live-stack + rehearsals + load)         |
-| make test-unit / make test-race       | Run unit or race tests                                                           |
-| make test-integration / make test-e2e | Run isolated live-stack suites                                                   |
-| make build-images                     | Build production images with normal Docker layer caching                         |
-| make clean-build                      | Build production images from scratch without layer cache                         |
-| make cache-status                     | Report project-only Docker resources (read-only)                                 |
-| make prune-report / make prune        | Preview or execute project-scoped Docker prune (CONFIRM=prune)                   |
-| make disk-cleanup-report              | Preview project disk artifact cleanup (dry-run, read-only)                       |
-| make disk-cleanup                     | Clean project disk artifacts (requires CONFIRM=disk-cleanup)                     |
-| make tools-clean                      | Remove tool caches and containers                                                |
-| make artifacts-clean                  | Remove workspace build/coverage/report artifacts (Dockerized, cache-safe)        |
-| make build-cache-prune                | Remove dangling build cache to prevent unbounded growth                          |
-| make compose-validate                 | Validate every Compose file                                                      |
-| make container-verify                 | Verify image hardening and health checks                                         |
-| make prod-container-verify            | Full production-container verification (build, harden, compose, smoke, teardown) |
-| make migration-test                   | Concurrent, idempotent, and legacy-fixture migration tests                       |
-| make backup-rehearsal                 | Disposable backup/restore rehearsal with continuity evidence                     |
-| make restart-rehearsal                | Stateful restart rehearsal (schema, data, media continuity)                      |
-| make reconnect-rehearsal              | WebSocket disconnect/reconnect and exact-once evidence                           |
-| make load-test                        | Disposable load test (k6, 5 VUs, 30s by default)                                 |
-| make smoke / make smoke-rehearsal     | Smoke test against a staging or disposable stack                                 |
-| make hosted-config                    | Validate isolated dev/production hosted topology                                 |
-| make terraform-validate / plan        | Validate or plan Hetzner/Cloudflare infrastructure                               |
-| make hosted-contract-test             | Check deployment, backup, locking, proxy, and rollback contracts                 |
+<details>
+<summary><strong>✅ Run the checks</strong></summary>
 
-Pull requests target `dev`. Production release PRs target `main` from a
-short-lived repository `release/*` branch whose Git tree must exactly equal the
-successfully deployed `dev` tree. This avoids squash-history conflicts without
-rewriting either protected branch. The protected branches accept verified squash
-commits. PR CI classifies changed paths, runs the fast gate, and selects backend
-integration or Chromium E2E. After merge, the exact `dev` revision runs the
-complete gate once before deploy. Production promotes those signed image digests
-without rebuilding them.
+Use the smallest relevant gate while iterating, then run the full fast gate
+before opening a pull request:
 
-Run make help for the full target list. Use make build-images for normal
-development; reserve make clean-build for reproducible CI or cache-invalidation
-scenarios. Hooks use make pre-commit and the fast make pre-push gate; they fail
-when Docker is unavailable and cannot be bypassed.
+```bash
+make format-check
+make test-unit
+make preflight
+```
 
-## Production platform
+Useful focused targets include `make test-backend`, `make test-frontend`,
+`make test-integration`, `make test-e2e`, and `make lint-docs`. The complete
+release gate is `make verify`; it is run on the exact merged `dev` revision
+before development images are published.
 
-The repository includes a one-host Hetzner deployment for up to roughly 100
-initial users. Dev and production are separate Compose projects with separate
-PostgreSQL volumes, encrypted secrets, R2 buckets, ports, limits, and release
-metadata. Cloudflare Tunnel provides outbound-only ingress; dev uses Access
-email OTP, while production is public.
+</details>
 
-Local verification still cannot prove live R2, Cloudflare Access, or Brevo
-delivery. Follow the hosted deployment runbook and complete dev acceptance plus
-a real backup restore before declaring production ready. The shared host is a
-single failure domain and deployments may interrupt service for up to two
-minutes; no autoscaling or zero-downtime claim is made.
+<details>
+<summary><strong>🧱 Understand the stack</strong></summary>
 
-## Architecture
+| Layer    | Implementation                                                                        |
+| -------- | ------------------------------------------------------------------------------------- |
+| Web app  | React, TypeScript, Vite, responsive CSS, and PWA assets                               |
+| Camera   | Browser media APIs, MediaPipe Face Landmarker, and Three.js lenses                    |
+| API      | Go HTTP and WebSocket services with embedded ordered SQL migrations                   |
+| Data     | PostgreSQL for accounts, groups, chat, challenges, guesses, and sessions              |
+| Media    | Private S3-compatible storage; MinIO locally and Cloudflare R2 in hosted environments |
+| Delivery | Caddy, Docker Compose, Cloudflare Tunnel, and immutable signed images                 |
 
-- React, TypeScript, and Vite frontend served by Caddy.
-- On-device MediaPipe/Three.js camera composer with 24 lenses, full-face
-  accessories, exaggerated face deformations, editable text banners, and
-  press-and-hold video capture.
-- Go HTTP/WebSocket API with embedded ordered SQL migrations.
-- PostgreSQL for accounts, groups, messages, challenges, and sessions.
-- Private S3-compatible media storage; MinIO is used by development and tests.
-- Authenticated SMTP; Mailpit is used by development and tests.
+The main code lives in [`frontend/`](frontend/), [`backend/`](backend/),
+[`deployment/`](deployment/), and [`docs/`](docs/). The
+[architecture guide](docs/architecture.md) explains trust boundaries and request
+flows.
 
-The test stack computes one public URL from its selected web port and passes it
-to the backend, browser runner, WebSocket origin checks, and email links. The
-Mailpit host port is passed independently with MAILPIT_BASE_URL.
+</details>
 
-## Deployment
+<details>
+<summary><strong>🌿 Branches, pull requests, and releases</strong></summary>
 
-Production uses immutable signed backend and web image digests, a one-shot
-migration service, non-root read-only backend execution, local persistent
-PostgreSQL, private Cloudflare R2 media, and Brevo SMTP. Start with the
-[hosted runbook](docs/runbooks/hosted-deployment.md), deployment guide, and
-operations guide.
+- Start feature branches from `dev` and target pull requests to `dev`.
+- Run `make hooks-install` and `make hooks-check`; never bypass the hooks.
+- Add regression coverage for every behavior change and keep the working tree
+  clean at handoff.
+- Production releases use a short-lived repository `release/*` branch based on
+  `main`. Its tree must exactly match the successfully deployed `dev` tree.
+- Merges publish signed, immutable development images first. Production then
+  promotes those exact image digests without rebuilding them.
 
-## Documentation
+See [Contributing](CONTRIBUTING.md), [Testing](docs/testing.md), and the
+[hosted deployment runbook](docs/runbooks/hosted-deployment.md) before working
+on CI or infrastructure.
 
-Start with the documentation index, testing guide, deployment guide, and
-contributing guide. The machine-readable API contract is docs/openapi.yaml.
+</details>
+
+## 📚 Find your way around
+
+| If you want to…             | Start here                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| Play the game               | [geoguessme.com](https://geoguessme.com)                                      |
+| Learn the rules             | [Gameplay](docs/gameplay.md)                                                  |
+| Run it locally              | [Local development](docs/local-development.md)                                |
+| Understand the system       | [Architecture](docs/architecture.md)                                          |
+| Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)        |
+| Test a change               | [Testing guide](docs/testing.md)                                              |
+| Deploy or operate it        | [Deployment guide](deployment/README.md) and [Operations](docs/operations.md) |
+| Review privacy and security | [Security and privacy](docs/security-and-privacy.md)                          |
+
+The complete documentation map is in [`docs/index.md`](docs/index.md). Run
+`make help` to see every supported Dockerized workflow.
+
+## 🤝 Contributing
+
+Bug reports, ideas, documentation improvements, and code contributions are
+welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. For a security
+issue, follow the private reporting instructions in [`SECURITY.md`](SECURITY.md)
+instead of opening a public issue.
+
+## 📄 License
+
+GeoGuessMe is released under the [MIT License](LICENSE).

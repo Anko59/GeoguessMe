@@ -44,6 +44,7 @@ export function useVideoRecording(onError: (message: string) => void) {
             const chunks: BlobPart[] = [];
             let bytes = 0;
             let tooLarge = false;
+            let emittedMIMEType = '';
             let recorder: MediaRecorder;
             try {
                 recorder = new MediaRecorder(stream, { mimeType });
@@ -54,6 +55,7 @@ export function useVideoRecording(onError: (message: string) => void) {
             recorderRef.current = recorder;
             recorder.ondataavailable = (event) => {
                 if (!event.data.size) return;
+                if (!emittedMIMEType && event.data.type) emittedMIMEType = event.data.type;
                 bytes += event.data.size;
                 if (bytes > MAX_VIDEO_BYTES) {
                     tooLarge = true;
@@ -70,7 +72,8 @@ export function useVideoRecording(onError: (message: string) => void) {
                     onError('That video is too large. Record a shorter clip (maximum 10 MiB).');
                     return;
                 }
-                const blob = new Blob(chunks, { type: mimeType });
+                const outputMIMEType = emittedMIMEType || recorder.mimeType || mimeType;
+                const blob = new Blob(chunks, { type: outputMIMEType });
                 if (!blob.size) {
                     onError('No video was recorded. Please try again.');
                     return;
@@ -80,7 +83,10 @@ export function useVideoRecording(onError: (message: string) => void) {
                 setRecordedVideo({ blob, url });
                 onComplete();
             };
-            recorder.start(1000);
+            // Keep the complete container in one final dataavailable event. A
+            // one-second timeslice can leave very short clips without the
+            // initialization metadata needed by browser playback.
+            recorder.start();
             setRecording(true);
             return true;
         },

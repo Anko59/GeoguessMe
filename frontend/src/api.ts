@@ -15,6 +15,20 @@ export const api = axios.create({
     withCredentials: true,
 });
 
+const publicAuthPaths = new Set([
+    '/auth/signup',
+    '/auth/login',
+    '/auth/verify',
+    '/auth/password/forgot',
+    '/auth/password/reset',
+]);
+
+function isPublicAuthRequest(url: string | undefined): boolean {
+    if (!url) return false;
+    const path = url.split('?', 1)[0];
+    return publicAuthPaths.has(path);
+}
+
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
         refreshPromise = axios
@@ -41,8 +55,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     const isSameOriginAPI = !config.url?.startsWith('http');
-    const isAuthEndpoint = config.url?.startsWith('/auth/') ?? false;
-    if (isSameOriginAPI && !isAuthEndpoint) {
+    if (isSameOriginAPI && !isPublicAuthRequest(config.url)) {
         // Cached PWA screens can render before the memory-only access token is
         // restored. Hold protected requests behind the existing single-flight
         // refresh so their first attempt has the token and error handling sees
@@ -72,8 +85,13 @@ api.interceptors.response.use(
 
 export const getAPIErrorMessage = (error: unknown, fallback: string): string => {
     if (error instanceof AxiosError) {
+        const response = (error as { response?: { data?: APIErrorBody } }).response;
         // Prefer a server-provided message; never leak Axios internal strings.
-        return error.response?.data?.error?.message ?? fallback;
+        return response?.data?.error?.message ?? fallback;
+    }
+    if (typeof error === 'object' && error !== null) {
+        const message = (error as { response?: { data?: APIErrorBody } }).response?.data?.error?.message;
+        if (message) return message;
     }
     return error instanceof Error ? error.message : fallback;
 };
