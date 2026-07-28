@@ -3,7 +3,25 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
 import Icon from '../../components/ui/Icon';
+import { useGroupPhotoUrl } from './groupPhotoCache';
 import './GroupsList.css';
+
+function GroupCard({ group }: { group: Group }) {
+    const groupPhotoURL = useGroupPhotoUrl(group.id);
+
+    return (
+        <Link key={group.id} to={`/group/${group.id}`} className="group-card" data-group-id={group.id}>
+            <div className="group-card-content">
+                <img src={groupPhotoURL} alt="" className="group-icon" />
+                <div className="group-info">
+                    <h3>{group.name}</h3>
+                    <span className="group-code">#{group.code}</span>
+                </div>
+            </div>
+            <Icon name="chevron-right" className="group-arrow" />
+        </Link>
+    );
+}
 
 export default function GroupsList() {
     const [groups, setGroups] = useState<Group[]>([]);
@@ -104,16 +122,7 @@ export default function GroupsList() {
             ) : (
                 <div className="groups-grid">
                     {groups.map((group) => (
-                        <Link key={group.id} to={`/group/${group.id}`} className="group-card">
-                            <div className="group-card-content">
-                                <img src="/friends_group_icon.png" alt="" className="group-icon" />
-                                <div className="group-info">
-                                    <h3>{group.name}</h3>
-                                    <span className="group-code">#{group.code}</span>
-                                </div>
-                            </div>
-                            <Icon name="chevron-right" className="group-arrow" />
-                        </Link>
+                        <GroupCard key={group.id} group={group} />
                     ))}
                 </div>
             )}

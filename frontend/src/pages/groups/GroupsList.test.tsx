@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GroupsList from './GroupsList';
@@ -14,13 +14,15 @@ vi.mock('../../api', () => ({
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:group-photo');
 });
 
 describe('GroupsList', () => {
     it('renders empty and populated groups, including a retry', async () => {
-        mocks.get.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValueOnce({
-            data: [{ id: 'group-1', name: 'Friends', code: 'ABC123' }],
-        });
+        mocks.get
+            .mockRejectedValueOnce(new Error('temporary failure'))
+            .mockResolvedValueOnce({ data: [{ id: 'group-1', name: 'Friends', code: 'ABC123' }] })
+            .mockResolvedValue({ data: [] });
         render(
             <MemoryRouter>
                 <GroupsList />
@@ -30,6 +32,10 @@ describe('GroupsList', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByText('Friends')).toBeInTheDocument();
         expect(screen.getByText('#ABC123')).toBeInTheDocument();
+        await waitFor(() => {
+            const card = screen.getByRole('link', { name: /Friends/ });
+            expect(card.querySelector('.group-icon')).toHaveAttribute('src', 'blob:group-photo');
+        });
 
         mocks.get.mockResolvedValueOnce({ data: [] });
         render(

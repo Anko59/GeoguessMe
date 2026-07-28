@@ -110,6 +110,14 @@ hold, or horizontal swipe. Hidden actions use no layout space, so adjacent
 messages keep the normal chat gap. The browser regression is covered by the chat
 E2E suite.
 
+## Group photos in the groups list
+
+Group photos are private authenticated media. The group view and each card on
+`/groups` resolve them through the same cached photo hook; the list must not
+render the static group icon for a card. If a photo is unset or unavailable, the
+hook falls back to `/logo.png`. Verify upload followed by a fresh groups
+navigation with `GEOGUESSME_E2E_SPEC=groups.spec.ts make test-e2e-pr`.
+
 ## Migrations
 
 **Symptom**: `make migrate-up` fails.
