@@ -77,6 +77,22 @@ Message:
         enum: [available, accepted, guessed, results, expired],
         description: Viewer-specific action state for challenge messages,
       }
+    challenge_resolved: { type: boolean, description: Whether any group member has answered the challenge }
+    reactions: { type: array, items: { $ref: "#/MessageReaction" } }
+
+MessageReaction:
+  type: object
+  required: [emoji, count, reacted]
+  properties:
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    count: { type: integer, minimum: 1 }
+    reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
+
+MessageReactionRequest:
+  type: object
+  required: [emoji]
+  properties:
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
 
 MessagesPage:
   type: object

@@ -128,6 +128,7 @@ func main() {
 	mux.Handle("/api/v1/group/members", protected(handlers.GetGroupMembers))
 	mux.Handle("/api/v1/group/leaderboard", protected(handlers.GetLeaderboard))
 	mux.Handle("/api/v1/group/messages", protected(handlers.GetGroupMessages))
+	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(handlers.SetMessageReaction))
 	mux.Handle("/api/v1/group/messages/media", protected(handlers.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(handlers.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto))

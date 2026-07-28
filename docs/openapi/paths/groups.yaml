@@ -129,6 +129,46 @@ messages:
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MessagesPage" } } }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+messageReaction:
+  put:
+    operationId: setMessageReaction
+    summary: Add an emoji reaction to a group message.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas.yaml#/MessageReactionRequest" }
+    responses:
+      "200":
+        description: Updated message.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Message" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  delete:
+    operationId: removeMessageReaction
+    summary: Remove the authenticated user's emoji reaction.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas.yaml#/MessageReactionRequest" }
+    responses:
+      "200":
+        description: Updated message.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Message" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 messageMediaUpload:
   post:
     operationId: uploadGroupMessageMedia

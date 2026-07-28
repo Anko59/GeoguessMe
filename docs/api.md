@@ -26,6 +26,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
   viewer's challenge view and guess state.
+- Messages may include aggregate `reactions`; each entry contains an emoji,
+  count, and `reacted` flag for the authenticated viewer.
 
 ## Endpoint overview
 
@@ -56,6 +58,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 | GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                   |
 | GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Calendar week/month or all-time leaderboard (member only)    |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                           |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add an emoji reaction                                        |
+| DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                     |
 | POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                  |
 | GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`) |
 
