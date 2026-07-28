@@ -144,6 +144,22 @@ navigation with `GEOGUESSME_E2E_SPEC=groups.spec.ts make test-e2e-pr`.
 - The test stack uses `PHOTO_VIEW_WINDOW=1s` — if tests expect real-time timing,
   check assertions allow for clock skew
 
+## Docker disk exhaustion during tests
+
+**Symptom**: A local E2E run fails with `ENOSPC`, especially while writing a
+trace, screenshot, or other diagnostic artifact.
+
+- Check available space with `df -h /home` and inspect Docker usage with
+  `docker system df`
+- Remove only repository-generated artifacts and dangling BuildKit layers with
+  `make artifacts-clean build-cache-prune`
+- Rerun the focused Make target after cleanup; do not remove the named database
+  or object-storage volumes unless the test data itself is intentionally being
+  reset
+
+The full local run is not a valid product result when the host reports `ENOSPC`;
+record the infrastructure failure separately from application test failures.
+
 ## Rate limiting
 
 **Symptom**: Requests return 429 with `Retry-After` header.

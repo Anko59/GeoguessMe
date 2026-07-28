@@ -32,16 +32,22 @@ application. Camera frames and selected files remain in the browser; the
 composited JPEG is the only image uploaded, and only after the user presses
 Send. The same lens picker works for the live front-facing camera and JPEG, PNG,
 or WebP files. The live camera preview and its lens overlay use the camera's
-natural orientation, so the scene on screen matches the photo that will be
-uploaded. Production's Content Security Policy permits WebAssembly compilation
-with `wasm-unsafe-eval`; it does not permit general JavaScript string
-evaluation.
+natural orientation for the environment-facing camera. The user-facing live
+preview and its lens overlay are mirrored for natural selfie framing, while the
+captured canvas and uploaded media are never mirrored. Production's Content
+Security Policy permits WebAssembly compilation with `wasm-unsafe-eval`; it does
+not permit general JavaScript string evaluation.
 
 WebGL is required for 3D rendering. MediaPipe attempts GPU inference first and
 falls back to CPU inference when necessary. If tracking or rendering is
 unavailable, the camera and original-file upload paths remain usable. Camera and
 location permissions are still required to send a photo, and camera access
-requires HTTPS outside local development.
+requires HTTPS outside local development. After the application becomes idle on
+a visible page, it imports the face-tracking module and warms one landmarker in
+the background. The first lens activation reuses that warmed instance, while a
+failed or interrupted preload is retried by normal camera startup; this keeps
+the startup path responsive without making lens support a prerequisite for using
+the rest of the application.
 
 The pinned Face Landmarker model and provenance live under
 `frontend/public/vendor/mediapipe/`. Lens asset provenance lives under

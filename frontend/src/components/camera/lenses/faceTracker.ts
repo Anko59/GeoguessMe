@@ -13,6 +13,8 @@ import type { FaceFrame } from './facePose';
 
 const MODEL_PATH = '/vendor/mediapipe/face_landmarker.task';
 
+let preloadedLandmarker: Promise<FaceLandmarker> | null = null;
+
 function toFrame(result: FaceLandmarkerResult): FaceFrame | null {
     const landmarks = result.faceLandmarks[0];
     if (!landmarks) return null;
@@ -34,31 +36,9 @@ export class FaceTracker {
     }
 
     static async create(): Promise<FaceTracker> {
-        const simdSupported = await FilesetResolver.isSimdSupported();
-        const fileset = simdSupported
-            ? { wasmLoaderPath: simdLoaderPath, wasmBinaryPath: simdBinaryPath }
-            : { wasmLoaderPath: noSimdLoaderPath, wasmBinaryPath: noSimdBinaryPath };
-        const options = {
-            baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' as const },
-            runningMode: 'VIDEO' as const,
-            numFaces: 1,
-            minFaceDetectionConfidence: 0.42,
-            minFacePresenceConfidence: 0.42,
-            minTrackingConfidence: 0.48,
-            outputFaceBlendshapes: true,
-            outputFacialTransformationMatrixes: true,
-        };
-
-        try {
-            return new FaceTracker(await FaceLandmarker.createFromOptions(fileset, options));
-        } catch {
-            return new FaceTracker(
-                await FaceLandmarker.createFromOptions(fileset, {
-                    ...options,
-                    baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'CPU' },
-                }),
-            );
-        }
+        const warmedLandmarker = preloadedLandmarker;
+        preloadedLandmarker = null;
+        return new FaceTracker(await (warmedLandmarker ?? createLandmarker()));
     }
 
     detectVideo(video: HTMLVideoElement, timestamp: number): FaceFrame | null {
@@ -76,4 +56,41 @@ export class FaceTracker {
     close(): void {
         this.landmarker.close();
     }
+}
+
+async function createLandmarker(): Promise<FaceLandmarker> {
+    const simdSupported = await FilesetResolver.isSimdSupported();
+    const fileset = simdSupported
+        ? { wasmLoaderPath: simdLoaderPath, wasmBinaryPath: simdBinaryPath }
+        : { wasmLoaderPath: noSimdLoaderPath, wasmBinaryPath: noSimdBinaryPath };
+    const options = {
+        baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' as const },
+        runningMode: 'VIDEO' as const,
+        numFaces: 1,
+        minFaceDetectionConfidence: 0.42,
+        minFacePresenceConfidence: 0.42,
+        minTrackingConfidence: 0.48,
+        outputFaceBlendshapes: true,
+        outputFacialTransformationMatrixes: true,
+    };
+
+    try {
+        return await FaceLandmarker.createFromOptions(fileset, options);
+    } catch {
+        return FaceLandmarker.createFromOptions(fileset, {
+            ...options,
+            baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'CPU' },
+        });
+    }
+}
+
+export function preloadFaceTracker(): Promise<void> {
+    if (!preloadedLandmarker) {
+        const preload = createLandmarker();
+        preloadedLandmarker = preload;
+        void preload.catch(() => {
+            if (preloadedLandmarker === preload) preloadedLandmarker = null;
+        });
+    }
+    return preloadedLandmarker.then(() => undefined);
 }
