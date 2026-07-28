@@ -100,6 +100,28 @@ describe('Chat', () => {
         );
     });
 
+    it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {
+        render(
+            <Chat
+                messages={[message()]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+                connectionStatus="connected"
+            />,
+        );
+        const messageElement = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
+        const reply = screen.getByRole('button', { name: 'Reply to bob' });
+
+        fireEvent.pointerDown(messageElement, { isPrimary: true, clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(messageElement, { isPrimary: true, clientX: 12, clientY: 45 });
+        expect(reply).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.pointerDown(messageElement, { isPrimary: true, clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(messageElement, { isPrimary: true, clientX: 45, clientY: 12 });
+        expect(reply).toHaveAttribute('tabindex', '0');
+    });
+
     it('uploads a selected photo through the authenticated chat-media endpoint', async () => {
         const send = vi.fn();
         const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} });

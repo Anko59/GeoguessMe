@@ -30,6 +30,7 @@ export default function GroupView() {
         wsRef,
         error: messagesError,
         updateChallengeStatus,
+        updateMessage,
     } = useGroupMessages(id, user?.id);
     const groupPhotoURL = useGroupPhotoUrl(id ?? '', groupPhotoRefreshKey);
 
@@ -103,6 +104,7 @@ export default function GroupView() {
                             groupID={id}
                             connectionStatus={connectionStatus}
                             onChallengeMessage={setGameMessage}
+                            onMessageUpdated={updateMessage}
                         />
                     </div>
                 )}

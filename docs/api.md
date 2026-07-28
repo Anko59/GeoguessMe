@@ -28,6 +28,10 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   viewer's challenge view and guess state.
 - Messages may include aggregate `reactions`; each entry contains an emoji,
   count, and `reacted` flag for the authenticated viewer.
+- Live reaction updates include `reaction_update` metadata so each WebSocket
+  recipient applies the shared count without inheriting another member's
+  viewer-specific `reacted` state. Guess submission also publishes a
+  `challenge_resolved` update to open conversations.
 
 ## Endpoint overview
 

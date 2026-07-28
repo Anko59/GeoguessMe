@@ -174,7 +174,8 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 
 func enrichMessageReactions(ctx context.Context, messages []models.Message, viewerID string) error {
 	messageIDs := make([]string, 0, len(messages))
-	for _, message := range messages {
+	for index, message := range messages {
+		messages[index].Reactions = []models.Reaction{}
 		messageIDs = append(messageIDs, message.ID)
 	}
 	if len(messageIDs) == 0 {
@@ -212,6 +213,27 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 
 func GetMessageForViewer(ctx context.Context, messageID, viewerID string) (*models.Message, error) {
 	rows, err := database.DB.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.id = $1`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := scanMessageRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	if err := enrichMessageReactions(ctx, messages, viewerID); err != nil {
+		return nil, err
+	}
+	return &messages[0], nil
+}
+
+// GetChallengeMessageForViewer returns the persisted chat message associated
+// with a challenge. Guess submission uses it to publish a live resolved-state
+// update without creating another message or push notification.
+func GetChallengeMessageForViewer(ctx context.Context, photoID, viewerID string) (*models.Message, error) {
+	rows, err := database.DB.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.photo_id = $1 AND m.kind = 'challenge'`, photoID)
 	if err != nil {
 		return nil, err
 	}
