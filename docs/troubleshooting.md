@@ -103,6 +103,13 @@ allowing it only in `img-src` makes Chromium reject a valid WebM recording with
 reports a readable error if media playback still fails. Verify the complete path
 with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
 
+## Message actions
+
+Reply and emoji actions are intentionally revealed on hover, keyboard focus,
+hold, or horizontal swipe. Hidden actions use no layout space, so adjacent
+messages keep the normal chat gap. The browser regression is covered by the chat
+E2E suite.
+
 ## Migrations
 
 **Symptom**: `make migrate-up` fails.
