@@ -26,7 +26,6 @@
     display: block;
     object-fit: cover;
     opacity: 0;
-    transform: scaleX(-1);
     transition: opacity 500ms ease;
 }
 
@@ -57,7 +56,6 @@
 
 .camera-filter-overlay {
     object-fit: cover;
-    transform: scaleX(-1);
 }
 
 .photo-filter-overlay {
