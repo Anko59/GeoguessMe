@@ -28,13 +28,15 @@ Migrations are stored in `backend/internal/database/migrations/`:
 005_leaderboard_lookup_index.sql
 006_message_replies.sql
 007_chat_media.sql
+008_message_reactions.sql
+009_group_settings.sql
 ```
 
 New migrations:
 
 ```bash
 make migration-new NAME=add_thing
-# Creates backend/internal/database/migrations/007_add_thing.sql
+# Creates the next numbered migration in backend/internal/database/migrations/
 ```
 
 ## Migration commands

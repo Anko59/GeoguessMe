@@ -1,17 +1,23 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"html"
+	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
 	"time"
 
 	"geoguessme/internal/auth"
+	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
+	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
@@ -212,6 +218,151 @@ func GetUserGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, groups)
+}
+
+type groupNotificationRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+func GroupNotifications(w http.ResponseWriter, r *http.Request) {
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if err := validateID(groupID, "group_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	switch r.Method {
+	case http.MethodGet:
+		enabled, err := repository.GetGroupNotificationPreferenceContext(r.Context(), groupID, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load notification settings")
+			return
+		}
+		writeJSON(w, http.StatusOK, groupNotificationRequest{Enabled: enabled})
+	case http.MethodPut:
+		var req groupNotificationRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := repository.SetGroupNotificationPreferenceContext(r.Context(), groupID, userID, req.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save notification settings")
+			return
+		}
+		writeJSON(w, http.StatusOK, req)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func GroupPhoto(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		serveGroupPhoto(w, r)
+	case http.MethodPost:
+		uploadGroupPhoto(w, r)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func uploadGroupPhoto(w http.ResponseWriter, r *http.Request) {
+	if MediaStore == nil || RuntimeConfig == nil {
+		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
+		return
+	}
+	maxBytes := RuntimeConfig.UploadMaxBytes
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
+	if err := r.ParseMultipartForm(maxBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
+		return
+	}
+	groupID := strings.TrimSpace(r.FormValue("group_id"))
+	if err := validateID(groupID, "group_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "missing_photo", "A photo is required")
+		return
+	}
+	defer file.Close()
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_photo", err.Error())
+		return
+	}
+	key := "groups/" + groupID + "/photo/" + uuid.NewString()
+	if err := MediaStore.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
+		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store group photo")
+		return
+	}
+	photo := &models.GroupPhoto{GroupID: groupID, StorageKey: key, MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: time.Now()}
+	previousKey, err := repository.SetGroupPhotoContext(r.Context(), photo)
+	if err != nil {
+		cleanupGroupPhoto(r, key)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save group photo")
+		return
+	}
+	if previousKey != "" && previousKey != key {
+		if err := MediaStore.Delete(r.Context(), previousKey); err != nil {
+			if enqueueErr := repository.EnqueueMediaDeletion(r.Context(), "group-photo-replacement", []string{previousKey}); enqueueErr != nil {
+				slog.Error("failed to queue replaced group photo", "storage_key", previousKey, "delete_error", err, "enqueue_error", enqueueErr)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"group_id": photo.GroupID, "mime_type": photo.MIMEType, "byte_size": photo.ByteSize, "created_at": photo.CreatedAt})
+}
+
+func cleanupGroupPhoto(r *http.Request, key string) {
+	if err := MediaStore.Delete(r.Context(), key); err != nil {
+		if enqueueErr := repository.EnqueueMediaDeletion(r.Context(), "group-photo-compensation", []string{key}); enqueueErr != nil {
+			slog.Error("failed to queue group photo compensation", "storage_key", key, "delete_error", err, "enqueue_error", enqueueErr)
+		}
+	}
+}
+
+func serveGroupPhoto(w http.ResponseWriter, r *http.Request) {
+	if MediaStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if err := validateID(groupID, "group_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	photo, err := repository.GetGroupPhotoContext(r.Context(), groupID)
+	if err != nil || photo == nil {
+		writeError(w, http.StatusNotFound, "not_found", "No group photo")
+		return
+	}
+	object, err := MediaStore.Get(r.Context(), photo.StorageKey)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "No group photo")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read group photo")
+		return
+	}
+	defer object.Close()
+	w.Header().Set("Content-Type", photo.MIMEType)
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, object)
 }
 
 // invitePageTemplate is a minimal HTML shell with Open Graph meta tags so

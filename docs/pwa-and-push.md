@@ -60,7 +60,8 @@ Browser               Backend               Push Service
 2. The resulting `PushSubscription` JSON is POSTed to `/api/v1/push/subscribe`
    and persisted in PostgreSQL.
 3. When a challenge or chat event fires, the backend resolves group members,
-   fetches their subscriptions, encrypts each payload with the subscription's
+   filters out members who disabled notifications for that group, fetches the
+   remaining subscriptions, and encrypts each payload with the subscription's
    `p256dh` key and `auth` secret (RFC 8291 + RFC 8188 aes128gcm), and POSTs to
    the push service endpoint with a VAPID JWT (RFC 8292) authorization header.
 4. The push service delivers the encrypted message; the service worker decrypts
@@ -111,6 +112,11 @@ network/service failure and never presents either as a successful subscription.
 | `DELETE` | `/api/v1/push/unsubscribe`      | required | Removes the subscription for the given endpoint, or all of them when `endpoint` is omitted.   |
 
 ### Notification triggers
+
+Each group member can independently enable or disable push delivery for a group
+from Group Settings. Preferences default to enabled for existing and new
+members; disabling a group does not change browser-wide notification permission
+or subscriptions for other groups.
 
 - **New challenge**: when a group member uploads a photo, other members receive
   "_Username_ posted a new challenge in _Group_".

@@ -6,6 +6,7 @@ import type { Group, Message } from '../../types';
 import Chat from '../../components/chat/Chat';
 import Leaderboard from '../../components/leaderboard/Leaderboard';
 import { prefetchLeaderboard } from '../../components/leaderboard/leaderboardCache';
+import { bustGroupPhotoCache, useGroupPhotoUrl } from './groupPhotoCache';
 import Camera from '../../components/camera/Camera';
 import Game from '../../components/game/Game';
 import SettingsModal from '../../components/settings/SettingsModal';
@@ -21,6 +22,7 @@ export default function GroupView() {
     const [group, setGroup] = useState<Group | null>(null);
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [groupPhotoRefreshKey, setGroupPhotoRefreshKey] = useState(0);
     const [groupError, setGroupError] = useState('');
     const {
         messages,
@@ -29,6 +31,7 @@ export default function GroupView() {
         error: messagesError,
         updateChallengeStatus,
     } = useGroupMessages(id, user?.id);
+    const groupPhotoURL = useGroupPhotoUrl(id ?? '', groupPhotoRefreshKey);
 
     useEffect(() => {
         if (!id) return;
@@ -54,7 +57,7 @@ export default function GroupView() {
                         <Icon name="arrow-left" className="back-arrow-icon" />
                         <span className="visually-hidden">Back to groups</span>
                     </Link>
-                    <img src="/logo.png" alt="GeoGuessMe" className="header-logo" />
+                    <img src={groupPhotoURL} alt="" className="header-logo" />
                     <div className="group-title-block">
                         <span>Group</span>
                         <h1 className="group-name">{group?.name ?? 'Group'}</h1>
@@ -80,6 +83,10 @@ export default function GroupView() {
                 groupName={group?.name ?? ''}
                 groupId={id}
                 currentUserName={user?.username ?? ''}
+                onGroupPhotoUpdated={() => {
+                    bustGroupPhotoCache(id);
+                    setGroupPhotoRefreshKey((key) => key + 1);
+                }}
             />
             <div className="tab-content">
                 {activeTab === 'camera' && (

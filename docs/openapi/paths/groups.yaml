@@ -76,6 +76,72 @@ groupMembers:
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+groupPhoto:
+  get:
+    operationId: getGroupPhoto
+    summary: Stream the private photo for a group.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200": { description: "JPEG group photo bytes; Cache-Control is private, no-store." }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  post:
+    operationId: uploadGroupPhoto
+    summary: Replace the authenticated member's group photo.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [group_id, photo]
+            properties:
+              group_id: { type: string, format: uuid }
+              photo: { type: string, format: binary }
+    responses:
+      "200":
+        description: Group photo metadata.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GroupPhoto" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+groupNotifications:
+  get:
+    operationId: getGroupNotificationPreference
+    summary: Get the authenticated member's notification preference for a group.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200":
+        description: Notification preference.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GroupNotificationPreference" } } }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  put:
+    operationId: setGroupNotificationPreference
+    summary: Enable or disable notifications for the authenticated member in a group.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas.yaml#/GroupNotificationPreference" }
+    responses:
+      "200":
+        description: Saved notification preference.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GroupNotificationPreference" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 leaderboard:
   get:
     operationId: getLeaderboard
