@@ -50,6 +50,25 @@ and `make migrate-status` to verify the restored schema.
 - Verify the `Origin` header is in `ALLOWED_ORIGINS`
 - Check that CORS preflight (OPTIONS) returns 200
 
+## Profile photo uploads
+
+**Symptom**: A profile photo upload returns `Authentication required`, or the
+page appears to do nothing.
+
+- Protected profile routes such as `/api/v1/auth/profile/avatar` still require
+  the bearer access token; only login, signup, verification, and password
+  recovery routes are public.
+- Upload through the shared API client so its request interceptor can restore a
+  session after a PWA reload. Do not set `Content-Type: multipart/form-data`
+  manually: the browser must add the multipart boundary.
+- The account settings page displays the server's structured error message in an
+  alert. Check the browser Network panel for the response status and the backend
+  logs with `make logs-backend` if storage fails.
+
+The authenticated browser regression is covered by the profile-photo scenario in
+`frontend/e2e/auth.spec.ts`; run it with
+`GEOGUESSME_E2E_SPEC=auth.spec.ts make test-e2e-pr`.
+
 ## WebSockets
 
 **Symptom**: WebSocket connection fails.

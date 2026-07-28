@@ -88,11 +88,7 @@ describe('AccountSettings', () => {
         await act(async () => {
             fireEvent.change(input, { target: { files: [file] } });
         });
-        await waitFor(() =>
-            expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData), {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            }),
-        );
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData)));
         expect(refresh).toHaveBeenCalled();
         expect(await screen.findByRole('status')).toHaveTextContent('Profile photo updated');
     });
