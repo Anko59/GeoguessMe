@@ -27,6 +27,19 @@ export interface Message {
     content: string;
     created_at: string;
     challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
+    challenge_resolved?: boolean;
+    reactions?: Reaction[];
+    reaction_update?: {
+        user_id: string;
+        emoji: string;
+        active: boolean;
+    };
+}
+
+export interface Reaction {
+    emoji: string;
+    count: number;
+    reacted: boolean;
 }
 
 export interface Group {

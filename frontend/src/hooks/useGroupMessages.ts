@@ -16,6 +16,7 @@ export interface UseGroupMessagesResult {
     wsRef: React.RefObject<WebSocket | null>;
     error: string;
     updateChallengeStatus: (photoId: string, status: NonNullable<Message['challenge_status']>) => void;
+    updateMessage: (message: Message) => void;
 }
 
 // reconnectPlan derives the next backoff delay and the incremented retry
@@ -79,19 +80,49 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
         setError('');
     }
 
-    const mergeMessages = useCallback((incoming: Message[]): void => {
-        if (incoming.length === 0) return;
-        setMessages((current) => {
-            const byId = new Map<string, Message>();
-            for (const message of current) {
-                if (message.id) byId.set(message.id, message);
-            }
-            for (const message of incoming) {
-                if (message.id) byId.set(message.id, message);
-            }
-            return [...byId.values()].sort(compareMessages);
-        });
-    }, []);
+    const mergeMessages = useCallback(
+        (incoming: Message[]): void => {
+            if (incoming.length === 0) return;
+            setMessages((current) => {
+                const byId = new Map<string, Message>();
+                for (const message of current) {
+                    if (message.id) byId.set(message.id, message);
+                }
+                for (const message of incoming) {
+                    if (!message.id) continue;
+                    const previous = byId.get(message.id);
+                    let reactions = message.reactions === undefined ? previous?.reactions : (message.reactions ?? []);
+                    if (message.reaction_update && message.reactions !== undefined) {
+                        const delta = message.reaction_update;
+                        reactions = (message.reactions ?? []).map((reaction) => ({
+                            ...reaction,
+                            reacted:
+                                delta.user_id === userID && reaction.emoji === delta.emoji
+                                    ? delta.active
+                                    : (previous?.reactions?.find((item) => item.emoji === reaction.emoji)?.reacted ??
+                                      false),
+                        }));
+                    }
+                    byId.set(message.id, {
+                        ...previous,
+                        ...message,
+                        challenge_status: message.challenge_status ?? previous?.challenge_status,
+                        challenge_resolved: Boolean(message.challenge_resolved || previous?.challenge_resolved),
+                        reactions,
+                    });
+                }
+                return [...byId.values()].sort(compareMessages);
+            });
+        },
+        [userID],
+    );
+
+    const updateMessage = useCallback(
+        (message: Message): void => {
+            mergeMessages([message]);
+        },
+        [mergeMessages],
+    );
 
     const updateChallengeStatus = useCallback(
         (photoId: string, status: NonNullable<Message['challenge_status']>): void => {
@@ -248,5 +279,5 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
         };
     }, [groupId, lastStableCursor, loadAfter, mergeMessages]);
 
-    return { messages, connectionStatus, wsRef, error, updateChallengeStatus };
+    return { messages, connectionStatus, wsRef, error, updateChallengeStatus, updateMessage };
 }

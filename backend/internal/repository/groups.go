@@ -65,6 +65,54 @@ func IsGroupMemberContext(ctx context.Context, groupID, userID string) (bool, er
 	return exists, err
 }
 
+func GetGroupPhotoContext(ctx context.Context, groupID string) (*models.GroupPhoto, error) {
+	var photo models.GroupPhoto
+	err := database.DB.QueryRow(ctx, `SELECT group_id, storage_key, mime_type, byte_size, created_at FROM group_photos WHERE group_id = $1`, groupID).Scan(&photo.GroupID, &photo.StorageKey, &photo.MIMEType, &photo.ByteSize, &photo.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return &photo, err
+}
+
+// SetGroupPhoto atomically points a group at a newly stored photo and returns
+// the previous storage key so callers can retire the replaced object after the
+// database commit succeeds.
+func SetGroupPhotoContext(ctx context.Context, photo *models.GroupPhoto) (string, error) {
+	tx, err := database.DB.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var previousKey string
+	err = tx.QueryRow(ctx, `SELECT storage_key FROM group_photos WHERE group_id = $1 FOR UPDATE`, photo.GroupID).Scan(&previousKey)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO group_photos (group_id, storage_key, mime_type, byte_size, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (group_id) DO UPDATE SET storage_key = EXCLUDED.storage_key, mime_type = EXCLUDED.mime_type, byte_size = EXCLUDED.byte_size, created_at = EXCLUDED.created_at`, photo.GroupID, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.CreatedAt)
+	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return previousKey, nil
+}
+
+func GetGroupNotificationPreferenceContext(ctx context.Context, groupID, userID string) (bool, error) {
+	var enabled bool
+	err := database.DB.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM group_notification_preferences WHERE group_id = $1 AND user_id = $2), TRUE)`, groupID, userID).Scan(&enabled)
+	return enabled, err
+}
+
+func SetGroupNotificationPreferenceContext(ctx context.Context, groupID, userID string, enabled bool) error {
+	_, err := database.DB.Exec(ctx, `INSERT INTO group_notification_preferences (group_id, user_id, enabled, updated_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+		ON CONFLICT (group_id, user_id) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = CURRENT_TIMESTAMP`, groupID, userID, enabled)
+	return err
+}
+
 type LeaderboardEntry struct {
 	UserID     string  `json:"user_id"`
 	Username   string  `json:"username"`

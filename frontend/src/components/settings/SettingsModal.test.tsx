@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
@@ -7,10 +7,12 @@ import type { User } from '../../types';
 
 const mocks = vi.hoisted(() => ({
     get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
-    default: { get: mocks.get },
+    default: { get: mocks.get, post: mocks.post, put: mocks.put },
 }));
 
 const user: User = {
@@ -33,6 +35,10 @@ const authValue = {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
+    mocks.post.mockReset();
+    mocks.put.mockReset();
+    mocks.post.mockResolvedValue({ data: {} });
+    mocks.put.mockResolvedValue({ data: { enabled: true } });
 });
 
 describe('SettingsModal', () => {
@@ -41,7 +47,7 @@ describe('SettingsModal', () => {
             configurable: true,
             value: { writeText: vi.fn().mockResolvedValue(undefined) },
         });
-        mocks.get.mockResolvedValueOnce({
+        mocks.get.mockResolvedValueOnce({ data: { enabled: true } }).mockResolvedValueOnce({
             data: [{ id: 'member-1', username: 'bob', avatar: 'avatar.png' }],
         });
         const onClose = vi.fn();
@@ -72,7 +78,9 @@ describe('SettingsModal', () => {
     });
 
     it('shows member load failures', async () => {
-        mocks.get.mockRejectedValueOnce(new Error('members unavailable'));
+        mocks.get
+            .mockResolvedValueOnce({ data: { enabled: true } })
+            .mockRejectedValueOnce(new Error('members unavailable'));
         render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
@@ -89,5 +97,33 @@ describe('SettingsModal', () => {
         );
         fireEvent.click(screen.getByText('Group Members'));
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load members');
+    });
+
+    it('updates the group photo and notification preference', async () => {
+        mocks.get.mockResolvedValueOnce({ data: { enabled: true } });
+        const onGroupPhotoUpdated = vi.fn();
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal
+                        isOpen
+                        onClose={vi.fn()}
+                        groupCode="ABC"
+                        groupName="Group"
+                        groupId="g"
+                        currentUserName="bob"
+                        onGroupPhotoUpdated={onGroupPhotoUpdated}
+                    />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        const file = new File(['image'], 'group.jpg', { type: 'image/jpeg' });
+        fireEvent.change(screen.getByLabelText('Choose a group photo'), { target: { files: [file] } });
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/group/photo', expect.any(FormData)));
+        expect(onGroupPhotoUpdated).toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Group notifications' }));
+        await waitFor(() =>
+            expect(mocks.put).toHaveBeenCalledWith('/group/notifications?group_id=g', { enabled: false }),
+        );
     });
 });

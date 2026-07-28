@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -50,6 +51,15 @@ func SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	if result.Existing {
 		status = http.StatusOK
+	}
+	if !result.Existing && HubInstance != nil {
+		message, messageErr := repository.GetChallengeMessageForViewer(r.Context(), photoID, "")
+		if messageErr != nil {
+			slog.Error("failed to load challenge message after guess", "photo_id", photoID, "error", messageErr)
+		} else if message != nil {
+			message.ChallengeResolved = true
+			HubInstance.BroadcastUpdate(*message)
+		}
 	}
 	writeJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": time.Now()})
 }

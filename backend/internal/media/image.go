@@ -25,7 +25,7 @@ type Image struct {
 // NormalizeAvatar decodes an uploaded image, shrinks it to fit within
 // AvatarMaxDimension preserving aspect ratio, re-encodes as JPEG q85, and
 // strips all metadata. Videos and non-images are rejected.
-func NormalizeAvatar(file multipart.File, declaredSize, maxBytes int64) (*Image, error) {
+func NormalizeAvatar(file multipart.File, declaredSize, maxBytes int64, maxPixels uint64) (*Image, error) {
 	if declaredSize <= 0 || declaredSize > maxBytes {
 		return nil, fmt.Errorf("avatar must be between 1 byte and %d bytes", maxBytes)
 	}
@@ -40,8 +40,8 @@ func NormalizeAvatar(file multipart.File, declaredSize, maxBytes int64) (*Image,
 	if err != nil {
 		return nil, fmt.Errorf("invalid image")
 	}
-	if config.Width <= 0 || config.Height <= 0 {
-		return nil, fmt.Errorf("invalid image")
+	if config.Width <= 0 || config.Height <= 0 || uint64(config.Width)*uint64(config.Height) > maxPixels {
+		return nil, fmt.Errorf("avatar exceeds pixel limit")
 	}
 	decoded, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

@@ -22,6 +22,13 @@ TOOLS_PSQL=(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml
     --project-directory "$REPO" run --rm --no-deps go-security
     psql "$DB_URL" -v ON_ERROR_STOP=1)
 FIXTURE="/workspace/deployment/scripts/legacy-migration-fixture.sql"
+shopt -s nullglob
+MIGRATION_FILES=("$REPO"/backend/internal/database/migrations/*.sql)
+EXPECTED_MIGRATIONS="${#MIGRATION_FILES[@]}"
+if [ "$EXPECTED_MIGRATIONS" -eq 0 ]; then
+    echo "FAIL: no committed SQL migrations found" >&2
+    exit 1
+fi
 
 cleanup() {
     local status=$?
@@ -83,8 +90,8 @@ test "$second_status" -eq 0 || {
 docker rm "$first" "$second" >/dev/null
 echo "  PASS: both concurrent migrations succeeded"
 
-# All 4 migrations must be recorded
-assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 7 \
+# Every committed migration must be recorded.
+assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" "$EXPECTED_MIGRATIONS" \
     "schema_migrations entries after concurrent run"
 
 # -- 3. verify every backfill transformation --------------------------------
@@ -217,7 +224,7 @@ assert_eq "$(psql_query "SELECT count(*) FROM pg_indexes WHERE indexname='media_
 echo "=== Verifying idempotent rerun ==="
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" \
     -p "$PROJECT" run --rm migration >/dev/null
-assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" 7 \
+assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" "$EXPECTED_MIGRATIONS" \
     "schema_migrations count unchanged after rerun"
 # Row counts must be identical (no duplicates or deletions from re-run)
 assert_eq "$(psql_query "SELECT count(*) FROM users")" 4 "user count unchanged"

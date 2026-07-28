@@ -1,0 +1,120 @@
+.reply-action {
+    padding: 0.35rem 0.55rem;
+    color: var(--ink-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.message-container.own .reply-action {
+    align-self: flex-end;
+}
+
+.message-actions {
+    margin-top: 0.3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transform: translateY(-0.15rem);
+    transition:
+        opacity var(--duration-fast) ease,
+        transform var(--duration-fast) var(--ease-out),
+        visibility var(--duration-fast) ease;
+}
+
+.message-container.actions-visible .message-actions,
+.message-container:hover .message-actions,
+.message-container:focus-within .message-actions {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+    transform: none;
+}
+
+.reaction-actions {
+    padding: 0.15rem 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.08rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-xs);
+}
+
+.reaction-action {
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    font-size: 0.95rem;
+    line-height: 1;
+    transition:
+        background var(--duration-fast) ease,
+        transform var(--duration-fast) var(--ease-out);
+}
+
+.reaction-action.selected {
+    background: var(--surface-brand);
+}
+
+.reaction-action:hover {
+    background: var(--surface-soft);
+    transform: scale(1.12);
+}
+
+.message-reactions {
+    margin-top: 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+}
+
+.message-container.own .message-reactions,
+.message-container.own .message-actions {
+    justify-content: flex-end;
+}
+
+.reaction-chip {
+    min-height: 1.65rem;
+    padding: 0.16rem 0.42rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    color: var(--ink-muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    font-size: 0.75rem;
+    font-weight: 750;
+}
+
+.reaction-chip.selected {
+    color: var(--brand-blue-accessible);
+    background: var(--surface-brand);
+    border-color: rgba(0, 119, 182, 0.28);
+}
+
+.message-content.photo-challenge.resolved {
+    color: var(--brand-navy);
+    background: linear-gradient(135deg, #d9f7f0, #dce9ff);
+    box-shadow: 0 10px 25px rgba(0, 119, 182, 0.14);
+}
+
+.chat-reaction-error {
+    width: min(100%, 52rem);
+    margin: 0 auto;
+    padding: 0.4rem clamp(0.75rem, 3vw, 1.5rem);
+    color: var(--danger);
+    background: rgba(255, 255, 255, 0.92);
+    font-size: 0.78rem;
+}

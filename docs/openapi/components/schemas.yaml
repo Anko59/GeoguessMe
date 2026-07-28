@@ -36,6 +36,21 @@ Group:
     code: { type: string, pattern: "^[A-Z0-9]{6}$" }
     created_at: { type: string, format: date-time }
 
+GroupPhoto:
+  type: object
+  required: [group_id, mime_type, byte_size, created_at]
+  properties:
+    group_id: { type: string, format: uuid }
+    mime_type: { type: string, enum: [image/jpeg] }
+    byte_size: { type: integer, minimum: 1 }
+    created_at: { type: string, format: date-time }
+
+GroupNotificationPreference:
+  type: object
+  required: [enabled]
+  properties:
+    enabled: { type: boolean }
+
 Member:
   type: object
   required: [id, username]
@@ -77,6 +92,32 @@ Message:
         enum: [available, accepted, guessed, results, expired],
         description: Viewer-specific action state for challenge messages,
       }
+    challenge_resolved: { type: boolean, description: Whether any group member has answered the challenge }
+    reactions: { type: array, items: { $ref: "#/MessageReaction" } }
+    reaction_update: { $ref: "#/MessageReactionUpdate" }
+
+MessageReaction:
+  type: object
+  required: [emoji, count, reacted]
+  properties:
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    count: { type: integer, minimum: 1 }
+    reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
+
+MessageReactionRequest:
+  type: object
+  required: [emoji]
+  properties:
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+
+MessageReactionUpdate:
+  type: object
+  description: WebSocket-only reaction mutation metadata used to preserve each recipient's viewer-specific state.
+  required: [user_id, emoji, active]
+  properties:
+    user_id: { type: string, format: uuid }
+    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    active: { type: boolean }
 
 MessagesPage:
   type: object

@@ -1,12 +1,85 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Reaction Group")
+	joinGroup(t, bob.access, code)
+
+	conn := mustDialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)
+	defer conn.Close()
+	require.NoError(t, conn.WriteJSON(map[string]string{"content": "React to this"}))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, payload, err := conn.ReadMessage()
+	require.NoError(t, err)
+	var sent struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &sent))
+	require.NotEmpty(t, sent.ID)
+
+	path := "/api/v1/group/message-reactions/" + sent.ID
+	resp, data := doJSON(t, http.MethodPut, path, map[string]string{"emoji": "👍"}, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+	var updated struct {
+		Reactions []struct {
+			Emoji   string `json:"emoji"`
+			Count   int    `json:"count"`
+			Reacted bool   `json:"reacted"`
+		} `json:"reactions"`
+	}
+	require.NoError(t, json.Unmarshal(data, &updated))
+	require.Equal(t, "👍", updated.Reactions[0].Emoji)
+	require.Equal(t, 1, updated.Reactions[0].Count)
+	require.True(t, updated.Reactions[0].Reacted)
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, livePayload, err := conn.ReadMessage()
+	require.NoError(t, err)
+	var liveUpdate struct {
+		ReactionUpdate struct {
+			UserID string `json:"user_id"`
+			Emoji  string `json:"emoji"`
+			Active bool   `json:"active"`
+		} `json:"reaction_update"`
+	}
+	require.NoError(t, json.Unmarshal(livePayload, &liveUpdate))
+	require.Equal(t, bob.userID, liveUpdate.ReactionUpdate.UserID)
+	require.Equal(t, "👍", liveUpdate.ReactionUpdate.Emoji)
+	require.True(t, liveUpdate.ReactionUpdate.Active)
+
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var page struct {
+		Items []struct {
+			Reactions []struct {
+				Count int `json:"count"`
+			} `json:"reactions"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(data, &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, 1, page.Items[0].Reactions[0].Count)
+
+	resp, data = doJSON(t, http.MethodDelete, path, map[string]string{"emoji": "👍"}, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+	var removed struct {
+		Reactions []struct {
+			Emoji string `json:"emoji"`
+		} `json:"reactions"`
+	}
+	require.NoError(t, json.Unmarshal(data, &removed))
+	require.Empty(t, removed.Reactions)
+
+}
 
 func TestMessageCursorPagination(t *testing.T) {
 	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
@@ -94,6 +167,27 @@ func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
 
 	require.Eventually(t, func() bool { return messageStatus(t, alice.access) == "results" }, 5*time.Second, 100*time.Millisecond, "uploader status must be available once the challenge message is persisted")
 	require.Equal(t, "available", messageStatus(t, bob.access), "participant starts with Accept challenge")
-	acceptChallenge(t, bob.access, photoID)
+	accepted := acceptChallenge(t, bob.access, photoID)
 	require.Equal(t, "accepted", messageStatus(t, bob.access), "accepted participant sees Continue challenge")
+
+	conn := mustDialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)
+	defer conn.Close()
+	require.NoError(t, conn.WriteJSON(map[string]string{"content": "ready"}))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, _, err := conn.ReadMessage()
+	require.NoError(t, err, "socket must be registered before the guess update")
+
+	waitUntilViewExpires(t, accepted.ViewExpiresAt)
+	require.Equal(t, http.StatusCreated, guess(t, bob.access, photoID, 48.8, 2.3))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, payload, err := conn.ReadMessage()
+	require.NoError(t, err)
+	var update struct {
+		ID                string `json:"id"`
+		PhotoID           string `json:"photo_id"`
+		ChallengeResolved bool   `json:"challenge_resolved"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &update))
+	require.Equal(t, photoID, update.PhotoID)
+	require.True(t, update.ChallengeResolved, "open conversations receive the resolved state immediately")
 }

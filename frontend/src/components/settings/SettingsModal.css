@@ -156,6 +156,55 @@
     object-fit: contain;
 }
 
+.group-photo-upload {
+    min-height: 48px;
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--brand-navy);
+    background: var(--gradient-orange);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.group-photo-upload input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.notification-toggle {
+    min-height: 48px;
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-strong);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.notification-toggle input {
+    width: 1.2rem;
+    height: 1.2rem;
+    accent-color: var(--brand-blue-accessible);
+}
+
+.settings-error {
+    margin-top: var(--space-2);
+    color: var(--danger, #b42318);
+    font-size: 0.8rem;
+}
+
 .members-toggle {
     width: 100%;
     min-height: 44px;

@@ -105,7 +105,11 @@ func (pgStore) DeleteByID(ctx context.Context, id string) error {
 }
 
 func (pgStore) GroupTargets(ctx context.Context, groupID, excludeUserID string) ([]NotificationTarget, error) {
-	rows, err := database.DB.Query(ctx, `SELECT u.id, u.username FROM group_members gm JOIN users u ON u.id = gm.user_id AND u.deleted_at IS NULL WHERE gm.group_id = $1 AND u.id <> $2`, groupID, excludeUserID)
+	rows, err := database.DB.Query(ctx, `SELECT u.id, u.username
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id AND u.deleted_at IS NULL
+		LEFT JOIN group_notification_preferences np ON np.group_id = gm.group_id AND np.user_id = gm.user_id
+		WHERE gm.group_id = $1 AND u.id <> $2 AND COALESCE(np.enabled, TRUE)`, groupID, excludeUserID)
 	if err != nil {
 		return nil, err
 	}

@@ -105,7 +105,7 @@ func TestNormalizeAvatarResizesLargePNG(t *testing.T) {
 	if err := png.Encode(&source, canvas); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024)
+	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024, 25_000_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestNormalizeAvatarAcceptsJPEG(t *testing.T) {
 	if err := jpeg.Encode(&source, canvas, &jpeg.Options{Quality: 80}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024)
+	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024, 25_000_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestNormalizeAvatarKeepsTinyImage(t *testing.T) {
 	if err := png.Encode(&source, canvas); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024)
+	result, err := NormalizeAvatar(uploadFile{bytes.NewReader(source.Bytes())}, int64(source.Len()), 5*1024*1024, 25_000_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestNormalizeAvatarKeepsTinyImage(t *testing.T) {
 
 func TestNormalizeAvatarRejectsNonImage(t *testing.T) {
 	data := []byte("not an image or video")
-	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, int64(len(data)), 5*1024*1024); err == nil {
+	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, int64(len(data)), 5*1024*1024, 25_000_000); err == nil {
 		t.Fatal("expected non-image to be rejected")
 	}
 }
@@ -161,11 +161,27 @@ func TestNormalizeAvatarRejectsOversizedDeclaredSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, 101, 100); err == nil {
+	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, 101, 100, 25_000_000); err == nil {
 		t.Fatal("oversized declared size accepted")
 	}
-	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, 0, 100); err == nil {
+	if _, err := NormalizeAvatar(uploadFile{bytes.NewReader(data)}, 0, 100, 25_000_000); err == nil {
 		t.Fatal("zero declared size accepted")
+	}
+}
+
+func TestNormalizeAvatarRejectsPixelBomb(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, source); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NormalizeAvatar(
+		uploadFile{bytes.NewReader(encoded.Bytes())},
+		int64(encoded.Len()),
+		5*1024*1024,
+		399,
+	); err == nil {
+		t.Fatal("avatar exceeding the pixel ceiling was accepted")
 	}
 }
 

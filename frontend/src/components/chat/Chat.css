@@ -95,6 +95,12 @@
     gap: 0.45rem;
 }
 
+.message-container:focus-visible {
+    outline: 2px solid var(--brand-blue-accessible);
+    outline-offset: 0.35rem;
+    border-radius: var(--radius-sm);
+}
+
 .message-container.own {
     flex-direction: row-reverse;
 }
@@ -235,22 +241,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.reply-action {
-    margin: 0.25rem 0.4rem 0;
-    padding: 0.2rem 0.35rem;
-    align-self: flex-start;
-    color: var(--ink-muted);
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    font-size: 0.72rem;
-    font-weight: 750;
-}
-
-.message-container.own .reply-action {
-    align-self: flex-end;
 }
 
 .message-content.photo-challenge {

@@ -227,6 +227,41 @@ func TestUploadRecordedVideo(t *testing.T) {
 	}
 }
 
+func TestSetAndRemoveMessageReaction(t *testing.T) {
+	setupHandlers(t)
+	InitChat()
+	t.Cleanup(HubInstance.Stop)
+	mock := handlerMock(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	messageID := "00000000-0000-0000-0000-000000000002"
+	messageRows := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}).
+			AddRow(messageID, "group-1", "user-2", "bob", "", "text", nil, nil, nil, nil, "hello", now)
+	}
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT 1 FROM messages").WithArgs(messageID).
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
+		if method == http.MethodPut {
+			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "👍").
+				WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		} else {
+			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "👍").
+				WillReturnResult(pgxmock.NewResult("DELETE", 1))
+		}
+		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		request := requestWithUser(method, "/", `{"emoji":"👍"}`, "user-1")
+		request.SetPathValue("messageID", messageID)
+		requireStatus(t, SetMessageReaction, request, http.StatusOK)
+	}
+}
+
 func TestUploadAndServeChatMedia(t *testing.T) {
 	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
