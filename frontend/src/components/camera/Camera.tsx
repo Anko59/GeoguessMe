@@ -46,6 +46,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
     const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
     const recordingError = useCallback((message: string) => setError(message), []);
+    const capturedVideoError = useCallback(
+        () => setError('The recorded video could not be played. Please record a new clip and try again.'),
+        [],
+    );
     const { recordedVideo, recording, startHeldRecording, stopRecording, discardRecording } = useVideoCapture({
         onError: recordingError,
     });
@@ -488,6 +492,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onFileSelected={handleFileSelected}
             onUpload={() => void handleUpload()}
             onRetake={retake}
+            onCapturedVideoError={capturedVideoError}
         />
     );
 }
