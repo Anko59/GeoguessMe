@@ -42,12 +42,12 @@ WebGL is required for 3D rendering. MediaPipe attempts GPU inference first and
 falls back to CPU inference when necessary. If tracking or rendering is
 unavailable, the camera and original-file upload paths remain usable. Camera and
 location permissions are still required to send a photo, and camera access
-requires HTTPS outside local development. After the application becomes idle on
-a visible page, it imports the face-tracking module and warms one landmarker in
-the background. The first lens activation reuses that warmed instance, while a
-failed or interrupted preload is retried by normal camera startup; this keeps
-the startup path responsive without making lens support a prerequisite for using
-the rest of the application.
+requires HTTPS outside local development. When the camera composer opens, it
+imports the face-tracking module and warms one landmarker before the user picks
+a lens. The first lens activation reuses that warmed instance, while a failed or
+interrupted preload is retried by normal camera startup; this keeps the camera
+interaction responsive without loading the large tracking runtime on routes that
+do not use the camera.
 
 The pinned Face Landmarker model and provenance live under
 `frontend/public/vendor/mediapipe/`. Lens asset provenance lives under

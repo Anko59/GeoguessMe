@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/home/Home';
 import Login from './pages/auth/Login';
@@ -17,51 +16,6 @@ import { usePushBootstrap } from './push/usePushBootstrap';
 
 function AppChrome() {
     usePushBootstrap();
-    useEffect(() => {
-        let cancelled = false;
-        let idleHandle: number | null = null;
-        let timeoutHandle: number | null = null;
-
-        const clearSchedule = () => {
-            if (idleHandle !== null && 'cancelIdleCallback' in window) {
-                window.cancelIdleCallback(idleHandle);
-                idleHandle = null;
-            }
-            if (timeoutHandle !== null) {
-                window.clearTimeout(timeoutHandle);
-                timeoutHandle = null;
-            }
-        };
-
-        const preload = () => {
-            idleHandle = null;
-            timeoutHandle = null;
-            if (cancelled || document.visibilityState !== 'visible') return;
-            void import('./components/camera/lenses/faceTracker')
-                .then(({ preloadFaceTracker }) => preloadFaceTracker())
-                .catch(() => {
-                    // Camera startup retries on demand and reports a user-facing error.
-                });
-        };
-
-        const schedule = () => {
-            clearSchedule();
-            if (document.visibilityState !== 'visible') return;
-            if ('requestIdleCallback' in window) {
-                idleHandle = window.requestIdleCallback(preload, { timeout: 5000 });
-            } else {
-                timeoutHandle = setTimeout(preload, 3000);
-            }
-        };
-
-        document.addEventListener('visibilitychange', schedule);
-        schedule();
-        return () => {
-            cancelled = true;
-            document.removeEventListener('visibilitychange', schedule);
-            clearSchedule();
-        };
-    }, []);
     return (
         <div className="app-root">
             <Routes>
