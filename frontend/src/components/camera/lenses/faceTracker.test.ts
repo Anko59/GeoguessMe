@@ -14,7 +14,7 @@ vi.mock('@mediapipe/tasks-vision', () => ({
     FilesetResolver: { isSimdSupported: mediaPipe.isSimdSupported },
 }));
 
-import { FaceTracker } from './faceTracker';
+import { FaceTracker, preloadFaceTracker } from './faceTracker';
 
 const LANDMARK = { x: 0.5, y: 0.4, z: -0.1, visibility: 1 };
 const RESULT = {
@@ -124,5 +124,28 @@ describe('FaceTracker', () => {
             landmarks: [LANDMARK],
             blendshapes: {},
         });
+    });
+
+    it('does not poison later camera startup when the preload fails', async () => {
+        mediaPipe.createFromOptions
+            .mockRejectedValueOnce(new Error('GPU unavailable'))
+            .mockRejectedValueOnce(new Error('CPU unavailable'));
+
+        await expect(preloadFaceTracker()).rejects.toThrow('CPU unavailable');
+        const tracker = await FaceTracker.create();
+
+        expect(mediaPipe.createFromOptions).toHaveBeenCalledTimes(3);
+        tracker.close();
+    });
+
+    it('reuses a preloaded landmarker for the first lens activation', async () => {
+        const preload = preloadFaceTracker();
+        await preload;
+        expect(mediaPipe.createFromOptions).toHaveBeenCalledTimes(1);
+
+        const tracker = await FaceTracker.create();
+
+        expect(mediaPipe.createFromOptions).toHaveBeenCalledTimes(1);
+        tracker.close();
     });
 });

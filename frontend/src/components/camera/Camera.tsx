@@ -12,6 +12,7 @@ import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner
 import { useCameraDevice } from './useCameraDevice';
 import { useHoldToRecord } from './capture/useHoldToRecord';
 import { useVideoCapture } from './capture/useVideoCapture';
+import { useFaceTrackerPreload } from './lenses/useFaceTrackerPreload';
 export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -53,6 +54,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const { recordedVideo, recording, startHeldRecording, stopRecording, discardRecording } = useVideoCapture({
         onError: recordingError,
     });
+    useFaceTrackerPreload();
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
         faceDetectedRef.current = detected;
