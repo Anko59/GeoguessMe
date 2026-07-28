@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"geoguessme/internal/models"
 	"geoguessme/internal/storage"
@@ -329,4 +330,144 @@ func avatarUploadRequest(t *testing.T, payload []byte) *http.Request {
 	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	return request
+}
+
+func groupPhotoUploadRequest(t *testing.T, groupID string, payload []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("group_id", groupID); err != nil {
+		t.Fatal(err)
+	}
+	part, err := writer.CreateFormFile("photo", "group.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := requestWithUser(http.MethodPost, "/", "", "user-1")
+	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	return request
+}
+
+func TestGroupNotificationSettings(t *testing.T) {
+	setupHandlers(t)
+	mock := handlerMock(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	member := func() {
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	}
+	member()
+	mock.ExpectQuery("SELECT COALESCE").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"enabled"}).AddRow(true))
+	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
+	member()
+	mock.ExpectExec("INSERT INTO group_notification_preferences").WithArgs(groupID, "user-1", false).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	requireStatus(t, GroupNotifications, requestWithUser(http.MethodPut, "/?group_id="+groupID, `{"enabled":false}`, "user-1"), http.StatusOK)
+	member()
+	requireStatus(t, GroupNotifications, requestWithUser(http.MethodDelete, "/?group_id="+groupID, "", "user-1"), http.StatusMethodNotAllowed)
+}
+
+func TestUploadAndServeGroupPhoto(t *testing.T) {
+	setupHandlers(t)
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	mock := handlerMock(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT storage_key FROM group_photos").WithArgs(groupID).
+		WillReturnRows(pgxmock.NewRows([]string{"storage_key"}))
+	mock.ExpectExec("INSERT INTO group_photos").
+		WithArgs(groupID, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	requireStatus(t, GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusOK)
+
+	const key = "groups/group-1/photo/current"
+	if err := store.Put(context.Background(), key, bytes.NewReader([]byte("photo")), 5, "image/png"); err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").WithArgs(groupID).
+		WillReturnRows(pgxmock.NewRows([]string{"group_id", "storage_key", "mime_type", "byte_size", "created_at"}).
+			AddRow(groupID, key, "image/png", 5, time.Now()))
+	recorder := httptest.NewRecorder()
+	GroupPhoto(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"))
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "photo" ||
+		recorder.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("group photo response = %d %q, cache %q", recorder.Code, recorder.Body.String(), recorder.Header().Get("Cache-Control"))
+	}
+	requireStatus(t, GroupPhoto, requestWithUser(http.MethodDelete, "/", "", "user-1"), http.StatusMethodNotAllowed)
+}
+
+func TestReactionAndGroupSettingFailures(t *testing.T) {
+	setupHandlers(t)
+	messageID := "00000000-0000-0000-0000-000000000002"
+	groupID := "00000000-0000-0000-0000-000000000001"
+	reactionRequest := func(method, emoji string) *http.Request {
+		request := requestWithUser(method, "/", `{"emoji":"`+emoji+`"}`, "user-1")
+		request.SetPathValue("messageID", messageID)
+		return request
+	}
+	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
+	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
+
+	mock := handlerMock(t)
+	columns := []string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).
+		WillReturnRows(pgxmock.NewRows(columns))
+	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusNotFound)
+
+	messageRows := func(kind string) *pgxmock.Rows {
+		return pgxmock.NewRows(columns).
+			AddRow(messageID, groupID, "user-2", "bob", "", kind, nil, nil, nil, nil, "hello", time.Now())
+	}
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
+	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
+
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
+	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)
+
+	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusForbidden)
+}
+
+func TestGroupPhotoAvailabilityFailures(t *testing.T) {
+	setupHandlers(t)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	requireStatus(t, GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusServiceUnavailable)
+	requireStatus(t, GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusServiceUnavailable)
+
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	MediaStore = store
+	mock := handlerMock(t)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").WithArgs(groupID).
+		WillReturnError(errors.New("database unavailable"))
+	requireStatus(t, GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusNotFound)
 }
