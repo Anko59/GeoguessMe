@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Camera from './Camera';
-
 const mocks = vi.hoisted(() => ({
     post: vi.fn(),
     getUserMedia: vi.fn(),
@@ -482,6 +481,7 @@ describe('Camera component', () => {
         expect(trackStop).not.toHaveBeenCalled();
         fireEvent.click(switchBtn);
         await waitFor(() => expect(trackStop).toHaveBeenCalled());
+        await waitFor(() => expect(document.querySelector('.camera-video')).not.toHaveClass('mirrored'));
         const constraints = mocks.getUserMedia.mock.calls[1][0] as MediaStreamConstraints;
         expect((constraints.video as { facingMode: string }).facingMode).toBe('environment');
     });

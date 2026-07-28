@@ -94,6 +94,15 @@ The authenticated browser regression is covered by the profile-photo scenario in
 - Check browser permissions
 - The app uses `navigator.geolocation.getCurrentPosition`
 
+## Recorded video playback
+
+Camera recordings and challenge media use browser-created `blob:` URLs before
+and during playback. The production gateway must allow `blob:` in `media-src`;
+allowing it only in `img-src` makes Chromium reject a valid WebM recording with
+“No videos with supported format and MIME type found”. The camera preview now
+reports a readable error if media playback still fails. Verify the complete path
+with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
+
 ## Migrations
 
 **Symptom**: `make migrate-up` fails.

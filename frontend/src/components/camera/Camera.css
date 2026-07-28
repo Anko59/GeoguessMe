@@ -33,6 +33,11 @@
     opacity: 1;
 }
 
+.camera-video.mirrored,
+.camera-filter-overlay.mirrored {
+    transform: scaleX(-1);
+}
+
 .camera-capture-canvas,
 .camera-source-canvas {
     width: 1px;
