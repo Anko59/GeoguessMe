@@ -3,6 +3,8 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"strings"
@@ -33,6 +35,30 @@ func attemptUpload(t *testing.T, bearer, groupID string) int {
 	return resp.StatusCode
 }
 
+func uploadGroupPhoto(t *testing.T, bearer, groupID string) (jsonResponse, []byte) {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("photo", "group.png")
+	require.NoError(t, err)
+	image, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	require.NoError(t, err)
+	_, err = part.Write(image)
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.Close())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/group/photo", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return jsonResponse{StatusCode: resp.StatusCode, Header: resp.Header, cookies: resp.Cookies()}, data
+}
+
 func TestNonMemberForbiddenMatrix(t *testing.T) {
 	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
 	outsider := signup(t, unique("out"), unique("out")+"@example.test", "StrongPassword123")
@@ -49,6 +75,8 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 		{"members", http.MethodGet, "/api/v1/group/members?id=" + groupID, nil},
 		{"messages", http.MethodGet, "/api/v1/group/messages?group_id=" + groupID, nil},
 		{"leaderboard", http.MethodGet, "/api/v1/group/leaderboard?group_id=" + groupID, nil},
+		{"group_photo", http.MethodGet, "/api/v1/group/photo?group_id=" + groupID, nil},
+		{"group_notifications", http.MethodGet, "/api/v1/group/notifications?group_id=" + groupID, nil},
 		{"ws_ticket", http.MethodPost, "/api/v1/ws/ticket?group_id=" + groupID, map[string]string{}},
 		{"accept", http.MethodPost, "/api/v1/challenges/" + photoID + "/accept", map[string]string{}},
 		{"guess", http.MethodPost, "/api/v1/challenges/" + photoID + "/guess", map[string]float64{"lat": 0, "long": 0}},
@@ -60,6 +88,43 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 		require.Equalf(t, http.StatusForbidden, resp.StatusCode, tc.name)
 	}
 	require.Equal(t, http.StatusForbidden, attemptUpload(t, outsider.access, groupID), "upload")
+	photoResp, _ := uploadGroupPhoto(t, outsider.access, groupID)
+	require.Equal(t, http.StatusForbidden, photoResp.StatusCode, "group photo upload")
+}
+
+func TestGroupPhotoAndNotificationSettings(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	outsider := signup(t, unique("out"), unique("out")+"@example.test", "StrongPassword123")
+	groupID, _ := createGroup(t, alice.access, "Settings Group")
+
+	photoResp, _ := uploadGroupPhoto(t, alice.access, groupID)
+	require.Equal(t, http.StatusOK, photoResp.StatusCode)
+	photoResp, photoData := doJSON(t, http.MethodGet, "/api/v1/group/photo?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, photoResp.StatusCode)
+	require.Equal(t, "image/jpeg", photoResp.Header.Get("Content-Type"))
+	require.NotEmpty(t, photoData)
+
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/notifications?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var preference struct {
+		Enabled bool `json:"enabled"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &preference))
+	require.True(t, preference.Enabled, "new members should receive notifications by default")
+
+	resp, data = doJSON(t, http.MethodPut, "/api/v1/group/notifications?group_id="+groupID, map[string]bool{"enabled": false}, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, jsonUnmarshal(data, &preference))
+	require.False(t, preference.Enabled)
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/notifications?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, jsonUnmarshal(data, &preference))
+	require.False(t, preference.Enabled)
+
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/photo?group_id="+groupID, nil, outsider.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodPut, "/api/v1/group/notifications?group_id="+groupID, map[string]bool{"enabled": true}, outsider.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
 type leaderboardEntry struct {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Member } from '../../types';
@@ -14,6 +14,7 @@ interface SettingsModalProps {
     groupName: string;
     groupId: string;
     currentUserName: string;
+    onGroupPhotoUpdated?: () => void;
 }
 
 export default function SettingsModal({
@@ -23,12 +24,43 @@ export default function SettingsModal({
     groupName,
     groupId,
     currentUserName,
+    onGroupPhotoUpdated,
 }: SettingsModalProps) {
     const [copiedItem, setCopiedItem] = useState<'link' | 'code' | null>(null);
     const [membersExpanded, setMembersExpanded] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [loadingMembers, setLoadingMembers] = useState(false);
     const [memberError, setMemberError] = useState('');
+    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [loadingNotifications, setLoadingNotifications] = useState(false);
+    const [notificationError, setNotificationError] = useState('');
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [photoError, setPhotoError] = useState('');
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let active = true;
+        queueMicrotask(() => {
+            if (active) {
+                setLoadingNotifications(true);
+                setNotificationError('');
+            }
+        });
+        void api
+            .get('/group/notifications', { params: { group_id: groupId } })
+            .then((response) => {
+                if (active) setNotificationsEnabled(response.data?.enabled !== false);
+            })
+            .catch(() => {
+                if (active) setNotificationError('Unable to load notification settings. Try again.');
+            })
+            .finally(() => {
+                if (active) setLoadingNotifications(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [groupId, isOpen]);
 
     const fetchMembers = useCallback(async () => {
         setLoadingMembers(true);
@@ -65,6 +97,34 @@ export default function SettingsModal({
         setTimeout(() => setCopiedItem(null), 2000);
     };
 
+    const toggleNotifications = () => {
+        if (loadingNotifications) return;
+        const enabled = !notificationsEnabled;
+        setLoadingNotifications(true);
+        setNotificationError('');
+        void api
+            .put(`/group/notifications?group_id=${encodeURIComponent(groupId)}`, { enabled })
+            .then(() => setNotificationsEnabled(enabled))
+            .catch(() => setNotificationError('Unable to save notification settings. Try again.'))
+            .finally(() => setLoadingNotifications(false));
+    };
+
+    const uploadPhoto = (event: ChangeEvent<HTMLInputElement>) => {
+        const photo = event.target.files?.[0];
+        event.target.value = '';
+        if (!photo) return;
+        setUploadingPhoto(true);
+        setPhotoError('');
+        const body = new FormData();
+        body.append('group_id', groupId);
+        body.append('photo', photo);
+        void api
+            .post('/group/photo', body)
+            .then(() => onGroupPhotoUpdated?.())
+            .catch(() => setPhotoError('Unable to update the group photo. Try again.'))
+            .finally(() => setUploadingPhoto(false));
+    };
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div
@@ -87,6 +147,44 @@ export default function SettingsModal({
                 <Link to="/settings" className="personal-settings-link" onClick={onClose}>
                     Open personal settings
                 </Link>
+
+                <div className="settings-section">
+                    <h4 className="section-title">
+                        <Icon name="image" />
+                        Group Photo
+                    </h4>
+                    <label className="group-photo-upload">
+                        <span>{uploadingPhoto ? 'Uploading...' : 'Choose a group photo'}</span>
+                        <input type="file" accept="image/*" onChange={uploadPhoto} disabled={uploadingPhoto} />
+                    </label>
+                    {photoError && (
+                        <div className="settings-error" role="alert">
+                            {photoError}
+                        </div>
+                    )}
+                </div>
+
+                <div className="settings-section">
+                    <h4 className="section-title">
+                        <Icon name="bell" />
+                        Notifications
+                    </h4>
+                    <label className="notification-toggle">
+                        <span>Group notifications</span>
+                        <input
+                            type="checkbox"
+                            aria-label="Group notifications"
+                            checked={notificationsEnabled}
+                            onChange={toggleNotifications}
+                            disabled={loadingNotifications}
+                        />
+                    </label>
+                    {notificationError && (
+                        <div className="settings-error" role="alert">
+                            {notificationError}
+                        </div>
+                    )}
+                </div>
 
                 <div className="settings-section">
                     <h4 className="section-title">

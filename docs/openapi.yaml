@@ -42,6 +42,10 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/groupMembers
   /group/leaderboard:
     $ref: ./openapi/paths/groups.yaml#/leaderboard
+  /group/photo:
+    $ref: ./openapi/paths/groups.yaml#/groupPhoto
+  /group/notifications:
+    $ref: ./openapi/paths/groups.yaml#/groupNotifications
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
   /group/message-reactions/{messageID}:

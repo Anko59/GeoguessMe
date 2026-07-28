@@ -1,4 +1,4 @@
-export type IconName = 'arrow-left' | 'chevron-right' | 'close' | 'logout' | 'send' | 'users';
+export type IconName = 'arrow-left' | 'bell' | 'chevron-right' | 'close' | 'image' | 'logout' | 'send' | 'users';
 
 interface IconProps {
     name: IconName;
@@ -12,11 +12,24 @@ const paths: Record<IconName, React.ReactNode> = {
             <path d="m12 19-7-7 7-7" />
         </>
     ),
+    bell: (
+        <>
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M10 21h4" />
+        </>
+    ),
     'chevron-right': <path d="m9 18 6-6-6-6" />,
     close: (
         <>
             <path d="m18 6-12 12" />
             <path d="m6 6 12 12" />
+        </>
+    ),
+    image: (
+        <>
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="m21 15-5-5L5 21" />
         </>
     ),
     logout: (

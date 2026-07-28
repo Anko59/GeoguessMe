@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"geoguessme/internal/config"
+	"geoguessme/internal/database"
+
+	"github.com/pashagolub/pgxmock/v4"
 )
 
 type fakeStore struct {
@@ -22,6 +25,32 @@ type fakeStore struct {
 	subsByUser    map[string][]Subscription
 	deletedIDs    []string
 	deleteIDError error
+}
+
+func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := database.DB
+	database.DB = mock
+	t.Cleanup(func() {
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Error(err)
+		}
+		mock.Close()
+		database.DB = previous
+	})
+	mock.ExpectQuery("group_notification_preferences").WithArgs("group-1", "user-1").WillReturnRows(
+		pgxmock.NewRows([]string{"id", "username"}).AddRow("user-2", "bob"),
+	)
+	targets, err := (pgStore{}).GroupTargets(context.Background(), "group-1", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].UserID != "user-2" {
+		t.Fatalf("notification targets = %+v", targets)
+	}
 }
 
 func (f *fakeStore) Upsert(_ context.Context, _ *Subscription) error { return nil }

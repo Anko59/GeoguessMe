@@ -36,6 +36,21 @@ Group:
     code: { type: string, pattern: "^[A-Z0-9]{6}$" }
     created_at: { type: string, format: date-time }
 
+GroupPhoto:
+  type: object
+  required: [group_id, mime_type, byte_size, created_at]
+  properties:
+    group_id: { type: string, format: uuid }
+    mime_type: { type: string, enum: [image/jpeg] }
+    byte_size: { type: integer, minimum: 1 }
+    created_at: { type: string, format: date-time }
+
+GroupNotificationPreference:
+  type: object
+  required: [enabled]
+  properties:
+    enabled: { type: boolean }
+
 Member:
   type: object
   required: [id, username]
