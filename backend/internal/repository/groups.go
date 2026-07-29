@@ -166,26 +166,26 @@ func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, pe
 	start := leaderboardPeriodStart(period, time.Now())
 	query := `
 		SELECT u.id, u.username, u.avatar,
-		       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
+		       COALESCE(SUM(g.score), 0),
 		       COUNT(g.id), COALESCE(AVG(g.score), 0)
 		FROM group_members gm
 		JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 		LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id
 		WHERE gm.group_id = $1
 		GROUP BY u.id, u.username, u.avatar
-		ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
+		ORDER BY COALESCE(SUM(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 	args := []any{groupID}
 	if start != nil {
 		query = `
 			SELECT u.id, u.username, u.avatar,
-			       COALESCE(CAST(AVG(g.score) AS INTEGER), 0),
+			       COALESCE(SUM(g.score), 0),
 			       COUNT(g.id), COALESCE(AVG(g.score), 0)
 			FROM group_members gm
 			JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 			LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id AND g.created_at >= $2
 			WHERE gm.group_id = $1
 			GROUP BY u.id, u.username, u.avatar
-			ORDER BY COALESCE(AVG(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
+			ORDER BY COALESCE(SUM(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 		args = append(args, *start)
 	}
 	rows, err := database.DB.Query(ctx, query, args...)

@@ -58,6 +58,10 @@ limit still protects image decoding from oversized inputs.
 **Scale**: 0–5000. Points decrease rapidly for the first kilometres, then taper
 off.
 
+The group leaderboard ranks each member by the sum of all of their guess scores
+in the selected calendar week, month, or all-time period. The response also
+retains the average score as metadata, but it does not affect ranking.
+
 ## Result visibility
 
 | Who                      | When                                     |
