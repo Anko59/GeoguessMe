@@ -109,7 +109,7 @@ export default function GroupView() {
                     </div>
                 )}
                 {activeTab === 'leaderboard' && (
-                    <div className="tab-panel fade-in">
+                    <div className="tab-panel leaderboard-tab-panel fade-in">
                         <Leaderboard key={id} groupID={id} />
                     </div>
                 )}
