@@ -461,10 +461,11 @@ describe('Camera component', () => {
     });
 
     it('shows a camera switch button and switches to the back camera', async () => {
-        const enumerateDevices = vi.fn().mockResolvedValue([
-            { deviceId: 'cam1', kind: 'videoinput', label: 'Front Camera', groupId: 'g1' },
-            { deviceId: 'cam2', kind: 'videoinput', label: 'Back Camera', groupId: 'g2' },
-        ]);
+        const camera = { kind: 'videoinput' as const };
+        const enumerateDevices = vi
+            .fn()
+            .mockImplementationOnce(() => [camera])
+            .mockImplementation(() => [camera, camera]);
         const { trackStop } = stubUserMedia();
         vi.stubGlobal('navigator', {
             mediaDevices: { getUserMedia: mocks.getUserMedia, enumerateDevices },
@@ -474,9 +475,7 @@ describe('Camera component', () => {
         vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
         await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
-        await act(async () => {
-            await Promise.resolve();
-        });
+        await Promise.resolve();
         const switchBtn = screen.getByLabelText(/switch to back camera/i);
         expect(trackStop).not.toHaveBeenCalled();
         fireEvent.click(switchBtn);
