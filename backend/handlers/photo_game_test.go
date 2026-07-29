@@ -241,7 +241,7 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
 		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT 1 FROM messages").WithArgs(messageID).
@@ -255,7 +255,7 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 		}
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
 		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 		request := requestWithUser(method, "/", `{"emoji":"👍"}`, "user-1")
 		request.SetPathValue("messageID", messageID)
 		requireStatus(t, SetMessageReaction, request, http.StatusOK)

@@ -27,7 +27,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   controls the available chat action and is derived from the authenticated
   viewer's challenge view and guess state.
 - Messages may include aggregate `reactions`; each entry contains an emoji,
-  count, and `reacted` flag for the authenticated viewer.
+  count, the `usernames` of members who selected it, and a `reacted` flag for
+  the authenticated viewer. Usernames are sorted alphabetically.
 - Live reaction updates include `reaction_update` metadata so each WebSocket
   recipient applies the shared count without inheriting another member's
   viewer-specific `reacted` state. Guess submission also publishes a
