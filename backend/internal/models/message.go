@@ -23,9 +23,10 @@ type Message struct {
 }
 
 type Reaction struct {
-	Emoji   string `json:"emoji"`
-	Count   int    `json:"count"`
-	Reacted bool   `json:"reacted"`
+	Emoji     string   `json:"emoji"`
+	Count     int      `json:"count"`
+	Reacted   bool     `json:"reacted"`
+	Usernames []string `json:"usernames"`
 }
 
 // ReactionUpdate identifies the mutation behind a WebSocket aggregate update.

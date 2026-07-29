@@ -438,12 +438,12 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
 	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
 
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
 	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)

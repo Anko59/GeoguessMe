@@ -143,19 +143,28 @@ export default function Chat({
     const renderReactions = (message: Message) =>
         message.reactions && message.reactions.length > 0 ? (
             <div className="message-reactions" aria-label="Message reactions">
-                {message.reactions.map((reaction) => (
-                    <button
-                        key={reaction.emoji}
-                        type="button"
-                        className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
-                        onClick={() => void handleReaction(message, reaction.emoji)}
-                        aria-label={`${reaction.emoji} reaction, ${reaction.count}`}
-                        aria-pressed={reaction.reacted}
-                    >
-                        <span aria-hidden="true">{reaction.emoji}</span>
-                        <span>{reaction.count}</span>
-                    </button>
-                ))}
+                {message.reactions.map((reaction) => {
+                    const usernames = reaction.usernames?.length ? reaction.usernames.join(', ') : 'Unknown user';
+                    const reactionLabel = `${reaction.emoji} reaction, ${reaction.count}. Reacted by ${usernames}`;
+                    return (
+                        <span key={reaction.emoji} className="reaction-chip-wrapper">
+                            <button
+                                type="button"
+                                className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
+                                onClick={() => void handleReaction(message, reaction.emoji)}
+                                aria-label={reactionLabel}
+                                title={`Reacted by ${usernames}`}
+                                aria-pressed={reaction.reacted}
+                            >
+                                <span aria-hidden="true">{reaction.emoji}</span>
+                                <span>{reaction.count}</span>
+                            </button>
+                            <span className="reaction-chip-tooltip" role="tooltip">
+                                {usernames}
+                            </span>
+                        </span>
+                    );
+                })}
             </div>
         ) : null;
 

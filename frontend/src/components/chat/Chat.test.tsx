@@ -128,6 +128,26 @@ describe('Chat', () => {
         );
     });
 
+    it('shows the members who selected each reaction', () => {
+        const { container } = render(
+            <Chat
+                messages={[
+                    message({
+                        reactions: [{ emoji: '👍', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
+                    }),
+                ]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+            />,
+        );
+
+        const reactionChip = container.querySelector('.reaction-chip') as HTMLButtonElement;
+        expect(reactionChip).toHaveAttribute('aria-label', '👍 reaction, 2. Reacted by alice, carol');
+        expect(reactionChip).toHaveAttribute('title', 'Reacted by alice, carol');
+        expect(container.querySelector('.reaction-chip-tooltip')).toHaveTextContent('alice, carol');
+    });
+
     it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {
         render(
             <Chat
