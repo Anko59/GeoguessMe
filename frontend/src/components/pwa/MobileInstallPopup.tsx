@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { isIosSafari, isStandaloneDisplay } from './usePwaInstall';
+import { isIosSafari, isStandaloneDisplay, usePwaInstall } from './usePwaInstall';
 import './MobileInstallPopup.css';
 
 export default function MobileInstallPopup() {
+    const { installable, promptInstall } = usePwaInstall();
     const [visible, setVisible] = useState(() => {
         if (isStandaloneDisplay()) return false;
         try {
@@ -28,6 +29,12 @@ export default function MobileInstallPopup() {
     };
 
     const iosGuide = isIosSafari();
+    const handleInstall = async () => {
+        const outcome = await promptInstall();
+        if (outcome !== 'unavailable') {
+            dismiss();
+        }
+    };
 
     return (
         <div className="mobile-install-popup" role="dialog" aria-label="Install GeoGuessMe">
@@ -52,6 +59,10 @@ export default function MobileInstallPopup() {
                             Tap <strong>Add</strong>
                         </li>
                     </ol>
+                ) : installable ? (
+                    <button type="button" className="btn btn-primary" onClick={() => void handleInstall()}>
+                        Install app
+                    </button>
                 ) : (
                     <button type="button" className="btn btn-primary" onClick={dismiss}>
                         Got it

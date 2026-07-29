@@ -39,8 +39,8 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 		WillReturnRows(singleMessageRow("message-1", "challenge", &photoID, now))
 	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}).
-			AddRow("message-1", "👍", 2, true))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}).
+			AddRow("message-1", "👍", 2, true, []string{"alice", "bob"}))
 	mock.ExpectQuery("SELECT p.id,").
 		WithArgs([]string{photoID}, "viewer-1").
 		WillReturnRows(pgxmock.NewRows([]string{"id", "challenge_status", "challenge_resolved"}).
@@ -51,7 +51,8 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	}
 	message := page.Items[0]
 	if message.ChallengeStatus != "guessed" || !message.ChallengeResolved ||
-		len(message.Reactions) != 1 || !message.Reactions[0].Reacted || message.Reactions[0].Count != 2 {
+		len(message.Reactions) != 1 || !message.Reactions[0].Reacted || message.Reactions[0].Count != 2 ||
+		len(message.Reactions[0].Usernames) != 2 || message.Reactions[0].Usernames[1] != "bob" {
 		t.Fatalf("enriched message = %+v", message)
 	}
 
@@ -60,7 +61,7 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 		WillReturnRows(singleMessageRow("message-1", "text", nil, now))
 	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-2").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 	loaded, err := GetMessageForViewer(ctx, "message-1", "viewer-2")
 	if err != nil || loaded == nil || loaded.Reactions == nil {
 		t.Fatalf("message for viewer = %+v, %v", loaded, err)
@@ -71,7 +72,7 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 		WillReturnRows(singleMessageRow("challenge-message", "challenge", &photoID, now))
 	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
 		WithArgs([]string{"challenge-message"}, "").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
 	loaded, err = GetChallengeMessageForViewer(ctx, photoID, "")
 	if err != nil || loaded == nil || loaded.ID != "challenge-message" {
 		t.Fatalf("challenge message = %+v, %v", loaded, err)

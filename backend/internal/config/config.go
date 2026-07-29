@@ -49,6 +49,7 @@ type Config struct {
 	TrustedProxyCIDRs []string
 
 	UploadMaxBytes  int64
+	AvatarMaxBytes  int64
 	UploadMaxPixels uint64
 	ChallengeTTL    time.Duration
 	ViewWindow      time.Duration
@@ -124,6 +125,7 @@ func Load() *Config {
 		TrustedProxyCIDRs: splitList(os.Getenv("TRUSTED_PROXY_CIDRS")),
 
 		UploadMaxBytes:  getEnvAsInt64("UPLOAD_MAX_BYTES", 10*1024*1024),
+		AvatarMaxBytes:  getEnvAsInt64("AVATAR_MAX_BYTES", 25*1024*1024),
 		UploadMaxPixels: uint64(getEnvAsInt64("UPLOAD_MAX_PIXELS", 25_000_000)),
 		ChallengeTTL:    getEnvAsDuration("CHALLENGE_TTL", 24*time.Hour),
 		ViewWindow:      getEnvAsDuration("PHOTO_VIEW_WINDOW", 10*time.Second),
@@ -195,7 +197,7 @@ func (c *Config) Validate() error {
 	if publicErr != nil || publicURL.Host == "" || (publicURL.Scheme != "http" && publicURL.Scheme != "https") {
 		problems = append(problems, "PUBLIC_URL must be a valid http(s) URL")
 	}
-	if c.UploadMaxBytes <= 0 || c.UploadMaxPixels == 0 {
+	if c.UploadMaxBytes <= 0 || c.AvatarMaxBytes <= 0 || c.UploadMaxPixels == 0 {
 		problems = append(problems, "upload limits must be positive")
 	}
 	if c.ChallengeTTL <= 0 || c.ViewWindow <= 0 || c.PhotoRetention <= 0 {

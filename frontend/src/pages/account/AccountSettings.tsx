@@ -142,6 +142,7 @@ export default function AccountSettings() {
                             />
                         </label>
                     </div>
+                    <p className="account-help">Photos up to 25 MiB are accepted and resized automatically.</p>
                     <div className="avatar-picker" role="radiogroup" aria-label="Profile image">
                         {avatars.map((candidate) => (
                             <button

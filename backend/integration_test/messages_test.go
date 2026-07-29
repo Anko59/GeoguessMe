@@ -11,7 +11,8 @@ import (
 
 func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
-	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	bobName := unique("bob")
+	bob := signup(t, bobName, bobName+"@example.test", "StrongPassword123")
 	groupID, code := createGroup(t, alice.access, "Reaction Group")
 	joinGroup(t, bob.access, code)
 
@@ -32,15 +33,17 @@ func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
 	var updated struct {
 		Reactions []struct {
-			Emoji   string `json:"emoji"`
-			Count   int    `json:"count"`
-			Reacted bool   `json:"reacted"`
+			Emoji     string   `json:"emoji"`
+			Count     int      `json:"count"`
+			Reacted   bool     `json:"reacted"`
+			Usernames []string `json:"usernames"`
 		} `json:"reactions"`
 	}
 	require.NoError(t, json.Unmarshal(data, &updated))
 	require.Equal(t, "👍", updated.Reactions[0].Emoji)
 	require.Equal(t, 1, updated.Reactions[0].Count)
 	require.True(t, updated.Reactions[0].Reacted)
+	require.Equal(t, []string{bobName}, updated.Reactions[0].Usernames)
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 	_, livePayload, err := conn.ReadMessage()
 	require.NoError(t, err)
@@ -61,13 +64,15 @@ func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	var page struct {
 		Items []struct {
 			Reactions []struct {
-				Count int `json:"count"`
+				Count     int      `json:"count"`
+				Usernames []string `json:"usernames"`
 			} `json:"reactions"`
 		} `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(data, &page))
 	require.Len(t, page.Items, 1)
 	require.Equal(t, 1, page.Items[0].Reactions[0].Count)
+	require.Equal(t, []string{bobName}, page.Items[0].Reactions[0].Usernames)
 
 	resp, data = doJSON(t, http.MethodDelete, path, map[string]string{"emoji": "👍"}, bob.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))

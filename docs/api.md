@@ -27,7 +27,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   controls the available chat action and is derived from the authenticated
   viewer's challenge view and guess state.
 - Messages may include aggregate `reactions`; each entry contains an emoji,
-  count, and `reacted` flag for the authenticated viewer.
+  count, the `usernames` of members who selected it, and a `reacted` flag for
+  the authenticated viewer. Usernames are sorted alphabetically.
 - Live reaction updates include `reaction_update` metadata so each WebSocket
   recipient applies the shared count without inheriting another member's
   viewer-specific `reacted` state. Guess submission also publishes a
@@ -53,23 +54,23 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ### Groups
 
-| Method | Path                                              | Auth   | Description                                                  |
-| ------ | ------------------------------------------------- | ------ | ------------------------------------------------------------ |
-| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                           |
-| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                        |
-| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                          |
-| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                                  |
-| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                   |
-| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Calendar week/month or all-time leaderboard (member only)    |
-| GET    | `/api/v1/group/photo?group_id=`                   | Bearer | Stream the private group photo (member only)                 |
-| POST   | `/api/v1/group/photo`                             | Bearer | Replace group photo `multipart(group_id,photo)`              |
-| GET    | `/api/v1/group/notifications?group_id=`           | Bearer | Read this member's group notification preference             |
-| PUT    | `/api/v1/group/notifications?group_id=`           | Bearer | Set `{enabled}` for this member's group notifications        |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                           |
-| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add an emoji reaction                                        |
-| DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                     |
-| POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                  |
-| GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`) |
+| Method | Path                                              | Auth   | Description                                                         |
+| ------ | ------------------------------------------------- | ------ | ------------------------------------------------------------------- |
+| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                                  |
+| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                               |
+| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                                 |
+| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                                         |
+| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                          |
+| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Sum-based calendar week/month or all-time leaderboard (member only) |
+| GET    | `/api/v1/group/photo?group_id=`                   | Bearer | Stream the private group photo (member only)                        |
+| POST   | `/api/v1/group/photo`                             | Bearer | Replace group photo `multipart(group_id,photo)`                     |
+| GET    | `/api/v1/group/notifications?group_id=`           | Bearer | Read this member's group notification preference                    |
+| PUT    | `/api/v1/group/notifications?group_id=`           | Bearer | Set `{enabled}` for this member's group notifications               |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                                  |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add an emoji reaction                                               |
+| DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                            |
+| POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                         |
+| GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`)        |
 
 ### Challenges
 
