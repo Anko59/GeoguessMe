@@ -293,10 +293,11 @@ func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
 		t.Fatal(err)
 	}
 	MediaStore = store
-	// A normal phone photo is larger than the former 2 MiB avatar cap. The
-	// handler must accept it and normalize it down to a small thumbnail.
-	photo := largeAvatarJPEG(t, 3<<20)
-	RuntimeConfig.UploadMaxBytes = int64(len(photo)) + 1<<20
+	// A high-resolution phone photo is larger than the shared 10 MiB media cap.
+	// The avatar-specific limit must accept it and normalize it down to a small
+	// thumbnail without changing challenge upload limits.
+	photo := largeAvatarJPEG(t, 10<<20)
+	RuntimeConfig.AvatarMaxBytes = int64(len(photo)) + 1<<20
 	RuntimeConfig.UploadMaxPixels = 25_000_000
 	mock := handlerMock(t)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}

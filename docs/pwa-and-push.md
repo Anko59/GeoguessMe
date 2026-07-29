@@ -12,13 +12,18 @@ registered on every page load.
 
 ### Install flow
 
-- **Android / desktop Chromium**: a `beforeinstallprompt` banner appears when
-  the user is authenticated, letting them install the app in one tap.
+- **Android / desktop Chromium**: when the browser exposes
+  `beforeinstallprompt`, the mobile landing popup and authenticated onboarding
+  both offer an **Install app** button for one-tap installation. If the browser
+  does not expose the event, the popup remains dismissible and the browser's
+  **Add to Home screen** menu can be used.
 - **iOS Safari**: the app displays step-by-step **Add to Home Screen**
   instructions (Share → Add to Home Screen → Add). Safari does not support the
   `beforeinstallprompt` event, so the guidance is unconditional until dismissed
-  or the app is installed.
-- The banner is dismissible; the choice is stored in `localStorage`.
+  or the app is installed. iPadOS desktop-mode Safari is detected as iOS too.
+- The authenticated onboarding dismissal is stored in `localStorage`; the public
+  mobile popup uses a session-scoped dismissal so it can guide visitors again in
+  a later session.
 
 Once installed, the app launches in standalone mode with a navy theme and no
 browser chrome.
