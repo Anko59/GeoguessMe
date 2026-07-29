@@ -22,6 +22,34 @@ beforeEach(() => {
 });
 
 describe('Chat', () => {
+    it('shows a sender name once for consecutive messages from the same user', () => {
+        const { container } = render(
+            <Chat
+                messages={[
+                    message({ id: 'first', content: 'First message' }),
+                    message({ id: 'second', content: 'Second message' }),
+                    message({
+                        id: 'third',
+                        user_id: 'user-3',
+                        username: 'carol',
+                        content: 'A different sender',
+                    }),
+                ]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+            />,
+        );
+
+        expect(Array.from(container.querySelectorAll('.message-username')).map((node) => node.textContent)).toEqual([
+            'bob',
+            'carol',
+        ]);
+        expect(container.querySelector('[data-message-id="second"] .avatar-container')).toHaveClass(
+            'avatar-placeholder',
+        );
+    });
+
     it('renders chat states, sends messages, and opens challenges', () => {
         const send = vi.fn();
         const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;
