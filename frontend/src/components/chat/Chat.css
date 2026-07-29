@@ -129,6 +129,10 @@
     object-fit: cover;
 }
 
+.avatar-placeholder {
+    visibility: hidden;
+}
+
 .message-wrapper {
     max-width: min(76%, 34rem);
     display: flex;
