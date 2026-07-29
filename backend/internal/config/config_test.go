@@ -31,6 +31,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.UploadDir != "./uploads" {
 		t.Errorf("Expected default UploadDir ./uploads, got %s", cfg.UploadDir)
 	}
+	if cfg.AvatarMaxBytes != 25*1024*1024 {
+		t.Errorf("Expected default AvatarMaxBytes 25 MiB, got %d", cfg.AvatarMaxBytes)
+	}
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Errorf("Expected 2 default AllowedOrigins, got %d", len(cfg.AllowedOrigins))
 	}
@@ -106,6 +109,7 @@ func validConfig() *Config {
 		S3SecretKey:       "s",
 		AllowedOrigins:    []string{"http://localhost:5173"},
 		UploadMaxBytes:    5 * 1024 * 1024,
+		AvatarMaxBytes:    25 * 1024 * 1024,
 		UploadMaxPixels:   25_000_000,
 		ChallengeTTL:      24 * time.Hour,
 		ViewWindow:        10 * time.Second,
@@ -317,11 +321,12 @@ func TestLoadValidatedAndInvalidEnvironmentValuesUseSafeDefaults(t *testing.T) {
 	t.Setenv("DB_MIN_CONNS", "bad")
 	t.Setenv("DB_MAX_CONNS", "bad")
 	t.Setenv("UPLOAD_MAX_BYTES", "bad")
+	t.Setenv("AVATAR_MAX_BYTES", "bad")
 	t.Setenv("UPLOAD_MAX_PIXELS", "bad")
 	t.Setenv("S3_USE_PATH_STYLE", "bad")
 	t.Setenv("ACCESS_TOKEN_TTL", "bad")
 	t.Setenv("SMTP_DIAL_TIMEOUT", "bad")
-	if cfg := Load(); cfg.DatabaseMinConns != 2 || cfg.DatabaseMaxConns != 10 || cfg.UploadMaxBytes <= 0 || cfg.UploadMaxPixels == 0 || !cfg.S3UsePathStyle || cfg.AccessTokenTTL <= 0 || cfg.SMTPDialTimeout <= 0 {
+	if cfg := Load(); cfg.DatabaseMinConns != 2 || cfg.DatabaseMaxConns != 10 || cfg.UploadMaxBytes <= 0 || cfg.AvatarMaxBytes <= 0 || cfg.UploadMaxPixels == 0 || !cfg.S3UsePathStyle || cfg.AccessTokenTTL <= 0 || cfg.SMTPDialTimeout <= 0 {
 		t.Fatalf("invalid environment values were not replaced safely: %+v", cfg)
 	}
 
@@ -356,6 +361,7 @@ func TestValidateReportsBroadConfigurationFailures(t *testing.T) {
 	c.S3AccessKey = ""
 	c.S3SecretKey = ""
 	c.UploadMaxBytes = 0
+	c.AvatarMaxBytes = 0
 	c.UploadMaxPixels = 0
 	c.ChallengeTTL = 0
 	c.ViewWindow = 0

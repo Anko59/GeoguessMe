@@ -44,6 +44,10 @@ for a held video capture. Recorded MP4 and WebM clips share the configured
 `UPLOAD_MAX_BYTES` limit (10 MiB by default); selected files remain photo-only
 so that video uploads originate from the privacy-preserving camera flow.
 
+Profile photos use the separate `AVATAR_MAX_BYTES` limit (25 MiB by default)
+because they are resized to a small thumbnail before storage. The shared pixel
+limit still protects image decoding from oversized inputs.
+
 ## Scoring
 
 **Formula**: Scoring uses exponential decay based on distance:

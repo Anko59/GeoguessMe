@@ -31,11 +31,10 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := GetUserIDFromContext(r)
 	// Avatars are resized to a small thumbnail server-side, but the upload must
-	// still accept a full-resolution phone photo. Reuse the shared runtime
-	// upload limit (same as challenge uploads) instead of a separate cap that
-	// rejected ordinary 3-8 MiB phone photos before normalization could shrink
-	// them.
-	maxBytes := RuntimeConfig.UploadMaxBytes
+	// still accept a full-resolution phone photo. Avatar uploads have a larger
+	// dedicated limit than challenge media because they are normalized to a
+	// small thumbnail and do not consume the challenge-media budget.
+	maxBytes := RuntimeConfig.AvatarMaxBytes
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
