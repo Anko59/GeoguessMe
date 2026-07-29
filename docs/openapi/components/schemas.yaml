@@ -66,9 +66,10 @@ LeaderboardEntry:
     user_id: { type: string, format: uuid }
     username: { type: string }
     avatar: { type: string }
-    score: { type: integer }
+    score: { type: integer, description: Sum of all guess scores in the selected period. }
     guess_count: { type: integer }
-    average_score: { type: number }
+    average_score:
+      { type: number, description: Average guess score for display metadata; it does not determine ranking. }
 
 Message:
   type: object

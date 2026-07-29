@@ -165,12 +165,13 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	if err != nil || len(members) != 1 || members[0]["username"] != "alice" {
 		t.Fatalf("members = %+v, %v", members, err)
 	}
-	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("u1", "alice", "avatar4.png", 80, 2, 80.5))
+	leaderboardQuery := `(?s)SELECT u\.id, u\.username, u\.avatar.*SUM\(g\.score\).*ORDER BY COALESCE\(SUM\(g\.score\), 0\) DESC`
+	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0))
 	entries, err := GetGroupLeaderboardContext(context.Background(), "g1")
-	if err != nil || len(entries) != 1 || entries[0].Score != 80 || entries[0].Avatar != "avatar4.png" {
+	if err != nil || len(entries) != 1 || entries[0].Score != 160 || entries[0].Average != 80.0 || entries[0].Avatar != "avatar4.png" {
 		t.Fatalf("leaderboard = %+v, %v", entries, err)
 	}
-	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("u1", "alice", "avatar4.png", 80, 2, 80.5))
+	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0))
 	if entries, err := GetGroupLeaderboard("g1"); err != nil || len(entries) != 1 {
 		t.Fatalf("GetGroupLeaderboard = %+v, %v", entries, err)
 	}
