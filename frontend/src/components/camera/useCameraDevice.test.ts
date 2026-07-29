@@ -43,6 +43,26 @@ describe('useCameraDevice', () => {
         expect(result.current.hasMultipleCameras).toBe(true);
     });
 
+    it('refreshes camera detection after permission reveals another camera', async () => {
+        mocks.enumerateDevices
+            .mockResolvedValueOnce([{ deviceId: 'cam1', kind: 'videoinput', label: '', groupId: '' }])
+            .mockResolvedValueOnce([
+                { deviceId: 'cam1', kind: 'videoinput', label: 'Front Camera', groupId: 'g1' },
+                { deviceId: 'cam2', kind: 'videoinput', label: 'Back Camera', groupId: 'g2' },
+            ]);
+        const { result } = renderHook(() => useCameraDevice());
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(result.current.hasMultipleCameras).toBe(false);
+
+        await act(async () => {
+            await result.current.refresh();
+        });
+        expect(result.current.hasMultipleCameras).toBe(true);
+    });
+
     it('switchCamera toggles facing mode and calls the stored restart', async () => {
         mocks.enumerateDevices.mockResolvedValue([
             { deviceId: 'cam1', kind: 'videoinput', label: 'Front Camera', groupId: 'g1' },

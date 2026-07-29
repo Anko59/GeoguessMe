@@ -45,7 +45,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const initializedCameraAttemptRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const locationRequestRef = useRef<Promise<GeolocationPosition> | null>(null);
-    const { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart } = useCameraDevice();
+    const { facingMode, hasMultipleCameras, facingModeRef, refresh, switchCamera, setRestart } = useCameraDevice();
     const recordingError = useCallback((message: string) => setError(message), []);
     const capturedVideoError = useCallback(
         () => setError('The recorded video could not be played. Please record a new clip and try again.'),
@@ -207,7 +207,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
     }, []);
-
     const startCamera = useCallback(async (): Promise<MediaStream | null> => {
         const attempt = ++cameraAttemptRef.current;
         filePreparationAttemptRef.current += 1;
@@ -242,6 +241,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 return null;
             }
             streamRef.current = mediaStream;
+            void refresh(); // iOS Safari reveals additional cameras after permission.
             const video = videoRef.current;
             if (!video) {
                 mediaStream.getTracks().forEach((track) => track.stop());
@@ -277,7 +277,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             else setError('The camera could not be started. Try again or upload a photo from your device.');
             return null;
         }
-    }, [destroyEffects, discardRecording, facingModeRef, initializeVideoEffects, stopCamera]);
+    }, [destroyEffects, discardRecording, facingModeRef, initializeVideoEffects, refresh, stopCamera]);
     const startHeldVideo = async (isStillPressed: () => boolean) => {
         if (recording) return;
         const videoStream = streamRef.current;
