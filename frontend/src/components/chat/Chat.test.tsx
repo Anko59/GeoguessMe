@@ -22,6 +22,34 @@ beforeEach(() => {
 });
 
 describe('Chat', () => {
+    it('shows a sender name once for consecutive messages from the same user', () => {
+        const { container } = render(
+            <Chat
+                messages={[
+                    message({ id: 'first', content: 'First message' }),
+                    message({ id: 'second', content: 'Second message' }),
+                    message({
+                        id: 'third',
+                        user_id: 'user-3',
+                        username: 'carol',
+                        content: 'A different sender',
+                    }),
+                ]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+            />,
+        );
+
+        expect(Array.from(container.querySelectorAll('.message-username')).map((node) => node.textContent)).toEqual([
+            'bob',
+            'carol',
+        ]);
+        expect(container.querySelector('[data-message-id="second"] .avatar-container')).toHaveClass(
+            'avatar-placeholder',
+        );
+    });
+
     it('renders chat states, sends messages, and opens challenges', () => {
         const send = vi.fn();
         const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;
@@ -98,6 +126,26 @@ describe('Chat', () => {
         expect(onMessageUpdated).toHaveBeenCalledWith(
             expect.objectContaining({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
         );
+    });
+
+    it('shows the members who selected each reaction', () => {
+        const { container } = render(
+            <Chat
+                messages={[
+                    message({
+                        reactions: [{ emoji: '👍', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
+                    }),
+                ]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+            />,
+        );
+
+        const reactionChip = container.querySelector('.reaction-chip') as HTMLButtonElement;
+        expect(reactionChip).toHaveAttribute('aria-label', '👍 reaction, 2. Reacted by alice, carol');
+        expect(reactionChip).toHaveAttribute('title', 'Reacted by alice, carol');
+        expect(container.querySelector('.reaction-chip-tooltip')).toHaveTextContent('alice, carol');
     });
 
     it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {

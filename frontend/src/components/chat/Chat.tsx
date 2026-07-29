@@ -143,19 +143,28 @@ export default function Chat({
     const renderReactions = (message: Message) =>
         message.reactions && message.reactions.length > 0 ? (
             <div className="message-reactions" aria-label="Message reactions">
-                {message.reactions.map((reaction) => (
-                    <button
-                        key={reaction.emoji}
-                        type="button"
-                        className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
-                        onClick={() => void handleReaction(message, reaction.emoji)}
-                        aria-label={`${reaction.emoji} reaction, ${reaction.count}`}
-                        aria-pressed={reaction.reacted}
-                    >
-                        <span aria-hidden="true">{reaction.emoji}</span>
-                        <span>{reaction.count}</span>
-                    </button>
-                ))}
+                {message.reactions.map((reaction) => {
+                    const usernames = reaction.usernames?.length ? reaction.usernames.join(', ') : 'Unknown user';
+                    const reactionLabel = `${reaction.emoji} reaction, ${reaction.count}. Reacted by ${usernames}`;
+                    return (
+                        <span key={reaction.emoji} className="reaction-chip-wrapper">
+                            <button
+                                type="button"
+                                className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
+                                onClick={() => void handleReaction(message, reaction.emoji)}
+                                aria-label={reactionLabel}
+                                title={`Reacted by ${usernames}`}
+                                aria-pressed={reaction.reacted}
+                            >
+                                <span aria-hidden="true">{reaction.emoji}</span>
+                                <span>{reaction.count}</span>
+                            </button>
+                            <span className="reaction-chip-tooltip" role="tooltip">
+                                {usernames}
+                            </span>
+                        </span>
+                    );
+                })}
             </div>
         ) : null;
 
@@ -210,7 +219,10 @@ export default function Chat({
                 {messages.map((message, index) => {
                     const isMe = message.user_id === currentUserId;
                     const isSystem = message.kind === 'system';
-                    const showAvatar = index === 0 || messages[index - 1].user_id !== message.user_id;
+                    const previousMessage = index > 0 ? messages[index - 1] : undefined;
+                    const sameSenderGroup =
+                        !isSystem && previousMessage?.kind !== 'system' && previousMessage?.user_id === message.user_id;
+                    const showSender = !sameSenderGroup;
                     const replyTarget = message.reply_to_id
                         ? messages.find((candidate) => candidate.id === message.reply_to_id)
                         : undefined;
@@ -229,18 +241,23 @@ export default function Chat({
                                 onPointerUp={handleMessagePointerEnd}
                                 onPointerCancel={handleMessagePointerEnd}
                             >
-                                {!isMe && showAvatar && (
-                                    <div className="avatar-container">
-                                        <Avatar
-                                            userID={message.user_id}
-                                            avatar={message.avatar}
-                                            username={message.username}
-                                            className="avatar"
-                                        />
+                                {!isMe && (
+                                    <div
+                                        className={`avatar-container${showSender ? '' : ' avatar-placeholder'}`}
+                                        aria-hidden={!showSender}
+                                    >
+                                        {showSender && (
+                                            <Avatar
+                                                userID={message.user_id}
+                                                avatar={message.avatar}
+                                                username={message.username}
+                                                className="avatar"
+                                            />
+                                        )}
                                     </div>
                                 )}
                                 <div className="message-wrapper">
-                                    {!isMe && (
+                                    {!isMe && showSender && (
                                         <div className="message-username">{message.username || 'Unknown User'}</div>
                                     )}
                                     <button
@@ -300,18 +317,23 @@ export default function Chat({
                             onPointerUp={handleMessagePointerEnd}
                             onPointerCancel={handleMessagePointerEnd}
                         >
-                            {!isMe && !isSystem && showAvatar && (
-                                <div className="avatar-container">
-                                    <Avatar
-                                        userID={message.user_id}
-                                        avatar={message.avatar}
-                                        username={message.username}
-                                        className="avatar"
-                                    />
+                            {!isMe && !isSystem && (
+                                <div
+                                    className={`avatar-container${showSender ? '' : ' avatar-placeholder'}`}
+                                    aria-hidden={!showSender}
+                                >
+                                    {showSender && (
+                                        <Avatar
+                                            userID={message.user_id}
+                                            avatar={message.avatar}
+                                            username={message.username}
+                                            className="avatar"
+                                        />
+                                    )}
                                 </div>
                             )}
                             <div className="message-wrapper">
-                                {!isMe && !isSystem && (
+                                {!isMe && !isSystem && showSender && (
                                     <div className="message-username">{message.username || 'Unknown User'}</div>
                                 )}
                                 <div

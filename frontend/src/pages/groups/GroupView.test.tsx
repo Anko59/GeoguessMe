@@ -217,6 +217,7 @@ describe('GroupView', () => {
         fireEvent.click(screen.getByTestId('tab-leaderboard'));
         expect(screen.getByTestId('active-tab')).toHaveTextContent('leaderboard');
         expect(screen.getByTestId('leaderboard')).toBeInTheDocument();
+        expect(screen.getByTestId('leaderboard').parentElement).toHaveClass('leaderboard-tab-panel');
     });
 
     it('opens the game when a challenge message is received', async () => {

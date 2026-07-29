@@ -5,21 +5,23 @@ export function useCameraDevice() {
     const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
     const facingModeRef = useRef<'user' | 'environment'>('user');
     const restartRef = useRef<() => Promise<void>>(() => Promise.resolve());
+    const enumerationRequestRef = useRef(0);
+
+    const refresh = useCallback(async () => {
+        const request = ++enumerationRequestRef.current;
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            if (request !== enumerationRequestRef.current) return;
+            setHasMultipleCameras(devices.filter((d) => d.kind === 'videoinput').length > 1);
+        } catch {
+            // Camera enumeration is optional; getUserMedia reports the actionable error.
+        }
+    }, []);
 
     useEffect(() => {
-        if (!navigator.mediaDevices?.enumerateDevices) return;
-        let active = true;
-        navigator.mediaDevices
-            .enumerateDevices()
-            .then((devices) => {
-                if (!active) return;
-                setHasMultipleCameras(devices.filter((d) => d.kind === 'videoinput').length > 1);
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
+        void Promise.resolve().then(refresh);
+    }, [refresh]);
 
     const setRestart = useCallback((fn: () => Promise<void>) => {
         restartRef.current = fn;
@@ -31,5 +33,5 @@ export function useCameraDevice() {
         void restartRef.current();
     }, []);
 
-    return { facingMode, hasMultipleCameras, facingModeRef, switchCamera, setRestart };
+    return { facingMode, hasMultipleCameras, facingModeRef, refresh, switchCamera, setRestart };
 }

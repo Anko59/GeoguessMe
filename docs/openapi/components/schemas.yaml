@@ -66,9 +66,10 @@ LeaderboardEntry:
     user_id: { type: string, format: uuid }
     username: { type: string }
     avatar: { type: string }
-    score: { type: integer }
+    score: { type: integer, description: Sum of all guess scores in the selected period. }
     guess_count: { type: integer }
-    average_score: { type: number }
+    average_score:
+      { type: number, description: Average guess score for display metadata; it does not determine ranking. }
 
 Message:
   type: object
@@ -98,11 +99,15 @@ Message:
 
 MessageReaction:
   type: object
-  required: [emoji, count, reacted]
+  required: [emoji, count, reacted, usernames]
   properties:
     emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
     count: { type: integer, minimum: 1 }
     reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
+    usernames:
+      type: array
+      items: { type: string }
+      description: Usernames of group members who selected this reaction
 
 MessageReactionRequest:
   type: object

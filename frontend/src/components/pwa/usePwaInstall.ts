@@ -39,7 +39,11 @@ export function isIosSafari(): boolean {
         return false;
     }
     const ua = navigator.userAgent;
-    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    const isIOS =
+        /iphone|ipad|ipod/i.test(ua) ||
+        // iPadOS can request the desktop Safari user agent while retaining
+        // touch support, so its user agent identifies as Macintosh.
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     // Other iOS browsers (Chrome, Firefox) report as Safari but cannot be added
     // to the home screen the same way; only genuine Safari qualifies.
     const isWebkit = /webkit/i.test(ua);

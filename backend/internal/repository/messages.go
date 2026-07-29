@@ -182,8 +182,11 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 		return nil
 	}
 	rows, err := database.DB.Query(ctx, `
-		SELECT message_id, emoji, COUNT(*)::INTEGER, COALESCE(BOOL_OR(user_id = $2), FALSE)
+		SELECT message_id, emoji, COUNT(*)::INTEGER,
+			COALESCE(BOOL_OR(user_id = $2), FALSE),
+			ARRAY_AGG(u.username ORDER BY u.username)
 		FROM message_reactions
+		JOIN users u ON u.id = message_reactions.user_id
 		WHERE message_id = ANY($1)
 		GROUP BY message_id, emoji
 		ORDER BY message_id, emoji`, messageIDs, viewerID)
@@ -195,7 +198,7 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 	for rows.Next() {
 		var messageID string
 		var reaction models.Reaction
-		if err := rows.Scan(&messageID, &reaction.Emoji, &reaction.Count, &reaction.Reacted); err != nil {
+		if err := rows.Scan(&messageID, &reaction.Emoji, &reaction.Count, &reaction.Reacted, &reaction.Usernames); err != nil {
 			return err
 		}
 		reactions[messageID] = append(reactions[messageID], reaction)

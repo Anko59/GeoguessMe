@@ -103,6 +103,12 @@
     height: 100%;
 }
 
+.leaderboard-tab-panel {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
 @media (hover: hover) {
     .back-btn:hover,
     .settings-btn:hover {

@@ -40,6 +40,7 @@ export interface Reaction {
     emoji: string;
     count: number;
     reacted: boolean;
+    usernames?: string[];
 }
 
 export interface Group {
