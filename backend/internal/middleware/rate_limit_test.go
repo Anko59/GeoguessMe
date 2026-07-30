@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -378,4 +380,46 @@ func TestSetClockNilRestoresRealTime(t *testing.T) {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, "request should succeed after restoring real clock and reset")
+}
+
+func TestRateLimitByIdentityPreservesMultipartBody(t *testing.T) {
+	ResetRateLimiter()
+	defer ResetRateLimiter()
+
+	payload := bytes.Repeat([]byte("camera-photo"), 8192)
+	handler := RateLimitByIdentity(1, time.Minute, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Equal(t, payload, body)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/auth/profile/avatar", bytes.NewReader(payload))
+	request.RemoteAddr = "192.0.2.10:1234"
+	request.Header.Set("Content-Type", "multipart/form-data; boundary=camera")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestRateLimitByIdentityPreservesLargeJSONBody(t *testing.T) {
+	ResetRateLimiter()
+	defer ResetRateLimiter()
+
+	payload := bytes.Repeat([]byte("json-body"), 8192)
+	handler := RateLimitByIdentity(1, time.Minute, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Equal(t, payload, body)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/auth/profile", bytes.NewReader(payload))
+	request.RemoteAddr = "192.0.2.11:1234"
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
 }

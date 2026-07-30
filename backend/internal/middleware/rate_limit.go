@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -97,17 +98,27 @@ func RateLimitWithTrustedProxies(limit int, window time.Duration, trustedCIDRs [
 }
 
 // RateLimitByIdentity rate-limits by client IP combined with the identity
-// field (username or email) extracted from the JSON request body (up to
-// 64 KiB). The body is replaced so downstream handlers can still read it.
+// field (username or email) extracted from small JSON request bodies. Non-JSON
+// and larger requests use the client-IP limiter without consuming the body.
 func RateLimitByIdentity(limit int, window time.Duration, trustedCIDRs []string) func(http.Handler) http.Handler {
+	ipLimit := rateLimit(limit, window, trustedCIDRs, false)
+	const maxIdentityBodyBytes = 64 * 1024
 	return func(next http.Handler) http.Handler {
+		ipLimited := ipLimit(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var body []byte
-			var err error
-			if r.Body != nil {
-				body, err = io.ReadAll(io.LimitReader(r.Body, 64*1024))
+			mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" || r.ContentLength < 0 || r.ContentLength > maxIdentityBodyBytes {
+				// Multipart uploads cannot be inspected for a JSON identity. Use
+				// the trusted client IP instead, and never consume non-small bodies.
+				ipLimited.ServeHTTP(w, r)
+				return
 			}
-			if err == nil {
+			var body []byte
+			var readErr error
+			if r.Body != nil {
+				body, readErr = io.ReadAll(r.Body)
+			}
+			if readErr == nil {
 				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
 			identity := ""

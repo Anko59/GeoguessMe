@@ -15,7 +15,6 @@
     "@mediapipe/tasks-vision": "0.10.35",
     "axios": "^1.18.1",
     "form-data": "^4.0.6",
-    "heic2any": "^0.0.4",
     "leaflet": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
