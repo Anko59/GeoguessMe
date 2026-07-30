@@ -153,9 +153,12 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 </div>
 
                                 <div className="entry-info">
-                                    <div className="entry-username">
-                                        {entry.username}
-                                        {isCurrentUser && <span className="you-badge">You</span>}
+                                    <div className="entry-username-row">
+                                        <div className="entry-username">
+                                            {entry.username}
+                                            {isCurrentUser && <span className="you-badge">You</span>}
+                                        </div>
+                                        <div className="entry-rank-name">{entry.rank.name}</div>
                                     </div>
                                     <div className="entry-score-bar">
                                         <div

@@ -295,7 +295,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average"}).AddRow("user-1", "alice", "avatar.png", 10, 1, 10.0))
+	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("user-1", "alice", "avatar.png", 10, 1, 10.0, 10))
 	recorder = httptest.NewRecorder()
 	GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {

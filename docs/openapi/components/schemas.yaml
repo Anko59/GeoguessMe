@@ -84,7 +84,7 @@ Member:
 
 LeaderboardEntry:
   type: object
-  required: [user_id, username, avatar, score, guess_count, average_score]
+  required: [user_id, username, avatar, score, guess_count, average_score, total_points, rank]
   properties:
     user_id: { type: string, format: uuid }
     username: { type: string }
@@ -93,6 +93,8 @@ LeaderboardEntry:
     guess_count: { type: integer }
     average_score:
       { type: number, description: Average guess score for display metadata; it does not determine ranking. }
+    total_points: { type: integer, minimum: 0, description: Lifetime guess points used for rank progression. }
+    rank: { $ref: "#/ProgressionRank" }
 
 Message:
   type: object
