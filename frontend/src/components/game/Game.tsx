@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { ChallengeAcceptance, ChallengeResults, GuessResult, Message } from '../../types';
 import Map from '../map/Map';
 import './Game.css';
+import GuessScoreFeedback from './GuessScoreFeedback';
+import { feedbackForScore } from './guessFeedback';
 
 type Status =
     'idle' | 'accepting' | 'viewing' | 'waiting' | 'guessing' | 'submitting' | 'results' | 'expired' | 'error';
@@ -35,6 +37,8 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     const [clock, setClock] = useState(() => Date.now());
     const [loadingMedia, setLoadingMedia] = useState(false);
     const [expandedResultImage, setExpandedResultImage] = useState<string | null>(null);
+    const [guessFeedback, setGuessFeedback] = useState<ReturnType<typeof feedbackForScore> | null>(null);
+    const [guessFeedbackScore, setGuessFeedbackScore] = useState<number | null>(null);
 
     const remaining = useMemo(
         () => (state.deadline ? Math.max(0, Math.ceil((state.deadline - (clock + state.serverOffset)) / 1000)) : 0),
@@ -124,7 +128,11 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         if (!state.photoId || !selectedLocation) return;
         setState((current) => ({ ...current, status: 'submitting' }));
         try {
-            await api.post<GuessResult>(`/challenges/${state.photoId}/guess`, selectedLocation);
+            const response = await api.post<GuessResult>(`/challenges/${state.photoId}/guess`, selectedLocation);
+            if (!response.data.duplicate) {
+                setGuessFeedbackScore(response.data.score);
+                setGuessFeedback(feedbackForScore(response.data.score));
+            }
             onChallengeStatusChange?.(state.photoId, 'guessed');
             await loadResults(state.photoId);
         } catch (requestError: unknown) {
@@ -140,6 +148,8 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
         setState({ status: 'idle', serverOffset: 0 });
         setSelectedLocation(null);
+        setGuessFeedback(null);
+        setGuessFeedbackScore(null);
         onClose();
     }, [onClose, state.mediaUrl]);
 
@@ -157,10 +167,16 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     useEffect(() => {
         const photoId = gameMessage?.photo_id;
         if (!gameMessage || !photoId || !user) {
-            if (!gameMessage) setState({ status: 'idle', serverOffset: 0 });
+            if (!gameMessage) {
+                setState({ status: 'idle', serverOffset: 0 });
+                setGuessFeedback(null);
+                setGuessFeedbackScore(null);
+            }
             return;
         }
         setSelectedLocation(null);
+        setGuessFeedback(null);
+        setGuessFeedbackScore(null);
         if (gameMessage.user_id === user.id) {
             void loadResults(photoId);
             return;
@@ -179,18 +195,34 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         window.addEventListener('keydown', closeOnEscape);
         return () => window.removeEventListener('keydown', closeOnEscape);
     }, [expandedResultImage]);
+    const feedbackOverlay = guessFeedback ? (
+        <GuessScoreFeedback
+            feedback={guessFeedback}
+            score={guessFeedbackScore ?? 0}
+            onDismiss={() => {
+                setGuessFeedback(null);
+                setGuessFeedbackScore(null);
+            }}
+        />
+    ) : null;
+    const renderWithFeedback = (content: ReactNode) => (
+        <>
+            {content}
+            {feedbackOverlay}
+        </>
+    );
     if (state.status === 'idle') return null;
     if (state.status === 'accepting')
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="loading-container fade-in">
                     <div className="loading-spinner" />
                     <p>{loadingMedia ? 'Loading private photo…' : 'Loading challenge…'}</p>
                 </div>
-            </div>
+            </div>,
         );
     if (state.status === 'error' || state.status === 'expired')
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="result-view scale-in">
                     <h2>{state.status === 'expired' ? 'Challenge expired' : 'Challenge unavailable'}</h2>
@@ -199,10 +231,10 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         Close
                     </button>
                 </div>
-            </div>
+            </div>,
         );
     if (state.status === 'viewing')
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="photo-view scale-in">
                     {state.mediaType?.startsWith('video/') ? (
@@ -223,20 +255,20 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>,
         );
     if (state.status === 'waiting')
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="skipped-message fade-in">
                     <img src="/timer_icon.png" alt="" className="skip-icon" />
                     <p>Photo hidden</p>
                     <p className="skip-subtitle">Guessing opens in {remaining} seconds.</p>
                 </div>
-            </div>
+            </div>,
         );
     if (state.status === 'guessing' || state.status === 'submitting')
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="guessing-view fade-in">
                     <div className="guessing-header">
@@ -259,10 +291,10 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                               : 'Select a location…'}
                     </button>
                 </div>
-            </div>
+            </div>,
         );
     if (expandedResultImage)
-        return (
+        return renderWithFeedback(
             <div className="game-image-dialog" role="dialog" aria-modal="true" aria-label="Challenge photo full screen">
                 <button
                     type="button"
@@ -277,10 +309,10 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     alt="Challenge location full screen"
                     className="game-image-dialog-photo"
                 />
-            </div>
+            </div>,
         );
     if (state.status === 'results' && state.results)
-        return (
+        return renderWithFeedback(
             <div className="game-overlay">
                 <div className="result-view scale-in">
                     <div className="result-header">
@@ -348,7 +380,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         Close
                     </button>
                 </div>
-            </div>
+            </div>,
         );
     return null;
 }
