@@ -27,25 +27,25 @@ type Image struct {
 // strips all metadata. Videos and non-images are rejected.
 func NormalizeAvatar(file multipart.File, declaredSize, maxBytes int64, maxPixels uint64) (*Image, error) {
 	if declaredSize <= 0 || declaredSize > maxBytes {
-		return nil, fmt.Errorf("avatar must be between 1 byte and %d bytes", maxBytes)
+		return nil, fmt.Errorf("photo must be between 1 byte and %d bytes", maxBytes)
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read avatar: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("avatar exceeds %d bytes", maxBytes)
+		return nil, fmt.Errorf("photo exceeds %d bytes", maxBytes)
 	}
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("invalid image")
+		return nil, fmt.Errorf("invalid image: choose a JPG, PNG, or WebP photo")
 	}
 	if config.Width <= 0 || config.Height <= 0 || uint64(config.Width)*uint64(config.Height) > maxPixels {
-		return nil, fmt.Errorf("avatar exceeds pixel limit")
+		return nil, fmt.Errorf("photo has too many pixels; choose a smaller-resolution image")
 	}
 	decoded, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("invalid image")
+		return nil, fmt.Errorf("invalid image: choose a JPG, PNG, or WebP photo")
 	}
 	scaledW, scaledH := avatarDimensions(config.Width, config.Height)
 	var result image.Image

@@ -110,6 +110,22 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 	require.Equal(t, updatedEmail, profile.Email)
 	require.Equal(t, "avatar2.png", profile.Avatar)
 
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/auth/profile", nil, session.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "profile read: %s", data)
+	var progression struct {
+		TotalPoints int `json:"total_points"`
+		GuessCount  int `json:"guess_count"`
+		Rank        struct {
+			Level int    `json:"level"`
+			Name  string `json:"name"`
+		} `json:"rank"`
+	}
+	require.NoError(t, json.Unmarshal(data, &progression))
+	require.Equal(t, 0, progression.TotalPoints)
+	require.Equal(t, 0, progression.GuessCount)
+	require.Equal(t, 1, progression.Rank.Level)
+	require.Equal(t, "Page", progression.Rank.Name)
+
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/change", map[string]string{
 		"current_password": pass,
 		"new_password":     "NewStrongPassword123",

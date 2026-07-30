@@ -50,6 +50,26 @@ func GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	return scanUser(database.DB.QueryRow(ctx, query, userID))
 }
 
+type UserScoreStats struct {
+	TotalPoints int
+	GuessCount  int
+}
+
+func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStats, error) {
+	var stats UserScoreStats
+	var totalPoints, guessCount int64
+	err := database.DB.QueryRow(ctx, `
+		SELECT COALESCE(SUM(score), 0), COUNT(*)
+		FROM guesses
+		WHERE user_id = $1`, userID).Scan(&totalPoints, &guessCount)
+	if err != nil {
+		return UserScoreStats{}, err
+	}
+	stats.TotalPoints = int(totalPoints)
+	stats.GuessCount = int(guessCount)
+	return stats, nil
+}
+
 // AuthStatus summarises what protected middleware must check on every request:
 // whether the account still exists (is active) and its current auth version.
 type AuthStatus struct {

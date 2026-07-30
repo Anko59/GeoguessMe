@@ -1,0 +1,121 @@
+.guess-feedback {
+    position: fixed;
+    inset: 0;
+    z-index: 2200;
+    padding: 14vh 1rem 1rem;
+    display: grid;
+    align-items: start;
+    justify-items: center;
+    pointer-events: none;
+}
+
+.guess-feedback-card {
+    width: min(100%, 25rem);
+    padding: 1.35rem 1.5rem 1.25rem;
+    display: grid;
+    justify-items: center;
+    gap: 0.35rem;
+    color: var(--ink-strong);
+    background: var(--surface);
+    border: 2px solid var(--brand-blue);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 18px 55px rgba(5, 7, 18, 0.35);
+    pointer-events: auto;
+    text-align: center;
+    animation:
+        guessFeedbackPop 550ms var(--ease-out) both,
+        guessFeedbackExit 350ms ease-in 2.8s forwards;
+}
+
+.guess-feedback-card--miss {
+    border-color: var(--danger);
+    animation-name: guessFeedbackShake, guessFeedbackExit;
+}
+
+.guess-feedback-card--excellent {
+    border-color: var(--brand-orange);
+    background: linear-gradient(145deg, var(--surface), #fffaf0);
+}
+
+.guess-feedback-kicker {
+    color: var(--ink-muted);
+    font-size: 0.7rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.guess-feedback-card strong {
+    color: var(--brand-navy);
+    font-size: clamp(1.35rem, 5vw, 1.8rem);
+    line-height: 1.1;
+}
+
+.guess-feedback-score {
+    color: var(--brand-blue-accessible);
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 900;
+}
+
+.guess-feedback-subtitle {
+    color: var(--ink-muted);
+    font-size: 0.88rem;
+}
+
+.guess-feedback-dismiss {
+    margin-top: 0.45rem;
+    padding: 0.45rem 1rem;
+    color: var(--brand-navy);
+    background: var(--surface-brand);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+@keyframes guessFeedbackPop {
+    0% {
+        opacity: 0;
+        transform: translateY(-1.5rem) scale(0.82) rotate(-2deg);
+    }
+    70% {
+        transform: translateY(0.2rem) scale(1.03) rotate(0.5deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0);
+    }
+}
+
+@keyframes guessFeedbackShake {
+    0% {
+        opacity: 0;
+        transform: translateX(-0.7rem) rotate(-1deg);
+    }
+    25% {
+        transform: translateX(0.55rem) rotate(1deg);
+    }
+    50% {
+        transform: translateX(-0.35rem) rotate(-0.5deg);
+    }
+    75% {
+        transform: translateX(0.15rem) rotate(0.25deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0) rotate(0);
+    }
+}
+
+@keyframes guessFeedbackExit {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-0.75rem) scale(0.96);
+    }
+}
