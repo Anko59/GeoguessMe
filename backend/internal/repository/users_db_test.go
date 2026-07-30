@@ -100,6 +100,17 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestGetUserScoreStats(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").
+		WithArgs("user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	stats, err := GetUserScoreStatsContext(context.Background(), "user-1")
+	if err != nil || stats.TotalPoints != 7600 || stats.GuessCount != 3 {
+		t.Fatalf("user score stats = %+v, %v", stats, err)
+	}
+}
+
 func TestProfileAndPasswordUpdates(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC()

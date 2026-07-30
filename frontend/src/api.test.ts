@@ -75,6 +75,12 @@ describe('api client', () => {
         expect(getAPIErrorMessage({ response: { data: { error: { message: 'api error' } } } }, 'fallback')).toBe(
             'api error',
         );
+        expect(
+            getAPIErrorMessage(
+                { response: { data: { code: 'invalid_upload', message: 'upload failed' } } },
+                'fallback',
+            ),
+        ).toBe('upload failed');
         expect(getAPIErrorMessage(null, 'fallback')).toBe('fallback');
         expect(getAPIErrorMessage('unknown', 'fallback')).toBe('fallback');
     });

@@ -128,12 +128,17 @@ func TestGroupPhotoAndNotificationSettings(t *testing.T) {
 }
 
 type leaderboardEntry struct {
-	UserID     string  `json:"user_id"`
-	Username   string  `json:"username"`
-	Avatar     string  `json:"avatar"`
-	Score      int     `json:"score"`
-	GuessCount int     `json:"guess_count"`
-	Average    float64 `json:"average_score"`
+	UserID      string  `json:"user_id"`
+	Username    string  `json:"username"`
+	Avatar      string  `json:"avatar"`
+	Score       int     `json:"score"`
+	GuessCount  int     `json:"guess_count"`
+	Average     float64 `json:"average_score"`
+	TotalPoints int     `json:"total_points"`
+	Rank        struct {
+		Level int    `json:"level"`
+		Name  string `json:"name"`
+	} `json:"rank"`
 }
 
 func leaderboard(t *testing.T, bearer, groupID string) []leaderboardEntry {
@@ -177,6 +182,8 @@ func TestCrossGroupIsolation(t *testing.T) {
 	require.NotEmpty(t, bobA.Avatar, "leaderboard entries must include the member avatar")
 	require.Equal(t, 1, bobA.GuessCount)
 	require.Greater(t, bobA.Score, 0)
+	require.Greater(t, bobA.TotalPoints, 0)
+	require.NotEmpty(t, bobA.Rank.Name)
 
 	bobB := findEntry(bEntries, "bob")
 	require.NotNil(t, bobB, "bob must be a Group B member")

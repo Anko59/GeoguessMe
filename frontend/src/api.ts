@@ -87,10 +87,11 @@ export const getAPIErrorMessage = (error: unknown, fallback: string): string => 
     if (error instanceof AxiosError) {
         const response = (error as { response?: { data?: APIErrorBody } }).response;
         // Prefer a server-provided message; never leak Axios internal strings.
-        return response?.data?.error?.message ?? fallback;
+        return response?.data?.error?.message ?? response?.data?.message ?? fallback;
     }
     if (typeof error === 'object' && error !== null) {
-        const message = (error as { response?: { data?: APIErrorBody } }).response?.data?.error?.message;
+        const data = (error as { response?: { data?: APIErrorBody } }).response?.data;
+        const message = data?.error?.message ?? data?.message;
         if (message) return message;
     }
     return error instanceof Error ? error.message : fallback;

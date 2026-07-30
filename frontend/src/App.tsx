@@ -11,6 +11,7 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import AccountSettings from './pages/account/AccountSettings';
+import ProfilePage from './pages/profile/ProfilePage';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import { usePushBootstrap } from './push/usePushBootstrap';
 
@@ -54,6 +55,14 @@ function AppChrome() {
                     element={
                         <ProtectedRoute>
                             <GroupView />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/profile"
+                    element={
+                        <ProtectedRoute>
+                            <ProfilePage />
                         </ProtectedRoute>
                     }
                 />

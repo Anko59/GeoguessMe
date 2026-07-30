@@ -113,6 +113,46 @@ describe('Game', () => {
         expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
     });
 
+    it('celebrates a newly submitted top-tier score', async () => {
+        mocks.get.mockRejectedValueOnce(new Error('results not ready')).mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-5',
+                group_id: 'group-1',
+                actual_lat: 48,
+                actual_long: 2,
+                media_available: false,
+                guesses: [],
+                server_time: new Date().toISOString(),
+            },
+        });
+        mocks.post
+            .mockResolvedValueOnce({
+                data: {
+                    media_url: 'https://example.test/photo.jpg',
+                    server_time: new Date().toISOString(),
+                    view_expires_at: new Date(Date.now() - 1000).toISOString(),
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    guess_id: 'guess-5',
+                    photo_id: 'photo-5',
+                    score: 4920,
+                    distance: 80,
+                    created_at: new Date().toISOString(),
+                    duplicate: false,
+                },
+            });
+        withGame(<Game gameMessage={message({ photo_id: 'photo-5', kind: 'challenge' })} onClose={vi.fn()} />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Map' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Submit guess ✓' }));
+
+        expect(await screen.findByRole('status')).toHaveTextContent('Masterstroke');
+        expect(screen.getByRole('status')).toHaveTextContent('4,920 points');
+        expect(mocks.post).toHaveBeenLastCalledWith('/challenges/photo-5/guess', { lat: 48.8, long: 2.3 });
+    });
+
     it('opens a result photo full screen and closes it with Escape', async () => {
         mocks.get.mockResolvedValueOnce({
             data: {
