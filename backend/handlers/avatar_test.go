@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,13 +21,19 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 )
 
-func TestUploadAvatarSuccess(t *testing.T) {
-	setupHandlers(t)
+func setupAvatarStore(t *testing.T) *storage.LocalStore {
+	t.Helper()
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	MediaStore = store
+	return store
+}
+
+func TestUploadAvatarSuccess(t *testing.T) {
+	setupHandlers(t)
+	store := setupAvatarStore(t)
 	mock := handlerMock(t)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
@@ -53,26 +60,51 @@ func TestUploadAvatarSuccess(t *testing.T) {
 
 func TestUploadAvatarRejectsNonImage(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	request := avatarUploadRequest(t, []byte("not an image"))
 	recorder := httptest.NewRecorder()
 	UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("non-image upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
+	if !strings.Contains(recorder.Body.String(), "JPG, PNG, or WebP") {
+		t.Fatalf("non-image error = %s", recorder.Body.String())
+	}
+}
+
+func TestUploadAvatarRejectsOversizedMultipartWithHelpfulMessage(t *testing.T) {
+	setupHandlers(t)
+	_ = setupAvatarStore(t)
+	RuntimeConfig.AvatarMaxBytes = 2 * 1024 * 1024
+	request := avatarUploadRequest(t, bytes.Repeat([]byte{'x'}, 4*1024*1024))
+	recorder := httptest.NewRecorder()
+	UploadAvatar(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("oversized upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "smaller than 2 MiB") {
+		t.Fatalf("oversized upload error = %s", recorder.Body.String())
+	}
+}
+
+func TestUploadAvatarRejectsMalformedMultipartWithHelpfulMessage(t *testing.T) {
+	setupHandlers(t)
+	_ = setupAvatarStore(t)
+	request := requestWithUser(http.MethodPost, "/", "not multipart data", "user-1")
+	request.Header.Set("Content-Type", "multipart/form-data; boundary=missing")
+	recorder := httptest.NewRecorder()
+	UploadAvatar(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("malformed upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "could not read") {
+		t.Fatalf("malformed upload error = %s", recorder.Body.String())
+	}
 }
 
 func TestUploadAvatarRejectsMissingPhoto(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if err := writer.WriteField("not_photo", "ignored"); err != nil {
@@ -83,6 +115,7 @@ func TestUploadAvatarRejectsMissingPhoto(t *testing.T) {
 	}
 	request := requestWithUser(http.MethodPost, "/", "", "user-1")
 	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	request.ContentLength = int64(body.Len())
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 	UploadAvatar(recorder, request)
@@ -104,11 +137,7 @@ const avatarTestUserID = "11111111-1111-1111-1111-111111111111"
 
 func TestServeUserAvatarSuccess(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	store := setupAvatarStore(t)
 	// Store a small JPEG as if a custom avatar was uploaded.
 	if err := store.Put(context.Background(), avatarStorageKey(avatarTestUserID), bytes.NewReader([]byte{0xff, 0xd8, 0xff, 0xe0}), 4, "image/jpeg"); err != nil {
 		t.Fatal(err)
@@ -133,11 +162,7 @@ func TestServeUserAvatarSuccess(t *testing.T) {
 
 func TestServeUserAvatarDefaultUser(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	mock := handlerMock(t)
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "avatar.png"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
@@ -152,11 +177,7 @@ func TestServeUserAvatarDefaultUser(t *testing.T) {
 
 func TestServeUserAvatarUnknownUser(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	mock := handlerMock(t)
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnError(errors.New("no rows"))
 	recorder := httptest.NewRecorder()
@@ -170,11 +191,7 @@ func TestServeUserAvatarUnknownUser(t *testing.T) {
 
 func TestServeUserAvatarMissingObject(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	mock := handlerMock(t)
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
@@ -204,11 +221,7 @@ func TestUploadAvatarStorageUnavailable(t *testing.T) {
 
 func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	store := setupAvatarStore(t)
 	mock := handlerMock(t)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
@@ -227,11 +240,7 @@ func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
 
 func TestUploadAvatarDBErrorRestoresPreviousCustomAvatar(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	store := setupAvatarStore(t)
 	key := avatarStorageKey("user-1")
 	previous := []byte("previous-avatar")
 	if err := store.Put(context.Background(), key, bytes.NewReader(previous), int64(len(previous)), "image/jpeg"); err != nil {
@@ -288,11 +297,7 @@ func largeAvatarJPEG(t *testing.T, minBytes int) []byte {
 
 func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	_ = setupAvatarStore(t)
 	// A high-resolution phone photo is larger than the shared 10 MiB media cap.
 	// The avatar-specific limit must accept it and normalize it down to a small
 	// thumbnail without changing challenge upload limits.
@@ -378,11 +383,7 @@ func TestGroupNotificationSettings(t *testing.T) {
 
 func TestUploadAndServeGroupPhoto(t *testing.T) {
 	setupHandlers(t)
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	MediaStore = store
+	store := setupAvatarStore(t)
 	mock := handlerMock(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").

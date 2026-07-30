@@ -8,8 +8,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - **Auth**: Protected endpoints require `Authorization: Bearer <access_token>`.
   The refresh cookie (`refresh_token`, path `/api/v1/auth`, HttpOnly) is used
   automatically by the `/api/v1/auth/refresh` endpoint.
-- **Request body**: JSON (`application/json`), except
-  `POST /api/v1/photo/upload` which uses `multipart/form-data`.
+- **Request body**: JSON (`application/json`), except multipart uploads such as
+  `POST /api/v1/auth/profile/avatar` and `POST /api/v1/photo/upload`.
 - **Response body**: Always JSON (or image bytes for media endpoints).
 - **Errors**: `{"error":{"code":"machine_readable","message":"human_readable"}}`
 - **Timestamps**: ISO 8601 / RFC 3339 format in UTC.
@@ -50,6 +50,7 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 | POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`    | 200, 400           |
 | POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions | 204, 400, 401      |
 | PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar     | 200, 400, 401, 409 |
+| POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)     | 200, 400, 401      |
 | DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`           | 204, 401           |
 
 ### Groups

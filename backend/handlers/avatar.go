@@ -3,9 +3,11 @@ package handlers
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"geoguessme/internal/media"
 	"geoguessme/internal/repository"
@@ -35,9 +37,18 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	// dedicated limit than challenge media because they are normalized to a
 	// small thumbnail and do not consume the challenge-media budget.
 	maxBytes := RuntimeConfig.AvatarMaxBytes
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
+	requestMaxBytes := maxBytes + 1024*1024
+	if r.ContentLength > requestMaxBytes {
+		writeError(w, http.StatusBadRequest, "invalid_upload", avatarTooLargeMessage(maxBytes))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBytes)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
+		if isRequestTooLarge(err) {
+			writeError(w, http.StatusBadRequest, "invalid_upload", avatarTooLargeMessage(maxBytes))
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_upload", "We could not read that upload. Choose a JPG, PNG, WebP, or HEIC/HEIF image and try again.")
+		}
 		return
 	}
 	file, header, err := r.FormFile("photo")
@@ -95,6 +106,15 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, userResponse(updated))
+}
+
+func isRequestTooLarge(err error) bool {
+	var maxBytesError *http.MaxBytesError
+	return errors.As(err, &maxBytesError) || strings.Contains(err.Error(), "message too large")
+}
+
+func avatarTooLargeMessage(maxBytes int64) string {
+	return fmt.Sprintf("This photo is too large. Choose an image smaller than %d MiB.", maxBytes/(1024*1024))
 }
 
 func ServeUserAvatar(w http.ResponseWriter, r *http.Request) {

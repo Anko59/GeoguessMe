@@ -191,6 +191,29 @@ updateProfile:
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+uploadAvatar:
+  post:
+    operationId: uploadAvatar
+    summary: Upload a profile photo.
+    description: Accepts JPG, PNG, and WebP uploads up to 25 MiB. HEIC/HEIF files are converted to JPEG by the web client before upload. The backend strips metadata and resizes the result to a 256-pixel maximum dimension.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [photo]
+            properties:
+              photo: { type: string, format: binary }
+    responses:
+      "200":
+        description: Updated profile with the custom avatar marker.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthUser" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 deleteAccount:
   delete:
     operationId: deleteAccount
