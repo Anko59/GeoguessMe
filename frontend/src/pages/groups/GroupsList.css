@@ -24,6 +24,12 @@
     text-decoration: none;
 }
 
+.groups-account-links {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
 .groups-brand {
     display: inline-flex;
     align-items: center;

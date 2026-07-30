@@ -81,9 +81,14 @@ export default function GroupsList() {
                     <img src="/logo.png" alt="" />
                     <span>GeoGuessMe</span>
                 </Link>
-                <Link to="/settings" className="groups-account-link">
-                    Account settings
-                </Link>
+                <div className="groups-account-links">
+                    <Link to="/profile" className="groups-account-link">
+                        Profile
+                    </Link>
+                    <Link to="/settings" className="groups-account-link">
+                        Settings
+                    </Link>
+                </div>
             </header>
 
             <div className="groups-heading-row">
