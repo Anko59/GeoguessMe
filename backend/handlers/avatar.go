@@ -47,7 +47,7 @@ func UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		if isRequestTooLarge(err) {
 			writeError(w, http.StatusBadRequest, "invalid_upload", avatarTooLargeMessage(maxBytes))
 		} else {
-			writeError(w, http.StatusBadRequest, "invalid_upload", "We could not read that upload. Choose a JPG, PNG, WebP, or HEIC/HEIF image and try again.")
+			writeError(w, http.StatusBadRequest, "invalid_upload", "We could not read that upload. Choose a JPG, PNG, or WebP image and try again.")
 		}
 		return
 	}
