@@ -93,6 +93,24 @@ describe('AccountSettings', () => {
         expect(await screen.findByRole('status')).toHaveTextContent('Profile photo updated');
     });
 
+    it('shows upload failures beside the upload control', async () => {
+        mocks.post.mockRejectedValueOnce(new Error('This photo format is not supported. Choose a JPG image.'));
+        const { container } = render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })] } });
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('This photo format is not supported');
+        expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData));
+    });
+
     it('changes the password and signs out all sessions', async () => {
         mocks.post.mockResolvedValueOnce({ data: {} });
         render(

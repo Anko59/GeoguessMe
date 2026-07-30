@@ -121,6 +121,8 @@ export interface ChallengeResults {
 
 export interface APIErrorBody {
     error?: { code: string; message: string };
+    code?: string;
+    message?: string;
 }
 
 export interface MessagesPage {

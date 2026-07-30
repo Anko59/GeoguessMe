@@ -139,6 +139,17 @@
     cursor: pointer;
 }
 
+.avatar-upload-error {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    color: var(--danger);
+    background: var(--danger-soft);
+    border: 1px solid #f7c9c5;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
 .account-verification {
     margin-top: var(--space-6);
     padding: var(--space-4) var(--space-5);

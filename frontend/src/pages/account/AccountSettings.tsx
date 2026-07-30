@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
+import { prepareAvatarFile, validateAvatarFile } from './avatarUpload';
 import './AccountSettings.css';
 
 const avatars = Array.from({ length: 10 }, (_, index) => (index === 0 ? 'avatar.png' : `avatar${index + 1}.png`));
@@ -17,6 +18,7 @@ export default function AccountSettings() {
     const [avatar, setAvatar] = useState(user?.avatar ?? 'avatar.png');
     const [avatarVersion, setAvatarVersion] = useState(0);
     const [uploading, setUploading] = useState(false);
+    const [avatarError, setAvatarError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [profilePassword, setProfilePassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -28,16 +30,24 @@ export default function AccountSettings() {
     const clearNotice = () => {
         setMessage('');
         setError('');
+        setAvatarError('');
     };
 
     const uploadPhoto = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
         const file = event.target.files?.[0];
         if (!file) return;
         clearNotice();
+        const validationError = validateAvatarFile(file);
+        if (validationError) {
+            setAvatarError(validationError);
+            event.target.value = '';
+            return;
+        }
         setUploading(true);
         try {
+            const uploadFile = await prepareAvatarFile(file);
             const formData = new FormData();
-            formData.append('photo', file);
+            formData.append('photo', uploadFile);
             // Let XMLHttpRequest add the multipart boundary. Setting the
             // content type manually omits that boundary in some browsers and
             // makes the server reject an otherwise valid form.
@@ -48,7 +58,7 @@ export default function AccountSettings() {
             await refresh();
             setMessage('Profile photo updated.');
         } catch (requestError: unknown) {
-            setError(getAPIErrorMessage(requestError, 'Unable to upload photo'));
+            setAvatarError(getAPIErrorMessage(requestError, 'Unable to upload photo'));
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -135,14 +145,21 @@ export default function AccountSettings() {
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept="image/*"
+                                accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
                                 hidden
                                 onChange={(event) => void uploadPhoto(event)}
                                 disabled={uploading}
                             />
                         </label>
                     </div>
-                    <p className="account-help">Photos up to 25 MiB are accepted and resized automatically.</p>
+                    <p className="account-help">
+                        JPG, PNG, WebP, and HEIC/HEIF photos up to 25 MiB are accepted and resized automatically.
+                    </p>
+                    {avatarError && (
+                        <p className="avatar-upload-error" role="alert" aria-live="assertive">
+                            {avatarError}
+                        </p>
+                    )}
                     <div className="avatar-picker" role="radiogroup" aria-label="Profile image">
                         {avatars.map((candidate) => (
                             <button

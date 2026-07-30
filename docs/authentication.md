@@ -73,9 +73,12 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
 
 Authenticated users can update their username, email address, or selected
 profile avatar through `PATCH /api/v1/auth/profile`; the current password is
-required and changing the email clears its verification state. Password changes
-use `POST /api/v1/auth/password/change`, require the current password, and
-revoke all sessions so the user must sign in again.
+required and changing the email clears its verification state. A custom profile
+photo is uploaded separately through `POST /api/v1/auth/profile/avatar`; the web
+client converts HEIC/HEIF locally, and the backend accepts the resulting JPG,
+PNG, or WebP up to 25 MiB before resizing and stripping metadata. Password
+changes use `POST /api/v1/auth/password/change`, require the current password,
+and revoke all sessions so the user must sign in again.
 
 ## Logout
 
