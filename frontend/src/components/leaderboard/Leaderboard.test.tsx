@@ -29,6 +29,16 @@ const authValue = {
     refresh: vi.fn(async () => false),
 };
 
+const pageRank = {
+    level: 1,
+    name: 'Page',
+    min_points: 0,
+    points_in_rank: 0,
+    points_to_next: 500,
+    progress_percent: 0,
+    trophy_key: 'page',
+};
+
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
@@ -60,6 +70,8 @@ describe('Leaderboard', () => {
                     score: 100,
                     guess_count: 1,
                     average_score: 100,
+                    total_points: 100,
+                    rank: pageRank,
                 },
                 {
                     user_id: 'user-2',
@@ -68,6 +80,8 @@ describe('Leaderboard', () => {
                     score: 80,
                     guess_count: 1,
                     average_score: 80,
+                    total_points: 80,
+                    rank: pageRank,
                 },
                 {
                     user_id: 'user-3',
@@ -76,6 +90,8 @@ describe('Leaderboard', () => {
                     score: 60,
                     guess_count: 1,
                     average_score: 60,
+                    total_points: 60,
+                    rank: pageRank,
                 },
                 {
                     user_id: 'user-4',
@@ -84,6 +100,8 @@ describe('Leaderboard', () => {
                     score: 40,
                     guess_count: 1,
                     average_score: 40,
+                    total_points: 40,
+                    rank: pageRank,
                 },
             ],
         });
@@ -97,6 +115,7 @@ describe('Leaderboard', () => {
         });
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
+        expect(screen.getAllByText('Page')).toHaveLength(4);
         expect(screen.getByText('#4')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
         rankedLeaderboard!.unmount();
@@ -128,6 +147,8 @@ describe('Leaderboard', () => {
                         score: 100,
                         guess_count: 1,
                         average_score: 100,
+                        total_points: 100,
+                        rank: pageRank,
                     },
                 ],
             })
@@ -140,6 +161,8 @@ describe('Leaderboard', () => {
                         score: 80,
                         guess_count: 1,
                         average_score: 80,
+                        total_points: 80,
+                        rank: pageRank,
                     },
                 ],
             });

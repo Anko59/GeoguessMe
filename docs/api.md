@@ -37,7 +37,9 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
 with lifetime guess points, guess count, and the server-calculated rank
 progression. Lifetime points are the sum of all accepted guess scores; rank
-thresholds and the 20 medieval-inspired rank names are server-owned.
+thresholds and the 20 medieval-inspired rank names are server-owned. Group
+leaderboard entries include the same rank object beneath each player's name
+while their `score` remains the selected period's sum.
 
 ## Endpoint overview
 

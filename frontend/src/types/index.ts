@@ -74,6 +74,8 @@ export interface LeaderboardEntry {
     score: number;
     guess_count: number;
     average_score: number;
+    total_points: number;
+    rank: ProgressionRank;
 }
 
 export type LeaderboardPeriod = 'week' | 'month' | 'all';

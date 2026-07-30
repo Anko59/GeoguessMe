@@ -7,6 +7,7 @@ import (
 
 	"geoguessme/internal/database"
 	"geoguessme/internal/models"
+	"geoguessme/internal/progression"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -114,12 +115,14 @@ func SetGroupNotificationPreferenceContext(ctx context.Context, groupID, userID 
 }
 
 type LeaderboardEntry struct {
-	UserID     string  `json:"user_id"`
-	Username   string  `json:"username"`
-	Avatar     string  `json:"avatar"`
-	Score      int     `json:"score"`
-	GuessCount int     `json:"guess_count"`
-	Average    float64 `json:"average_score"`
+	UserID      string           `json:"user_id"`
+	Username    string           `json:"username"`
+	Avatar      string           `json:"avatar"`
+	Score       int              `json:"score"`
+	GuessCount  int              `json:"guess_count"`
+	Average     float64          `json:"average_score"`
+	TotalPoints int              `json:"total_points"`
+	Rank        progression.Rank `json:"rank"`
 }
 
 type LeaderboardPeriod string
@@ -167,24 +170,36 @@ func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, pe
 	query := `
 		SELECT u.id, u.username, u.avatar,
 		       COALESCE(SUM(g.score), 0),
-		       COUNT(g.id), COALESCE(AVG(g.score), 0)
+		       COUNT(g.id), COALESCE(AVG(g.score), 0),
+		       COALESCE(all_time.total_points, 0)
 		FROM group_members gm
 		JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 		LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id
+		LEFT JOIN (
+			SELECT user_id, SUM(score) AS total_points
+			FROM guesses
+			GROUP BY user_id
+		) all_time ON all_time.user_id = u.id
 		WHERE gm.group_id = $1
-		GROUP BY u.id, u.username, u.avatar
+		GROUP BY u.id, u.username, u.avatar, all_time.total_points
 		ORDER BY COALESCE(SUM(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 	args := []any{groupID}
 	if start != nil {
 		query = `
 			SELECT u.id, u.username, u.avatar,
 			       COALESCE(SUM(g.score), 0),
-			       COUNT(g.id), COALESCE(AVG(g.score), 0)
+			       COUNT(g.id), COALESCE(AVG(g.score), 0),
+			       COALESCE(all_time.total_points, 0)
 			FROM group_members gm
 			JOIN users u ON gm.user_id = u.id AND u.deleted_at IS NULL
 			LEFT JOIN guesses g ON g.user_id = u.id AND g.group_id = gm.group_id AND g.created_at >= $2
+			LEFT JOIN (
+				SELECT user_id, SUM(score) AS total_points
+				FROM guesses
+				GROUP BY user_id
+			) all_time ON all_time.user_id = u.id
 			WHERE gm.group_id = $1
-			GROUP BY u.id, u.username, u.avatar
+			GROUP BY u.id, u.username, u.avatar, all_time.total_points
 			ORDER BY COALESCE(SUM(g.score), 0) DESC, COUNT(g.id) DESC, u.username ASC`
 		args = append(args, *start)
 	}
@@ -196,9 +211,10 @@ func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, pe
 	var result []LeaderboardEntry
 	for rows.Next() {
 		var entry LeaderboardEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Avatar, &entry.Score, &entry.GuessCount, &entry.Average); err != nil {
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Avatar, &entry.Score, &entry.GuessCount, &entry.Average, &entry.TotalPoints); err != nil {
 			return nil, err
 		}
+		entry.Rank = progression.RankForPoints(entry.TotalPoints)
 		result = append(result, entry)
 	}
 	return result, rows.Err()

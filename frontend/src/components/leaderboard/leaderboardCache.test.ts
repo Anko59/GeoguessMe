@@ -23,6 +23,16 @@ describe('leaderboardCache', () => {
                 score: number;
                 guess_count: number;
                 average_score: number;
+                total_points: number;
+                rank: {
+                    level: number;
+                    name: string;
+                    min_points: number;
+                    points_in_rank: number;
+                    points_to_next: number;
+                    progress_percent: number;
+                    trophy_key: string;
+                };
             }>;
         }) => void;
         mocks.get.mockReturnValue(
@@ -47,6 +57,16 @@ describe('leaderboardCache', () => {
                     score: 10,
                     guess_count: 1,
                     average_score: 10,
+                    total_points: 10,
+                    rank: {
+                        level: 1,
+                        name: 'Page',
+                        min_points: 0,
+                        points_in_rank: 10,
+                        points_to_next: 500,
+                        progress_percent: 2,
+                        trophy_key: 'page',
+                    },
                 },
             ],
         });
@@ -59,6 +79,16 @@ describe('leaderboardCache', () => {
                 score: 10,
                 guess_count: 1,
                 average_score: 10,
+                total_points: 10,
+                rank: {
+                    level: 1,
+                    name: 'Page',
+                    min_points: 0,
+                    points_in_rank: 10,
+                    points_to_next: 500,
+                    progress_percent: 2,
+                    trophy_key: 'page',
+                },
             },
         ]);
         expect(getCachedLeaderboard('user-b', 'group-a', 'week')).toBeUndefined();
