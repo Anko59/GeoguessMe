@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
@@ -247,6 +248,26 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	if GetUserIDFromContext(httptest.NewRequest(http.MethodGet, "/", nil)) != "" {
 		t.Fatal("anonymous request unexpectedly has a user")
 	}
+}
+
+func TestProfileReadErrorAndMethodBranches(t *testing.T) {
+	setupHandlers(t)
+	requireStatus(t, GetProfile, requestWithUser(http.MethodPatch, "/", "", "user-1"), http.StatusMethodNotAllowed)
+
+	mock := handlerMock(t)
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
+	requireStatus(t, GetProfile, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusUnauthorized)
+
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).WillReturnError(errors.New("stats unavailable"))
+	requireStatus(t, GetProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusInternalServerError)
+
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(0), int64(0)))
+	requireStatus(t, UpdateProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusOK)
 }
 
 func TestGroupAndReadHandlers(t *testing.T) {
