@@ -27,7 +27,7 @@ paths:
   /auth/password/change:
     $ref: ./openapi/paths/auth.yaml#/changePassword
   /auth/profile:
-    $ref: ./openapi/paths/auth.yaml#/updateProfile
+    $ref: ./openapi/paths/auth.yaml#/profile
   /auth/profile/avatar:
     $ref: ./openapi/paths/auth.yaml#/uploadAvatar
   /auth/account:

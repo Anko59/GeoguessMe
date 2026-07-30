@@ -6,6 +6,23 @@ export interface User {
     avatar: string;
 }
 
+export interface ProgressionRank {
+    level: number;
+    name: string;
+    min_points: number;
+    next_points?: number;
+    points_in_rank: number;
+    points_to_next: number;
+    progress_percent: number;
+    trophy_key: string;
+}
+
+export interface Profile extends User {
+    total_points: number;
+    guess_count: number;
+    rank: ProgressionRank;
+}
+
 export interface AuthResponse {
     access_token: string;
     expires_in: number;
