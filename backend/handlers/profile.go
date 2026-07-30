@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"geoguessme/internal/auth"
+	"geoguessme/internal/progression"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/validation"
 
@@ -24,6 +25,10 @@ type passwordChangeRequest struct {
 }
 
 func UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		GetProfile(w, r)
+		return
+	}
 	if r.Method != http.MethodPatch {
 		methodNotAllowed(w)
 		return
@@ -72,6 +77,36 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, userResponse(updated))
+}
+
+type ProfileResponse struct {
+	AuthUser
+	TotalPoints int              `json:"total_points"`
+	GuessCount  int              `json:"guess_count"`
+	Rank        progression.Rank `json:"rank"`
+}
+
+func GetProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	user, err := repository.GetUserByID(r.Context(), GetUserIDFromContext(r))
+	if err != nil || user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
+		return
+	}
+	stats, err := repository.GetUserScoreStatsContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	writeJSON(w, http.StatusOK, ProfileResponse{
+		AuthUser:    userResponse(user),
+		TotalPoints: stats.TotalPoints,
+		GuessCount:  stats.GuessCount,
+		Rank:        progression.RankForPoints(stats.TotalPoints),
+	})
 }
 
 func ChangePassword(w http.ResponseWriter, r *http.Request) {

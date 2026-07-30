@@ -61,7 +61,7 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 func TestProfileValidationBranches(t *testing.T) {
 	setupHandlers(t)
 	recorder := httptest.NewRecorder()
-	UpdateProfile(recorder, requestWithUser(http.MethodGet, "/", "{}", "user-1"))
+	UpdateProfile(recorder, requestWithUser(http.MethodPost, "/", "{}", "user-1"))
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("profile method status = %d", recorder.Code)
 	}
@@ -79,6 +79,21 @@ func TestProfileValidationBranches(t *testing.T) {
 	requireStatus(t, UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"alice@example.test","avatar":"avatar.png","current_password":"WrongPassword123"}`, user.ID), http.StatusUnauthorized)
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	requireStatus(t, ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"WrongPassword123","new_password":"NewPassword123"}`, user.ID), http.StatusUnauthorized)
+}
+
+func TestProfileReturnsLifetimeProgression(t *testing.T) {
+	setupHandlers(t)
+	mock := handlerMock(t)
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	recorder := httptest.NewRecorder()
+	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) {
+		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
+	}
 }
 
 func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {

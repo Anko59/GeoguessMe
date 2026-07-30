@@ -27,6 +27,29 @@ AuthResponse:
     expires_in: { type: integer }
     user: { $ref: "#/AuthUser" }
 
+ProgressionRank:
+  type: object
+  required: [level, name, min_points, points_in_rank, points_to_next, progress_percent, trophy_key]
+  properties:
+    level: { type: integer, minimum: 1, maximum: 20 }
+    name: { type: string }
+    min_points: { type: integer, minimum: 0 }
+    next_points: { type: integer, minimum: 0 }
+    points_in_rank: { type: integer, minimum: 0 }
+    points_to_next: { type: integer, minimum: 0 }
+    progress_percent: { type: integer, minimum: 0, maximum: 100 }
+    trophy_key: { type: string }
+
+Profile:
+  allOf:
+    - $ref: "#/AuthUser"
+    - type: object
+      required: [total_points, guess_count, rank]
+      properties:
+        total_points: { type: integer, minimum: 0 }
+        guess_count: { type: integer, minimum: 0 }
+        rank: { $ref: "#/ProgressionRank" }
+
 Group:
   type: object
   required: [id, name, code, created_at]

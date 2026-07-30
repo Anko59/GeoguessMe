@@ -149,7 +149,17 @@ changePassword:
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
-updateProfile:
+profile:
+  get:
+    operationId: getProfile
+    summary: Get the authenticated user's profile and progression.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Profile, lifetime score, guess count, and current rank.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Profile" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
   patch:
     operationId: updateProfile
     summary: Update the authenticated user's profile.
