@@ -121,7 +121,7 @@ describe('Leaderboard', () => {
         expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
         const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');
         expect(badges).toHaveLength(4);
-        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/tier-5.png');
+        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/emperor.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));

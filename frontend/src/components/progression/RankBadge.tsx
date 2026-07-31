@@ -1,5 +1,4 @@
 import type { ProgressionRank } from '../../types';
-import { TIER_COUNT, tierForLevel } from './rankTiers';
 import './RankBadge.css';
 
 interface RankBadgeProps {
@@ -9,14 +8,15 @@ interface RankBadgeProps {
     className?: string;
 }
 
-/** Renders the AI-generated badge artwork for a progression rank. Inline
+/** Renders the AI-generated badge artwork for a progression rank. Each of the
+ *  20 ranks has its own emblem; the material step-up (bronze → silver → gold
+ *  shields, then royal → imperial crowns) keeps the ordering readable. Inline
  *  badges sit next to rank names and are decorative; the large badge is the
  *  progression artwork on the profile hero. */
 export default function RankBadge({ rank, size = 'inline', alt = '', className = '' }: RankBadgeProps) {
-    const tier = Math.min(tierForLevel(rank.level), TIER_COUNT);
     return (
         <img
-            src={`/rank-badges/tier-${tier}.png`}
+            src={`/rank-badges/${rank.trophy_key}.png`}
             alt={alt}
             className={`rank-badge rank-badge--${size} ${className}`}
             width={size === 'large' ? 144 : 18}

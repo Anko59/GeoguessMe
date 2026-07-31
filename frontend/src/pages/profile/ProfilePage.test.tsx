@@ -54,7 +54,7 @@ describe('ProfilePage', () => {
         expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
-        expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/tier-1.png');
+        expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/squire.png');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
     });
 
