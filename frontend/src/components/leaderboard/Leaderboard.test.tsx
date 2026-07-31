@@ -117,6 +117,8 @@ describe('Leaderboard', () => {
         expect(screen.getByText('You')).toBeInTheDocument();
         expect(screen.getAllByText('Page')).toHaveLength(3);
         expect(screen.getByText('Emperor')).toBeInTheDocument();
+        expect(screen.getAllByText('I')).toHaveLength(3);
+        expect(screen.getByText('XVII')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
         const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');

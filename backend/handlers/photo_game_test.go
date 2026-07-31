@@ -88,8 +88,7 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
-	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1943)))
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\)").WithArgs(7600).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(2)))
+	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
 	recorder := httptest.NewRecorder()
 	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {

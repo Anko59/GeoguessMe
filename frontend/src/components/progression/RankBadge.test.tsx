@@ -33,6 +33,20 @@ describe('RankBadge', () => {
         expect(srcs).toEqual(['/rank-badges/page.png', '/rank-badges/knight-errant.png', '/rank-badges/emperor.png']);
     });
 
+    it('shows the rank number in roman numerals beneath the badge', () => {
+        const { container, rerender } = render(<RankBadge rank={rankAt('squire', 2)} alt="Squire badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('II');
+
+        rerender(<RankBadge rank={rankAt('herald', 4)} alt="Herald badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('IV');
+
+        rerender(<RankBadge rank={rankAt('knight-errant', 5)} alt="Knight Errant badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('V');
+
+        rerender(<RankBadge rank={rankAt('emperor', 20)} alt="Emperor badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('XX');
+    });
+
     it('renders a large badge for the profile hero', () => {
         render(<RankBadge rank={rankAt('high-king', 19)} size="large" alt="High King badge" />);
         const img = screen.getByRole('img', { name: 'High King badge' });

@@ -220,9 +220,12 @@
     letter-spacing: 0.02em;
 }
 
-.entry-rank-name .rank-badge {
+.entry-rank-name .rank-badge-stack {
     width: 0.85rem;
-    height: 0.85rem;
+}
+
+.entry-rank-name .rank-badge-numeral {
+    font-size: 0.4rem;
 }
 
 .you-badge {

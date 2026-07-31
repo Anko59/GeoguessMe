@@ -56,13 +56,14 @@ finished transparent PNGs are committed under `frontend/public/rank-badges/` as
 `{trophy_key}.png` (for example `knight-errant.png`), one per rank.
 
 Because `image-01` outputs JPEG (no alpha channel), generated images are
-post-processed once with a white-to-transparent flood fill before being
-committed. The flood fill removes background connected to the image border
-(threshold 242) and fades near-white edge pixels to remove JPEG halos; the
-results are trimmed, padded, and resized to 256×256. Rarely the model draws a
-gray vignette instead of a white background; such images must be regenerated and
-the same post-processing applied. The committed PNGs are final assets:
-regeneration is a one-off manual step, never part of the build.
+post-processed once before being committed: a border flood fill makes the white
+background transparent, enclosed near-white regions above a size threshold are
+removed (leftover background inside badge outlines, e.g. a shield's interior),
+near-white edge pixels are faded to remove JPEG halos, and the result is
+trimmed, padded, and resized to 256×256. Rarely the model draws a gray vignette
+instead of a white background; such images must be regenerated and the same
+post-processing applied. The committed PNGs are final assets: regeneration is a
+one-off manual step, never part of the build.
 
 To regenerate a badge, run the same prompt recipe for that rank through the
 model, post-process with the flood-fill script, verify transparency and margins
@@ -73,6 +74,9 @@ programmatically, and review the result before committing.
 - A small badge (16–20 px) is shown next to the rank name everywhere a rank name
   is displayed: the profile hero, the profile stat card, and every leaderboard
   row.
+- The rank number in roman numerals (I to XX) is shown beneath the badge
+  everywhere the badge is displayed, so the ordering is obvious even when only
+  the badge is in view.
 - The profile hero shows a large version (96–144 px) of the player's badge as
   the progression artwork.
 - The badge is chosen from the rank's `trophy_key`, which the server already

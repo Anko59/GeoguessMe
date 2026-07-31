@@ -79,30 +79,26 @@ type GlobalRankStats struct {
 	TotalPlayers int
 }
 
-// GetGlobalRankContext returns the player's rank among all players who have
-// guessed at least once. A player who has never guessed is not part of the
-// ranked population; Rank is zero in that case. hasGuesses mirrors the player's
-// own guess count from the profile stats query so the two stay consistent.
-func GetGlobalRankContext(ctx context.Context, totalPoints int, hasGuesses bool) (GlobalRankStats, error) {
-	var totalPlayers int64
-	if err := database.DB.QueryRow(ctx, `SELECT COUNT(DISTINCT user_id) FROM guesses`).Scan(&totalPlayers); err != nil {
+// GetGlobalRankContext calculates a stable snapshot in one query. Deleted
+// accounts are excluded from both the requested rank and the population.
+func GetGlobalRankContext(ctx context.Context, userID string) (GlobalRankStats, error) {
+	var rank, totalPlayers int64
+	err := database.DB.QueryRow(ctx, `
+		WITH totals AS (
+			SELECT g.user_id, SUM(g.score) AS total_points
+			FROM guesses g
+			JOIN users u ON u.id = g.user_id AND u.deleted_at IS NULL
+			GROUP BY g.user_id
+		), ranked AS (
+			SELECT user_id, RANK() OVER (ORDER BY total_points DESC) AS global_rank
+			FROM totals
+		)
+		SELECT COALESCE(MAX(global_rank) FILTER (WHERE user_id = $1), 0), COUNT(*)
+		FROM ranked`, userID).Scan(&rank, &totalPlayers)
+	if err != nil {
 		return GlobalRankStats{}, err
 	}
-	if totalPlayers == 0 || !hasGuesses {
-		return GlobalRankStats{Rank: 0, TotalPlayers: int(totalPlayers)}, nil
-	}
-	var ahead int64
-	if err := database.DB.QueryRow(ctx, `
-		SELECT COUNT(*)
-		FROM (
-			SELECT user_id
-			FROM guesses
-			GROUP BY user_id
-			HAVING SUM(score) > $1
-		) ahead_of_user`, totalPoints).Scan(&ahead); err != nil {
-		return GlobalRankStats{}, err
-	}
-	return GlobalRankStats{Rank: int(ahead) + 1, TotalPlayers: int(totalPlayers)}, nil
+	return GlobalRankStats{Rank: int(rank), TotalPlayers: int(totalPlayers)}, nil
 }
 
 // AuthStatus summarises what protected middleware must check on every request:

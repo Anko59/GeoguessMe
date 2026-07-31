@@ -51,6 +51,7 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(screen.getByText('600')).toBeInTheDocument();
         expect(screen.getAllByText('Squire')).toHaveLength(2);
+        expect(screen.getAllByText('II')).toHaveLength(3);
         expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');

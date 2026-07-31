@@ -110,7 +110,7 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
-	globalRank, err := repository.GetGlobalRankContext(r.Context(), stats.TotalPoints, stats.GuessCount > 0)
+	globalRank, err := repository.GetGlobalRankContext(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return

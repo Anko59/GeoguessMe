@@ -267,8 +267,8 @@ func TestProfileReadErrorAndMethodBranches(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
 		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(0), int64(0)))
-	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").
-		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(0), int64(0)))
 	requireStatus(t, UpdateProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusOK)
 }
 
