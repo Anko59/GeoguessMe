@@ -111,6 +111,35 @@ func TestGetUserScoreStats(t *testing.T) {
 	}
 }
 
+func TestGetGlobalRank(t *testing.T) {
+	mock := newMockPool(t)
+	// Two players ahead on lifetime points: rank is 3 of 1,943 ranked players.
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1943)))
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\)").WithArgs(7600).
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(2)))
+	stats, err := GetGlobalRankContext(context.Background(), 7600, true)
+	if err != nil || stats.Rank != 3 || stats.TotalPlayers != 1943 {
+		t.Fatalf("global rank = %+v, %v", stats, err)
+	}
+
+	// A player who never guessed is not part of the ranked population.
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1943)))
+	stats, err = GetGlobalRankContext(context.Background(), 0, false)
+	if err != nil || stats.Rank != 0 || stats.TotalPlayers != 1943 {
+		t.Fatalf("unranked player = %+v, %v", stats, err)
+	}
+
+	// No guesses anywhere: both values are zero.
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+	stats, err = GetGlobalRankContext(context.Background(), 0, false)
+	if err != nil || stats.Rank != 0 || stats.TotalPlayers != 0 {
+		t.Fatalf("empty population = %+v, %v", stats, err)
+	}
+}
+
 func TestProfileAndPasswordUpdates(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC()

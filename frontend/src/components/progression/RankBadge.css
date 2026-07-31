@@ -1,0 +1,33 @@
+.rank-badge {
+    flex: none;
+    object-fit: contain;
+}
+
+.rank-badge--inline {
+    width: 1.1rem;
+    height: 1.1rem;
+    vertical-align: -0.2em;
+}
+
+.rank-badge--large {
+    width: clamp(6rem, 18vw, 9rem);
+    height: clamp(6rem, 18vw, 9rem);
+    filter: drop-shadow(0 0.4rem 0.45rem rgba(17, 26, 77, 0.16));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .rank-badge--large {
+        animation: rankBadgeFloat 3.8s ease-in-out infinite;
+    }
+}
+
+@keyframes rankBadgeFloat {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-1deg);
+    }
+
+    50% {
+        transform: translateY(-0.25rem) rotate(1deg);
+    }
+}

@@ -28,6 +28,10 @@ const profile = {
         progress_percent: 10,
         trophy_key: 'squire',
     },
+    global_rank: {
+        rank: 3,
+        total_players: 1943,
+    },
 };
 
 beforeEach(() => {
@@ -47,8 +51,10 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(screen.getByText('600')).toBeInTheDocument();
         expect(screen.getAllByText('Squire')).toHaveLength(2);
+        expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
+        expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
-        expect(screen.getByRole('img', { name: 'Squire trophy' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/tier-1.png');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
     });
 
@@ -66,5 +72,19 @@ describe('ProfilePage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'alice' })).toBeInTheDocument());
         expect(mocks.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks a player who never guessed as unranked', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: { ...profile, total_points: 0, guess_count: 0, global_rank: { rank: 0, total_players: 1943 } },
+        });
+        render(
+            <MemoryRouter>
+                <ProfilePage />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByText('Unranked')).toBeInTheDocument();
+        expect(screen.getByText('Guess a location to enter the ranking')).toBeInTheDocument();
     });
 });

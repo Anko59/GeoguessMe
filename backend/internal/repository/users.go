@@ -70,6 +70,41 @@ func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStat
 	return stats, nil
 }
 
+// GlobalRankStats is the player's position among every player who has guessed
+// at least once, ordered by lifetime guess points. Rank uses standard
+// competition ranking: players with equal totals share a rank and the next
+// rank is skipped accordingly.
+type GlobalRankStats struct {
+	Rank         int
+	TotalPlayers int
+}
+
+// GetGlobalRankContext returns the player's rank among all players who have
+// guessed at least once. A player who has never guessed is not part of the
+// ranked population; Rank is zero in that case. hasGuesses mirrors the player's
+// own guess count from the profile stats query so the two stay consistent.
+func GetGlobalRankContext(ctx context.Context, totalPoints int, hasGuesses bool) (GlobalRankStats, error) {
+	var totalPlayers int64
+	if err := database.DB.QueryRow(ctx, `SELECT COUNT(DISTINCT user_id) FROM guesses`).Scan(&totalPlayers); err != nil {
+		return GlobalRankStats{}, err
+	}
+	if totalPlayers == 0 || !hasGuesses {
+		return GlobalRankStats{Rank: 0, TotalPlayers: int(totalPlayers)}, nil
+	}
+	var ahead int64
+	if err := database.DB.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM (
+			SELECT user_id
+			FROM guesses
+			GROUP BY user_id
+			HAVING SUM(score) > $1
+		) ahead_of_user`, totalPoints).Scan(&ahead); err != nil {
+		return GlobalRankStats{}, err
+	}
+	return GlobalRankStats{Rank: int(ahead) + 1, TotalPlayers: int(totalPlayers)}, nil
+}
+
 // AuthStatus summarises what protected middleware must check on every request:
 // whether the account still exists (is active) and its current auth version.
 type AuthStatus struct {

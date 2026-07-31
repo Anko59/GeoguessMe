@@ -211,10 +211,18 @@
 }
 
 .entry-rank-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
     color: var(--brand-blue-accessible);
     font-size: 0.68rem;
     font-weight: 850;
     letter-spacing: 0.02em;
+}
+
+.entry-rank-name .rank-badge {
+    width: 0.85rem;
+    height: 0.85rem;
 }
 
 .you-badge {

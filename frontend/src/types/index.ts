@@ -17,10 +17,16 @@ export interface ProgressionRank {
     trophy_key: string;
 }
 
+export interface GlobalRank {
+    rank: number;
+    total_players: number;
+}
+
 export interface Profile extends User {
     total_points: number;
     guess_count: number;
     rank: ProgressionRank;
+    global_rank: GlobalRank;
 }
 
 export interface AuthResponse {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
 import Avatar from '../common/Avatar';
+import RankBadge from '../progression/RankBadge';
 import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
 import './Leaderboard.css';
 
@@ -158,7 +159,10 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                             {entry.username}
                                             {isCurrentUser && <span className="you-badge">You</span>}
                                         </div>
-                                        <div className="entry-rank-name">{entry.rank.name}</div>
+                                        <div className="entry-rank-name">
+                                            <RankBadge rank={entry.rank} />
+                                            {entry.rank.name}
+                                        </div>
                                     </div>
                                     <div className="entry-score-bar">
                                         <div

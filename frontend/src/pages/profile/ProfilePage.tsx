@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
-import RankTrophy from '../../components/progression/RankTrophy';
+import RankBadge from '../../components/progression/RankBadge';
 import type { Profile } from '../../types';
 import './ProfilePage.css';
 
@@ -53,7 +53,7 @@ export default function ProfilePage() {
         );
     }
 
-    const { rank } = profile;
+    const { rank, global_rank: globalRank } = profile;
     const nextRankText = rank.next_points
         ? `Next rank at ${rank.next_points.toLocaleString()} pts`
         : 'Highest rank reached';
@@ -81,10 +81,13 @@ export default function ProfilePage() {
                         <p className="profile-eyebrow">Your adventurer card</p>
                         <h1 id="profile-title">{profile.username}</h1>
                         <p className="profile-email">{profile.email}</p>
-                        <p className="profile-rank-name">{rank.name}</p>
+                        <p className="profile-rank-name">
+                            <RankBadge rank={rank} />
+                            {rank.name}
+                        </p>
                     </div>
                 </div>
-                <RankTrophy rank={rank} className="profile-trophy" />
+                <RankBadge rank={rank} size="large" alt={`${rank.name} badge`} className="profile-badge" />
             </section>
 
             <section className="profile-trackers" aria-label="Score trackers">
@@ -101,7 +104,24 @@ export default function ProfilePage() {
                 <article className="profile-stat-card profile-stat-rank">
                     <span className="profile-stat-label">Current rank</span>
                     <strong>#{rank.level}</strong>
-                    <span>{rank.name}</span>
+                    <span className="profile-stat-rank-name">
+                        <RankBadge rank={rank} />
+                        {rank.name}
+                    </span>
+                </article>
+                <article className="profile-stat-card profile-stat-global-rank">
+                    <span className="profile-stat-label">Global rank</span>
+                    {globalRank.rank > 0 ? (
+                        <>
+                            <strong>#{globalRank.rank}</strong>
+                            <span>of {globalRank.total_players.toLocaleString()} players</span>
+                        </>
+                    ) : (
+                        <>
+                            <strong>Unranked</strong>
+                            <span>Guess a location to enter the ranking</span>
+                        </>
+                    )}
                 </article>
             </section>
 

@@ -87,11 +87,12 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
-		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	mock.ExpectQuery("SELECT COUNT\\(DISTINCT user_id\\) FROM guesses").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1943)))
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\)").WithArgs(7600).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(2)))
 	recorder := httptest.NewRecorder()
 	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {
 		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
@@ -455,9 +456,7 @@ func TestHandleInvitePreview(t *testing.T) {
 	mock := handlerMock(t)
 	now := time.Now().UTC()
 	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
-		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
-	)
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/invite/ABC123?from=Alice", nil)
 	req.SetPathValue("code", "ABC123")
@@ -482,9 +481,7 @@ func TestHandleInvitePreviewWithoutInviter(t *testing.T) {
 	RuntimeConfig = handlerConfig()
 	mock := handlerMock(t)
 	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "DEF456", CreatedAt: time.Now().UTC()}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
-		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
-	)
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/invite/DEF456", nil)
 	req.SetPathValue("code", "DEF456")
