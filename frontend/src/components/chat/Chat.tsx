@@ -27,6 +27,10 @@ const reactionOptions = [
     { emoji: '🙏', label: 'thanks' },
 ];
 
+// How long a touch must be held before the reply/react panel opens. This is
+// the deliberate long press that replaces tap-to-open on touch devices.
+const LONG_PRESS_MS = 1000;
+
 interface PressState {
     messageID: string;
     startX: number;
@@ -53,10 +57,34 @@ export default function Chat({
     const [reactionError, setReactionError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pressRef = useRef<PressState | null>(null);
+    // Hover-capable devices reveal actions on hover and keyboard focus; touch
+    // devices rely on a deliberate long press instead, like Messenger or
+    // WhatsApp, so a plain tap never opens the reply/react panel.
+    const [canHover] = useState(
+        () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover)').matches,
+    );
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    useEffect(() => {
+        const dismissActions = (event: PointerEvent) => {
+            if (!(event.target as HTMLElement).closest('[data-message-id]')) {
+                setActionsMessageID(null);
+            }
+        };
+        document.addEventListener('pointerdown', dismissActions);
+        return () => document.removeEventListener('pointerdown', dismissActions);
+    }, []);
+
+    const hoverHandlers = (messageID: string, enabled: boolean) =>
+        canHover && enabled
+            ? {
+                  onMouseEnter: () => setActionsMessageID(messageID),
+                  onMouseLeave: () => setActionsMessageID(null),
+              }
+            : {};
 
     const clearPress = () => {
         if (pressRef.current) window.clearTimeout(pressRef.current.timer);
@@ -65,10 +93,11 @@ export default function Chat({
 
     const handleMessagePointerDown = (event: React.PointerEvent<HTMLDivElement>, messageID: string) => {
         if (!event.isPrimary || (event.target as HTMLElement).closest('button')) return;
+        setActionsMessageID((current) => (current === messageID ? current : null));
         clearPress();
         const timer = window.setTimeout(() => {
             setActionsMessageID(messageID);
-        }, 450);
+        }, LONG_PRESS_MS);
         pressRef.current = { messageID, startX: event.clientX, startY: event.clientY, timer };
     };
 
@@ -113,7 +142,10 @@ export default function Chat({
                 type="button"
                 className="reply-action"
                 tabIndex={actionsMessageID === message.id ? 0 : -1}
-                onClick={() => setReplyingTo(message)}
+                onClick={() => {
+                    setReplyingTo(message);
+                    setActionsMessageID(null);
+                }}
                 aria-label={`Reply to ${message.username || 'message'}`}
             >
                 Reply
@@ -266,11 +298,7 @@ export default function Chat({
                                             {message.username || 'Unknown User'}
                                         </Link>
                                     )}
-                                    <div
-                                        className="message-hover-target"
-                                        onMouseEnter={() => setActionsMessageID(message.id)}
-                                        onMouseLeave={() => setActionsMessageID(null)}
-                                    >
+                                    <div className="message-hover-target" {...hoverHandlers(message.id, true)}>
                                         <button
                                             className={`message-content photo-challenge clickable${message.challenge_resolved || message.challenge_status === 'guessed' ? ' resolved' : ''}`}
                                             data-photo-id={message.photo_id}
@@ -353,11 +381,7 @@ export default function Chat({
                                         {message.username || 'Unknown User'}
                                     </Link>
                                 )}
-                                <div
-                                    className="message-hover-target"
-                                    onMouseEnter={() => !isSystem && setActionsMessageID(message.id)}
-                                    onMouseLeave={() => setActionsMessageID(null)}
-                                >
+                                <div className="message-hover-target" {...hoverHandlers(message.id, !isSystem)}>
                                     <div
                                         className={`message-content ${isSystem ? 'system-message' : message.kind === 'media' ? 'media-message' : 'text'}`}
                                     >

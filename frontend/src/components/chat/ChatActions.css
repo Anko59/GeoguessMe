@@ -27,14 +27,26 @@
         visibility var(--duration-fast) ease;
 }
 
-.message-container.actions-visible .message-actions,
-.message-hover-target:hover .message-actions,
-.message-container:focus-within .message-actions {
+.message-container.actions-visible .message-actions {
     display: flex;
     opacity: 1;
     pointer-events: auto;
     visibility: visible;
     transform: none;
+}
+
+/* Hover and focus reveals only apply where a hover pointer exists. Touch
+   devices must hold the message (long press) or swipe to open the actions,
+   so a plain tap never reveals them. */
+@media (hover: hover) {
+    .message-hover-target:hover .message-actions,
+    .message-container:focus-within .message-actions {
+        display: flex;
+        opacity: 1;
+        pointer-events: auto;
+        visibility: visible;
+        transform: none;
+    }
 }
 
 .reaction-actions {
