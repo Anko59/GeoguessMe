@@ -5,6 +5,7 @@ import type { Message } from '../../types';
 import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
+import ChallengeTimer from './ChallengeTimer';
 import { reactionByKey, reactionOptions } from './reactionOptions';
 import './Chat.css';
 import './ChatActions.css';
@@ -299,7 +300,7 @@ export default function Chat({
                                     )}
                                     <div className="message-hover-target" {...hoverHandlers(message.id, true)}>
                                         <button
-                                            className={`message-content photo-challenge clickable${message.challenge_resolved || message.challenge_status === 'guessed' ? ' resolved' : ''}`}
+                                            className={`message-content photo-challenge clickable${message.challenge_status === 'guessed' ? ' resolved' : ''}`}
                                             data-photo-id={message.photo_id}
                                             onClick={() => onChallengeMessage?.(message)}
                                         >
@@ -315,13 +316,20 @@ export default function Chat({
                                                         className="challenge-icon"
                                                     />
                                                     <span>
-                                                        {message.challenge_resolved ||
-                                                        message.challenge_status === 'guessed'
+                                                        {message.challenge_status === 'guessed'
                                                             ? 'Resolved challenge'
-                                                            : isMe
-                                                              ? 'Challenge sent'
-                                                              : 'New challenge'}
+                                                            : message.challenge_status === 'expired'
+                                                              ? 'Challenge expired'
+                                                              : isMe
+                                                                ? 'Challenge sent'
+                                                                : 'New challenge'}
                                                     </span>
+                                                    {message.challenge_expires_at && message.challenge_ttl_seconds ? (
+                                                        <ChallengeTimer
+                                                            expiresAt={message.challenge_expires_at}
+                                                            ttlSeconds={message.challenge_ttl_seconds}
+                                                        />
+                                                    ) : null}
                                                 </span>
                                                 <span className="start-challenge-btn">
                                                     {isMe ||

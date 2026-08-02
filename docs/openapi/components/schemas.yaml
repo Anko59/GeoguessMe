@@ -154,6 +154,16 @@ Message:
         description: Viewer-specific action state for challenge messages,
       }
     challenge_resolved: { type: boolean, description: Whether any group member has answered the challenge }
+    challenge_expires_at:
+      type: string
+      format: date-time
+      description: >-
+        Challenge deadline (upload time + TTL), present on challenge messages.
+    challenge_ttl_seconds:
+      type: integer
+      minimum: 1
+      description: >-
+        Challenge duration in seconds, present on challenge messages.
     reactions: { type: array, items: { $ref: "#/MessageReaction" } }
     reaction_update: { $ref: "#/MessageReactionUpdate" }
 
