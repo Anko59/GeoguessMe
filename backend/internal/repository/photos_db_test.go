@@ -75,12 +75,22 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	if _, err := SubmitGuess(context.Background(), photo.ID, "user-2", 100, 0, now); err != ErrInvalidCoordinate {
 		t.Fatalf("invalid guess = %v", err)
 	}
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(-time.Minute)))
+	mock.ExpectRollback()
+	if _, err := SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); err != ErrViewNotFinished {
+		t.Fatalf("guess before delivery confirmation = %v", err)
+	}
 	guessTime := now.Add(time.Hour)
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
-	mock.ExpectQuery("SELECT view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(-time.Minute)))
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute)))
 	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	result, err := SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)

@@ -206,7 +206,10 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT view_expires_at").WithArgs(photo.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(time.Hour)))
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(time.Hour)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(RuntimeConfig.ViewWindow)))
 	recorder = httptest.NewRecorder()
 	mediaRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	mediaRequest.SetPathValue("photoID", photo.ID)

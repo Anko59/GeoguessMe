@@ -98,6 +98,38 @@ describe('Game', () => {
         expect(screen.getByText('gone')).toBeInTheDocument();
     });
 
+    it('starts the viewing window when the media finishes loading on a slow connection', async () => {
+        // The results check fails; the accept response arrives with the server
+        // window already elapsed, and the media blob finishes loading only now.
+        const serverTime = Date.now();
+        mocks.get
+            .mockRejectedValueOnce(new Error('results not ready'))
+            .mockResolvedValueOnce({ data: new Blob(['data'], { type: 'image/jpeg' }) });
+        mocks.post
+            .mockResolvedValueOnce({
+                data: {
+                    media_url: '/api/v1/challenges/photo-6/media',
+                    media_type: 'image/jpeg',
+                    accepted_at: new Date(serverTime - 10000).toISOString(),
+                    view_expires_at: new Date(serverTime).toISOString(),
+                    server_time: new Date(serverTime).toISOString(),
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    view_expires_at: new Date(serverTime + 10000).toISOString(),
+                    server_time: new Date(serverTime).toISOString(),
+                },
+            });
+        withGame(<Game gameMessage={message({ photo_id: 'photo-6', kind: 'challenge' })} onClose={vi.fn()} />);
+
+        // The image is shown even though the accept-time window has elapsed,
+        // and the countdown reflects the full window from media-ready instead
+        // of the consumed server window.
+        expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
+        expect(screen.getByText(/^[1-9]\d*$/)).toBeInTheDocument();
+    });
+
     it('accepts a challenge, selects a location, and submits a guess', async () => {
         mocks.get.mockRejectedValueOnce(new Error('results not ready'));
         mocks.post
@@ -108,27 +140,40 @@ describe('Game', () => {
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
                 },
             })
-            .mockResolvedValueOnce({ data: {} });
+            .mockResolvedValueOnce({
+                data: {
+                    view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    server_time: new Date().toISOString(),
+                },
+            });
         withGame(<Game gameMessage={message({ photo_id: 'photo-3', kind: 'challenge' })} onClose={vi.fn()} />);
         expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
     });
 
     it('celebrates a newly submitted top-tier score', async () => {
-        mocks.get.mockRejectedValueOnce(new Error('results not ready')).mockResolvedValueOnce({
-            data: {
-                photo_id: 'photo-5',
-                group_id: 'group-1',
-                actual_lat: 48,
-                actual_long: 2,
-                media_available: false,
-                guesses: [],
-                server_time: new Date().toISOString(),
-            },
-        });
+        // The results check fails, and the media fetch fails too (the player
+        // already viewed this challenge, so the window has elapsed and they may
+        // guess directly).
+        mocks.get
+            .mockRejectedValueOnce(new Error('results not ready'))
+            .mockRejectedValueOnce(new Error('media expired'))
+            .mockResolvedValueOnce({
+                data: {
+                    photo_id: 'photo-5',
+                    group_id: 'group-1',
+                    actual_lat: 48,
+                    actual_long: 2,
+                    media_available: false,
+                    guesses: [],
+                    server_time: new Date().toISOString(),
+                },
+            });
         mocks.post
             .mockResolvedValueOnce({
                 data: {
-                    media_url: 'https://example.test/photo.jpg',
+                    media_url: '/api/v1/challenges/photo-5/media',
+                    media_type: 'image/jpeg',
+                    accepted_at: new Date(Date.now() - 11000).toISOString(),
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() - 1000).toISOString(),
                 },
@@ -185,14 +230,21 @@ describe('Game', () => {
 
     it('renders recorded video challenges with playback controls', async () => {
         mocks.get.mockRejectedValueOnce(new Error('results not ready'));
-        mocks.post.mockResolvedValueOnce({
-            data: {
-                media_url: 'https://example.test/challenge.webm',
-                media_type: 'video/webm',
-                server_time: new Date().toISOString(),
-                view_expires_at: new Date(Date.now() + 2000).toISOString(),
-            },
-        });
+        mocks.post
+            .mockResolvedValueOnce({
+                data: {
+                    media_url: 'https://example.test/challenge.webm',
+                    media_type: 'video/webm',
+                    server_time: new Date().toISOString(),
+                    view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    server_time: new Date().toISOString(),
+                },
+            });
         withGame(<Game gameMessage={message({ photo_id: 'video-1', kind: 'challenge' })} onClose={vi.fn()} />);
         expect(await screen.findByLabelText('Challenge video')).toHaveAttribute(
             'src',

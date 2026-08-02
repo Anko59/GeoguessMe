@@ -64,6 +64,8 @@ paths:
     $ref: ./openapi/paths/challenges.yaml#/accept
   /challenges/{photoID}/media:
     $ref: ./openapi/paths/challenges.yaml#/media
+  /challenges/{photoID}/media-delivered:
+    $ref: ./openapi/paths/challenges.yaml#/mediaDelivered
   /challenges/{photoID}/guess:
     $ref: ./openapi/paths/challenges.yaml#/guess
   /challenges/{photoID}/results:

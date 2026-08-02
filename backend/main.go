@@ -141,6 +141,7 @@ func main() {
 	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
 	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(handlers.AcceptChallenge))
+	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(handlers.ConfirmChallengeMediaDelivered))
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))

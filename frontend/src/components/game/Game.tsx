@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { ChallengeAcceptance, ChallengeResults, GuessResult, Message } from '../../types';
+import type { ChallengeAcceptance, ChallengeMediaDelivered, ChallengeResults, GuessResult, Message } from '../../types';
 import Map from '../map/Map';
 import './Game.css';
 import GuessScoreFeedback from './GuessScoreFeedback';
@@ -63,22 +63,52 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             try {
                 const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`);
                 const data = response.data;
-                const offset = Date.parse(data.server_time) - Date.now();
-                const deadline = Date.parse(data.view_expires_at);
-                if (deadline <= Date.now()) {
-                    setState({ status: 'guessing', photoId, deadline, serverOffset: 0 });
+                const serverOffset = Date.parse(data.server_time) - Date.now();
+                const serverDeadline = Date.parse(data.view_expires_at);
+                let mediaUrl: string | undefined;
+                let mediaError: unknown;
+                try {
+                    mediaUrl = await loadMedia(data.media_url);
+                    const delivered = await api.post<ChallengeMediaDelivered>(`/challenges/${photoId}/media-delivered`);
+                    setState({
+                        status: 'viewing',
+                        photoId,
+                        mediaUrl,
+                        mediaType: data.media_type,
+                        deadline: Date.parse(delivered.data.view_expires_at),
+                        serverOffset: Date.parse(delivered.data.server_time) - Date.now(),
+                    });
+                    onChallengeStatusChange?.(photoId, 'accepted');
+                    return;
+                } catch (loadError: unknown) {
+                    mediaError = loadError;
+                    if (mediaUrl) {
+                        URL.revokeObjectURL(mediaUrl);
+                        setState({
+                            status: 'error',
+                            photoId,
+                            serverOffset: 0,
+                            message: getAPIErrorMessage(
+                                mediaError,
+                                'The viewing window could not be started. Reopen the challenge to try again.',
+                            ),
+                        });
+                        return;
+                    }
+                }
+                // The media could not be loaded. If the viewing window has
+                // already elapsed (e.g. the player already viewed this
+                // challenge), they may still submit a guess.
+                if (serverDeadline <= Date.now() + serverOffset) {
+                    setState({ status: 'guessing', photoId, deadline: serverDeadline, serverOffset });
                     return;
                 }
-                const mediaUrl = await loadMedia(data.media_url);
                 setState({
-                    status: 'viewing',
+                    status: 'error',
                     photoId,
-                    mediaUrl,
-                    mediaType: data.media_type,
-                    deadline: Date.parse(data.view_expires_at),
-                    serverOffset: offset,
+                    serverOffset: 0,
+                    message: getAPIErrorMessage(mediaError, 'This challenge is no longer available.'),
                 });
-                onChallengeStatusChange?.(photoId, 'accepted');
             } catch (requestError: unknown) {
                 setState({
                     status: 'error',

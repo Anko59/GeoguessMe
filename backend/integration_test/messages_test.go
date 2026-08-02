@@ -172,7 +172,7 @@ func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
 
 	require.Eventually(t, func() bool { return messageStatus(t, alice.access) == "results" }, 5*time.Second, 100*time.Millisecond, "uploader status must be available once the challenge message is persisted")
 	require.Equal(t, "available", messageStatus(t, bob.access), "participant starts with Accept challenge")
-	accepted := acceptChallenge(t, bob.access, photoID)
+	accepted := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.Equal(t, "accepted", messageStatus(t, bob.access), "accepted participant sees Continue challenge")
 
 	conn := mustDialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)

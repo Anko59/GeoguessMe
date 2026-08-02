@@ -122,6 +122,12 @@ export interface ChallengeAcceptance {
     server_time: string;
 }
 
+export interface ChallengeMediaDelivered {
+    view_expires_at: string;
+    guess_after: string;
+    server_time: string;
+}
+
 export interface GuessResult {
     guess_id: string;
     photo_id: string;
