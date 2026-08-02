@@ -25,7 +25,9 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - Challenge messages in `items` may include viewer-specific `challenge_status`
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
-  viewer's challenge view and guess state.
+  viewer's challenge view and guess state. Challenge messages also carry
+  `challenge_expires_at` (the 24-hour deadline) and `challenge_ttl_seconds` so
+  the client can render the remaining time as a countdown.
 - Messages may include aggregate `reactions`; each entry contains a reaction key
   (mapping to the custom reaction artwork), count, the `usernames` of members
   who selected it, and a `reacted` flag for the authenticated viewer. Usernames

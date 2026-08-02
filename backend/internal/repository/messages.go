@@ -133,6 +133,8 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 	}
 	rows, err := database.DB.Query(ctx, `
 		SELECT p.id,
+			p.expires_at,
+			EXTRACT(EPOCH FROM (p.expires_at - p.created_at))::INTEGER,
 			CASE
 				WHEN p.user_id = $2 THEN 'results'
 				WHEN EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id AND g.user_id = $2) THEN 'guessed'
@@ -150,14 +152,18 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 	statuses := make(map[string]string, len(photoIDs))
 	for rows.Next() {
 		var photoID, status string
+		var expiresAt time.Time
+		var ttlSeconds int64
 		var resolved bool
-		if err := rows.Scan(&photoID, &status, &resolved); err != nil {
+		if err := rows.Scan(&photoID, &expiresAt, &ttlSeconds, &status, &resolved); err != nil {
 			return MessagesPage{}, err
 		}
 		statuses[photoID] = status
 		for index := range page.Items {
 			if page.Items[index].PhotoID != nil && *page.Items[index].PhotoID == photoID {
 				page.Items[index].ChallengeResolved = resolved
+				page.Items[index].ChallengeExpiresAt = &expiresAt
+				page.Items[index].ChallengeTTLSeconds = int(ttlSeconds)
 			}
 		}
 	}

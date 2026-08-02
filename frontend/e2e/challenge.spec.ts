@@ -73,7 +73,7 @@ test.describe('Challenge flow', () => {
             expect(guessResponse.status()).toBe(201);
             await expect(guesser.locator('.result-view')).toContainText('Challenge results');
 
-            await expect(exactChallenge).toContainText('Resolved challenge');
+            await expect(exactChallenge).toContainText('Challenge sent');
             await exactChallenge.click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
         } finally {

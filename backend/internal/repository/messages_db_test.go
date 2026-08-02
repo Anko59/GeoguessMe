@@ -43,14 +43,15 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 			AddRow("message-1", "like", 2, true, []string{"alice", "bob"}))
 	mock.ExpectQuery("SELECT p.id,").
 		WithArgs([]string{photoID}, "viewer-1").
-		WillReturnRows(pgxmock.NewRows([]string{"id", "challenge_status", "challenge_resolved"}).
-			AddRow(photoID, "guessed", true))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "expires_at", "ttl_seconds", "challenge_status", "challenge_resolved"}).
+			AddRow(photoID, now.Add(time.Hour), int64(86400), "guessed", true))
 	page, err := GetGroupMessagesPageForViewer(ctx, "group-1", "", 10, "viewer-1")
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("viewer message page = %+v, %v", page, err)
 	}
 	message := page.Items[0]
 	if message.ChallengeStatus != "guessed" || !message.ChallengeResolved ||
+		message.ChallengeExpiresAt == nil || !message.ChallengeExpiresAt.After(now) || message.ChallengeTTLSeconds != 86400 ||
 		len(message.Reactions) != 1 || !message.Reactions[0].Reacted || message.Reactions[0].Count != 2 ||
 		len(message.Reactions[0].Usernames) != 2 || message.Reactions[0].Usernames[1] != "bob" {
 		t.Fatalf("enriched message = %+v", message)

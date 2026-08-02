@@ -86,6 +86,71 @@ describe('Chat', () => {
         expect(screen.getByRole('link', { name: "View bob's profile" })).toHaveAttribute('href', '/profile/user-2');
     });
 
+    it('marks a challenge resolved only for the viewer who answered it', () => {
+        const { container } = renderChat({
+            messages: [
+                message({
+                    id: 'ch1',
+                    kind: 'challenge',
+                    photo_id: 'photo-1',
+                    content: '',
+                    challenge_status: 'available',
+                    challenge_resolved: true,
+                }),
+                message({
+                    id: 'ch2',
+                    kind: 'challenge',
+                    photo_id: 'photo-2',
+                    content: '',
+                    challenge_status: 'guessed',
+                    challenge_resolved: true,
+                }),
+            ],
+        });
+        // Someone else answered ch1; the viewer has not, so it stays a new challenge.
+        const othersChallenge = container.querySelector('button[data-photo-id="photo-1"]') as HTMLButtonElement;
+        const myChallenge = container.querySelector('button[data-photo-id="photo-2"]') as HTMLButtonElement;
+        expect(othersChallenge).not.toHaveClass('resolved');
+        expect(othersChallenge).toHaveTextContent('New challenge');
+        expect(myChallenge).toHaveClass('resolved');
+        expect(myChallenge).toHaveTextContent('Resolved challenge');
+    });
+
+    it('labels an expired challenge', () => {
+        const { container } = renderChat({
+            messages: [
+                message({
+                    id: 'ch3',
+                    kind: 'challenge',
+                    photo_id: 'photo-3',
+                    content: '',
+                    challenge_status: 'expired',
+                }),
+            ],
+        });
+        expect(container.querySelector('button[data-photo-id="photo-3"]')).toHaveTextContent('Challenge expired');
+    });
+
+    it('shows a round countdown of the challenge deadline', () => {
+        const { container } = renderChat({
+            messages: [
+                message({
+                    id: 'ch4',
+                    kind: 'challenge',
+                    photo_id: 'photo-4',
+                    content: '',
+                    challenge_status: 'available',
+                    challenge_expires_at: new Date(Date.now() + 21 * 3600 * 1000).toISOString(),
+                    challenge_ttl_seconds: 24 * 3600,
+                }),
+            ],
+        });
+        const timer = container.querySelector('.challenge-timer') as HTMLElement;
+        expect(timer).toBeInTheDocument();
+        expect(timer).toHaveAttribute('aria-label', '21h remaining');
+        expect(timer.textContent).toContain('21h');
+    });
+
     it('renders chat states, sends messages, and opens challenges', () => {
         const send = vi.fn();
         const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;

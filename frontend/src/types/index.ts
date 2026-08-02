@@ -63,6 +63,8 @@ export interface Message {
     created_at: string;
     challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
     challenge_resolved?: boolean;
+    challenge_expires_at?: string;
+    challenge_ttl_seconds?: number;
     reactions?: Reaction[];
     reaction_update?: {
         user_id: string;
