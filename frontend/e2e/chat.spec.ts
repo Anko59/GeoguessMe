@@ -140,7 +140,7 @@ test.describe('Chat via WebSocket', () => {
             expect(secondBox).not.toBeNull();
             expect(secondBox!.y - (firstBox!.y + firstBox!.height)).toBeLessThan(24);
 
-            await firstMessage.hover();
+            await firstMessage.locator('.message-hover-target').hover();
             await expect(actions).toBeVisible();
             expect(await actions.boundingBox()).not.toBeNull();
         } finally {

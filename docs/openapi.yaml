@@ -34,6 +34,8 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/deleteAccount
   /user/groups:
     $ref: ./openapi/paths/groups.yaml#/userGroups
+  /user/profile/{userID}:
+    $ref: ./openapi/paths/groups.yaml#/userProfile
   /group/create:
     $ref: ./openapi/paths/groups.yaml#/createGroup
   /group/join:

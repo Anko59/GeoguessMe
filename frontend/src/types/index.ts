@@ -15,6 +15,7 @@ export interface ProgressionRank {
     points_to_next: number;
     progress_percent: number;
     trophy_key: string;
+    next_rank?: ProgressionRank;
 }
 
 export interface GlobalRank {
@@ -23,6 +24,17 @@ export interface GlobalRank {
 }
 
 export interface Profile extends User {
+    total_points: number;
+    guess_count: number;
+    rank: ProgressionRank;
+    global_rank: GlobalRank;
+}
+
+/** Another player's profile: identity and progression, never email. */
+export interface PublicProfile {
+    id: string;
+    username: string;
+    avatar: string;
     total_points: number;
     guess_count: number;
     rank: ProgressionRank;
