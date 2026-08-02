@@ -121,13 +121,17 @@ describe('Game', () => {
                     server_time: new Date(serverTime).toISOString(),
                 },
             });
-        withGame(<Game gameMessage={message({ photo_id: 'photo-6', kind: 'challenge' })} onClose={vi.fn()} />);
+        const view = withGame(
+            <Game gameMessage={message({ photo_id: 'photo-6', kind: 'challenge' })} onClose={vi.fn()} />,
+        );
 
         // The image is shown even though the accept-time window has elapsed,
         // and the countdown reflects the full window from media-ready instead
         // of the consumed server window.
         expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
         expect(screen.getByText(/^[1-9]\d*$/)).toBeInTheDocument();
+        // The pulsating timer icon is rendered above the displayed media.
+        expect(view.container.querySelector('.timer-icon')).toHaveAttribute('src', '/timer_icon.png');
     });
 
     it('accepts a challenge, selects a location, and submits a guess', async () => {
