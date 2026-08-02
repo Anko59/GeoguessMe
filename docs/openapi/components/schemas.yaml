@@ -39,6 +39,9 @@ ProgressionRank:
     points_to_next: { type: integer, minimum: 0 }
     progress_percent: { type: integer, minimum: 0, maximum: 100 }
     trophy_key: { type: string }
+    next_rank:
+      $ref: "#/ProgressionRank"
+      description: The following rank, omitted at the highest rank.
 
 GlobalRank:
   type: object
@@ -66,6 +69,21 @@ Profile:
         guess_count: { type: integer, minimum: 0 }
         rank: { $ref: "#/ProgressionRank" }
         global_rank: { $ref: "#/GlobalRank" }
+
+PublicProfile:
+  type: object
+  required: [id, username, avatar, total_points, guess_count, rank, global_rank]
+  properties:
+    id: { type: string }
+    username: { type: string }
+    avatar: { type: string }
+    total_points: { type: integer, minimum: 0 }
+    guess_count: { type: integer, minimum: 0 }
+    rank: { $ref: "#/ProgressionRank" }
+    global_rank: { $ref: "#/GlobalRank" }
+  description: >
+    Another player's progression profile. Never contains email or account
+    details; only visible when the player shares a group with the requester.
 
 Group:
   type: object

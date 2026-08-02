@@ -41,9 +41,17 @@ scores; rank thresholds and the 20 medieval-inspired rank names are
 server-owned. `global_rank.rank` is the player's position among every player who
 has guessed at least once, ordered by lifetime points with standard competition
 ranking (equal totals share a rank), and `global_rank.total_players` is the size
-of that population; a player who has never guessed has `rank` 0. Group
-leaderboard entries include the same rank object beneath each player's name
-while their `score` remains the selected period's sum.
+of that population; a player who has never guessed has `rank` 0. Each rank
+object carries a `next_rank` with the following rank's name and badge key
+(omitted at the highest rank). Group leaderboard entries include the same rank
+object beneath each player's name while their `score` remains the selected
+period's sum.
+
+`GET /api/v1/user/profile/{userID}` returns another player's identity and
+progression with the same shape minus email and account details. The player must
+share at least one group with the requester (viewing yourself always works);
+otherwise the endpoint returns 403. This is the data behind the player profile
+page reachable from chat and leaderboards.
 
 ## Endpoint overview
 
@@ -61,6 +69,7 @@ while their `score` remains the selected period's sum.
 | POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`      | 200, 400           |
 | POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions   | 204, 400, 401      |
 | GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank | 200, 401           |
+| GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression       | 200, 401, 403, 404 |
 | PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar       | 200, 400, 401, 409 |
 | POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)       | 200, 400, 401      |
 | DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`             | 204, 401           |

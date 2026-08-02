@@ -122,6 +122,7 @@ func main() {
 	mux.Handle("/api/v1/auth/account", protected(handlers.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(handlers.GetUserGroups))
+	mux.Handle("/api/v1/user/profile/{userID}", protected(handlers.GetPublicProfile))
 	mux.Handle("/api/v1/group/create", protected(handlers.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(handlers.JoinGroup))
 	mux.Handle("/api/v1/group/details", protected(handlers.GetGroupDetails))

@@ -10,6 +10,26 @@ userGroups:
         content: { application/json: { schema: { type: array, items: { $ref: "../components/schemas.yaml#/Group" } } } }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+userProfile:
+  get:
+    operationId: getUserProfile
+    summary: Get another player's progression profile.
+    description: >
+      Returns a player's identity and progression. The player must share at
+      least one group with the requester, or be the requester themselves;
+      email and account details are never returned.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: userID, in: path, required: true, schema: { type: string } }
+    responses:
+      "200":
+        description: Player progression profile.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PublicProfile" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 createGroup:
   post:
     operationId: createGroup

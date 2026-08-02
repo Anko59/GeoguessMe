@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../../api';
 import Chat from './Chat';
@@ -16,6 +17,19 @@ const message = (overrides: Partial<Message> = {}): Message => ({
     ...overrides,
 });
 
+const renderChat = (props: Partial<React.ComponentProps<typeof Chat>> = {}) =>
+    render(
+        <MemoryRouter>
+            <Chat
+                messages={[message()]}
+                wsRef={{ current: null }}
+                currentUserId="user-1"
+                groupID="group-1"
+                {...props}
+            />
+        </MemoryRouter>,
+    );
+
 beforeEach(() => {
     vi.clearAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
@@ -24,21 +38,23 @@ beforeEach(() => {
 describe('Chat', () => {
     it('shows a sender name once for consecutive messages from the same user', () => {
         const { container } = render(
-            <Chat
-                messages={[
-                    message({ id: 'first', content: 'First message' }),
-                    message({ id: 'second', content: 'Second message' }),
-                    message({
-                        id: 'third',
-                        user_id: 'user-3',
-                        username: 'carol',
-                        content: 'A different sender',
-                    }),
-                ]}
-                wsRef={{ current: null }}
-                currentUserId="user-1"
-                groupID="group-1"
-            />,
+            <MemoryRouter>
+                <Chat
+                    messages={[
+                        message({ id: 'first', content: 'First message' }),
+                        message({ id: 'second', content: 'Second message' }),
+                        message({
+                            id: 'third',
+                            user_id: 'user-3',
+                            username: 'carol',
+                            content: 'A different sender',
+                        }),
+                    ]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                />
+            </MemoryRouter>,
         );
 
         expect(Array.from(container.querySelectorAll('.message-username')).map((node) => node.textContent)).toEqual([
@@ -50,29 +66,37 @@ describe('Chat', () => {
         );
     });
 
+    it('links sender names and avatars to the player profile', () => {
+        renderChat();
+        expect(screen.getByRole('link', { name: 'bob' })).toHaveAttribute('href', '/profile/user-2');
+        expect(screen.getByRole('link', { name: "View bob's profile" })).toHaveAttribute('href', '/profile/user-2');
+    });
+
     it('renders chat states, sends messages, and opens challenges', () => {
         const send = vi.fn();
         const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;
         const onChallenge = vi.fn();
         render(
-            <Chat
-                messages={[
-                    message(),
-                    message({ id: 'system', kind: 'system', content: 'System update' }),
-                    message({
-                        id: 'challenge',
-                        kind: 'challenge',
-                        photo_id: 'photo-1',
-                        user_id: 'user-1',
-                        content: 'Challenge',
-                    }),
-                ]}
-                wsRef={wsRef}
-                currentUserId="user-1"
-                groupID="group-1"
-                connectionStatus="connected"
-                onChallengeMessage={onChallenge}
-            />,
+            <MemoryRouter>
+                <Chat
+                    messages={[
+                        message(),
+                        message({ id: 'system', kind: 'system', content: 'System update' }),
+                        message({
+                            id: 'challenge',
+                            kind: 'challenge',
+                            photo_id: 'photo-1',
+                            user_id: 'user-1',
+                            content: 'Challenge',
+                        }),
+                    ]}
+                    wsRef={wsRef}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    connectionStatus="connected"
+                    onChallengeMessage={onChallenge}
+                />
+            </MemoryRouter>,
         );
         expect(screen.getByRole('status')).toHaveTextContent('Connected');
         fireEvent.click(screen.getByRole('button', { name: /challenge/i }));
@@ -81,7 +105,7 @@ describe('Chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledWith(JSON.stringify({ content: 'hi' }));
 
-        fireEvent.mouseEnter(screen.getByText('Hello').closest('[data-message-id]') as HTMLElement);
+        fireEvent.mouseEnter(screen.getByText('Hello').closest('.message-hover-target') as HTMLElement);
         fireEvent.click(screen.getAllByRole('button', { name: 'Reply to bob' })[0]);
         expect(screen.getAllByRole('status')[1]).toHaveTextContent('Replying to bob');
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'same here' } });
@@ -89,16 +113,31 @@ describe('Chat', () => {
         expect(send).toHaveBeenLastCalledWith(JSON.stringify({ content: 'same here', reply_to_id: 'message-1' }));
 
         render(
-            <Chat
-                messages={[]}
-                wsRef={{ current: null }}
-                currentUserId="user-1"
-                groupID="group-1"
-                connectionStatus="offline"
-            />,
+            <MemoryRouter>
+                <Chat
+                    messages={[]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    connectionStatus="offline"
+                />
+            </MemoryRouter>,
         );
         expect(screen.getByText('Offline — retrying')).toBeInTheDocument();
         expect(screen.getByText('No messages yet')).toBeInTheDocument();
+    });
+
+    it('reveals actions only when hovering the message bubble, not the row', () => {
+        renderChat({ connectionStatus: 'connected' });
+        const reply = screen.getByRole('button', { name: 'Reply to bob' });
+        const row = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
+        const bubble = screen.getByText('Hello').closest('.message-hover-target') as HTMLElement;
+
+        fireEvent.mouseEnter(row);
+        expect(reply).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.mouseEnter(bubble);
+        expect(reply).toHaveAttribute('tabindex', '0');
     });
 
     it('reveals message actions and saves emoji reactions', async () => {
@@ -106,20 +145,9 @@ describe('Chat', () => {
             data: message({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
         });
         const onMessageUpdated = vi.fn();
-        const wsRef = { current: null } as unknown as React.RefObject<WebSocket | null>;
-        render(
-            <Chat
-                messages={[message()]}
-                wsRef={wsRef}
-                currentUserId="user-1"
-                groupID="group-1"
-                connectionStatus="connected"
-                onMessageUpdated={onMessageUpdated}
-            />,
-        );
+        renderChat({ connectionStatus: 'connected', onMessageUpdated });
 
-        const messageElement = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
-        fireEvent.mouseEnter(messageElement);
+        fireEvent.mouseEnter(screen.getByText('Hello').closest('.message-hover-target') as HTMLElement);
         fireEvent.click(screen.getByRole('button', { name: 'React with thumbs up' }));
 
         await waitFor(() => expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { emoji: '👍' }));
@@ -130,16 +158,18 @@ describe('Chat', () => {
 
     it('shows the members who selected each reaction', () => {
         const { container } = render(
-            <Chat
-                messages={[
-                    message({
-                        reactions: [{ emoji: '👍', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
-                    }),
-                ]}
-                wsRef={{ current: null }}
-                currentUserId="user-1"
-                groupID="group-1"
-            />,
+            <MemoryRouter>
+                <Chat
+                    messages={[
+                        message({
+                            reactions: [{ emoji: '👍', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
+                        }),
+                    ]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                />
+            </MemoryRouter>,
         );
 
         const reactionChip = container.querySelector('.reaction-chip') as HTMLButtonElement;
@@ -149,15 +179,7 @@ describe('Chat', () => {
     });
 
     it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {
-        render(
-            <Chat
-                messages={[message()]}
-                wsRef={{ current: null }}
-                currentUserId="user-1"
-                groupID="group-1"
-                connectionStatus="connected"
-            />,
-        );
+        renderChat({ connectionStatus: 'connected' });
         const messageElement = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
         const reply = screen.getByRole('button', { name: 'Reply to bob' });
 
@@ -175,7 +197,15 @@ describe('Chat', () => {
         const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} });
         const wsRef = { current: { readyState: WebSocket.OPEN, send } } as unknown as React.RefObject<WebSocket | null>;
         render(
-            <Chat messages={[]} wsRef={wsRef} currentUserId="user-1" groupID="group-1" connectionStatus="connected" />,
+            <MemoryRouter>
+                <Chat
+                    messages={[]}
+                    wsRef={wsRef}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    connectionStatus="connected"
+                />
+            </MemoryRouter>,
         );
 
         const file = new File(['image'], 'shared.png', { type: 'image/png' });

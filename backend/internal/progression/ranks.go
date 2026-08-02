@@ -20,6 +20,9 @@ type Rank struct {
 	PointsToNext    int    `json:"points_to_next"`
 	ProgressPercent int    `json:"progress_percent"`
 	TrophyKey       string `json:"trophy_key"`
+	// Next is the following rank, or nil at the highest rank. It lets clients
+	// render the next rank's name and badge without duplicating the table.
+	Next *Rank `json:"next_rank,omitempty"`
 }
 
 var rankDefinitions = [...]rankDefinition{
@@ -70,7 +73,9 @@ func RankForPoints(totalPoints int) Rank {
 		rank.ProgressPercent = 100
 		return rank
 	}
-	nextPoints := rankDefinitions[index+1].minPoints
+	next := rankDefinitions[index+1]
+	rank.Next = &Rank{Level: index + 2, Name: next.name, MinPoints: next.minPoints, TrophyKey: next.trophyKey}
+	nextPoints := next.minPoints
 	rank.NextPoints = &nextPoints
 	rank.PointsToNext = nextPoints - definition.minPoints
 	rank.ProgressPercent = rank.PointsInRank * 100 / rank.PointsToNext
