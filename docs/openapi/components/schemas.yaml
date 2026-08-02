@@ -40,15 +40,32 @@ ProgressionRank:
     progress_percent: { type: integer, minimum: 0, maximum: 100 }
     trophy_key: { type: string }
 
+GlobalRank:
+  type: object
+  required: [rank, total_players]
+  properties:
+    rank:
+      type: integer
+      minimum: 0
+      description: >
+        Position among every player who has guessed at least once, ordered by
+        lifetime points using standard competition ranking. Zero while the
+        player has no guesses of their own.
+    total_players:
+      type: integer
+      minimum: 0
+      description: Number of players who have guessed at least once.
+
 Profile:
   allOf:
     - $ref: "#/AuthUser"
     - type: object
-      required: [total_points, guess_count, rank]
+      required: [total_points, guess_count, rank, global_rank]
       properties:
         total_points: { type: integer, minimum: 0 }
         guess_count: { type: integer, minimum: 0 }
         rank: { $ref: "#/ProgressionRank" }
+        global_rank: { $ref: "#/GlobalRank" }
 
 Group:
   type: object

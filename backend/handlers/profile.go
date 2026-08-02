@@ -79,11 +79,20 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userResponse(updated))
 }
 
+// GlobalRank is the player's position among every player who has guessed at
+// least once, ordered by lifetime points. Rank is zero while the player has no
+// guesses of their own (they are not part of the ranked population).
+type GlobalRank struct {
+	Rank         int `json:"rank"`
+	TotalPlayers int `json:"total_players"`
+}
+
 type ProfileResponse struct {
 	AuthUser
 	TotalPoints int              `json:"total_points"`
 	GuessCount  int              `json:"guess_count"`
 	Rank        progression.Rank `json:"rank"`
+	GlobalRank  GlobalRank       `json:"global_rank"`
 }
 
 func GetProfile(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +110,17 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	globalRank, err := repository.GetGlobalRankContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	writeJSON(w, http.StatusOK, ProfileResponse{
 		AuthUser:    userResponse(user),
 		TotalPoints: stats.TotalPoints,
 		GuessCount:  stats.GuessCount,
 		Rank:        progression.RankForPoints(stats.TotalPoints),
+		GlobalRank:  GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
 	})
 }
 

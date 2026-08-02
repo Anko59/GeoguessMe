@@ -35,9 +35,13 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   `challenge_resolved` update to open conversations.
 
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
-with lifetime guess points, guess count, and the server-calculated rank
-progression. Lifetime points are the sum of all accepted guess scores; rank
-thresholds and the 20 medieval-inspired rank names are server-owned. Group
+with lifetime guess points, guess count, the server-calculated rank progression,
+and the player's global rank. Lifetime points are the sum of all accepted guess
+scores; rank thresholds and the 20 medieval-inspired rank names are
+server-owned. `global_rank.rank` is the player's position among every player who
+has guessed at least once, ordered by lifetime points with standard competition
+ranking (equal totals share a rank), and `global_rank.total_players` is the size
+of that population; a player who has never guessed has `rank` 0. Group
 leaderboard entries include the same rank object beneath each player's name
 while their `score` remains the selected period's sum.
 

@@ -96,6 +96,9 @@
 
 .profile-rank-name {
     margin: var(--space-3) 0 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     color: var(--brand-blue-accessible);
     font-size: 1.1rem;
     font-weight: 900;
@@ -108,7 +111,7 @@
 
 .profile-trackers {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-3);
 }
 
@@ -134,6 +137,12 @@
 .profile-stat-rank {
     background: var(--surface-brand);
     border-color: rgba(0, 119, 182, 0.18);
+}
+
+.profile-stat-rank-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
 .profile-progress-card {
@@ -208,6 +217,12 @@
     justify-self: center;
 }
 
+@media (max-width: 700px) {
+    .profile-trackers {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 600px) {
     .profile-hero,
     .profile-progress-card {
@@ -219,12 +234,11 @@
         position: relative;
     }
 
-    .profile-trophy {
+    .profile-badge {
         position: absolute;
         right: 1rem;
         bottom: 1rem;
         width: 5rem;
-        height: 5rem;
     }
 
     .profile-trackers {

@@ -24,6 +24,7 @@ and submit one server-timed guess.
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility
 - [Photo filters](photo-filters.md) — camera filters, capture behavior, and
   permissions
+- [Rank badges](rank-badges.md) — progression badge artwork and global rank
 - [Authentication](authentication.md) — access/refresh tokens, verification,
   account deletion
 - [API reference](api.md) — endpoint conventions, error format, rate limits

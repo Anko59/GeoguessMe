@@ -101,7 +101,7 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 40,
                     total_points: 40,
-                    rank: pageRank,
+                    rank: { ...pageRank, level: 17, name: 'Emperor', trophy_key: 'emperor' },
                 },
             ],
         });
@@ -115,9 +115,15 @@ describe('Leaderboard', () => {
         });
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
-        expect(screen.getAllByText('Page')).toHaveLength(4);
+        expect(screen.getAllByText('Page')).toHaveLength(3);
+        expect(screen.getByText('Emperor')).toBeInTheDocument();
+        expect(screen.getAllByText('I')).toHaveLength(3);
+        expect(screen.getByText('XVII')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
+        const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');
+        expect(badges).toHaveLength(4);
+        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/emperor.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));
