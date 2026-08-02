@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../../api';
@@ -30,9 +30,23 @@ const renderChat = (props: Partial<React.ComponentProps<typeof Chat>> = {}) =>
         </MemoryRouter>,
     );
 
+const mockMatchMedia = (matches: boolean) => {
+    window.matchMedia = ((query: string) => ({
+        matches,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+};
+
 beforeEach(() => {
     vi.clearAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
+    mockMatchMedia(true);
 });
 
 describe('Chat', () => {
@@ -138,6 +152,48 @@ describe('Chat', () => {
 
         fireEvent.mouseEnter(bubble);
         expect(reply).toHaveAttribute('tabindex', '0');
+    });
+
+    it('requires a one-second long press on touch instead of opening on tap', () => {
+        mockMatchMedia(false);
+        vi.useFakeTimers();
+        try {
+            renderChat({ connectionStatus: 'connected' });
+            const reply = screen.getByRole('button', { name: 'Reply to bob' });
+            const bubble = screen.getByText('Hello').closest('.message-hover-target') as HTMLElement;
+
+            // A tap (synthetic hover plus a quick pointer sequence) must not open actions.
+            fireEvent.mouseEnter(bubble);
+            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
+            fireEvent.pointerUp(bubble);
+            expect(reply).toHaveAttribute('tabindex', '-1');
+
+            // A short hold is still too short.
+            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
+            act(() => {
+                vi.advanceTimersByTime(500);
+            });
+            fireEvent.pointerUp(bubble);
+            expect(reply).toHaveAttribute('tabindex', '-1');
+
+            // Holding for a full second opens them.
+            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+            expect(reply).toHaveAttribute('tabindex', '0');
+
+            // Tapping elsewhere dismisses the actions.
+            fireEvent.pointerDown(document.body);
+            expect(reply).toHaveAttribute('tabindex', '-1');
+
+            // A hardware-keyboard user on the same touch device can still
+            // reveal the actions without a hover-capable pointer.
+            fireEvent.focus(bubble.closest('[data-message-id]') as HTMLElement);
+            expect(reply).toHaveAttribute('tabindex', '0');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('reveals message actions and saves emoji reactions', async () => {
