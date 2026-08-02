@@ -5,6 +5,7 @@ import type { Message } from '../../types';
 import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
+import { reactionByKey, reactionOptions } from './reactionOptions';
 import './Chat.css';
 import './ChatActions.css';
 
@@ -17,27 +18,6 @@ interface ChatProps {
     onChallengeMessage?: (message: Message) => void;
     onMessageUpdated?: (message: Message) => void;
 }
-
-interface ReactionOption {
-    reaction: string;
-    label: string;
-    image: string;
-}
-
-const reactionOptions: ReactionOption[] = [
-    { reaction: 'like', label: 'thumbs up', image: '/reactions/like.png' },
-    { reaction: 'love', label: 'love', image: '/reactions/love.png' },
-    { reaction: 'laugh', label: 'laughing', image: '/reactions/laugh.png' },
-    { reaction: 'wow', label: 'surprised', image: '/reactions/wow.png' },
-    { reaction: 'sad', label: 'sad', image: '/reactions/sad.png' },
-    { reaction: 'spot-on', label: 'spot on', image: '/reactions/spot-on.png' },
-    { reaction: 'lost', label: 'lost', image: '/reactions/lost.png' },
-    { reaction: 'mind-blown', label: 'mind blown', image: '/reactions/mind-blown.png' },
-    { reaction: 'wrong-way', label: 'wrong way', image: '/reactions/wrong-way.png' },
-    { reaction: 'vacation', label: 'vacation', image: '/reactions/vacation.png' },
-];
-
-const reactionByKey = new Map(reactionOptions.map((option) => [option.reaction, option]));
 
 // How long a touch must be held before the reply/react panel opens. This is
 // the deliberate long press that replaces tap-to-open on touch devices.

@@ -218,6 +218,7 @@ var allowedReactions = map[string]struct{}{
 
 type messageReactionRequest struct {
 	Reaction string `json:"reaction"`
+	Emoji    string `json:"emoji"`
 }
 
 // SetMessageReaction adds a reaction, while DELETE removes the same user's
@@ -238,6 +239,9 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Reaction = strings.TrimSpace(req.Reaction)
+	if req.Reaction == "" {
+		req.Reaction = strings.TrimSpace(req.Emoji)
+	}
 	if _, ok := allowedReactions[req.Reaction]; !ok {
 		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
@@ -289,6 +293,7 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		broadcast.ReactionUpdate = &models.ReactionUpdate{
 			UserID:   userID,
 			Reaction: req.Reaction,
+			Emoji:    req.Reaction,
 			Active:   r.Method == http.MethodPut,
 		}
 		HubInstance.BroadcastUpdate(broadcast)

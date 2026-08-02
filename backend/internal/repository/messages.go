@@ -201,6 +201,7 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 		if err := rows.Scan(&messageID, &reaction.Reaction, &reaction.Count, &reaction.Reacted, &reaction.Usernames); err != nil {
 			return err
 		}
+		reaction.Emoji = reaction.Reaction
 		reactions[messageID] = append(reactions[messageID], reaction)
 	}
 	if err := rows.Err(); err != nil {
