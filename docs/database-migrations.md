@@ -30,6 +30,10 @@ Migrations are stored in `backend/internal/database/migrations/`:
 007_chat_media.sql
 008_message_reactions.sql
 009_group_settings.sql
+010_progression_lookup_index.sql
+011_custom_reactions.sql
+012_media_delivery_window.sql
+013_challenge_hide_location.sql
 ```
 
 New migrations:

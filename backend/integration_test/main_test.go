@@ -397,7 +397,9 @@ func unique(prefix string) string {
 	uniqueMu.Lock()
 	defer uniqueMu.Unlock()
 	uniqueCounter++
-	return fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), uniqueCounter)
+	// Seconds-based so the generated username stays well under the 30-character
+	// limit even with two-digit counters; the counter keeps it unique per run.
+	return fmt.Sprintf("%s%d%d", prefix, time.Now().Unix(), uniqueCounter)
 }
 
 // --- Toxiproxy helpers ---------------------------------------------------

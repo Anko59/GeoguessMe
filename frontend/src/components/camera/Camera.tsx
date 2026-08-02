@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getAPIErrorMessage } from '../../api';
-import { dataURLToBlob, getCurrentPosition, isFilterableImageType, uploadPhoto } from './cameraUtils';
+import { isFilterableImageType, useCameraDevice } from './cameraUtils';
+import { useChallengeOptions, useChallengeUpload } from './useChallengeUpload';
 import './Camera.css';
 import CameraView from './CameraView';
 import { capturePhotoFrame, prepareImageForFilters } from './capture/cameraImagePreparation';
@@ -8,8 +8,7 @@ import type { FaceFrame } from './lenses/facePose';
 import type { FaceTracker as FaceTrackerInstance } from './lenses/faceTracker';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
 import type { LensId } from './lenses/lensCatalog';
-import { drawTextBanner, EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
-import { useCameraDevice } from './useCameraDevice';
+import { EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
 import { useHoldToRecord } from './capture/useHoldToRecord';
 import { useVideoCapture } from './capture/useVideoCapture';
 import { useFaceTrackerPreload } from './lenses/useFaceTrackerPreload';
@@ -27,6 +26,16 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const [showFilters, setShowFilters] = useState(
         () => !window.matchMedia('(pointer: coarse), (max-width: 40rem)').matches,
     );
+    const {
+        showOptions,
+        availableGroups,
+        targetGroupIDs,
+        hideLocation,
+        toggleOptions,
+        toggleGroup,
+        toggleHideLocation,
+        closeOptions,
+    } = useChallengeOptions(groupID);
     const videoRef = useRef<HTMLVideoElement>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,23 +64,12 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         onError: recordingError,
     });
     useFaceTrackerPreload();
+
     const updateFaceDetected = useCallback((detected: boolean) => {
         if (faceDetectedRef.current === detected) return;
         faceDetectedRef.current = detected;
         setFaceDetected(detected);
     }, []);
-    const requestLocation = useCallback(() => {
-        if (locationRequestRef.current) return locationRequestRef.current;
-        const request = getCurrentPosition();
-        locationRequestRef.current = request;
-        void request.catch(() => {
-            if (locationRequestRef.current === request) locationRequestRef.current = null;
-        });
-        return request;
-    }, []);
-    useEffect(() => {
-        void requestLocation();
-    }, [requestLocation]);
     const clearEffects = useCallback(() => {
         lastFrameRef.current = null;
         rendererRef.current?.clear();
@@ -236,6 +234,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 },
                 audio: false,
             });
+
             if (attempt !== cameraAttemptRef.current) {
                 mediaStream.getTracks().forEach((track) => track.stop());
                 return null;
@@ -305,6 +304,33 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             stopCamera();
         };
     }, [setRestart, destroyEffects, startCamera, stopCamera]);
+    const { requestLocation, handleUpload } = useChallengeUpload({
+        groupIDs: targetGroupIDs,
+        hideLocation,
+        fileMode,
+        capturedPhoto,
+        textBanner,
+        recordedVideo,
+        sourceCanvasRef,
+        captureCanvasRef,
+        overlayCanvasRef,
+        rendererRef,
+        lastFrameRef,
+        preparedFileDataRef,
+        locationRequestRef,
+        destroyEffects,
+        stopCamera,
+        discardRecording,
+        onUploadComplete,
+        setCapturedPhoto,
+        setFileMode,
+        setError,
+        setUploading,
+    });
+
+    useEffect(() => {
+        void requestLocation();
+    }, [requestLocation]);
     const capturePhoto = () => {
         const photo = capturePhotoFrame({
             video: videoRef.current,
@@ -377,58 +403,6 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         };
         reader.readAsDataURL(file);
     };
-    const renderFinalPhoto = (): string | null => {
-        const sourceCanvas = sourceCanvasRef.current;
-        const captureCanvas = captureCanvasRef.current;
-        if (!sourceCanvas || !captureCanvas || sourceCanvas.width === 0) return capturedPhoto;
-        const context = captureCanvas.getContext('2d');
-        if (!context) return capturedPhoto;
-        captureCanvas.width = sourceCanvas.width;
-        captureCanvas.height = sourceCanvas.height;
-        context.drawImage(sourceCanvas, 0, 0);
-        if (fileMode && preparedFileDataRef.current === capturedPhoto && overlayCanvasRef.current) {
-            rendererRef.current?.render(lastFrameRef.current);
-            context.drawImage(overlayCanvasRef.current, 0, 0, sourceCanvas.width, sourceCanvas.height);
-        }
-        drawTextBanner(context, captureCanvas.width, captureCanvas.height, textBanner);
-        return captureCanvas.toDataURL('image/jpeg', 0.9);
-    };
-    const handleUpload = async () => {
-        const video = recordedVideo;
-        const photo = video ? null : renderFinalPhoto();
-        if (!video && !photo) return;
-        setUploading(true);
-        setError('');
-        try {
-            const position = await requestLocation();
-            if (video) {
-                const extension = video.blob.type === 'video/mp4' ? 'mp4' : 'webm';
-                await uploadPhoto(video.blob, `capture.${extension}`, groupID, position);
-            } else {
-                await uploadPhoto(
-                    dataURLToBlob(photo as string),
-                    fileMode ? 'upload.jpg' : 'capture.jpg',
-                    groupID,
-                    position,
-                );
-            }
-            destroyEffects();
-            stopCamera();
-            setCapturedPhoto(null);
-            discardRecording();
-            setFileMode(false);
-            onUploadComplete();
-        } catch (requestError: unknown) {
-            const message = requestError instanceof Error ? requestError.message : String(requestError);
-            setError(
-                /location|geolocation|denied/i.test(message)
-                    ? 'Unable to retrieve location. Please enable location services.'
-                    : getAPIErrorMessage(requestError, 'Upload failed. Please try again.'),
-            );
-        } finally {
-            setUploading(false);
-        }
-    };
     const selectLens = (lens: LensId) => {
         selectedFilterRef.current = lens;
         setSelectedFilter(lens);
@@ -475,6 +449,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             hasMultipleCameras={hasMultipleCameras}
             facingMode={facingMode}
             showFilters={showFilters}
+            showOptions={showOptions}
+            optionsGroups={availableGroups}
+            selectedGroupIDs={targetGroupIDs}
+            hideLocation={hideLocation}
             selectedFilter={selectedFilter}
             filterReady={filterReady}
             filterError={filterError}
@@ -485,6 +463,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             onSetFileMode={() => setFileMode(true)}
             onSwitchCamera={switchCamera}
             onToggleFilters={() => setShowFilters((p) => !p)}
+            onToggleOptions={toggleOptions}
+            onToggleGroup={toggleGroup}
+            onToggleHideLocation={toggleHideLocation}
+            onCloseOptions={closeOptions}
             onSelectLens={selectLens}
             onBannerChange={setTextBanner}
             onCaptureButtonClick={captureButtonClick}

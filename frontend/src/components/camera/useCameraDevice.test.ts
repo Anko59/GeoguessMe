@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useCameraDevice } from './useCameraDevice';
+import { useCameraDevice } from './cameraUtils';
 
 const mocks = vi.hoisted(() => ({
     enumerateDevices: vi.fn(),

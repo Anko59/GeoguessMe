@@ -261,12 +261,15 @@ GuessResponse:
 
 ChallengeResults:
   type: object
-  required: [photo_id, group_id, actual_lat, actual_long, guesses, media_available, server_time]
+  required: [photo_id, group_id, guesses, media_available, server_time]
   properties:
     photo_id: { type: string, format: uuid }
     group_id: { type: string, format: uuid }
-    actual_lat: { type: number, format: double }
-    actual_long: { type: number, format: double }
+    actual_lat: { type: number, format: double, description: Omitted while the poster hides the location }
+    actual_long: { type: number, format: double, description: Omitted while the poster hides the location }
+    location_hidden: { type: boolean, description: True when the poster hid the location and it is not yet revealed }
+    location_reveals_at:
+      { type: string, format: date-time, description: When the hidden location becomes visible on the results page }
     guesses: { type: array, items: { $ref: "#/Guess" } }
     media_available: { type: boolean }
     media_url: { type: [string, "null"] }

@@ -1,7 +1,8 @@
 import React from 'react';
-import { CameraErrorPanel, CameraTopControls, PreviewActions } from './CameraPanels';
+import { CameraErrorPanel, CameraOptionsMenu, CameraTopControls, PreviewActions } from './CameraPanels';
 import FilterPicker from './FilterPicker';
 import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
+import type { Group } from '../../types';
 import type { LensId } from './lenses/lensCatalog';
 import type { TextBanner } from './textBanner';
 
@@ -20,6 +21,10 @@ interface CameraViewProps {
     hasMultipleCameras: boolean;
     facingMode: 'user' | 'environment';
     showFilters: boolean;
+    showOptions: boolean;
+    optionsGroups: Group[];
+    selectedGroupIDs: string[];
+    hideLocation: boolean;
     selectedFilter: LensId;
     filterReady: boolean;
     filterError: string;
@@ -30,6 +35,10 @@ interface CameraViewProps {
     onSetFileMode: () => void;
     onSwitchCamera: () => void;
     onToggleFilters: () => void;
+    onToggleOptions: () => void;
+    onToggleGroup: (id: string) => void;
+    onToggleHideLocation: () => void;
+    onCloseOptions: () => void;
     onSelectLens: (lens: LensId) => void;
     onBannerChange: (banner: TextBanner) => void;
     onCaptureButtonClick: () => void;
@@ -57,6 +66,10 @@ export default function CameraView({
     hasMultipleCameras,
     facingMode,
     showFilters,
+    showOptions,
+    optionsGroups,
+    selectedGroupIDs,
+    hideLocation,
     selectedFilter,
     filterReady,
     filterError,
@@ -67,6 +80,10 @@ export default function CameraView({
     onSetFileMode,
     onSwitchCamera,
     onToggleFilters,
+    onToggleOptions,
+    onToggleGroup,
+    onToggleHideLocation,
+    onCloseOptions,
     onSelectLens,
     onBannerChange,
     onCaptureButtonClick,
@@ -89,6 +106,28 @@ export default function CameraView({
         />
     );
     const textEditor = <TextBannerEditor banner={textBanner} onChange={onBannerChange} />;
+    const optionsButton = (
+        <button
+            type="button"
+            className={`options-toggle-btn${showOptions ? ' active' : ''}`}
+            onClick={onToggleOptions}
+            aria-label="Challenge options"
+            aria-expanded={showOptions}
+        >
+            <span aria-hidden="true">⚙️</span>
+            <span>{showOptions ? 'Hide options' : 'Options'}</span>
+        </button>
+    );
+    const optionsMenu = (
+        <CameraOptionsMenu
+            groups={optionsGroups}
+            selectedGroupIDs={selectedGroupIDs}
+            hideLocation={hideLocation}
+            onToggleGroup={onToggleGroup}
+            onToggleHideLocation={onToggleHideLocation}
+            onClose={onCloseOptions}
+        />
+    );
 
     return (
         <div className="camera-container">
@@ -115,6 +154,10 @@ export default function CameraView({
                         aria-hidden="true"
                     />
                     <TextBannerOverlay banner={textBanner} />
+                    <div className="camera-options-bar">
+                        {optionsButton}
+                        {showOptions && optionsMenu}
+                    </div>
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
                             {!recording && (
@@ -122,8 +165,10 @@ export default function CameraView({
                                     hasMultipleCameras={hasMultipleCameras}
                                     facingMode={facingMode}
                                     showFilters={showFilters}
+                                    showOptions={showOptions}
                                     onSwitchCamera={onSwitchCamera}
                                     onToggleFilters={onToggleFilters}
+                                    onToggleOptions={onToggleOptions}
                                 />
                             )}
                             {showFilters && filterPicker}
@@ -165,6 +210,14 @@ export default function CameraView({
                 </div>
             ) : (
                 <div className="photo-preview">
+                    <div className="camera-options-bar preview-options-bar">
+                        {optionsButton}
+                        <span className="camera-options-summary">
+                            {selectedGroupIDs.length} group{selectedGroupIDs.length === 1 ? '' : 's'}
+                            {hideLocation ? ' · location hidden' : ''}
+                        </span>
+                        {showOptions && optionsMenu}
+                    </div>
                     {capturedPhoto ? (
                         <>
                             <img src={capturedPhoto} alt="Captured" className="preview-image" />
@@ -176,14 +229,17 @@ export default function CameraView({
                             </div>
                         </>
                     ) : (
-                        <video
-                            src={capturedVideo ?? undefined}
-                            className="preview-image"
-                            controls
-                            playsInline
-                            aria-label="Recorded video preview"
-                            onError={onCapturedVideoError}
-                        />
+                        <>
+                            <video
+                                src={capturedVideo ?? undefined}
+                                className="preview-image"
+                                controls
+                                playsInline
+                                aria-label="Recorded video preview"
+                                onError={onCapturedVideoError}
+                            />
+                            {textEditor}
+                        </>
                     )}
                     <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
                 </div>
