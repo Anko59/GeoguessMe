@@ -64,6 +64,22 @@ media:
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+mediaDelivered:
+  post:
+    operationId: confirmChallengeMediaDelivered
+    summary: Confirm complete media delivery and start the private view window.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+    responses:
+      "200":
+        {
+          description: Authoritative viewing deadline.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeMediaDelivered" } } },
+        }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 guess:
   post:
     operationId: submitChallengeGuess

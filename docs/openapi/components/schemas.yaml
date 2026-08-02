@@ -229,6 +229,14 @@ ChallengeAccepted:
     challenge_expires_at: { type: string, format: date-time }
     server_time: { type: string, format: date-time }
 
+ChallengeMediaDelivered:
+  type: object
+  required: [view_expires_at, guess_after, server_time]
+  properties:
+    view_expires_at: { type: string, format: date-time }
+    guess_after: { type: string, format: date-time }
+    server_time: { type: string, format: date-time }
+
 GuessResponse:
   type: object
   required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]

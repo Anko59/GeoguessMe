@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func UploadPhoto(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +129,28 @@ func AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func ConfirmChallengeMediaDelivered(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	photoID := r.PathValue("photoID")
+	if err := validateID(photoID, "photo_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+		return
+	}
+	expiresAt, err := repository.MarkChallengeMediaDelivered(r.Context(), photoID, GetUserIDFromContext(r), RuntimeConfig.ViewWindow, time.Now())
+	if err != nil {
+		if errors.Is(err, repository.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden", "Challenge media was not accepted")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to start the viewing window")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"view_expires_at": expiresAt, "guess_after": expiresAt, "server_time": time.Now()})
+}
+
 // mediaURL always returns a same-origin, authenticated API path. Internal S3
 // endpoints and object keys never reach browsers; the frontend fetches media as
 // an authenticated blob and renders it through a short-lived object URL.
@@ -169,11 +193,24 @@ func ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "forbidden", "Media is not available")
 			return
 		}
-		// Check the exact stored view deadline on every media request so a
-		// re-acceptance can never extend access beyond the original window.
+		// A player may fetch the media while they have never received it in
+		// full, or while their viewing window is still open. The window starts
+		// at the first full delivery (see the extension below) so a slow
+		// connection cannot consume it; a re-fetch after the window is always
+		// denied, preserving the view-once guarantee.
+		var delivered pgtype.Timestamptz
 		var expiresAt time.Time
-		err := database.DB.QueryRow(r.Context(), `SELECT view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&expiresAt)
-		if err != nil || !time.Now().Before(expiresAt) {
+		err := database.DB.QueryRow(r.Context(), `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&delivered, &expiresAt)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
+			return
+		}
+		if delivered.Valid {
+			if !time.Now().Before(expiresAt) {
+				writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
+				return
+			}
+		} else if !time.Now().Before(photo.ExpiresAt) {
 			writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
 			return
 		}
@@ -196,7 +233,18 @@ func ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 	defer object.Close()
 	w.Header().Set("Content-Type", photo.MIMEType)
 	w.Header().Set("Cache-Control", "private, no-store")
-	_, _ = io.Copy(w, object)
+	// The viewing window starts at the first full delivery. Use a short-lived
+	// background context because the request context may be canceled as soon as
+	// the final response byte reaches the client. The client also acknowledges
+	// delivery explicitly, making the transition recoverable and authoritative.
+	n, copyErr := io.Copy(w, object)
+	if copyErr == nil && n == photo.ByteSize {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if _, err := repository.MarkChallengeMediaDelivered(ctx, photoID, userID, RuntimeConfig.ViewWindow, time.Now()); err != nil {
+			slog.Error("failed to start challenge view window after media delivery", "photo_id", photoID, "user_id", userID, "error", err)
+		}
+	}
 }
 
 func challengeError(w http.ResponseWriter, err error) {

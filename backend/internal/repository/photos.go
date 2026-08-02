@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -105,6 +106,27 @@ func AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow tim
 	return photo, &view, nil
 }
 
+// MarkChallengeMediaDelivered starts the one-time private viewing window. It
+// is idempotent so the streaming handler and the client's delivery
+// acknowledgement can safely race without extending an existing window.
+func MarkChallengeMediaDelivered(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (time.Time, error) {
+	var expiresAt time.Time
+	err := database.DB.QueryRow(ctx, `
+		UPDATE challenge_views v
+		SET media_delivered_at = COALESCE(v.media_delivered_at, $3),
+			view_expires_at = CASE
+				WHEN v.media_delivered_at IS NULL THEN LEAST($3 + $4 * INTERVAL '1 second', p.expires_at)
+				ELSE v.view_expires_at
+			END
+		FROM photos p
+		WHERE v.photo_id = $1 AND v.user_id = $2 AND p.id = v.photo_id
+		RETURNING v.view_expires_at`, photoID, userID, now, int64(viewWindow.Seconds())).Scan(&expiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, ErrForbidden
+	}
+	return expiresAt, err
+}
+
 type GuessResult struct {
 	Guess    models.Guess
 	Photo    *models.Photo
@@ -192,12 +214,16 @@ func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long floa
 	if photo.ExpiresAt.Before(now) {
 		return nil, false, ErrChallengeExpired
 	}
+	var deliveredAt pgtype.Timestamptz
 	var viewExpiresAt time.Time
-	if err := tx.QueryRow(ctx, `SELECT view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&viewExpiresAt); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, ErrForbidden
 		}
 		return nil, isRetryable(err), err
+	}
+	if !deliveredAt.Valid {
+		return nil, false, ErrViewNotFinished
 	}
 	if now.Before(viewExpiresAt) {
 		return nil, false, ErrViewNotFinished
