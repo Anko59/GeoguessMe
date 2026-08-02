@@ -157,11 +157,19 @@ Message:
     reactions: { type: array, items: { $ref: "#/MessageReaction" } }
     reaction_update: { $ref: "#/MessageReactionUpdate" }
 
+ReactionKey:
+  type: string
+  enum: [like, love, laugh, wow, sad, spot-on, lost, mind-blown, wrong-way, vacation, 👍, ❤️, 😂, 😮, 😢, 🙏]
+  description: >
+    Reaction identity. The ten keys map to custom artwork shown in the UI; the
+    six legacy emoji values are still accepted so existing reactions keep
+    working.
+
 MessageReaction:
   type: object
-  required: [emoji, count, reacted, usernames]
+  required: [reaction, count, reacted, usernames]
   properties:
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
     count: { type: integer, minimum: 1 }
     reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
     usernames:
@@ -171,17 +179,17 @@ MessageReaction:
 
 MessageReactionRequest:
   type: object
-  required: [emoji]
+  required: [reaction]
   properties:
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
 
 MessageReactionUpdate:
   type: object
   description: WebSocket-only reaction mutation metadata used to preserve each recipient's viewer-specific state.
-  required: [user_id, emoji, active]
+  required: [user_id, reaction, active]
   properties:
     user_id: { type: string, format: uuid }
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
     active: { type: boolean }
 
 MessagesPage:

@@ -18,14 +18,26 @@ interface ChatProps {
     onMessageUpdated?: (message: Message) => void;
 }
 
-const reactionOptions = [
-    { emoji: '👍', label: 'thumbs up' },
-    { emoji: '❤️', label: 'heart' },
-    { emoji: '😂', label: 'laughing' },
-    { emoji: '😮', label: 'surprised' },
-    { emoji: '😢', label: 'sad' },
-    { emoji: '🙏', label: 'thanks' },
+interface ReactionOption {
+    reaction: string;
+    label: string;
+    image: string;
+}
+
+const reactionOptions: ReactionOption[] = [
+    { reaction: 'like', label: 'thumbs up', image: '/reactions/like.png' },
+    { reaction: 'love', label: 'love', image: '/reactions/love.png' },
+    { reaction: 'laugh', label: 'laughing', image: '/reactions/laugh.png' },
+    { reaction: 'wow', label: 'surprised', image: '/reactions/wow.png' },
+    { reaction: 'sad', label: 'sad', image: '/reactions/sad.png' },
+    { reaction: 'spot-on', label: 'spot on', image: '/reactions/spot-on.png' },
+    { reaction: 'lost', label: 'lost', image: '/reactions/lost.png' },
+    { reaction: 'mind-blown', label: 'mind blown', image: '/reactions/mind-blown.png' },
+    { reaction: 'wrong-way', label: 'wrong way', image: '/reactions/wrong-way.png' },
+    { reaction: 'vacation', label: 'vacation', image: '/reactions/vacation.png' },
 ];
+
+const reactionByKey = new Map(reactionOptions.map((option) => [option.reaction, option]));
 
 // How long a touch must be held before the reply/react panel opens. This is
 // the deliberate long press that replaces tap-to-open on touch devices.
@@ -118,15 +130,15 @@ export default function Chat({
 
     const handleMessagePointerEnd = () => clearPress();
 
-    const handleReaction = async (message: Message, emoji: string) => {
-        const selected = message.reactions?.find((reaction) => reaction.emoji === emoji);
-        const key = `${message.id}:${emoji}`;
+    const handleReaction = async (message: Message, reaction: string) => {
+        const selected = message.reactions?.find((item) => item.reaction === reaction);
+        const key = `${message.id}:${reaction}`;
         setReactionPending(key);
         setReactionError('');
         try {
             const response = selected?.reacted
-                ? await api.delete<Message>(`/group/message-reactions/${message.id}`, { data: { emoji } })
-                : await api.put<Message>(`/group/message-reactions/${message.id}`, { emoji });
+                ? await api.delete<Message>(`/group/message-reactions/${message.id}`, { data: { reaction } })
+                : await api.put<Message>(`/group/message-reactions/${message.id}`, { reaction });
             onMessageUpdated?.(response.data);
             setActionsMessageID(null);
         } catch (requestError: unknown) {
@@ -151,21 +163,22 @@ export default function Chat({
                 Reply
             </button>
             <div className="reaction-actions" aria-label="React to message">
-                {reactionOptions.map(({ emoji, label }) => {
-                    const reaction = message.reactions?.find((item) => item.emoji === emoji);
-                    const pending = reactionPending === `${message.id}:${emoji}`;
+                {reactionOptions.map(({ reaction, label, image }) => {
+                    const item = message.reactions?.find((entry) => entry.reaction === reaction);
+                    const pending = reactionPending === `${message.id}:${reaction}`;
                     return (
                         <button
-                            key={emoji}
+                            key={reaction}
                             type="button"
-                            className={`reaction-action${reaction?.reacted ? ' selected' : ''}`}
+                            className={`reaction-action${item?.reacted ? ' selected' : ''}`}
                             tabIndex={actionsMessageID === message.id ? 0 : -1}
-                            onClick={() => void handleReaction(message, emoji)}
+                            onClick={() => void handleReaction(message, reaction)}
                             aria-label={`React with ${label}`}
-                            aria-pressed={reaction?.reacted ?? false}
+                            aria-pressed={item?.reacted ?? false}
                             disabled={pending}
+                            title={label}
                         >
-                            {emoji}
+                            <img src={image} alt="" className="reaction-action-image" />
                         </button>
                     );
                 })}
@@ -177,19 +190,25 @@ export default function Chat({
         message.reactions && message.reactions.length > 0 ? (
             <div className="message-reactions" aria-label="Message reactions">
                 {message.reactions.map((reaction) => {
+                    const option = reactionByKey.get(reaction.reaction);
+                    const label = option?.label ?? reaction.reaction;
                     const usernames = reaction.usernames?.length ? reaction.usernames.join(', ') : 'Unknown user';
-                    const reactionLabel = `${reaction.emoji} reaction, ${reaction.count}. Reacted by ${usernames}`;
+                    const reactionLabel = `${label} reaction, ${reaction.count}. Reacted by ${usernames}`;
                     return (
-                        <span key={reaction.emoji} className="reaction-chip-wrapper">
+                        <span key={reaction.reaction} className="reaction-chip-wrapper">
                             <button
                                 type="button"
                                 className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
-                                onClick={() => void handleReaction(message, reaction.emoji)}
+                                onClick={() => void handleReaction(message, reaction.reaction)}
                                 aria-label={reactionLabel}
                                 title={`Reacted by ${usernames}`}
                                 aria-pressed={reaction.reacted}
                             >
-                                <span aria-hidden="true">{reaction.emoji}</span>
+                                {option ? (
+                                    <img src={option.image} alt="" className="reaction-chip-image" />
+                                ) : (
+                                    <span aria-hidden="true">{reaction.reaction}</span>
+                                )}
                                 <span>{reaction.count}</span>
                             </button>
                             <span className="reaction-chip-tooltip" role="tooltip">

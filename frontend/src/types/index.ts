@@ -66,13 +66,13 @@ export interface Message {
     reactions?: Reaction[];
     reaction_update?: {
         user_id: string;
-        emoji: string;
+        reaction: string;
         active: boolean;
     };
 }
 
 export interface Reaction {
-    emoji: string;
+    reaction: string;
     count: number;
     reacted: boolean;
     usernames?: string[];

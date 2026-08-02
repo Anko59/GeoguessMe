@@ -26,9 +26,10 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
   viewer's challenge view and guess state.
-- Messages may include aggregate `reactions`; each entry contains an emoji,
-  count, the `usernames` of members who selected it, and a `reacted` flag for
-  the authenticated viewer. Usernames are sorted alphabetically.
+- Messages may include aggregate `reactions`; each entry contains a reaction key
+  (mapping to the custom reaction artwork), count, the `usernames` of members
+  who selected it, and a `reacted` flag for the authenticated viewer. Usernames
+  are sorted alphabetically.
 - Live reaction updates include `reaction_update` metadata so each WebSocket
   recipient applies the shared count without inheriting another member's
   viewer-specific `reacted` state. Guess submission also publishes a
@@ -89,7 +90,7 @@ page reachable from chat and leaderboards.
 | GET    | `/api/v1/group/notifications?group_id=`           | Bearer | Read this member's group notification preference                    |
 | PUT    | `/api/v1/group/notifications?group_id=`           | Bearer | Set `{enabled}` for this member's group notifications               |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                                  |
-| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add an emoji reaction                                               |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add a reaction key to a group message                               |
 | DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                            |
 | POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                         |
 | GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`)        |

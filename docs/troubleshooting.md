@@ -109,10 +109,10 @@ with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
 
 ## Message actions
 
-Reply and emoji actions are intentionally revealed on hover, keyboard focus,
-hold, or horizontal swipe. Hidden actions use no layout space, so adjacent
-messages keep the normal chat gap. The browser regression is covered by the chat
-E2E suite.
+Reply and reaction actions are revealed on hover or keyboard focus on
+hover-capable devices, and on a one-second long press or horizontal swipe on
+touch devices. Hidden actions use no layout space, so adjacent messages keep the
+normal chat gap. The browser regression is covered by the chat E2E suite.
 
 ## Group photos in the groups list
 
