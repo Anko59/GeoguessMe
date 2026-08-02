@@ -196,9 +196,9 @@ describe('Chat', () => {
         }
     });
 
-    it('reveals message actions and saves emoji reactions', async () => {
+    it('reveals message actions and saves reactions', async () => {
         const put = vi.spyOn(api, 'put').mockResolvedValue({
-            data: message({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
+            data: message({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
         });
         const onMessageUpdated = vi.fn();
         renderChat({ connectionStatus: 'connected', onMessageUpdated });
@@ -206,9 +206,11 @@ describe('Chat', () => {
         fireEvent.mouseEnter(screen.getByText('Hello').closest('.message-hover-target') as HTMLElement);
         fireEvent.click(screen.getByRole('button', { name: 'React with thumbs up' }));
 
-        await waitFor(() => expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { emoji: '👍' }));
+        await waitFor(() =>
+            expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { reaction: 'like' }),
+        );
         expect(onMessageUpdated).toHaveBeenCalledWith(
-            expect.objectContaining({ reactions: [{ emoji: '👍', count: 1, reacted: true }] }),
+            expect.objectContaining({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
         );
     });
 
@@ -218,7 +220,7 @@ describe('Chat', () => {
                 <Chat
                     messages={[
                         message({
-                            reactions: [{ emoji: '👍', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
+                            reactions: [{ reaction: 'like', count: 2, reacted: false, usernames: ['alice', 'carol'] }],
                         }),
                     ]}
                     wsRef={{ current: null }}
@@ -229,9 +231,10 @@ describe('Chat', () => {
         );
 
         const reactionChip = container.querySelector('.reaction-chip') as HTMLButtonElement;
-        expect(reactionChip).toHaveAttribute('aria-label', '👍 reaction, 2. Reacted by alice, carol');
+        expect(reactionChip).toHaveAttribute('aria-label', 'thumbs up reaction, 2. Reacted by alice, carol');
         expect(reactionChip).toHaveAttribute('title', 'Reacted by alice, carol');
         expect(container.querySelector('.reaction-chip-tooltip')).toHaveTextContent('alice, carol');
+        expect(container.querySelector('.reaction-chip-image')).toHaveAttribute('src', '/reactions/like.png');
     });
 
     it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {

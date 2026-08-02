@@ -218,7 +218,7 @@ messages:
 messageReaction:
   put:
     operationId: setMessageReaction
-    summary: Add an emoji reaction to a group message.
+    summary: Add a reaction to a group message.
     tags: [Groups]
     security: [{ bearerAuth: [] }]
     parameters:
@@ -237,7 +237,7 @@ messageReaction:
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
   delete:
     operationId: removeMessageReaction
-    summary: Remove the authenticated user's emoji reaction.
+    summary: Remove the authenticated user's reaction.
     tags: [Groups]
     security: [{ bearerAuth: [] }]
     parameters:

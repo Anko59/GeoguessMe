@@ -148,7 +148,7 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('keeps reaction selection viewer-specific while applying live counts and removals', async () => {
         const initial = message('reacted', '2026-01-01T00:00:00Z');
-        initial.reactions = [{ emoji: '👍', count: 1, reacted: false }];
+        initial.reactions = [{ reaction: 'like', count: 1, reacted: false }];
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
         mocks.get.mockResolvedValue({ data: { items: [initial] } });
 
@@ -161,20 +161,20 @@ describe('useGroupMessages reconnect sequence', () => {
         act(() =>
             socket.fireMessage({
                 ...initial,
-                reactions: [{ emoji: '👍', count: 2, reacted: true }],
-                reaction_update: { user_id: 'user-2', emoji: '👍', active: true },
+                reactions: [{ reaction: 'like', count: 2, reacted: true }],
+                reaction_update: { user_id: 'user-2', reaction: 'like', active: true },
             }),
         );
-        expect(result.current.messages[0].reactions).toEqual([{ emoji: '👍', count: 2, reacted: false }]);
+        expect(result.current.messages[0].reactions).toEqual([{ reaction: 'like', count: 2, reacted: false }]);
 
         act(() =>
             socket.fireMessage({
                 ...initial,
-                reactions: [{ emoji: '👍', count: 3, reacted: true }],
-                reaction_update: { user_id: 'user-1', emoji: '👍', active: true },
+                reactions: [{ reaction: 'like', count: 3, reacted: true }],
+                reaction_update: { user_id: 'user-1', reaction: 'like', active: true },
             }),
         );
-        expect(result.current.messages[0].reactions).toEqual([{ emoji: '👍', count: 3, reacted: true }]);
+        expect(result.current.messages[0].reactions).toEqual([{ reaction: 'like', count: 3, reacted: true }]);
 
         act(() =>
             result.current.updateMessage({

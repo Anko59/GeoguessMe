@@ -195,7 +195,19 @@ func ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, object)
 }
 
-var allowedReactionEmojis = map[string]struct{}{
+var allowedReactions = map[string]struct{}{
+	// Custom reaction artwork keys offered by the UI.
+	"like":       {},
+	"love":       {},
+	"laugh":      {},
+	"wow":        {},
+	"sad":        {},
+	"spot-on":    {},
+	"lost":       {},
+	"mind-blown": {},
+	"wrong-way":  {},
+	"vacation":   {},
+	// Legacy emoji reactions stay valid so existing data keeps working.
 	"👍":  {},
 	"❤️": {},
 	"😂":  {},
@@ -205,11 +217,12 @@ var allowedReactionEmojis = map[string]struct{}{
 }
 
 type messageReactionRequest struct {
-	Emoji string `json:"emoji"`
+	Reaction string `json:"reaction"`
+	Emoji    string `json:"emoji"`
 }
 
 // SetMessageReaction adds a reaction, while DELETE removes the same user's
-// reaction for that emoji. Both operations return the updated aggregate so
+// reaction for that reaction key. Both operations return the updated aggregate so
 // every client can render the same reaction counts immediately.
 func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
@@ -225,9 +238,12 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	req.Emoji = strings.TrimSpace(req.Emoji)
-	if _, ok := allowedReactionEmojis[req.Emoji]; !ok {
-		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported emoji reaction")
+	req.Reaction = strings.TrimSpace(req.Reaction)
+	if req.Reaction == "" {
+		req.Reaction = strings.TrimSpace(req.Emoji)
+	}
+	if _, ok := allowedReactions[req.Reaction]; !ok {
+		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}
 
@@ -251,16 +267,16 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPut {
-		err = repository.SetMessageReaction(r.Context(), messageID, userID, req.Emoji)
+		err = repository.SetMessageReaction(r.Context(), messageID, userID, req.Reaction)
 	} else {
-		err = repository.DeleteMessageReaction(r.Context(), messageID, userID, req.Emoji)
+		err = repository.DeleteMessageReaction(r.Context(), messageID, userID, req.Reaction)
 	}
 	if errors.Is(err, repository.ErrMessageNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "Message not found")
 		return
 	}
 	if errors.Is(err, repository.ErrInvalidReaction) {
-		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported emoji reaction")
+		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}
 	if err != nil {
@@ -275,9 +291,10 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if HubInstance != nil {
 		broadcast := *updated
 		broadcast.ReactionUpdate = &models.ReactionUpdate{
-			UserID: userID,
-			Emoji:  req.Emoji,
-			Active: r.Method == http.MethodPut,
+			UserID:   userID,
+			Reaction: req.Reaction,
+			Emoji:    req.Reaction,
+			Active:   r.Method == http.MethodPut,
 		}
 		HubInstance.BroadcastUpdate(broadcast)
 	}

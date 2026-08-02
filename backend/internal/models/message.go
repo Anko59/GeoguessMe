@@ -23,6 +23,7 @@ type Message struct {
 }
 
 type Reaction struct {
+	Reaction  string   `json:"reaction"`
 	Emoji     string   `json:"emoji"`
 	Count     int      `json:"count"`
 	Reacted   bool     `json:"reacted"`
@@ -33,7 +34,8 @@ type Reaction struct {
 // Reaction aggregates contain viewer-specific Reacted flags, so clients use
 // this delta to preserve their own selection while accepting the new counts.
 type ReactionUpdate struct {
-	UserID string `json:"user_id"`
-	Emoji  string `json:"emoji"`
-	Active bool   `json:"active"`
+	UserID   string `json:"user_id"`
+	Reaction string `json:"reaction"`
+	Emoji    string `json:"emoji"`
+	Active   bool   `json:"active"`
 }

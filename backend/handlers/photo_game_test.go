@@ -255,23 +255,23 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 	}
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
-		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT 1 FROM messages").WithArgs(messageID).
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
 		if method == http.MethodPut {
-			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "👍").
+			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		} else {
-			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "👍").
+			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("DELETE", 1))
 		}
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
-		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
-		request := requestWithUser(method, "/", `{"emoji":"👍"}`, "user-1")
+		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
+		request := requestWithUser(method, "/", `{"reaction":"like"}`, "user-1")
 		request.SetPathValue("messageID", messageID)
 		requireStatus(t, SetMessageReaction, request, http.StatusOK)
 	}
