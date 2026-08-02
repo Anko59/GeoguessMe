@@ -155,8 +155,10 @@ export interface ChallengeGuess {
 export interface ChallengeResults {
     photo_id: string;
     group_id: string;
-    actual_lat: number;
-    actual_long: number;
+    actual_lat?: number;
+    actual_long?: number;
+    location_hidden?: boolean;
+    location_reveals_at?: string;
     guesses: ChallengeGuess[];
     media_available: boolean;
     media_url?: string;

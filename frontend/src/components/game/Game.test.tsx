@@ -134,6 +134,28 @@ describe('Game', () => {
         expect(view.container.querySelector('.timer-icon')).toHaveAttribute('src', '/timer_icon.png');
     });
 
+    it('shows a notice instead of the location when the poster hid it', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-7',
+                group_id: 'group-1',
+                location_hidden: true,
+                location_reveals_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+                guesses: [],
+                media_available: false,
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-7', kind: 'challenge' })}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(await screen.findByText(/hasn’t revealed this location yet/)).toBeInTheDocument();
+        expect(screen.getByText(/after 48 hours/)).toBeInTheDocument();
+    });
+
     it('accepts a challenge, selects a location, and submits a guess', async () => {
         mocks.get.mockRejectedValueOnce(new Error('results not ready'));
         mocks.post

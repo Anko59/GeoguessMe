@@ -30,13 +30,29 @@ func CreatePhoto(photo *models.Photo) error {
 }
 
 func CreatePhotoContext(ctx context.Context, photo *models.Photo) error {
-	_, err := database.DB.Exec(ctx, `INSERT INTO photos (id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
+	_, err := database.DB.Exec(ctx, `INSERT INTO photos (id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
 	return err
+}
+
+// CreatePhotosContext inserts every photo atomically so a multi-group upload
+// either lands in all selected groups or in none.
+func CreatePhotosContext(ctx context.Context, photos []*models.Photo) error {
+	tx, err := database.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, photo := range photos {
+		if _, err := tx.Exec(ctx, `INSERT INTO photos (id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func scanPhoto(row interface{ Scan(...any) error }) (*models.Photo, error) {
 	var photo models.Photo
-	err := row.Scan(&photo.ID, &photo.UserID, &photo.GroupID, &photo.URL, &photo.StorageKey, &photo.MIMEType, &photo.ByteSize, &photo.Lat, &photo.Long, &photo.LifecycleStatus, &photo.CreatedAt, &photo.ExpiresAt, &photo.RetentionAt)
+	err := row.Scan(&photo.ID, &photo.UserID, &photo.GroupID, &photo.URL, &photo.StorageKey, &photo.MIMEType, &photo.ByteSize, &photo.Lat, &photo.Long, &photo.LifecycleStatus, &photo.HideLocation, &photo.CreatedAt, &photo.ExpiresAt, &photo.RetentionAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -51,7 +67,7 @@ func GetPhoto(id string) (*models.Photo, error) {
 }
 
 func GetPhotoContext(ctx context.Context, id string) (*models.Photo, error) {
-	return scanPhoto(database.DB.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at FROM photos WHERE id = $1`, id))
+	return scanPhoto(database.DB.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1`, id))
 }
 
 type ChallengeView struct {
@@ -67,7 +83,7 @@ func AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow tim
 		return nil, nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
+	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -183,7 +199,7 @@ func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long floa
 		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
+	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
 	if err != nil {
 		return nil, isRetryable(err), err
 	}

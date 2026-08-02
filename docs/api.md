@@ -100,15 +100,15 @@ page reachable from chat and leaderboards.
 
 ### Challenges
 
-| Method | Path                                           | Auth   | Description                                                                   |
-| ------ | ---------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
-| POST   | `/api/v1/photo/upload`                         | Bearer | Upload photo or camera-recorded MP4/WebM `multipart(photo,group_id,lat,long)` |
-| POST   | `/api/v1/challenges/{photoID}/accept`          | Bearer | Accept challenge and authorize its private media                              |
-| GET    | `/api/v1/challenges/{photoID}/media`           | Bearer | Stream media (view-once window starts at first full delivery)                 |
-| POST   | `/api/v1/challenges/{photoID}/media-delivered` | Bearer | Confirm full delivery and return the authoritative view deadline              |
-| GET    | `/api/v1/challenges/{photoID}/media?result=1`  | Bearer | Stream media (results visible)                                                |
-| POST   | `/api/v1/challenges/{photoID}/guess`           | Bearer | Submit guess `{lat, long}`                                                    |
-| GET    | `/api/v1/challenges/{photoID}/results`         | Bearer | Get results                                                                   |
+| Method | Path                                           | Auth   | Description                                                                                     |
+| ------ | ---------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/photo/upload`                         | Bearer | Upload photo or video `multipart(photo,group_ids,lat,long,hide_location)` to one or more groups |
+| POST   | `/api/v1/challenges/{photoID}/accept`          | Bearer | Accept challenge and authorize its private media                                                |
+| GET    | `/api/v1/challenges/{photoID}/media`           | Bearer | Stream media (view-once window starts at first full delivery)                                   |
+| POST   | `/api/v1/challenges/{photoID}/media-delivered` | Bearer | Confirm full delivery and return the authoritative view deadline                                |
+| GET    | `/api/v1/challenges/{photoID}/media?result=1`  | Bearer | Stream media (results visible)                                                                  |
+| POST   | `/api/v1/challenges/{photoID}/guess`           | Bearer | Submit guess `{lat, long}`                                                                      |
+| GET    | `/api/v1/challenges/{photoID}/results`         | Bearer | Get results                                                                                     |
 
 Accepting a challenge authorizes its private media. After a complete stream, the
 client confirms delivery with `POST .../media-delivered` and uses the

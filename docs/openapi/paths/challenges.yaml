@@ -1,7 +1,7 @@
 upload:
   post:
     operationId: uploadPhotoChallenge
-    summary: Upload a photo or camera-recorded video challenge.
+    summary: Upload a photo or camera-recorded video challenge to one or more groups.
     tags: [Challenges]
     security: [{ bearerAuth: [] }]
     requestBody:
@@ -10,10 +10,21 @@ upload:
         multipart/form-data:
           schema:
             type: object
-            required: [photo, group_id, lat, long]
+            required: [photo, lat, long]
             properties:
               photo: { type: string, format: binary }
-              group_id: { type: string, format: uuid }
+              group_ids:
+                {
+                  type: array,
+                  items: { type: string, format: uuid },
+                  description: Target groups (repeated form field); the legacy single group_id is still accepted,
+                }
+              group_id: { type: string, format: uuid, description: Legacy single-group field }
+              hide_location:
+                {
+                  type: boolean,
+                  description: Hide the exact location from guessers for the configured duration (48 hours by default),
+                }
               lat: { type: number, format: double, minimum: -90, maximum: 90 }
               long: { type: number, format: double, minimum: -180, maximum: 180 }
     responses:

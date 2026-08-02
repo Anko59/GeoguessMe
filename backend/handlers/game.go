@@ -93,7 +93,17 @@ func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	if guesses == nil {
 		guesses = []repository.GuessWithUser{}
 	}
-	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "actual_lat": photo.Lat, "actual_long": photo.Long, "guesses": guesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
+	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "guesses": guesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
+	// A poster who hid the location keeps the exact spot private from guessers
+	// until the hide duration has passed; the owner always sees their own spot.
+	viewerID := GetUserIDFromContext(r)
+	if photo.HideLocation && photo.UserID != viewerID && time.Now().Before(photo.CreatedAt.Add(RuntimeConfig.LocationHide)) {
+		response["location_hidden"] = true
+		response["location_reveals_at"] = photo.CreatedAt.Add(RuntimeConfig.LocationHide)
+	} else {
+		response["actual_lat"] = photo.Lat
+		response["actual_long"] = photo.Long
+	}
 	if photo.LifecycleStatus != "removed" {
 		response["media_url"] = mediaURL(photo, true)
 		response["media_type"] = photo.MIMEType

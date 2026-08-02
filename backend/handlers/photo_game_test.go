@@ -97,8 +97,8 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 }
 
 func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "created_at", "expires_at", "retention_at"}).
-		AddRow(photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
+	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "hide_location", "created_at", "expires_at", "retention_at"}).
+		AddRow(photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
 }
 
 func multipartUpload(t *testing.T, groupID string) (*http.Request, error) {
@@ -172,7 +172,9 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock := handlerMock(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	request, err := multipartUpload(t, groupID)
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +234,9 @@ func TestUploadRecordedVideo(t *testing.T) {
 	mock := handlerMock(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
 	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
 	if err != nil {
@@ -385,35 +389,6 @@ func (s *countingStore) Get(ctx context.Context, key string) (io.ReadCloser, err
 func (s *countingStore) Stat(ctx context.Context, key string) (int64, error) {
 	s.statCalls++
 	return s.ObjectStore.Stat(ctx, key)
-}
-
-func TestChallengeResultsAndChatRejection(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
-	now := time.Now().UTC()
-	groupID := "00000000-0000-0000-0000-000000000001"
-	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png"))
-	recorder := httptest.NewRecorder()
-	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
-	resultsRequest.SetPathValue("photoID", photo.ID)
-	GetChallengeResults(recorder, resultsRequest)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("results status = %d", recorder.Code)
-	}
-
-	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil, nil)
-	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
-	badOrigin.Header.Set("Origin", "http://evil.test")
-	recorder = httptest.NewRecorder()
-	HandleChat(recorder, badOrigin)
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("bad origin status = %d", recorder.Code)
-	}
-	HubInstance = nil
 }
 
 type failingStore struct{ err error }

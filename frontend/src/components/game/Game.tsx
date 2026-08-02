@@ -398,10 +398,24 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                             </div>
                         </div>
                         <div className="result-map" aria-label="Challenge map">
+                            {state.results.location_hidden && (
+                                <div className="result-location-hidden" role="note">
+                                    <strong>The poster hasn’t revealed this location yet</strong>
+                                    <span>
+                                        Only distances are shown. The exact spot will appear here after 48 hours.
+                                    </span>
+                                </div>
+                            )}
                             <Map
                                 onLocationSelect={() => undefined}
                                 selectedLocation={null}
-                                actualLocation={{ lat: state.results.actual_lat, long: state.results.actual_long }}
+                                actualLocation={
+                                    state.results.actual_lat !== undefined &&
+                                    state.results.actual_long !== undefined &&
+                                    !state.results.location_hidden
+                                        ? { lat: state.results.actual_lat, long: state.results.actual_long }
+                                        : null
+                                }
                                 guesses={state.results.guesses}
                             />
                         </div>
