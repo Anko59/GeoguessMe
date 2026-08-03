@@ -21,7 +21,11 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   cursor); a non-empty `cursor` returns messages strictly after it. An empty
   `next_cursor` in the response means no more pages. The legacy `after_id`
   message id is resolved onto the cursor so reconnect callers that only know the
-  last received message id keep working.
+  last received message id keep working. To load chat history backwards, pass
+  `before_id` with a message id: the response is the page of messages strictly
+  older than that message (chronological, empty `next_cursor`), and the client
+  repeats the request with the oldest returned message's id until the page comes
+  back shorter than `limit`.
 - Challenge messages in `items` may include viewer-specific `challenge_status`
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
@@ -80,23 +84,23 @@ page reachable from chat and leaderboards.
 
 ### Groups
 
-| Method | Path                                              | Auth   | Description                                                         |
-| ------ | ------------------------------------------------- | ------ | ------------------------------------------------------------------- |
-| GET    | `/api/v1/user/groups`                             | Bearer | List user's groups                                                  |
-| POST   | `/api/v1/group/create`                            | Bearer | Create group `{name}`                                               |
-| POST   | `/api/v1/group/join`                              | Bearer | Join group `{code}`                                                 |
-| GET    | `/api/v1/group/details?id=`                       | Bearer | Group details (member only)                                         |
-| GET    | `/api/v1/group/members?id=`                       | Bearer | List members (member only)                                          |
-| GET    | `/api/v1/group/leaderboard?group_id=&period=`     | Bearer | Sum-based calendar week/month or all-time leaderboard (member only) |
-| GET    | `/api/v1/group/photo?group_id=`                   | Bearer | Stream the private group photo (member only)                        |
-| POST   | `/api/v1/group/photo`                             | Bearer | Replace group photo `multipart(group_id,photo)`                     |
-| GET    | `/api/v1/group/notifications?group_id=`           | Bearer | Read this member's group notification preference                    |
-| PUT    | `/api/v1/group/notifications?group_id=`           | Bearer | Set `{enabled}` for this member's group notifications               |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                                  |
-| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add a reaction key to a group message                               |
-| DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                            |
-| POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                         |
-| GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`)        |
+| Method | Path                                                         | Auth   | Description                                                                    |
+| ------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ |
+| GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                             |
+| POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                          |
+| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{code}`                                                            |
+| GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                    |
+| GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                     |
+| GET    | `/api/v1/group/leaderboard?group_id=&period=`                | Bearer | Sum-based calendar week/month or all-time leaderboard (member only)            |
+| GET    | `/api/v1/group/photo?group_id=`                              | Bearer | Stream the private group photo (member only)                                   |
+| POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                |
+| GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                               |
+| PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                          |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`/`after_id`, backward via `before_id`) |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                          |
+| DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                       |
+| POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                    |
+| GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                   |
 
 ### Challenges
 

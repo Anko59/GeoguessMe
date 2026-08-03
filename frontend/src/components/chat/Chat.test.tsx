@@ -80,6 +80,62 @@ describe('Chat', () => {
         );
     });
 
+    it('requests older messages when scrolled to the top while more exist', () => {
+        const onLoadOlder = vi.fn();
+        const { container } = render(
+            <MemoryRouter>
+                <Chat
+                    messages={[message({ id: 'first', content: 'First message' })]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    hasMoreOlder
+                    onLoadOlder={onLoadOlder}
+                />
+            </MemoryRouter>,
+        );
+        const list = container.querySelector('.messages-list') as HTMLDivElement;
+        fireEvent.scroll(list, { target: { scrollTop: 0 } });
+        expect(onLoadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not request older messages when the history is drained', () => {
+        const onLoadOlder = vi.fn();
+        const { container } = render(
+            <MemoryRouter>
+                <Chat
+                    messages={[message()]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    hasMoreOlder={false}
+                    onLoadOlder={onLoadOlder}
+                />
+            </MemoryRouter>,
+        );
+        fireEvent.scroll(container.querySelector('.messages-list') as HTMLDivElement, {
+            target: { scrollTop: 0 },
+        });
+        expect(onLoadOlder).not.toHaveBeenCalled();
+    });
+
+    it('shows the loading-older indicator while older messages load', () => {
+        const { container } = render(
+            <MemoryRouter>
+                <Chat
+                    messages={[message()]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                    loadingOlder
+                />
+            </MemoryRouter>,
+        );
+        const indicator = container.querySelector('.messages-loading-older');
+        expect(indicator).not.toBeNull();
+        expect(indicator).toHaveTextContent('Loading older messages');
+    });
+
     it('marks consecutive same-sender messages as grouped for tighter spacing', () => {
         const { container } = render(
             <MemoryRouter>

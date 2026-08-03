@@ -32,6 +32,9 @@ export default function GroupView() {
         error: messagesError,
         updateChallengeStatus,
         updateMessage,
+        loadOlder,
+        hasMoreOlder,
+        loadingOlder,
     } = useGroupMessages(id, user?.id);
     const groupPhotoURL = useGroupPhotoUrl(id ?? '', groupPhotoRefreshKey);
 
@@ -111,6 +114,9 @@ export default function GroupView() {
                             connectionStatus={connectionStatus}
                             onChallengeMessage={setGameMessage}
                             onMessageUpdated={updateMessage}
+                            onLoadOlder={loadOlder}
+                            hasMoreOlder={hasMoreOlder}
+                            loadingOlder={loadingOlder}
                         />
                     </div>
                 )}

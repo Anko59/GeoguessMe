@@ -144,6 +144,69 @@ func TestMessageCursorPagination(t *testing.T) {
 	require.Equal(t, full.Items[2].ID, recent.Items[1].ID, "latest page must end at the newest message")
 }
 
+func TestMessageCursorPaginationBackward(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	groupID, _ := createGroup(t, alice.access, "Backward Pagination Group")
+
+	// Seed six text messages over the WebSocket; sequential sends get
+	// increasing server timestamps so ordering by (created_at, id) is stable.
+	conn := mustDialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)
+	defer conn.Close()
+	ids := make([]string, 0, 6)
+	for i := 0; i < 6; i++ {
+		require.NoError(t, conn.WriteJSON(map[string]string{"content": "message"}))
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+		_, payload, err := conn.ReadMessage()
+		require.NoError(t, err, "broadcast of seeded message %d", i+1)
+		var sent struct {
+			ID string `json:"id"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &sent))
+		require.NotEmpty(t, sent.ID)
+		ids = append(ids, sent.ID)
+	}
+
+	type item struct {
+		ID string `json:"id"`
+	}
+	type page struct {
+		Items      []item `json:"items"`
+		NextCursor string `json:"next_cursor"`
+	}
+
+	latest := page{}
+	require.Eventually(t, func() bool {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=2", nil, alice.access, nil)
+		if resp.StatusCode != http.StatusOK || jsonUnmarshal(data, &latest) != nil {
+			return false
+		}
+		return len(latest.Items) == 2
+	}, 5*time.Second, 100*time.Millisecond, "latest page must become queryable")
+	require.Equal(t, []string{ids[4], ids[5]}, []string{latest.Items[0].ID, latest.Items[1].ID}, "latest page is the newest two messages")
+
+	older := page{}
+	require.Eventually(t, func() bool {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&before_id="+latest.Items[0].ID+"&limit=2", nil, alice.access, nil)
+		if resp.StatusCode != http.StatusOK || jsonUnmarshal(data, &older) != nil {
+			return false
+		}
+		return len(older.Items) == 2
+	}, 5*time.Second, 100*time.Millisecond, "older page must become queryable")
+	require.Equal(t, []string{ids[2], ids[3]}, []string{older.Items[0].ID, older.Items[1].ID}, "older page is the two messages before the latest page")
+
+	oldest := page{}
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&before_id="+older.Items[0].ID+"&limit=2", nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, jsonUnmarshal(data, &oldest))
+	require.Equal(t, []string{ids[0], ids[1]}, []string{oldest.Items[0].ID, oldest.Items[1].ID}, "draining page is the first two messages")
+
+	exhausted := page{}
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&before_id="+oldest.Items[0].ID+"&limit=2", nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, jsonUnmarshal(data, &exhausted))
+	require.Empty(t, exhausted.Items, "before the first message there is nothing older")
+}
+
 func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
 	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
 	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")

@@ -43,6 +43,27 @@ export async function signupViaUI(page: Page, creds?: Partial<Credentials>): Pro
 }
 
 /**
+ * Sign up through the UI and capture the access token from the signup
+ * response, for tests that drive authenticated API calls directly.
+ */
+export async function signupWithToken(context: BrowserContext): Promise<{ page: Page; token: string }> {
+    const page = await context.newPage();
+    const signupResponsePromise = page.waitForResponse(
+        (r) => r.url().endsWith('/api/v1/auth/signup') && r.request().method() === 'POST',
+    );
+    await page.goto('/signup');
+    await page.waitForSelector('#signup-username', { state: 'visible' });
+    await page.fill('#signup-username', uniqueUsername());
+    await page.fill('#signup-email', uniqueEmail());
+    await page.fill('#signup-password', 'TestPass123');
+    await page.click('button.btn-primary[type="submit"]');
+    const signupResponse = await signupResponsePromise;
+    const token = ((await signupResponse.json()) as { access_token: string }).access_token;
+    await page.waitForURL(/\/groups/, { timeout: 15000 });
+    return { page, token };
+}
+
+/**
  * Log in through the UI.
  */
 export async function loginViaUI(page: Page, username: string, password: string): Promise<void> {

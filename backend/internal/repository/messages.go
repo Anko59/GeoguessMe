@@ -107,14 +107,55 @@ func GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int
 	return page, nil
 }
 
+// GetGroupMessagesPageBefore returns up to limit messages strictly before the
+// message identified by beforeID, in chronological (ascending) order, with an
+// empty NextCursor. The caller derives the next older request from the oldest
+// returned message. An unknown or out-of-group beforeID yields an empty page
+// (there is nothing older to load).
+func GetGroupMessagesPageBefore(ctx context.Context, groupID, beforeID string, limit int) (MessagesPage, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 500
+	}
+	var createdAt time.Time
+	err := database.DB.QueryRow(ctx, `SELECT created_at FROM messages WHERE id = $1 AND group_id = $2`, beforeID, groupID).Scan(&createdAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return MessagesPage{Items: []models.Message{}}, nil
+		}
+		return MessagesPage{}, err
+	}
+	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) < ROW($2, $3) ORDER BY m.created_at DESC, m.id DESC LIMIT $4`
+	rows, err := database.DB.Query(ctx, query, groupID, createdAt, beforeID, limit)
+	if err != nil {
+		return MessagesPage{}, err
+	}
+	messages, err := scanMessageRows(rows)
+	if err != nil {
+		return MessagesPage{}, err
+	}
+	// Fetch newest-first but expose the page in chronological order.
+	reverseMessages(messages)
+	return MessagesPage{Items: messages}, nil
+}
+
 // GetGroupMessagesPageForViewer enriches challenge messages with state that is
 // specific to the authenticated viewer. The state is derived from the
 // existing challenge views and guesses tables, so reconnects and hard reloads
 // restore the same action shown in the chat without client-only assumptions.
 func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, limit int, viewerID string) (MessagesPage, error) {
 	page, err := GetGroupMessagesPage(ctx, groupID, cursor, limit)
-	if err != nil || len(page.Items) == 0 {
+	if err != nil {
 		return page, err
+	}
+	return EnrichMessagesPageForViewer(ctx, page, viewerID)
+}
+
+// EnrichMessagesPageForViewer decorates a messages page with the
+// viewer-specific challenge and reaction state shared by every direction
+// (latest, forward catch-up, and backward history).
+func EnrichMessagesPageForViewer(ctx context.Context, page MessagesPage, viewerID string) (MessagesPage, error) {
+	if len(page.Items) == 0 {
+		return page, nil
 	}
 	if err := enrichMessageReactions(ctx, page.Items, viewerID); err != nil {
 		return MessagesPage{}, err

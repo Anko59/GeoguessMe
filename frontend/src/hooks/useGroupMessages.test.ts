@@ -99,7 +99,8 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('merges catch-up and live delivery without loss or duplicates', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
-        // Catch-up returns a and b; live delivery repeats b and adds c.
+        // The first sync fetches the latest page; live delivery repeats b and
+        // adds c around it.
         mocks.get.mockResolvedValue({
             data: { items: [message('a', '2026-01-01T00:00:00Z'), message('b', '2026-01-02T00:00:00Z')] },
         });
@@ -109,12 +110,12 @@ describe('useGroupMessages reconnect sequence', () => {
         await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
         const socket = MockWebSocket.instances[0];
 
-        // Open the renewed socket first; the hook then runs cursor catch-up.
+        // Open the renewed socket first; the hook then runs the first sync.
         await act(async () => {
             socket.fireOpen();
         });
-        // While catch-up is resolving, live events arrive: b overlaps catch-up
-        // and must be deduplicated; c is live-only and must not be lost.
+        // While the first sync is resolving, live events arrive: b overlaps the
+        // page and must be deduplicated; c is live-only and must not be lost.
         act(() => socket.fireMessage(message('b', '2026-01-02T00:00:00Z')));
         act(() => socket.fireMessage(message('c', '2026-01-03T00:00:00Z')));
 
@@ -268,5 +269,57 @@ describe('useGroupMessages reconnect sequence', () => {
         // mutate state or throw.
         act(() => socket.fireMessage(message('late', '2026-01-01T00:00:00Z')));
         expect(ids(result.current.messages)).toEqual([]);
+    });
+
+    it('loads the page before the oldest message and stops when history drains', async () => {
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get
+            .mockResolvedValueOnce({
+                data: { items: [message('b', '2026-01-02T00:00:00Z'), message('c', '2026-01-03T00:00:00Z')] },
+            })
+            .mockResolvedValueOnce({ data: { items: [message('a', '2026-01-01T00:00:00Z')] } });
+
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.fireOpen());
+        await waitFor(() => expect(ids(result.current.messages)).toEqual(['b', 'c']));
+        expect(result.current.hasMoreOlder).toBe(false); // short page: history drained
+
+        await act(async () => result.current.loadOlder());
+        expect(mocks.get).toHaveBeenLastCalledWith(
+            '/group/messages',
+            expect.objectContaining({
+                params: expect.objectContaining({ group_id: 'group-1', before_id: 'b', limit: 50 }),
+            }),
+        );
+        expect(ids(result.current.messages)).toEqual(['a', 'b', 'c']);
+        expect(result.current.hasMoreOlder).toBe(false);
+        expect(result.current.loadingOlder).toBe(false);
+    });
+
+    it('exposes hasMoreOlder on a full page and ignores concurrent loadOlder calls', async () => {
+        const page = Array.from({ length: 50 }, (_, i) =>
+            message(`m-${i}`, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString()),
+        );
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValueOnce({ data: { items: page } });
+
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.fireOpen());
+        await waitFor(() => expect(result.current.messages).toHaveLength(50));
+        expect(result.current.hasMoreOlder).toBe(true); // full page: older history exists
+
+        mocks.get.mockResolvedValueOnce({ data: { items: [message('oldest', '2025-12-31T23:59:00Z')] } });
+        const first = result.current.loadOlder();
+        const second = result.current.loadOlder(); // ignored while in flight
+        await act(async () => {
+            await Promise.all([first, second]);
+        });
+        expect(mocks.get).toHaveBeenCalledTimes(2); // initial sync + one loadOlder
+        expect(ids(result.current.messages)).toEqual(['oldest', ...page.map((m) => m.id)]);
+        expect(result.current.hasMoreOlder).toBe(false);
     });
 });
