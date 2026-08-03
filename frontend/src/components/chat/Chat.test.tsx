@@ -80,6 +80,32 @@ describe('Chat', () => {
         );
     });
 
+    it('marks consecutive same-sender messages as grouped for tighter spacing', () => {
+        const { container } = render(
+            <MemoryRouter>
+                <Chat
+                    messages={[
+                        message({ id: 'first', content: 'First message' }),
+                        message({ id: 'second', content: 'Second message' }),
+                        message({
+                            id: 'third',
+                            user_id: 'user-3',
+                            username: 'carol',
+                            content: 'A different sender',
+                        }),
+                    ]}
+                    wsRef={{ current: null }}
+                    currentUserId="user-1"
+                    groupID="group-1"
+                />
+            </MemoryRouter>,
+        );
+
+        expect(container.querySelector('[data-message-id="first"]')).not.toHaveClass('message-grouped');
+        expect(container.querySelector('[data-message-id="second"]')).toHaveClass('message-grouped');
+        expect(container.querySelector('[data-message-id="third"]')).not.toHaveClass('message-grouped');
+    });
+
     it('links sender names and avatars to the player profile', () => {
         renderChat();
         expect(screen.getByRole('link', { name: 'bob' })).toHaveAttribute('href', '/profile/user-2');

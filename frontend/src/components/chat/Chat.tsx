@@ -264,7 +264,7 @@ export default function Chat({
                             <div
                                 key={message.id}
                                 data-message-id={message.id}
-                                className={`message-container ${isMe ? 'own' : 'other'} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
+                                className={`message-container ${isMe ? 'own' : 'other'} ${sameSenderGroup ? ' message-grouped' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                                 tabIndex={0}
                                 onFocus={() => setActionsMessageID(message.id)}
                                 onPointerDown={(event) => handleMessagePointerDown(event, message.id)}
@@ -354,7 +354,7 @@ export default function Chat({
                         <div
                             key={message.id}
                             data-message-id={message.id}
-                            className={`message-container ${isMe ? 'own' : 'other'} ${isSystem ? 'system' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
+                            className={`message-container ${isMe ? 'own' : 'other'} ${isSystem ? 'system' : ''} ${sameSenderGroup ? ' message-grouped' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                             tabIndex={isSystem ? -1 : 0}
                             onFocus={() => !isSystem && setActionsMessageID(message.id)}
                             onPointerDown={(event) => handleMessagePointerDown(event, message.id)}

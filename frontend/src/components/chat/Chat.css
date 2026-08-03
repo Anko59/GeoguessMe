@@ -53,7 +53,6 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 0.6rem;
     overflow-y: auto;
     scrollbar-color: var(--line-strong) transparent;
     scrollbar-width: thin;
@@ -90,9 +89,20 @@
 }
 
 .message-container {
+    margin-top: 0.9rem;
     display: flex;
     align-items: flex-end;
     gap: 0.45rem;
+}
+
+/* Consecutive messages from the same sender sit tighter together so the
+   avatar + name grouping stays obvious; a fresh sender gets more air. */
+.message-container.message-grouped {
+    margin-top: 0.3rem;
+}
+
+.messages-list > .message-container:first-child {
+    margin-top: 0;
 }
 
 .message-container:focus-visible {
