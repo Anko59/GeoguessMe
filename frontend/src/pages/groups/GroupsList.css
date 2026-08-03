@@ -48,8 +48,15 @@
     padding-inline: var(--space-3);
     display: inline-flex;
     align-items: center;
+    gap: 0.4rem;
     color: var(--brand-blue-accessible);
     font-size: 0.875rem;
+}
+
+.groups-account-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: none;
 }
 
 .groups-heading-row {
@@ -281,13 +288,12 @@
         gap: var(--space-4);
     }
 
-    .groups-account-link {
-        font-size: 0;
+    .groups-account-label {
+        display: none;
     }
 
-    .groups-account-link::after {
-        content: 'Account';
-        font-size: 0.8rem;
+    .groups-account-link {
+        padding-inline: 0.6rem;
     }
 
     .groups-heading-row {

@@ -66,6 +66,7 @@ describe('SettingsModal', () => {
             </AuthContext.Provider>,
         );
         expect(screen.getByDisplayValue(`${window.location.origin}/invite/ABC123?from=alice`)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Personal settings' })).toHaveAttribute('href', '/settings');
         fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
         expect(await screen.findByText('Copied!')).toBeInTheDocument();
         const membersToggle = screen.getByRole('button', { name: 'Group Members' });

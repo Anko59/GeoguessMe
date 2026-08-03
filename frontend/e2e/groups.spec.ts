@@ -32,6 +32,10 @@ test.describe('Group operations', () => {
         try {
             await owner.page.goto('/groups');
             await expect(owner.page.locator('.groups-grid')).toBeVisible();
+            // The topbar links keep their real labels on every viewport (the
+            // mobile layout must not collapse both into a generic label).
+            await expect(owner.page.getByRole('link', { name: 'Profile' })).toBeVisible();
+            await expect(owner.page.getByRole('link', { name: 'Settings' })).toBeVisible();
         } finally {
             await owner.context.close();
         }
@@ -251,12 +255,29 @@ test.describe('Membership changes', () => {
         try {
             await owner.page.getByRole('button', { name: 'Open group settings' }).click();
             const settings = owner.page.getByRole('dialog');
+            await expect(settings.getByRole('link', { name: 'Personal settings' })).toHaveAttribute(
+                'href',
+                '/settings',
+            );
             const membersToggle = settings.locator('.members-toggle');
             await membersToggle.click();
             await expect(settings.locator('.members-list')).toBeVisible();
             await expect(settings.locator('.member-item')).toHaveCount(1);
             await settings.getByRole('button', { name: 'Close settings' }).click();
             await expect(settings).not.toBeVisible();
+        } finally {
+            await owner.context.close();
+        }
+    });
+
+    test('owner reaches their own profile from the group header', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            const profileLink = owner.page.getByRole('link', { name: 'Open your profile' });
+            await expect(profileLink).toBeVisible();
+            await profileLink.click();
+            await expect(owner.page).toHaveURL(/\/profile$/);
+            await expect(owner.page.getByRole('heading', { level: 1 })).toBeVisible();
         } finally {
             await owner.context.close();
         }

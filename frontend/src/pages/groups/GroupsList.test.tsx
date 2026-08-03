@@ -45,4 +45,17 @@ describe('GroupsList', () => {
         );
         expect(await screen.findByText("You haven't joined any groups yet")).toBeInTheDocument();
     });
+
+    it('links to the own profile and personal settings from the topbar', async () => {
+        mocks.get.mockResolvedValue({ data: [] });
+        render(
+            <MemoryRouter>
+                <GroupsList />
+            </MemoryRouter>,
+        );
+        await screen.findByText("You haven't joined any groups yet");
+
+        expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
+        expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    });
 });

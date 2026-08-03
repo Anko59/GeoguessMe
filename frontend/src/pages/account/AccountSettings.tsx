@@ -116,8 +116,8 @@ export default function AccountSettings() {
                 <div className="account-header">
                     <img src="/logo.png" alt="" />
                     <div>
-                        <p className="account-eyebrow">Your GeoGuessMe profile</p>
-                        <h1 className="auth-title">Account settings</h1>
+                        <p className="account-eyebrow">Your GeoGuessMe account</p>
+                        <h1 className="auth-title">Settings</h1>
                         <p className="account-intro">Manage your profile, security, and account.</p>
                     </div>
                 </div>

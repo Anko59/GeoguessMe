@@ -11,6 +11,7 @@ import Camera from '../../components/camera/Camera';
 import Game from '../../components/game/Game';
 import SettingsModal from '../../components/settings/SettingsModal';
 import TabBar, { type TabType } from '../../components/navigation/TabBar';
+import Avatar from '../../components/common/Avatar';
 import { useGroupMessages } from '../../hooks/useGroupMessages';
 import Icon from '../../components/ui/Icon';
 import './GroupView.css';
@@ -63,6 +64,11 @@ export default function GroupView() {
                         <span>Group</span>
                         <h1 className="group-name">{group?.name ?? 'Group'}</h1>
                     </div>
+                    {user && (
+                        <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
+                            <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
+                        </Link>
+                    )}
                     <button
                         className="settings-btn"
                         onClick={() => setSettingsOpen(true)}
