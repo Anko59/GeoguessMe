@@ -2,6 +2,7 @@ import React from 'react';
 import { CameraErrorPanel, CameraOptionsMenu, CameraTopControls, PreviewActions } from './CameraPanels';
 import FilterPicker from './FilterPicker';
 import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
+import { isLiveCameraFeed } from './cameraUtils';
 import type { Group } from '../../types';
 import type { LensId } from './lenses/lensCatalog';
 import type { TextBanner } from './textBanner';
@@ -96,6 +97,7 @@ export default function CameraView({
     onCapturedVideoError,
 }: CameraViewProps) {
     const mirrorLivePreview = facingMode === 'user';
+    const liveFeed = isLiveCameraFeed(cameraReady, fileMode);
     const filterPicker = (
         <FilterPicker
             selectedFilter={selectedFilter}
@@ -154,10 +156,13 @@ export default function CameraView({
                         aria-hidden="true"
                     />
                     <TextBannerOverlay banner={textBanner} />
-                    <div className="camera-options-bar">
-                        {optionsButton}
-                        {showOptions && optionsMenu}
-                    </div>
+                    {!liveFeed && (
+                        <div className="camera-options-bar">
+                            {optionsButton}
+                            {showOptions && optionsMenu}
+                        </div>
+                    )}
+                    {liveFeed && showOptions && <div className="camera-options-popover">{optionsMenu}</div>}
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
                             {!recording && (
