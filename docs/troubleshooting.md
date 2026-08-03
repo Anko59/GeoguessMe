@@ -61,6 +61,10 @@ page appears to do nothing.
 - Upload through the shared API client so its request interceptor can restore a
   session after a PWA reload. Do not set `Content-Type: multipart/form-data`
   manually: the browser must add the multipart boundary.
+- Avatar and group-photo uploads use the browser's native `image/*` file flow;
+  the server validates the image bytes and resizes the photo. If the same file
+  works for a group photo but not an avatar, check the response and backend logs
+  rather than renaming or re-encoding the file.
 - The account settings page displays the server's structured error message in an
   alert. Check the browser Network panel for the response status and the backend
   logs with `make logs-backend` if storage fails.
@@ -105,10 +109,10 @@ with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
 
 ## Message actions
 
-Reply and emoji actions are intentionally revealed on hover, keyboard focus,
-hold, or horizontal swipe. Hidden actions use no layout space, so adjacent
-messages keep the normal chat gap. The browser regression is covered by the chat
-E2E suite.
+Reply and reaction actions are revealed on hover or keyboard focus on
+hover-capable devices, and on a one-second long press or horizontal swipe on
+touch devices. Hidden actions use no layout space, so adjacent messages keep the
+normal chat gap. The browser regression is covered by the chat E2E suite.
 
 ## Group photos in the groups list
 

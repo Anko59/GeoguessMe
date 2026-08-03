@@ -1,13 +1,29 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
-import RankTrophy from '../../components/progression/RankTrophy';
-import type { Profile } from '../../types';
+import RankBadge from '../../components/progression/RankBadge';
+import { useAuth } from '../../context/AuthContext';
+import type { GlobalRank, ProgressionRank } from '../../types';
 import './ProfilePage.css';
 
+interface ProfileViewData {
+    id: string;
+    username: string;
+    avatar: string;
+    email?: string;
+    total_points: number;
+    guess_count: number;
+    rank: ProgressionRank;
+    global_rank: GlobalRank;
+}
+
 export default function ProfilePage() {
-    const [profile, setProfile] = useState<Profile | null>(null);
+    const { userId } = useParams();
+    const { user } = useAuth();
+    const isOwnProfile = !userId;
+    const isSelf = isOwnProfile || user?.id === userId;
+    const [profile, setProfile] = useState<ProfileViewData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -15,14 +31,20 @@ export default function ProfilePage() {
         setError('');
         setLoading(true);
         try {
-            const response = await api.get<Profile>('/auth/profile');
+            const endpoint = isOwnProfile ? '/auth/profile' : `/user/profile/${userId}`;
+            const response = await api.get<ProfileViewData>(endpoint);
             setProfile(response.data);
         } catch (requestError: unknown) {
-            setError(getAPIErrorMessage(requestError, 'Unable to load your profile.'));
+            setError(
+                getAPIErrorMessage(
+                    requestError,
+                    isOwnProfile ? 'Unable to load your profile.' : "Unable to load this player's profile.",
+                ),
+            );
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [isOwnProfile, userId]);
 
     useEffect(() => {
         queueMicrotask(() => void loadProfile());
@@ -33,7 +55,7 @@ export default function ProfilePage() {
             <main className="profile-page profile-state" aria-busy="true">
                 <div className="loading" role="status">
                     <div className="spinner" />
-                    <span>Loading your profile…</span>
+                    <span>Loading profile…</span>
                 </div>
             </main>
         );
@@ -43,8 +65,8 @@ export default function ProfilePage() {
         return (
             <main className="profile-page profile-state">
                 <div className="profile-error" role="alert">
-                    <strong>We couldn’t load your profile</strong>
-                    <span>{error || 'Your profile is temporarily unavailable.'}</span>
+                    <strong>We couldn’t load this profile</strong>
+                    <span>{error || 'This profile is temporarily unavailable.'}</span>
                     <button className="btn btn-secondary" onClick={() => void loadProfile()}>
                         Retry
                     </button>
@@ -54,9 +76,7 @@ export default function ProfilePage() {
     }
 
     const { rank } = profile;
-    const nextRankText = rank.next_points
-        ? `Next rank at ${rank.next_points.toLocaleString()} pts`
-        : 'Highest rank reached';
+    const remaining = rank.next_points ? rank.points_to_next - rank.points_in_rank : 0;
 
     return (
         <main className="profile-page">
@@ -64,36 +84,43 @@ export default function ProfilePage() {
                 <Link to="/groups" className="profile-back-link">
                     ← Groups
                 </Link>
-                <Link to="/settings" className="profile-settings-link">
-                    Edit profile
-                </Link>
+                {isSelf && (
+                    <Link to="/settings" className="profile-settings-link">
+                        Edit profile
+                    </Link>
+                )}
             </header>
 
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">
-                    <Avatar
-                        userID={profile.id}
-                        avatar={profile.avatar}
-                        username={profile.username}
-                        className="profile-avatar"
-                    />
+                    <div className="profile-avatar-ring">
+                        <Avatar
+                            userID={profile.id}
+                            avatar={profile.avatar}
+                            username={profile.username}
+                            className="profile-avatar"
+                        />
+                    </div>
                     <div>
-                        <p className="profile-eyebrow">Your adventurer card</p>
+                        <p className="profile-eyebrow">Adventurer card</p>
                         <h1 id="profile-title">{profile.username}</h1>
-                        <p className="profile-email">{profile.email}</p>
-                        <p className="profile-rank-name">{rank.name}</p>
+                        {isOwnProfile && profile.email && <p className="profile-email">{profile.email}</p>}
+                        <p className="profile-rank-name">
+                            <RankBadge rank={rank} />
+                            {rank.name}
+                        </p>
                     </div>
                 </div>
-                <RankTrophy rank={rank} className="profile-trophy" />
+                <RankBadge rank={rank} size="large" alt={`${rank.name} badge`} className="profile-badge" />
             </section>
 
             <section className="profile-trackers" aria-label="Score trackers">
-                <article className="profile-stat-card">
+                <article className="profile-stat-card profile-stat-points">
                     <span className="profile-stat-label">Total points</span>
                     <strong>{profile.total_points.toLocaleString()}</strong>
                     <span>Lifetime guess score</span>
                 </article>
-                <article className="profile-stat-card">
+                <article className="profile-stat-card profile-stat-guesses">
                     <span className="profile-stat-label">Guesses made</span>
                     <strong>{profile.guess_count.toLocaleString()}</strong>
                     <span>Places explored</span>
@@ -101,24 +128,53 @@ export default function ProfilePage() {
                 <article className="profile-stat-card profile-stat-rank">
                     <span className="profile-stat-label">Current rank</span>
                     <strong>#{rank.level}</strong>
-                    <span>{rank.name}</span>
+                    <span className="profile-stat-rank-name">
+                        <RankBadge rank={rank} />
+                        {rank.name}
+                    </span>
+                </article>
+                <article className="profile-stat-card profile-stat-global">
+                    <span className="profile-stat-label">Global rank</span>
+                    {profile.global_rank.rank > 0 ? (
+                        <>
+                            <strong>#{profile.global_rank.rank}</strong>
+                            <span>of {profile.global_rank.total_players.toLocaleString()} players</span>
+                        </>
+                    ) : (
+                        <>
+                            <strong>Unranked</strong>
+                            <span>Guess a location to enter the ranking</span>
+                        </>
+                    )}
                 </article>
             </section>
 
-            <section className="profile-progress-card" aria-labelledby="progress-title">
-                <div className="profile-progress-copy">
+            <section className="profile-next-rank" aria-labelledby="next-rank-title">
+                <div className="profile-next-rank-copy">
                     <p className="profile-eyebrow">Keep climbing</p>
-                    <h2 id="progress-title">Progress to the next rank</h2>
-                    <p>
-                        {rank.points_in_rank.toLocaleString()} of {rank.points_to_next.toLocaleString()} points in this
-                        rank.
-                    </p>
-                    <strong>{nextRankText}</strong>
+                    <h2 id="next-rank-title">
+                        {rank.next_rank ? `Next rank: ${rank.next_rank.name}` : 'Highest rank reached'}
+                    </h2>
+                    {rank.next_rank ? (
+                        <>
+                            <div className="profile-rank-path" aria-hidden="true">
+                                <RankBadge rank={rank} />
+                                <span className="profile-rank-arrow">→</span>
+                                <RankBadge rank={rank.next_rank} />
+                            </div>
+                            <p className="profile-next-rank-progress">
+                                {rank.points_in_rank.toLocaleString()} of {rank.points_to_next.toLocaleString()} points
+                                — {remaining.toLocaleString()} to go
+                            </p>
+                        </>
+                    ) : (
+                        <p className="profile-next-rank-progress">You’ve reached the top of the ladder. 👑</p>
+                    )}
                 </div>
                 <div
                     className="profile-progress-ring"
                     role="progressbar"
-                    aria-label={`Progress to ${rank.next_points ? 'the next rank' : 'the final rank'}`}
+                    aria-label={`Progress to ${rank.next_rank ? 'the next rank' : 'the final rank'}`}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={rank.progress_percent}

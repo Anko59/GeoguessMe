@@ -148,6 +148,27 @@ func TestGroupQueriesAndMembership(t *testing.T) {
 	}
 }
 
+func TestSharesGroup(t *testing.T) {
+	mock := newMockPool(t)
+	// A user always shares a group with themself, without a query.
+	shared, err := SharesGroupContext(context.Background(), "user-1", "user-1")
+	if err != nil || !shared {
+		t.Fatalf("self shared = %v, %v", shared, err)
+	}
+	// Two members of a common group share it.
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("user-1", "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	shared, err = SharesGroupContext(context.Background(), "user-1", "user-2")
+	if err != nil || !shared {
+		t.Fatalf("shared group = %v, %v", shared, err)
+	}
+	// Players in disjoint groups do not share one.
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("user-1", "user-3").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	shared, err = SharesGroupContext(context.Background(), "user-1", "user-3")
+	if err != nil || shared {
+		t.Fatalf("disjoint groups = %v, %v", shared, err)
+	}
+}
+
 func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC()

@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
-import { prepareAvatarFile, validateAvatarFile } from './avatarUpload';
 import './AccountSettings.css';
 
 const avatars = Array.from({ length: 10 }, (_, index) => (index === 0 ? 'avatar.png' : `avatar${index + 1}.png`));
@@ -37,17 +36,13 @@ export default function AccountSettings() {
         const file = event.target.files?.[0];
         if (!file) return;
         clearNotice();
-        const validationError = validateAvatarFile(file);
-        if (validationError) {
-            setAvatarError(validationError);
-            event.target.value = '';
-            return;
-        }
         setUploading(true);
         try {
-            const uploadFile = await prepareAvatarFile(file);
             const formData = new FormData();
-            formData.append('photo', uploadFile);
+            // Keep this identical to the working group-photo upload path.
+            // The browser may provide a camera photo with an unusual MIME
+            // type or filename; the server validates the actual image bytes.
+            formData.append('photo', file);
             // Let XMLHttpRequest add the multipart boundary. Setting the
             // content type manually omits that boundary in some browsers and
             // makes the server reject an otherwise valid form.
@@ -145,7 +140,7 @@ export default function AccountSettings() {
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                accept="image/*"
                                 hidden
                                 onChange={(event) => void uploadPhoto(event)}
                                 disabled={uploading}
@@ -153,7 +148,7 @@ export default function AccountSettings() {
                         </label>
                     </div>
                     <p className="account-help">
-                        JPG, PNG, WebP, and HEIC/HEIF photos up to 25 MiB are accepted and resized automatically.
+                        Camera photos are accepted and resized automatically, just like group photos.
                     </p>
                     {avatarError && (
                         <p className="avatar-upload-error" role="alert" aria-live="assertive">

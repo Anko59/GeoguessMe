@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
 import Leaderboard from './Leaderboard';
@@ -39,6 +40,15 @@ const pageRank = {
     trophy_key: 'page',
 };
 
+const renderLeaderboard = (groupID = 'group-1') =>
+    render(
+        <AuthContext.Provider value={authValue}>
+            <MemoryRouter>
+                <Leaderboard groupID={groupID} />
+            </MemoryRouter>
+        </AuthContext.Provider>,
+    );
+
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
@@ -49,11 +59,7 @@ describe('Leaderboard', () => {
         mocks.get.mockResolvedValueOnce({ data: [] });
         let emptyLeaderboard: ReturnType<typeof render>;
         await act(async () => {
-            emptyLeaderboard = render(
-                <AuthContext.Provider value={authValue}>
-                    <Leaderboard groupID="group-1" />
-                </AuthContext.Provider>,
-            );
+            emptyLeaderboard = renderLeaderboard();
         });
         expect(await screen.findByText('No scores yet')).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/group/leaderboard', {
@@ -101,33 +107,33 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 40,
                     total_points: 40,
-                    rank: pageRank,
+                    rank: { ...pageRank, level: 17, name: 'Emperor', trophy_key: 'emperor' },
                 },
             ],
         });
         let rankedLeaderboard: ReturnType<typeof render>;
         await act(async () => {
-            rankedLeaderboard = render(
-                <AuthContext.Provider value={authValue}>
-                    <Leaderboard groupID="group-1" />
-                </AuthContext.Provider>,
-            );
+            rankedLeaderboard = renderLeaderboard();
         });
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
-        expect(screen.getAllByText('Page')).toHaveLength(4);
+        expect(screen.getAllByText('Page')).toHaveLength(3);
+        expect(screen.getByText('Emperor')).toBeInTheDocument();
+        expect(screen.getAllByText('I')).toHaveLength(3);
+        expect(screen.getByText('XVII')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'alice' })).toHaveAttribute('src', '/avatars/avatar2.png');
+        expect(screen.getByRole('link', { name: 'alice' })).toHaveAttribute('href', '/profile/user-1');
+        expect(screen.getByRole('link', { name: "View alice's profile" })).toHaveAttribute('href', '/profile/user-1');
+        const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');
+        expect(badges).toHaveLength(4);
+        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/emperor.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));
         let errorLeaderboard: ReturnType<typeof render>;
         await act(async () => {
-            errorLeaderboard = render(
-                <AuthContext.Provider value={authValue}>
-                    <Leaderboard groupID="group-1" />
-                </AuthContext.Provider>,
-            );
+            errorLeaderboard = renderLeaderboard();
         });
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load rankings');
         await act(async () => {
@@ -166,11 +172,7 @@ describe('Leaderboard', () => {
                     },
                 ],
             });
-        render(
-            <AuthContext.Provider value={authValue}>
-                <Leaderboard groupID="group-1" />
-            </AuthContext.Provider>,
-        );
+        renderLeaderboard();
 
         expect(await screen.findByText('alice')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('tab', { name: 'This month' }));

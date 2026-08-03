@@ -25,21 +25,37 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - Challenge messages in `items` may include viewer-specific `challenge_status`
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
-  viewer's challenge view and guess state.
-- Messages may include aggregate `reactions`; each entry contains an emoji,
-  count, the `usernames` of members who selected it, and a `reacted` flag for
-  the authenticated viewer. Usernames are sorted alphabetically.
+  viewer's challenge view and guess state. Challenge messages also carry
+  `challenge_expires_at` (the 24-hour deadline) and `challenge_ttl_seconds` so
+  the client can render the remaining time as a countdown.
+- Messages may include aggregate `reactions`; each entry contains a reaction key
+  (mapping to the custom reaction artwork), count, the `usernames` of members
+  who selected it, and a `reacted` flag for the authenticated viewer. Usernames
+  are sorted alphabetically. Reaction requests use `reaction`; the deprecated
+  `emoji` request and response alias remains available during rolling upgrades.
 - Live reaction updates include `reaction_update` metadata so each WebSocket
   recipient applies the shared count without inheriting another member's
   viewer-specific `reacted` state. Guess submission also publishes a
   `challenge_resolved` update to open conversations.
 
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
-with lifetime guess points, guess count, and the server-calculated rank
-progression. Lifetime points are the sum of all accepted guess scores; rank
-thresholds and the 20 medieval-inspired rank names are server-owned. Group
-leaderboard entries include the same rank object beneath each player's name
-while their `score` remains the selected period's sum.
+with lifetime guess points, guess count, the server-calculated rank progression,
+and the player's global rank. Lifetime points are the sum of all accepted guess
+scores; rank thresholds and the 20 medieval-inspired rank names are
+server-owned. `global_rank.rank` is the player's position among every player who
+has guessed at least once, ordered by lifetime points with standard competition
+ranking (equal totals share a rank), and `global_rank.total_players` is the size
+of that population; a player who has never guessed has `rank` 0. Each rank
+object carries a `next_rank` with the following rank's name and badge key
+(omitted at the highest rank). Group leaderboard entries include the same rank
+object beneath each player's name while their `score` remains the selected
+period's sum.
+
+`GET /api/v1/user/profile/{userID}` returns another player's identity and
+progression with the same shape minus email and account details. The player must
+share at least one group with the requester (viewing yourself always works);
+otherwise the endpoint returns 403. This is the data behind the player profile
+page reachable from chat and leaderboards.
 
 ## Endpoint overview
 
@@ -57,6 +73,7 @@ while their `score` remains the selected period's sum.
 | POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`      | 200, 400           |
 | POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions   | 204, 400, 401      |
 | GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank | 200, 401           |
+| GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression       | 200, 401, 403, 404 |
 | PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar       | 200, 400, 401, 409 |
 | POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)       | 200, 400, 401      |
 | DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`             | 204, 401           |
@@ -76,21 +93,30 @@ while their `score` remains the selected period's sum.
 | GET    | `/api/v1/group/notifications?group_id=`           | Bearer | Read this member's group notification preference                    |
 | PUT    | `/api/v1/group/notifications?group_id=`           | Bearer | Set `{enabled}` for this member's group notifications               |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&limit=` | Bearer | Paginated messages                                                  |
-| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add an emoji reaction                                               |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Add a reaction key to a group message                               |
 | DELETE | `/api/v1/group/message-reactions/{messageID}`     | Bearer | Remove the authenticated user's reaction                            |
 | POST   | `/api/v1/group/messages/media`                    | Bearer | Send private image/MP4/WebM chat attachment                         |
 | GET    | `/api/v1/group/messages/media/{mediaID}`          | Bearer | Stream attachment for a current member (`private, no-store`)        |
 
 ### Challenges
 
-| Method | Path                                          | Auth   | Description                                                                   |
-| ------ | --------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
-| POST   | `/api/v1/photo/upload`                        | Bearer | Upload photo or camera-recorded MP4/WebM `multipart(photo,group_id,lat,long)` |
-| POST   | `/api/v1/challenges/{photoID}/accept`         | Bearer | Accept challenge, start view window                                           |
-| GET    | `/api/v1/challenges/{photoID}/media`          | Bearer | Stream media (during view window)                                             |
-| GET    | `/api/v1/challenges/{photoID}/media?result=1` | Bearer | Stream media (results visible)                                                |
-| POST   | `/api/v1/challenges/{photoID}/guess`          | Bearer | Submit guess `{lat, long}`                                                    |
-| GET    | `/api/v1/challenges/{photoID}/results`        | Bearer | Get results                                                                   |
+| Method | Path                                           | Auth   | Description                                                                                     |
+| ------ | ---------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/photo/upload`                         | Bearer | Upload photo or video `multipart(photo,group_ids,lat,long,hide_location)` to one or more groups |
+| POST   | `/api/v1/challenges/{photoID}/accept`          | Bearer | Accept challenge and authorize its private media                                                |
+| GET    | `/api/v1/challenges/{photoID}/media`           | Bearer | Stream media (view-once window starts at first full delivery)                                   |
+| POST   | `/api/v1/challenges/{photoID}/media-delivered` | Bearer | Confirm full delivery and return the authoritative view deadline                                |
+| GET    | `/api/v1/challenges/{photoID}/media?result=1`  | Bearer | Stream media (results visible)                                                                  |
+| POST   | `/api/v1/challenges/{photoID}/guess`           | Bearer | Submit guess `{lat, long}`                                                                      |
+| GET    | `/api/v1/challenges/{photoID}/results`         | Bearer | Get results                                                                                     |
+
+Accepting a challenge authorizes its private media. After a complete stream, the
+client confirms delivery with `POST .../media-delivered` and uses the
+authoritative deadline returned by the server. The configured viewing window
+starts at that first confirmed full delivery rather than at acceptance, so a
+slow connection gets the full viewing time instead of having the download
+consume it. A re-fetch after the window has closed is always denied, and
+guessing is only allowed once the window has ended — the media stays view-once.
 
 ### WebSocket
 
@@ -132,32 +158,32 @@ Available metrics:
 
 ## API error codes
 
-| Code                    | Meaning                             |
-| ----------------------- | ----------------------------------- |
-| `invalid_username`      | Username validation failed          |
-| `invalid_email`         | Email validation failed             |
-| `invalid_password`      | Password validation failed          |
-| `username_taken`        | Username already in use             |
-| `email_taken`           | Email already in use                |
-| `authentication_failed` | Bad credentials                     |
-| `unauthorized`          | Missing or invalid auth             |
-| `forbidden`             | Not a member of the required group  |
-| `not_found`             | Resource not found                  |
-| `group_not_found`       | Group not found                     |
-| `already_member`        | Already a member                    |
-| `invalid_group_name`    | Group name validation failed        |
-| `invalid_group_code`    | Group code validation failed        |
-| `invalid_upload`        | Upload too large or malformed       |
-| `invalid_media`         | Photo or video type or size invalid |
-| `invalid_coordinates`   | Invalid lat/long                    |
-| `invalid_request`       | Request body malformed              |
-| `challenge_expired`     | Challenge is past its TTL           |
-| `viewing_window_open`   | Must wait for view window to end    |
-| `media_expired`         | Viewing window has expired          |
-| `media_removed`         | Original media no longer available  |
-| `results_not_available` | Results not yet visible             |
-| `origin_not_allowed`    | WebSocket origin rejected           |
-| `rate_limited`          | Rate limit exceeded                 |
-| `internal_error`        | Unexpected server error             |
-| `storage_unavailable`   | Media storage unavailable           |
-| `storage_error`         | Backend storage error               |
+| Code                    | Meaning                                        |
+| ----------------------- | ---------------------------------------------- |
+| `invalid_username`      | Username validation failed                     |
+| `invalid_email`         | Email validation failed                        |
+| `invalid_password`      | Password validation failed                     |
+| `username_taken`        | Username already in use                        |
+| `email_taken`           | Email already in use                           |
+| `authentication_failed` | Bad credentials                                |
+| `unauthorized`          | Missing or invalid auth                        |
+| `forbidden`             | Not a member of the required group             |
+| `not_found`             | Resource not found                             |
+| `group_not_found`       | Group not found                                |
+| `already_member`        | Already a member                               |
+| `invalid_group_name`    | Group name validation failed                   |
+| `invalid_group_code`    | Group code validation failed                   |
+| `invalid_upload`        | Upload too large or malformed                  |
+| `invalid_media`         | Photo or video type or size invalid            |
+| `invalid_coordinates`   | Invalid lat/long                               |
+| `invalid_request`       | Request body malformed                         |
+| `challenge_expired`     | Challenge is past its TTL                      |
+| `viewing_window_open`   | Must wait for view window to end               |
+| `media_expired`         | Viewing window expired or media already viewed |
+| `media_removed`         | Original media no longer available             |
+| `results_not_available` | Results not yet visible                        |
+| `origin_not_allowed`    | WebSocket origin rejected                      |
+| `rate_limited`          | Rate limit exceeded                            |
+| `internal_error`        | Unexpected server error                        |
+| `storage_unavailable`   | Media storage unavailable                      |
+| `storage_error`         | Backend storage error                          |

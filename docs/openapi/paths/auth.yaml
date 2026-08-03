@@ -205,7 +205,7 @@ uploadAvatar:
   post:
     operationId: uploadAvatar
     summary: Upload a profile photo.
-    description: Accepts JPG, PNG, and WebP uploads up to 25 MiB. HEIC/HEIF files are converted to JPEG by the web client before upload. The backend strips metadata and resizes the result to a 256-pixel maximum dimension.
+    description: Accepts JPG, PNG, and WebP uploads up to 25 MiB. The web client sends the original selected file; the backend validates the image bytes, strips metadata, and resizes the result to a 256-pixel maximum dimension.
     tags: [Authentication]
     security: [{ bearerAuth: [] }]
     requestBody:

@@ -97,10 +97,10 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                         reactions = (message.reactions ?? []).map((reaction) => ({
                             ...reaction,
                             reacted:
-                                delta.user_id === userID && reaction.emoji === delta.emoji
+                                delta.user_id === userID && reaction.reaction === delta.reaction
                                     ? delta.active
-                                    : (previous?.reactions?.find((item) => item.emoji === reaction.emoji)?.reacted ??
-                                      false),
+                                    : (previous?.reactions?.find((item) => item.reaction === reaction.reaction)
+                                          ?.reacted ?? false),
                         }));
                     }
                     byId.set(message.id, {

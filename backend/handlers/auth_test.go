@@ -267,6 +267,8 @@ func TestProfileReadErrorAndMethodBranches(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
 		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(0), int64(0)))
+	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(0), int64(0)))
 	requireStatus(t, UpdateProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusOK)
 }
 
@@ -485,7 +487,7 @@ func handlerConfig() *config.Config {
 		Environment: "test", PublicURL: "http://localhost:8080", JWTSecret: "test_secret_key_at_least_32_characters_long",
 		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour, VerificationTTL: 24 * time.Hour, ResetTTL: time.Hour,
 		PasswordHashCost: 4, UploadMaxBytes: 5 * 1024 * 1024, AvatarMaxBytes: 25 * 1024 * 1024, UploadMaxPixels: 100000, ChallengeTTL: time.Hour,
-		ViewWindow: time.Minute, PhotoRetention: 24 * time.Hour, AllowedOrigins: []string{"http://localhost:8080"},
+		ViewWindow: time.Minute, LocationHide: 48 * time.Hour, PhotoRetention: 24 * time.Hour, AllowedOrigins: []string{"http://localhost:8080"},
 	}
 }
 

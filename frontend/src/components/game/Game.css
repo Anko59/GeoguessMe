@@ -68,6 +68,36 @@
     object-fit: contain;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+    .timer-icon {
+        transform-origin: center;
+        animation: timerPulse 1s ease-in-out infinite;
+    }
+}
+
+@keyframes timerPulse {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    12% {
+        transform: scale(1.22);
+    }
+
+    24% {
+        transform: scale(1);
+    }
+
+    36% {
+        transform: scale(1.1);
+    }
+
+    48% {
+        transform: scale(1);
+    }
+}
+
 .timer-text {
     position: absolute;
     top: 50%;
@@ -351,4 +381,19 @@
         min-height: 17rem;
         height: 42dvh;
     }
+}
+
+.result-location-hidden {
+    padding: var(--space-3) var(--space-4);
+    display: grid;
+    gap: 0.15rem;
+    color: var(--brand-navy);
+    background: var(--surface-brand);
+    border: 1px solid rgba(0, 119, 182, 0.28);
+    border-radius: var(--radius-md);
+}
+
+.result-location-hidden span {
+    color: var(--ink-muted);
+    font-size: 0.8rem;
 }

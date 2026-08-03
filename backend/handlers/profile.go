@@ -79,11 +79,33 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userResponse(updated))
 }
 
+// GlobalRank is the player's position among every player who has guessed at
+// least once, ordered by lifetime points. Rank is zero while the player has no
+// guesses of their own (they are not part of the ranked population).
+type GlobalRank struct {
+	Rank         int `json:"rank"`
+	TotalPlayers int `json:"total_players"`
+}
+
+// PublicProfileResponse is the profile of another player. It deliberately
+// excludes email and account details; it contains only the identity and
+// progression data already visible inside a shared group.
+type PublicProfileResponse struct {
+	ID          string           `json:"id"`
+	Username    string           `json:"username"`
+	Avatar      string           `json:"avatar"`
+	TotalPoints int              `json:"total_points"`
+	GuessCount  int              `json:"guess_count"`
+	Rank        progression.Rank `json:"rank"`
+	GlobalRank  GlobalRank       `json:"global_rank"`
+}
+
 type ProfileResponse struct {
 	AuthUser
 	TotalPoints int              `json:"total_points"`
 	GuessCount  int              `json:"guess_count"`
 	Rank        progression.Rank `json:"rank"`
+	GlobalRank  GlobalRank       `json:"global_rank"`
 }
 
 func GetProfile(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +123,68 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	globalRank, err := repository.GetGlobalRankContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	writeJSON(w, http.StatusOK, ProfileResponse{
 		AuthUser:    userResponse(user),
 		TotalPoints: stats.TotalPoints,
 		GuessCount:  stats.GuessCount,
 		Rank:        progression.RankForPoints(stats.TotalPoints),
+		GlobalRank:  GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
+	})
+}
+
+// GetPublicProfile returns another player's progression profile. The player
+// must share at least one group with the requester (or be the requester
+// themselves); email and account details are never returned.
+func GetPublicProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	targetID := strings.TrimSpace(r.PathValue("userID"))
+	viewerID := GetUserIDFromContext(r)
+	user, err := repository.GetUserByID(r.Context(), targetID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	if user == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Player not found")
+		return
+	}
+	if targetID != viewerID {
+		shared, err := repository.SharesGroupContext(r.Context(), targetID, viewerID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+			return
+		}
+		if !shared {
+			writeError(w, http.StatusForbidden, "forbidden", "You do not share a group with this player")
+			return
+		}
+	}
+	stats, err := repository.GetUserScoreStatsContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	globalRank, err := repository.GetGlobalRankContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	writeJSON(w, http.StatusOK, PublicProfileResponse{
+		ID:          user.ID,
+		Username:    user.Username,
+		Avatar:      user.Avatar,
+		TotalPoints: stats.TotalPoints,
+		GuessCount:  stats.GuessCount,
+		Rank:        progression.RankForPoints(stats.TotalPoints),
+		GlobalRank:  GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
 	})
 }
 

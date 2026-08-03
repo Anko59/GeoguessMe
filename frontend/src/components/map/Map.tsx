@@ -1,6 +1,7 @@
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import './Map.css';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -80,14 +81,13 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
             )}
 
             {/* User Guesses */}
-            {guesses?.map((guess, idx) => (
-                <Marker
-                    key={idx}
-                    position={[guess.lat, guess.long]}
-                    icon={GuessIcon}
-                    title={`${guess.username}: ${guess.score} pts`}
-                    opacity={0.8}
-                />
+            {guesses?.map((guess) => (
+                <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
+                    <Popup>
+                        <strong>{guess.username}</strong>
+                        <span className="guess-popup-score">{guess.score} pts</span>
+                    </Popup>
+                </Marker>
             ))}
         </MapContainer>
     );

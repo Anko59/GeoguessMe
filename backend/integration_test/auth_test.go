@@ -119,12 +119,18 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 			Level int    `json:"level"`
 			Name  string `json:"name"`
 		} `json:"rank"`
+		GlobalRank struct {
+			Rank         int `json:"rank"`
+			TotalPlayers int `json:"total_players"`
+		} `json:"global_rank"`
 	}
 	require.NoError(t, json.Unmarshal(data, &progression))
 	require.Equal(t, 0, progression.TotalPoints)
 	require.Equal(t, 0, progression.GuessCount)
 	require.Equal(t, 1, progression.Rank.Level)
 	require.Equal(t, "Page", progression.Rank.Name)
+	// A player who never guessed is not part of the ranked population.
+	require.Equal(t, 0, progression.GlobalRank.Rank)
 
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/change", map[string]string{
 		"current_password": pass,

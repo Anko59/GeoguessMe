@@ -84,17 +84,30 @@ describe('AccountSettings', () => {
             </AuthContext.Provider>,
         );
         const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-        const file = new File(['pixel'], 'me.png', { type: 'image/png' });
+        const file = new File(['camera photo'], 'IMG_1234', { type: '' });
         await act(async () => {
             fireEvent.change(input, { target: { files: [file] } });
         });
         await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData)));
+        expect(mocks.post.mock.calls[0]?.[1].get('photo')).toBe(file);
         expect(refresh).toHaveBeenCalled();
         expect(await screen.findByRole('status')).toHaveTextContent('Profile photo updated');
     });
 
+    it('uses the native image picker accepted by group photo uploads', () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*');
+    });
+
     it('shows upload failures beside the upload control', async () => {
-        mocks.post.mockRejectedValueOnce(new Error('This photo format is not supported. Choose a JPG image.'));
+        mocks.post.mockRejectedValueOnce(new Error('We could not read that upload. Try again.'));
         const { container } = render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
@@ -107,7 +120,7 @@ describe('AccountSettings', () => {
             fireEvent.change(input, { target: { files: [new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })] } });
         });
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('This photo format is not supported');
+        expect(await screen.findByRole('alert')).toHaveTextContent('We could not read that upload');
         expect(mocks.post).toHaveBeenCalledWith('/auth/profile/avatar', expect.any(FormData));
     });
 

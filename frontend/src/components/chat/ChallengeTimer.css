@@ -1,0 +1,39 @@
+.challenge-timer {
+    width: 2.6rem;
+    height: 2.6rem;
+    position: relative;
+    display: block;
+    flex: none;
+    margin-left: auto;
+}
+
+.challenge-timer svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.challenge-timer-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 3;
+}
+
+.challenge-timer-value {
+    fill: none;
+    stroke: var(--brand-navy);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset var(--duration) ease;
+}
+
+.challenge-timer-label {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--brand-navy);
+    font-size: 0.62rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+}

@@ -113,6 +113,7 @@ func validConfig() *Config {
 		UploadMaxPixels:   25_000_000,
 		ChallengeTTL:      24 * time.Hour,
 		ViewWindow:        10 * time.Second,
+		LocationHide:      48 * time.Hour,
 		PhotoRetention:    30 * 24 * time.Hour,
 		RateLimitRequests: 10,
 		RateLimitWindow:   time.Minute,

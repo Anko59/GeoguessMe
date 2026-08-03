@@ -66,6 +66,25 @@ func IsGroupMemberContext(ctx context.Context, groupID, userID string) (bool, er
 	return exists, err
 }
 
+// SharesGroupContext reports whether two users are members of at least one
+// common group. A user always shares a group with themself. It backs the
+// player profile endpoint, which is only visible to players who actually
+// interact with the target in a group.
+func SharesGroupContext(ctx context.Context, userA, userB string) (bool, error) {
+	if userA == userB {
+		return true, nil
+	}
+	var shared bool
+	err := database.DB.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM group_members a
+			JOIN group_members b ON b.group_id = a.group_id
+			WHERE a.user_id = $1 AND b.user_id = $2
+		)`, userA, userB).Scan(&shared)
+	return shared, err
+}
+
 func GetGroupPhotoContext(ctx context.Context, groupID string) (*models.GroupPhoto, error) {
 	var photo models.GroupPhoto
 	err := database.DB.QueryRow(ctx, `SELECT group_id, storage_key, mime_type, byte_size, created_at FROM group_photos WHERE group_id = $1`, groupID).Scan(&photo.GroupID, &photo.StorageKey, &photo.MIMEType, &photo.ByteSize, &photo.CreatedAt)

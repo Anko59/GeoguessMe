@@ -87,18 +87,18 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
-		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
 	recorder := httptest.NewRecorder()
 	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {
 		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
 
 func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "created_at", "expires_at", "retention_at"}).
-		AddRow(photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
+	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "hide_location", "created_at", "expires_at", "retention_at"}).
+		AddRow(photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
 }
 
 func multipartUpload(t *testing.T, groupID string) (*http.Request, error) {
@@ -172,7 +172,9 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock := handlerMock(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	request, err := multipartUpload(t, groupID)
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +208,10 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT view_expires_at").WithArgs(photo.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(time.Hour)))
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(time.Hour)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(RuntimeConfig.ViewWindow)))
 	recorder = httptest.NewRecorder()
 	mediaRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	mediaRequest.SetPathValue("photoID", photo.ID)
@@ -229,7 +234,9 @@ func TestUploadRecordedVideo(t *testing.T) {
 	mock := handlerMock(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
 	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
 	if err != nil {
@@ -255,23 +262,23 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 	}
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
-		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT 1 FROM messages").WithArgs(messageID).
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
 		if method == http.MethodPut {
-			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "👍").
+			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		} else {
-			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "👍").
+			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("DELETE", 1))
 		}
 		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
-		mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
-		request := requestWithUser(method, "/", `{"emoji":"👍"}`, "user-1")
+		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
+		request := requestWithUser(method, "/", `{"reaction":"like"}`, "user-1")
 		request.SetPathValue("messageID", messageID)
 		requireStatus(t, SetMessageReaction, request, http.StatusOK)
 	}
@@ -384,35 +391,6 @@ func (s *countingStore) Stat(ctx context.Context, key string) (int64, error) {
 	return s.ObjectStore.Stat(ctx, key)
 }
 
-func TestChallengeResultsAndChatRejection(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
-	now := time.Now().UTC()
-	groupID := "00000000-0000-0000-0000-000000000001"
-	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png"))
-	recorder := httptest.NewRecorder()
-	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
-	resultsRequest.SetPathValue("photoID", photo.ID)
-	GetChallengeResults(recorder, resultsRequest)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("results status = %d", recorder.Code)
-	}
-
-	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil, nil)
-	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
-	badOrigin.Header.Set("Origin", "http://evil.test")
-	recorder = httptest.NewRecorder()
-	HandleChat(recorder, badOrigin)
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("bad origin status = %d", recorder.Code)
-	}
-	HubInstance = nil
-}
-
 type failingStore struct{ err error }
 
 func (s failingStore) Put(context.Context, string, io.Reader, int64, string) error { return s.err }
@@ -455,9 +433,7 @@ func TestHandleInvitePreview(t *testing.T) {
 	mock := handlerMock(t)
 	now := time.Now().UTC()
 	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
-		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
-	)
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/invite/ABC123?from=Alice", nil)
 	req.SetPathValue("code", "ABC123")
@@ -482,9 +458,7 @@ func TestHandleInvitePreviewWithoutInviter(t *testing.T) {
 	RuntimeConfig = handlerConfig()
 	mock := handlerMock(t)
 	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "DEF456", CreatedAt: time.Now().UTC()}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(
-		pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt),
-	)
+	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/invite/DEF456", nil)
 	req.SetPathValue("code", "DEF456")

@@ -15,12 +15,30 @@ export interface ProgressionRank {
     points_to_next: number;
     progress_percent: number;
     trophy_key: string;
+    next_rank?: ProgressionRank;
+}
+
+export interface GlobalRank {
+    rank: number;
+    total_players: number;
 }
 
 export interface Profile extends User {
     total_points: number;
     guess_count: number;
     rank: ProgressionRank;
+    global_rank: GlobalRank;
+}
+
+/** Another player's profile: identity and progression, never email. */
+export interface PublicProfile {
+    id: string;
+    username: string;
+    avatar: string;
+    total_points: number;
+    guess_count: number;
+    rank: ProgressionRank;
+    global_rank: GlobalRank;
 }
 
 export interface AuthResponse {
@@ -45,16 +63,18 @@ export interface Message {
     created_at: string;
     challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
     challenge_resolved?: boolean;
+    challenge_expires_at?: string;
+    challenge_ttl_seconds?: number;
     reactions?: Reaction[];
     reaction_update?: {
         user_id: string;
-        emoji: string;
+        reaction: string;
         active: boolean;
     };
 }
 
 export interface Reaction {
-    emoji: string;
+    reaction: string;
     count: number;
     reacted: boolean;
     usernames?: string[];
@@ -104,6 +124,12 @@ export interface ChallengeAcceptance {
     server_time: string;
 }
 
+export interface ChallengeMediaDelivered {
+    view_expires_at: string;
+    guess_after: string;
+    server_time: string;
+}
+
 export interface GuessResult {
     guess_id: string;
     photo_id: string;
@@ -129,8 +155,10 @@ export interface ChallengeGuess {
 export interface ChallengeResults {
     photo_id: string;
     group_id: string;
-    actual_lat: number;
-    actual_long: number;
+    actual_lat?: number;
+    actual_long?: number;
+    location_hidden?: boolean;
+    location_reveals_at?: string;
     guesses: ChallengeGuess[];
     media_available: boolean;
     media_url?: string;

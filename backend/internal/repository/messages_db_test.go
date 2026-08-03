@@ -37,20 +37,21 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").
 		WithArgs("group-1", 10).
 		WillReturnRows(singleMessageRow("message-1", "challenge", &photoID, now))
-	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}).
-			AddRow("message-1", "👍", 2, true, []string{"alice", "bob"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}).
+			AddRow("message-1", "like", 2, true, []string{"alice", "bob"}))
 	mock.ExpectQuery("SELECT p.id,").
 		WithArgs([]string{photoID}, "viewer-1").
-		WillReturnRows(pgxmock.NewRows([]string{"id", "challenge_status", "challenge_resolved"}).
-			AddRow(photoID, "guessed", true))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "expires_at", "ttl_seconds", "challenge_status", "challenge_resolved"}).
+			AddRow(photoID, now.Add(time.Hour), int64(86400), "guessed", true))
 	page, err := GetGroupMessagesPageForViewer(ctx, "group-1", "", 10, "viewer-1")
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("viewer message page = %+v, %v", page, err)
 	}
 	message := page.Items[0]
 	if message.ChallengeStatus != "guessed" || !message.ChallengeResolved ||
+		message.ChallengeExpiresAt == nil || !message.ChallengeExpiresAt.After(now) || message.ChallengeTTLSeconds != 86400 ||
 		len(message.Reactions) != 1 || !message.Reactions[0].Reacted || message.Reactions[0].Count != 2 ||
 		len(message.Reactions[0].Usernames) != 2 || message.Reactions[0].Usernames[1] != "bob" {
 		t.Fatalf("enriched message = %+v", message)
@@ -59,9 +60,9 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").
 		WithArgs("message-1").
 		WillReturnRows(singleMessageRow("message-1", "text", nil, now))
-	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-2").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	loaded, err := GetMessageForViewer(ctx, "message-1", "viewer-2")
 	if err != nil || loaded == nil || loaded.Reactions == nil {
 		t.Fatalf("message for viewer = %+v, %v", loaded, err)
@@ -70,9 +71,9 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM messages.*m.photo_id").
 		WithArgs(photoID).
 		WillReturnRows(singleMessageRow("challenge-message", "challenge", &photoID, now))
-	mock.ExpectQuery("SELECT message_id, emoji, COUNT").
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").
 		WithArgs([]string{"challenge-message"}, "").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	loaded, err = GetChallengeMessageForViewer(ctx, photoID, "")
 	if err != nil || loaded == nil || loaded.ID != "challenge-message" {
 		t.Fatalf("challenge message = %+v, %v", loaded, err)

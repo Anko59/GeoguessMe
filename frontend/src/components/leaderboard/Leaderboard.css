@@ -188,6 +188,12 @@
     object-fit: cover;
 }
 
+.entry-avatar > a {
+    width: 100%;
+    height: 100%;
+    display: flex;
+}
+
 .entry-info {
     min-width: 0;
     flex: 1;
@@ -205,16 +211,38 @@
     white-space: nowrap;
 }
 
+.entry-username-link {
+    overflow: hidden;
+    color: var(--ink-strong);
+    text-decoration: none;
+    text-overflow: ellipsis;
+}
+
+.entry-username-link:hover {
+    color: var(--brand-blue-accessible);
+}
+
 .entry-username-row {
     min-width: 0;
     margin-bottom: var(--space-2);
 }
 
 .entry-rank-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
     color: var(--brand-blue-accessible);
     font-size: 0.68rem;
     font-weight: 850;
     letter-spacing: 0.02em;
+}
+
+.entry-rank-name .rank-badge-stack {
+    width: 0.85rem;
+}
+
+.entry-rank-name .rank-badge-numeral {
+    font-size: 0.4rem;
 }
 
 .you-badge {

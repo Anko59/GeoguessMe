@@ -248,7 +248,8 @@
 }
 
 .camera-switch-btn,
-.filter-toggle-btn {
+.filter-toggle-btn,
+.options-toggle-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -269,9 +270,22 @@
 }
 
 .camera-switch-btn:hover,
-.filter-toggle-btn:hover {
+.filter-toggle-btn:hover,
+.options-toggle-btn:hover {
     background: rgba(255, 255, 255, 0.16);
     border-color: rgba(255, 255, 255, 0.54);
+}
+
+.options-toggle-btn {
+    min-width: 4.5rem;
+    padding: 0.55rem 0.8rem;
+    display: none;
+}
+
+.options-toggle-btn.active {
+    color: #16131f;
+    background: var(--brand-yellow);
+    border-color: white;
 }
 
 .camera-switch-btn {

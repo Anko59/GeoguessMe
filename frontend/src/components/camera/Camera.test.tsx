@@ -2,13 +2,14 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Camera from './Camera';
 const mocks = vi.hoisted(() => ({
+    get: vi.fn(),
     post: vi.fn(),
     getUserMedia: vi.fn(),
     getCurrentPosition: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
-    default: { post: mocks.post },
+    default: { get: mocks.get, post: mocks.post },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -25,28 +26,16 @@ function stubUserMedia() {
 
 function stubGeolocation() {
     mocks.getCurrentPosition.mockImplementation((resolve: PositionCallback) =>
-        resolve({
-            coords: {
-                latitude: 45.5,
-                longitude: -73.6,
-                accuracy: 10,
-                altitude: null,
-                altitudeAccuracy: null,
-                heading: null,
-                speed: null,
-                toJSON: () => ({}),
-            },
-            timestamp: Date.now(),
-            toJSON: () => ({}),
-        }),
+        resolve({ coords: { latitude: 45.5, longitude: -73.6 } } as GeolocationPosition),
     );
 }
+async function useDeviceFallback() {
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Upload from device' })));
+} // opens the camera-error file fallback
 
 beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getUserMedia.mockReset();
-    mocks.post.mockReset();
-    mocks.getCurrentPosition.mockReset();
+    [mocks.get, mocks.post, mocks.getUserMedia, mocks.getCurrentPosition].forEach((mock) => mock.mockReset());
 
     vi.stubGlobal('navigator', {
         mediaDevices: { getUserMedia: mocks.getUserMedia },
@@ -148,10 +137,7 @@ describe('Camera component', () => {
     it('opens file picker fallback from camera error state', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
         await waitFor(() => {
             expect(screen.getByLabelText('Choose photo from device')).toBeInTheDocument();
         });
@@ -160,10 +146,7 @@ describe('Camera component', () => {
     it('handles file selection via the file input', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
@@ -183,8 +166,7 @@ describe('Camera component', () => {
     it('keeps unsupported image files usable while disabling 3D preparation', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument());
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
         fireEvent.change(input, { target: { files: [] } });
@@ -220,10 +202,7 @@ describe('Camera component', () => {
         );
 
         render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
@@ -247,12 +226,46 @@ describe('Camera component', () => {
             maximumAge: 60_000,
         });
         const formData = mocks.post.mock.calls[0][1] as FormData;
-        expect(formData.get('group_id')).toBe('group-1');
+        expect(formData.getAll('group_ids')).toEqual(['group-1']);
+        expect(formData.get('hide_location')).toBe('false');
         expect(formData.get('lat')).toBe('45.5');
         expect(formData.get('long')).toBe('-73.6');
         const uploadedPhoto = formData.get('photo');
         expect(uploadedPhoto).toBeInstanceOf(Blob);
         expect((uploadedPhoto as Blob).type).toBe('image/png');
+        expect(onUploadComplete).toHaveBeenCalled();
+    });
+
+    it('lets the user pick target groups and hide the location before sending', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: [
+                { id: 'group-1', name: 'Paris', code: 'ABC123' },
+                { id: 'group-2', name: 'Berlin', code: 'DEF456' },
+            ],
+        });
+        mocks.getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+        stubGeolocation();
+        const onUploadComplete = vi.fn();
+        render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Challenge options' }));
+        await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/user/groups'));
+        const berlin = screen.getByLabelText('Berlin');
+        fireEvent.click(berlin);
+        fireEvent.click(screen.getByLabelText(/Hide my location/));
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+        await useDeviceFallback();
+        const file = new File(['image'], 'upload.jpg', { type: 'image/jpeg' });
+        const picker = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(picker, { target: { files: [file] } });
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Send/ }));
+        await waitFor(() => expect(mocks.post).toHaveBeenCalled());
+        const formData = mocks.post.mock.calls[0][1] as FormData;
+        expect(formData.getAll('group_ids')).toEqual(['group-1', 'group-2']);
+        expect(formData.get('hide_location')).toBe('true');
         expect(onUploadComplete).toHaveBeenCalled();
     });
 
@@ -270,10 +283,7 @@ describe('Camera component', () => {
         });
 
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
@@ -300,10 +310,7 @@ describe('Camera component', () => {
         });
 
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
@@ -328,10 +335,7 @@ describe('Camera component', () => {
         mocks.post.mockRejectedValue(new Error('Server error'));
 
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
@@ -356,10 +360,7 @@ describe('Camera component', () => {
         mocks.post.mockReturnValue(new Promise(() => {}));
 
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Upload from device' })).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Upload from device' }));
+        await useDeviceFallback();
 
         const file = new File(['fake-image'], 'photo.png', { type: 'image/png' });
         const input = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
