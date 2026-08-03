@@ -1,4 +1,5 @@
-export type IconName = 'arrow-left' | 'bell' | 'chevron-right' | 'close' | 'image' | 'logout' | 'send' | 'users';
+export type IconName =
+    'arrow-left' | 'bell' | 'chevron-right' | 'close' | 'gear' | 'image' | 'logout' | 'send' | 'user' | 'users';
 
 interface IconProps {
     name: IconName;
@@ -32,6 +33,12 @@ const paths: Record<IconName, React.ReactNode> = {
             <path d="m21 15-5-5L5 21" />
         </>
     ),
+    gear: (
+        <>
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+        </>
+    ),
     logout: (
         <>
             <path d="M10 17l5-5-5-5" />
@@ -51,6 +58,12 @@ const paths: Record<IconName, React.ReactNode> = {
             <circle cx="9" cy="7" r="4" />
             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </>
+    ),
+    user: (
+        <>
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
         </>
     ),
 };

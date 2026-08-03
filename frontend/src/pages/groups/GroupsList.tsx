@@ -82,11 +82,13 @@ export default function GroupsList() {
                     <span>GeoGuessMe</span>
                 </Link>
                 <div className="groups-account-links">
-                    <Link to="/profile" className="groups-account-link">
-                        Profile
+                    <Link to="/profile" className="groups-account-link" aria-label="Profile">
+                        <Icon name="user" className="groups-account-icon" />
+                        <span className="groups-account-label">Profile</span>
                     </Link>
-                    <Link to="/settings" className="groups-account-link">
-                        Settings
+                    <Link to="/settings" className="groups-account-link" aria-label="Settings">
+                        <Icon name="gear" className="groups-account-icon" />
+                        <span className="groups-account-label">Settings</span>
                     </Link>
                 </div>
             </header>

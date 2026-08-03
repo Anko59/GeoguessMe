@@ -203,6 +203,13 @@ describe('GroupView', () => {
         await waitFor(() => expect(screen.queryByTestId('settings-modal')).toBeNull());
     });
 
+    it('links the header avatar to the own profile', async () => {
+        renderGroupView('group-1');
+        const profileLink = await screen.findByRole('link', { name: 'Open your profile' });
+        expect(profileLink).toHaveAttribute('href', '/profile');
+        expect(profileLink.querySelector('img')).toHaveAttribute('src', '/avatars/avatar.png');
+    });
+
     it('switches tabs between chat, camera, and leaderboard', async () => {
         renderGroupView('group-1');
         await waitFor(() => expect(screen.getByText('Test Group')).toBeInTheDocument());
