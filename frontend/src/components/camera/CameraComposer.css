@@ -247,6 +247,24 @@
     gap: 0.5rem;
 }
 
+/* When the camera is live, the options menu floats above the opaque camera
+   feed (the static .camera-options-bar is only rendered while the feed is
+   transparent, i.e. not ready or in file mode). */
+.camera-options-popover {
+    position: absolute;
+    top: max(0.9rem, env(safe-area-inset-top));
+    right: 0;
+    left: 0;
+    z-index: 6;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.camera-options-popover .camera-options-menu {
+    pointer-events: auto;
+}
+
 .camera-switch-btn,
 .filter-toggle-btn,
 .options-toggle-btn {
@@ -279,7 +297,12 @@
 .options-toggle-btn {
     min-width: 4.5rem;
     padding: 0.55rem 0.8rem;
-    display: none;
+    /* The challenge-options menu starts closed on every device, so its entry
+       point must always be visible (desktop and touch alike). Unlike
+       .filter-toggle-btn, which is hidden on fine-pointer screens because the
+       filter picker opens by default, this button must never default to
+       display: none. */
+    display: inline-flex;
 }
 
 .options-toggle-btn.active {
