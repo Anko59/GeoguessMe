@@ -48,6 +48,7 @@ type Photo struct {
 	Lat             float64   `json:"-"`
 	Long            float64   `json:"-"`
 	LifecycleStatus string    `json:"lifecycle_status"`
+	HideLocation    bool      `json:"hide_location"`
 	CreatedAt       time.Time `json:"created_at"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	RetentionAt     time.Time `json:"-"`

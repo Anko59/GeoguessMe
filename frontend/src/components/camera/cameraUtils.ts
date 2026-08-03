@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api';
 
 export const LOCATION_OPTIONS: PositionOptions = {
@@ -34,15 +35,55 @@ export function getCurrentPosition(options: PositionOptions = LOCATION_OPTIONS):
 export async function uploadPhoto(
     blob: Blob,
     filename: string,
-    groupID: string,
+    groupIDs: string[],
     position: GeolocationPosition,
+    hideLocation = false,
 ): Promise<void> {
     const formData = new FormData();
     formData.append('photo', blob, filename);
-    formData.append('group_id', groupID);
+    for (const groupID of groupIDs) {
+        formData.append('group_ids', groupID);
+    }
+    formData.append('hide_location', hideLocation ? 'true' : 'false');
     formData.append('lat', position.coords.latitude.toString());
     formData.append('long', position.coords.longitude.toString());
     await api.post('/photo/upload', formData);
 }
 
 const FILTERABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+export function useCameraDevice() {
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+    const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+    const facingModeRef = useRef<'user' | 'environment'>('user');
+    const restartRef = useRef<() => Promise<void>>(() => Promise.resolve());
+    const enumerationRequestRef = useRef(0);
+
+    const refresh = useCallback(async () => {
+        const request = ++enumerationRequestRef.current;
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            if (request !== enumerationRequestRef.current) return;
+            setHasMultipleCameras(devices.filter((d) => d.kind === 'videoinput').length > 1);
+        } catch {
+            // Camera enumeration is optional; getUserMedia reports the actionable error.
+        }
+    }, []);
+
+    useEffect(() => {
+        void Promise.resolve().then(refresh);
+    }, [refresh]);
+
+    const setRestart = useCallback((fn: () => Promise<void>) => {
+        restartRef.current = fn;
+    }, []);
+
+    const switchCamera = useCallback(() => {
+        facingModeRef.current = facingModeRef.current === 'user' ? 'environment' : 'user';
+        setFacingMode(facingModeRef.current);
+        void restartRef.current();
+    }, []);
+
+    return { facingMode, hasMultipleCameras, facingModeRef, refresh, switchCamera, setRestart };
+}

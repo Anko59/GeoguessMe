@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
 import Avatar from '../common/Avatar';
+import RankBadge from '../progression/RankBadge';
 import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
 import './Leaderboard.css';
 
@@ -149,16 +151,30 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 <div className="entry-rank">{rankEmoji || `#${rank}`}</div>
 
                                 <div className="entry-avatar">
-                                    <Avatar userID={entry.user_id} avatar={entry.avatar} username={entry.username} />
+                                    <Link
+                                        to={`/profile/${entry.user_id}`}
+                                        aria-label={`View ${entry.username}'s profile`}
+                                    >
+                                        <Avatar
+                                            userID={entry.user_id}
+                                            avatar={entry.avatar}
+                                            username={entry.username}
+                                        />
+                                    </Link>
                                 </div>
 
                                 <div className="entry-info">
                                     <div className="entry-username-row">
                                         <div className="entry-username">
-                                            {entry.username}
+                                            <Link className="entry-username-link" to={`/profile/${entry.user_id}`}>
+                                                {entry.username}
+                                            </Link>
                                             {isCurrentUser && <span className="you-badge">You</span>}
                                         </div>
-                                        <div className="entry-rank-name">{entry.rank.name}</div>
+                                        <div className="entry-rank-name">
+                                            <RankBadge rank={entry.rank} />
+                                            {entry.rank.name}
+                                        </div>
                                     </div>
                                     <div className="entry-score-bar">
                                         <div

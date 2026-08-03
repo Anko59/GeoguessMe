@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import type { Message } from '../../types';
 import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
+import ChallengeTimer from './ChallengeTimer';
+import { reactionByKey, reactionOptions } from './reactionOptions';
 import './Chat.css';
 import './ChatActions.css';
 
@@ -17,14 +20,9 @@ interface ChatProps {
     onMessageUpdated?: (message: Message) => void;
 }
 
-const reactionOptions = [
-    { emoji: '👍', label: 'thumbs up' },
-    { emoji: '❤️', label: 'heart' },
-    { emoji: '😂', label: 'laughing' },
-    { emoji: '😮', label: 'surprised' },
-    { emoji: '😢', label: 'sad' },
-    { emoji: '🙏', label: 'thanks' },
-];
+// How long a touch must be held before the reply/react panel opens. This is
+// the deliberate long press that replaces tap-to-open on touch devices.
+const LONG_PRESS_MS = 1000;
 
 interface PressState {
     messageID: string;
@@ -52,10 +50,34 @@ export default function Chat({
     const [reactionError, setReactionError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pressRef = useRef<PressState | null>(null);
+    // Hover-capable devices reveal actions on hover and keyboard focus; touch
+    // devices rely on a deliberate long press instead, like Messenger or
+    // WhatsApp, so a plain tap never opens the reply/react panel.
+    const [canHover] = useState(
+        () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover)').matches,
+    );
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    useEffect(() => {
+        const dismissActions = (event: PointerEvent) => {
+            if (!(event.target as HTMLElement).closest('[data-message-id]')) {
+                setActionsMessageID(null);
+            }
+        };
+        document.addEventListener('pointerdown', dismissActions);
+        return () => document.removeEventListener('pointerdown', dismissActions);
+    }, []);
+
+    const hoverHandlers = (messageID: string, enabled: boolean) =>
+        canHover && enabled
+            ? {
+                  onMouseEnter: () => setActionsMessageID(messageID),
+                  onMouseLeave: () => setActionsMessageID(null),
+              }
+            : {};
 
     const clearPress = () => {
         if (pressRef.current) window.clearTimeout(pressRef.current.timer);
@@ -64,10 +86,11 @@ export default function Chat({
 
     const handleMessagePointerDown = (event: React.PointerEvent<HTMLDivElement>, messageID: string) => {
         if (!event.isPrimary || (event.target as HTMLElement).closest('button')) return;
+        setActionsMessageID((current) => (current === messageID ? current : null));
         clearPress();
         const timer = window.setTimeout(() => {
             setActionsMessageID(messageID);
-        }, 450);
+        }, LONG_PRESS_MS);
         pressRef.current = { messageID, startX: event.clientX, startY: event.clientY, timer };
     };
 
@@ -88,15 +111,15 @@ export default function Chat({
 
     const handleMessagePointerEnd = () => clearPress();
 
-    const handleReaction = async (message: Message, emoji: string) => {
-        const selected = message.reactions?.find((reaction) => reaction.emoji === emoji);
-        const key = `${message.id}:${emoji}`;
+    const handleReaction = async (message: Message, reaction: string) => {
+        const selected = message.reactions?.find((item) => item.reaction === reaction);
+        const key = `${message.id}:${reaction}`;
         setReactionPending(key);
         setReactionError('');
         try {
             const response = selected?.reacted
-                ? await api.delete<Message>(`/group/message-reactions/${message.id}`, { data: { emoji } })
-                : await api.put<Message>(`/group/message-reactions/${message.id}`, { emoji });
+                ? await api.delete<Message>(`/group/message-reactions/${message.id}`, { data: { reaction } })
+                : await api.put<Message>(`/group/message-reactions/${message.id}`, { reaction });
             onMessageUpdated?.(response.data);
             setActionsMessageID(null);
         } catch (requestError: unknown) {
@@ -112,27 +135,31 @@ export default function Chat({
                 type="button"
                 className="reply-action"
                 tabIndex={actionsMessageID === message.id ? 0 : -1}
-                onClick={() => setReplyingTo(message)}
+                onClick={() => {
+                    setReplyingTo(message);
+                    setActionsMessageID(null);
+                }}
                 aria-label={`Reply to ${message.username || 'message'}`}
             >
                 Reply
             </button>
             <div className="reaction-actions" aria-label="React to message">
-                {reactionOptions.map(({ emoji, label }) => {
-                    const reaction = message.reactions?.find((item) => item.emoji === emoji);
-                    const pending = reactionPending === `${message.id}:${emoji}`;
+                {reactionOptions.map(({ reaction, label, image }) => {
+                    const item = message.reactions?.find((entry) => entry.reaction === reaction);
+                    const pending = reactionPending === `${message.id}:${reaction}`;
                     return (
                         <button
-                            key={emoji}
+                            key={reaction}
                             type="button"
-                            className={`reaction-action${reaction?.reacted ? ' selected' : ''}`}
+                            className={`reaction-action${item?.reacted ? ' selected' : ''}`}
                             tabIndex={actionsMessageID === message.id ? 0 : -1}
-                            onClick={() => void handleReaction(message, emoji)}
+                            onClick={() => void handleReaction(message, reaction)}
                             aria-label={`React with ${label}`}
-                            aria-pressed={reaction?.reacted ?? false}
+                            aria-pressed={item?.reacted ?? false}
                             disabled={pending}
+                            title={label}
                         >
-                            {emoji}
+                            <img src={image} alt="" className="reaction-action-image" />
                         </button>
                     );
                 })}
@@ -144,19 +171,25 @@ export default function Chat({
         message.reactions && message.reactions.length > 0 ? (
             <div className="message-reactions" aria-label="Message reactions">
                 {message.reactions.map((reaction) => {
+                    const option = reactionByKey.get(reaction.reaction);
+                    const label = option?.label ?? reaction.reaction;
                     const usernames = reaction.usernames?.length ? reaction.usernames.join(', ') : 'Unknown user';
-                    const reactionLabel = `${reaction.emoji} reaction, ${reaction.count}. Reacted by ${usernames}`;
+                    const reactionLabel = `${label} reaction, ${reaction.count}. Reacted by ${usernames}`;
                     return (
-                        <span key={reaction.emoji} className="reaction-chip-wrapper">
+                        <span key={reaction.reaction} className="reaction-chip-wrapper">
                             <button
                                 type="button"
                                 className={`reaction-chip${reaction.reacted ? ' selected' : ''}`}
-                                onClick={() => void handleReaction(message, reaction.emoji)}
+                                onClick={() => void handleReaction(message, reaction.reaction)}
                                 aria-label={reactionLabel}
                                 title={`Reacted by ${usernames}`}
                                 aria-pressed={reaction.reacted}
                             >
-                                <span aria-hidden="true">{reaction.emoji}</span>
+                                {option ? (
+                                    <img src={option.image} alt="" className="reaction-chip-image" />
+                                ) : (
+                                    <span aria-hidden="true">{reaction.reaction}</span>
+                                )}
                                 <span>{reaction.count}</span>
                             </button>
                             <span className="reaction-chip-tooltip" role="tooltip">
@@ -234,8 +267,6 @@ export default function Chat({
                                 className={`message-container ${isMe ? 'own' : 'other'} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                                 tabIndex={0}
                                 onFocus={() => setActionsMessageID(message.id)}
-                                onMouseEnter={() => setActionsMessageID(message.id)}
-                                onMouseLeave={() => setActionsMessageID(null)}
                                 onPointerDown={(event) => handleMessagePointerDown(event, message.id)}
                                 onPointerMove={handleMessagePointerMove}
                                 onPointerUp={handleMessagePointerEnd}
@@ -247,57 +278,73 @@ export default function Chat({
                                         aria-hidden={!showSender}
                                     >
                                         {showSender && (
-                                            <Avatar
-                                                userID={message.user_id}
-                                                avatar={message.avatar}
-                                                username={message.username}
-                                                className="avatar"
-                                            />
+                                            <Link
+                                                to={`/profile/${message.user_id}`}
+                                                aria-label={`View ${message.username || 'player'}'s profile`}
+                                            >
+                                                <Avatar
+                                                    userID={message.user_id}
+                                                    avatar={message.avatar}
+                                                    username={message.username}
+                                                    className="avatar"
+                                                />
+                                            </Link>
                                         )}
                                     </div>
                                 )}
                                 <div className="message-wrapper">
                                     {!isMe && showSender && (
-                                        <div className="message-username">{message.username || 'Unknown User'}</div>
+                                        <Link className="message-username" to={`/profile/${message.user_id}`}>
+                                            {message.username || 'Unknown User'}
+                                        </Link>
                                     )}
-                                    <button
-                                        className={`message-content photo-challenge clickable${message.challenge_resolved || message.challenge_status === 'guessed' ? ' resolved' : ''}`}
-                                        data-photo-id={message.photo_id}
-                                        onClick={() => onChallengeMessage?.(message)}
-                                    >
-                                        <span className="challenge-card">
-                                            <span className="challenge-header">
-                                                <img
-                                                    src={
-                                                        isMe
-                                                            ? '/challenge_sent_icon.png'
-                                                            : '/challenge_received_icon.png'
-                                                    }
-                                                    alt=""
-                                                    className="challenge-icon"
-                                                />
-                                                <span>
-                                                    {message.challenge_resolved ||
-                                                    message.challenge_status === 'guessed'
-                                                        ? 'Resolved challenge'
-                                                        : isMe
-                                                          ? 'Challenge sent'
-                                                          : 'New challenge'}
+                                    <div className="message-hover-target" {...hoverHandlers(message.id, true)}>
+                                        <button
+                                            className={`message-content photo-challenge clickable${message.challenge_status === 'guessed' ? ' resolved' : ''}`}
+                                            data-photo-id={message.photo_id}
+                                            onClick={() => onChallengeMessage?.(message)}
+                                        >
+                                            <span className="challenge-card">
+                                                <span className="challenge-header">
+                                                    <img
+                                                        src={
+                                                            isMe
+                                                                ? '/challenge_sent_icon.png'
+                                                                : '/challenge_received_icon.png'
+                                                        }
+                                                        alt=""
+                                                        className="challenge-icon"
+                                                    />
+                                                    <span>
+                                                        {message.challenge_status === 'guessed'
+                                                            ? 'Resolved challenge'
+                                                            : message.challenge_status === 'expired'
+                                                              ? 'Challenge expired'
+                                                              : isMe
+                                                                ? 'Challenge sent'
+                                                                : 'New challenge'}
+                                                    </span>
+                                                    {message.challenge_expires_at && message.challenge_ttl_seconds ? (
+                                                        <ChallengeTimer
+                                                            expiresAt={message.challenge_expires_at}
+                                                            ttlSeconds={message.challenge_ttl_seconds}
+                                                        />
+                                                    ) : null}
+                                                </span>
+                                                <span className="start-challenge-btn">
+                                                    {isMe ||
+                                                    message.challenge_status === 'results' ||
+                                                    message.challenge_status === 'guessed' ||
+                                                    message.challenge_status === 'expired'
+                                                        ? 'View results'
+                                                        : message.challenge_status === 'accepted'
+                                                          ? 'Continue challenge'
+                                                          : 'Accept challenge'}
                                                 </span>
                                             </span>
-                                            <span className="start-challenge-btn">
-                                                {isMe ||
-                                                message.challenge_status === 'results' ||
-                                                message.challenge_status === 'guessed' ||
-                                                message.challenge_status === 'expired'
-                                                    ? 'View results'
-                                                    : message.challenge_status === 'accepted'
-                                                      ? 'Continue challenge'
-                                                      : 'Accept challenge'}
-                                            </span>
-                                        </span>
-                                    </button>
-                                    {renderMessageActions(message)}
+                                        </button>
+                                        {renderMessageActions(message)}
+                                    </div>
                                     {renderReactions(message)}
                                 </div>
                             </div>
@@ -310,8 +357,6 @@ export default function Chat({
                             className={`message-container ${isMe ? 'own' : 'other'} ${isSystem ? 'system' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                             tabIndex={isSystem ? -1 : 0}
                             onFocus={() => !isSystem && setActionsMessageID(message.id)}
-                            onMouseEnter={() => !isSystem && setActionsMessageID(message.id)}
-                            onMouseLeave={() => setActionsMessageID(null)}
                             onPointerDown={(event) => handleMessagePointerDown(event, message.id)}
                             onPointerMove={handleMessagePointerMove}
                             onPointerUp={handleMessagePointerEnd}
@@ -323,34 +368,43 @@ export default function Chat({
                                     aria-hidden={!showSender}
                                 >
                                     {showSender && (
-                                        <Avatar
-                                            userID={message.user_id}
-                                            avatar={message.avatar}
-                                            username={message.username}
-                                            className="avatar"
-                                        />
+                                        <Link
+                                            to={`/profile/${message.user_id}`}
+                                            aria-label={`View ${message.username || 'player'}'s profile`}
+                                        >
+                                            <Avatar
+                                                userID={message.user_id}
+                                                avatar={message.avatar}
+                                                username={message.username}
+                                                className="avatar"
+                                            />
+                                        </Link>
                                     )}
                                 </div>
                             )}
                             <div className="message-wrapper">
                                 {!isMe && !isSystem && showSender && (
-                                    <div className="message-username">{message.username || 'Unknown User'}</div>
+                                    <Link className="message-username" to={`/profile/${message.user_id}`}>
+                                        {message.username || 'Unknown User'}
+                                    </Link>
                                 )}
-                                <div
-                                    className={`message-content ${isSystem ? 'system-message' : message.kind === 'media' ? 'media-message' : 'text'}`}
-                                >
-                                    {message.reply_to_id && (
-                                        <div className="reply-context">
-                                            <strong>{replyTarget?.username || 'Original message'}</strong>
-                                            <span>{replyTarget?.content || 'Message unavailable'}</span>
-                                        </div>
-                                    )}
-                                    {message.kind === 'media' && message.media_id && message.media_type && (
-                                        <ChatAttachment mediaID={message.media_id} mediaType={message.media_type} />
-                                    )}
-                                    {message.content && <p className="message-caption">{message.content}</p>}
+                                <div className="message-hover-target" {...hoverHandlers(message.id, !isSystem)}>
+                                    <div
+                                        className={`message-content ${isSystem ? 'system-message' : message.kind === 'media' ? 'media-message' : 'text'}`}
+                                    >
+                                        {message.reply_to_id && (
+                                            <div className="reply-context">
+                                                <strong>{replyTarget?.username || 'Original message'}</strong>
+                                                <span>{replyTarget?.content || 'Message unavailable'}</span>
+                                            </div>
+                                        )}
+                                        {message.kind === 'media' && message.media_id && message.media_type && (
+                                            <ChatAttachment mediaID={message.media_id} mediaType={message.media_type} />
+                                        )}
+                                        {message.content && <p className="message-caption">{message.content}</p>}
+                                    </div>
+                                    {!isSystem && renderMessageActions(message)}
                                 </div>
-                                {!isSystem && renderMessageActions(message)}
                                 {!isSystem && renderReactions(message)}
                             </div>
                         </div>

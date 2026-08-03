@@ -133,6 +133,8 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 	}
 	rows, err := database.DB.Query(ctx, `
 		SELECT p.id,
+			p.expires_at,
+			EXTRACT(EPOCH FROM (p.expires_at - p.created_at))::INTEGER,
 			CASE
 				WHEN p.user_id = $2 THEN 'results'
 				WHEN EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id AND g.user_id = $2) THEN 'guessed'
@@ -150,14 +152,18 @@ func GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, 
 	statuses := make(map[string]string, len(photoIDs))
 	for rows.Next() {
 		var photoID, status string
+		var expiresAt time.Time
+		var ttlSeconds int64
 		var resolved bool
-		if err := rows.Scan(&photoID, &status, &resolved); err != nil {
+		if err := rows.Scan(&photoID, &expiresAt, &ttlSeconds, &status, &resolved); err != nil {
 			return MessagesPage{}, err
 		}
 		statuses[photoID] = status
 		for index := range page.Items {
 			if page.Items[index].PhotoID != nil && *page.Items[index].PhotoID == photoID {
 				page.Items[index].ChallengeResolved = resolved
+				page.Items[index].ChallengeExpiresAt = &expiresAt
+				page.Items[index].ChallengeTTLSeconds = int(ttlSeconds)
 			}
 		}
 	}
@@ -182,14 +188,14 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 		return nil
 	}
 	rows, err := database.DB.Query(ctx, `
-		SELECT message_id, emoji, COUNT(*)::INTEGER,
+		SELECT message_id, reaction, COUNT(*)::INTEGER,
 			COALESCE(BOOL_OR(user_id = $2), FALSE),
 			ARRAY_AGG(u.username ORDER BY u.username)
 		FROM message_reactions
 		JOIN users u ON u.id = message_reactions.user_id
 		WHERE message_id = ANY($1)
-		GROUP BY message_id, emoji
-		ORDER BY message_id, emoji`, messageIDs, viewerID)
+		GROUP BY message_id, reaction
+		ORDER BY message_id, reaction`, messageIDs, viewerID)
 	if err != nil {
 		return err
 	}
@@ -198,9 +204,10 @@ func enrichMessageReactions(ctx context.Context, messages []models.Message, view
 	for rows.Next() {
 		var messageID string
 		var reaction models.Reaction
-		if err := rows.Scan(&messageID, &reaction.Emoji, &reaction.Count, &reaction.Reacted, &reaction.Usernames); err != nil {
+		if err := rows.Scan(&messageID, &reaction.Reaction, &reaction.Count, &reaction.Reacted, &reaction.Usernames); err != nil {
 			return err
 		}
+		reaction.Emoji = reaction.Reaction
 		reactions[messageID] = append(reactions[messageID], reaction)
 	}
 	if err := rows.Err(); err != nil {
@@ -253,8 +260,8 @@ func GetChallengeMessageForViewer(ctx context.Context, photoID, viewerID string)
 	return &messages[0], nil
 }
 
-func SetMessageReaction(ctx context.Context, messageID, userID, emoji string) error {
-	if emoji == "" {
+func SetMessageReaction(ctx context.Context, messageID, userID, reaction string) error {
+	if reaction == "" {
 		return ErrInvalidReaction
 	}
 	var exists int
@@ -264,12 +271,12 @@ func SetMessageReaction(ctx context.Context, messageID, userID, emoji string) er
 		}
 		return err
 	}
-	_, err := database.DB.Exec(ctx, `INSERT INTO message_reactions(message_id, user_id, emoji) VALUES ($1, $2, $3) ON CONFLICT (message_id, user_id, emoji) DO NOTHING`, messageID, userID, emoji)
+	_, err := database.DB.Exec(ctx, `INSERT INTO message_reactions(message_id, user_id, reaction) VALUES ($1, $2, $3) ON CONFLICT (message_id, user_id, reaction) DO NOTHING`, messageID, userID, reaction)
 	return err
 }
 
-func DeleteMessageReaction(ctx context.Context, messageID, userID, emoji string) error {
-	if emoji == "" {
+func DeleteMessageReaction(ctx context.Context, messageID, userID, reaction string) error {
+	if reaction == "" {
 		return ErrInvalidReaction
 	}
 	var exists int
@@ -279,7 +286,7 @@ func DeleteMessageReaction(ctx context.Context, messageID, userID, emoji string)
 		}
 		return err
 	}
-	_, err := database.DB.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`, messageID, userID, emoji)
+	_, err := database.DB.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND reaction = $3`, messageID, userID, reaction)
 	return err
 }
 

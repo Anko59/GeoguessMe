@@ -252,6 +252,29 @@ func acceptChallenge(t *testing.T, bearer, photoID string) acceptance {
 	return acceptance{PhotoID: body.PhotoID, MediaURL: body.MediaURL, ViewExpiresAt: viewExp, ServerTime: serverT}
 }
 
+// deliverChallengeMedia consumes the complete private stream and confirms the
+// authoritative viewing deadline, matching the sequence used by the client.
+func deliverChallengeMedia(t *testing.T, bearer string, accepted acceptance) acceptance {
+	t.Helper()
+	resp, data := doJSON(t, http.MethodGet, accepted.MediaURL, nil, bearer, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "deliver media %d: %s", resp.StatusCode, data)
+
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/challenges/"+accepted.PhotoID+"/media-delivered", nil, bearer, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "confirm media delivery %d: %s", resp.StatusCode, data)
+	var body struct {
+		ViewExpiresAt string `json:"view_expires_at"`
+		ServerTime    string `json:"server_time"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &body))
+	viewExp, err := time.Parse(time.RFC3339Nano, body.ViewExpiresAt)
+	require.NoError(t, err)
+	serverT, err := time.Parse(time.RFC3339Nano, body.ServerTime)
+	require.NoError(t, err)
+	accepted.ViewExpiresAt = viewExp
+	accepted.ServerTime = serverT
+	return accepted
+}
+
 // waitUntilViewExpires blocks until the server clock passes the stored view
 // deadline (plus a small grace period) WITHOUT submitting a guess.
 func waitUntilViewExpires(t *testing.T, deadline time.Time) {
@@ -374,7 +397,9 @@ func unique(prefix string) string {
 	uniqueMu.Lock()
 	defer uniqueMu.Unlock()
 	uniqueCounter++
-	return fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), uniqueCounter)
+	// Seconds-based so the generated username stays well under the 30-character
+	// limit even with two-digit counters; the counter keeps it unique per run.
+	return fmt.Sprintf("%s%d%d", prefix, time.Now().Unix(), uniqueCounter)
 }
 
 // --- Toxiproxy helpers ---------------------------------------------------

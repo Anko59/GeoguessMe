@@ -39,16 +39,51 @@ ProgressionRank:
     points_to_next: { type: integer, minimum: 0 }
     progress_percent: { type: integer, minimum: 0, maximum: 100 }
     trophy_key: { type: string }
+    next_rank:
+      $ref: "#/ProgressionRank"
+      description: The following rank, omitted at the highest rank.
+
+GlobalRank:
+  type: object
+  required: [rank, total_players]
+  properties:
+    rank:
+      type: integer
+      minimum: 0
+      description: >
+        Position among every player who has guessed at least once, ordered by
+        lifetime points using standard competition ranking. Zero while the
+        player has no guesses of their own.
+    total_players:
+      type: integer
+      minimum: 0
+      description: Number of players who have guessed at least once.
 
 Profile:
   allOf:
     - $ref: "#/AuthUser"
     - type: object
-      required: [total_points, guess_count, rank]
+      required: [total_points, guess_count, rank, global_rank]
       properties:
         total_points: { type: integer, minimum: 0 }
         guess_count: { type: integer, minimum: 0 }
         rank: { $ref: "#/ProgressionRank" }
+        global_rank: { $ref: "#/GlobalRank" }
+
+PublicProfile:
+  type: object
+  required: [id, username, avatar, total_points, guess_count, rank, global_rank]
+  properties:
+    id: { type: string }
+    username: { type: string }
+    avatar: { type: string }
+    total_points: { type: integer, minimum: 0 }
+    guess_count: { type: integer, minimum: 0 }
+    rank: { $ref: "#/ProgressionRank" }
+    global_rank: { $ref: "#/GlobalRank" }
+  description: >
+    Another player's progression profile. Never contains email or account
+    details; only visible when the player shares a group with the requester.
 
 Group:
   type: object
@@ -119,14 +154,33 @@ Message:
         description: Viewer-specific action state for challenge messages,
       }
     challenge_resolved: { type: boolean, description: Whether any group member has answered the challenge }
+    challenge_expires_at:
+      type: string
+      format: date-time
+      description: >-
+        Challenge deadline (upload time + TTL), present on challenge messages.
+    challenge_ttl_seconds:
+      type: integer
+      minimum: 1
+      description: >-
+        Challenge duration in seconds, present on challenge messages.
     reactions: { type: array, items: { $ref: "#/MessageReaction" } }
     reaction_update: { $ref: "#/MessageReactionUpdate" }
 
+ReactionKey:
+  type: string
+  enum: [like, love, laugh, wow, sad, spot-on, lost, mind-blown, wrong-way, vacation, 👍, ❤️, 😂, 😮, 😢, 🙏]
+  description: >
+    Reaction identity. The ten keys map to custom artwork shown in the UI; the
+    six legacy emoji values are still accepted so existing reactions keep
+    working.
+
 MessageReaction:
   type: object
-  required: [emoji, count, reacted, usernames]
+  required: [reaction, emoji, count, reacted, usernames]
   properties:
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
+    emoji: { $ref: "#/ReactionKey", deprecated: true, description: Compatibility alias for reaction }
     count: { type: integer, minimum: 1 }
     reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
     usernames:
@@ -136,17 +190,22 @@ MessageReaction:
 
 MessageReactionRequest:
   type: object
-  required: [emoji]
+  description: Supply reaction. The deprecated emoji alias remains accepted during the compatibility window.
+  anyOf:
+    - required: [reaction]
+    - required: [emoji]
   properties:
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
+    emoji: { $ref: "#/ReactionKey", deprecated: true }
 
 MessageReactionUpdate:
   type: object
   description: WebSocket-only reaction mutation metadata used to preserve each recipient's viewer-specific state.
-  required: [user_id, emoji, active]
+  required: [user_id, reaction, emoji, active]
   properties:
     user_id: { type: string, format: uuid }
-    emoji: { type: string, enum: [👍, ❤️, 😂, 😮, 😢, 🙏] }
+    reaction: { $ref: "#/ReactionKey" }
+    emoji: { $ref: "#/ReactionKey", deprecated: true, description: Compatibility alias for reaction }
     active: { type: boolean }
 
 MessagesPage:
@@ -180,6 +239,14 @@ ChallengeAccepted:
     challenge_expires_at: { type: string, format: date-time }
     server_time: { type: string, format: date-time }
 
+ChallengeMediaDelivered:
+  type: object
+  required: [view_expires_at, guess_after, server_time]
+  properties:
+    view_expires_at: { type: string, format: date-time }
+    guess_after: { type: string, format: date-time }
+    server_time: { type: string, format: date-time }
+
 GuessResponse:
   type: object
   required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
@@ -194,12 +261,15 @@ GuessResponse:
 
 ChallengeResults:
   type: object
-  required: [photo_id, group_id, actual_lat, actual_long, guesses, media_available, server_time]
+  required: [photo_id, group_id, guesses, media_available, server_time]
   properties:
     photo_id: { type: string, format: uuid }
     group_id: { type: string, format: uuid }
-    actual_lat: { type: number, format: double }
-    actual_long: { type: number, format: double }
+    actual_lat: { type: number, format: double, description: Omitted while the poster hides the location }
+    actual_long: { type: number, format: double, description: Omitted while the poster hides the location }
+    location_hidden: { type: boolean, description: True when the poster hid the location and it is not yet revealed }
+    location_reveals_at:
+      { type: string, format: date-time, description: When the hidden location becomes visible on the results page }
     guesses: { type: array, items: { $ref: "#/Guess" } }
     media_available: { type: boolean }
     media_url: { type: [string, "null"] }

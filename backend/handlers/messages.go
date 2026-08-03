@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"geoguessme/internal/auth"
+	"geoguessme/internal/chat"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
@@ -193,4 +195,184 @@ func ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, object)
+}
+
+var allowedReactions = map[string]struct{}{
+	// Custom reaction artwork keys offered by the UI.
+	"like":       {},
+	"love":       {},
+	"laugh":      {},
+	"wow":        {},
+	"sad":        {},
+	"spot-on":    {},
+	"lost":       {},
+	"mind-blown": {},
+	"wrong-way":  {},
+	"vacation":   {},
+	// Legacy emoji reactions stay valid so existing data keeps working.
+	"👍":  {},
+	"❤️": {},
+	"😂":  {},
+	"😮":  {},
+	"😢":  {},
+	"🙏":  {},
+}
+
+type messageReactionRequest struct {
+	Reaction string `json:"reaction"`
+	Emoji    string `json:"emoji"`
+}
+
+// SetMessageReaction adds a reaction, while DELETE removes the same user's
+// reaction for that reaction key. Both operations return the updated aggregate so
+// every client can render the same reaction counts immediately.
+func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		methodNotAllowed(w)
+		return
+	}
+	messageID := strings.TrimSpace(r.PathValue("messageID"))
+	if err := validateID(messageID, "message_id"); err != nil {
+		writeError(w, http.StatusBadRequest, "missing_message_id", "Message ID is required")
+		return
+	}
+	var req messageReactionRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Reaction = strings.TrimSpace(req.Reaction)
+	if req.Reaction == "" {
+		req.Reaction = strings.TrimSpace(req.Emoji)
+	}
+	if _, ok := allowedReactions[req.Reaction]; !ok {
+		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
+		return
+	}
+
+	userID := GetUserIDFromContext(r)
+	message, err := repository.GetMessageForViewer(r.Context(), messageID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load message")
+		return
+	}
+	if message == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Message not found")
+		return
+	}
+	if message.Kind == "system" {
+		writeError(w, http.StatusBadRequest, "invalid_reaction", "System messages cannot be reacted to")
+		return
+	}
+	if err := auth.VerifyGroupMembership(r.Context(), message.GroupID, userID); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+
+	if r.Method == http.MethodPut {
+		err = repository.SetMessageReaction(r.Context(), messageID, userID, req.Reaction)
+	} else {
+		err = repository.DeleteMessageReaction(r.Context(), messageID, userID, req.Reaction)
+	}
+	if errors.Is(err, repository.ErrMessageNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "Message not found")
+		return
+	}
+	if errors.Is(err, repository.ErrInvalidReaction) {
+		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save reaction")
+		return
+	}
+	updated, err := repository.GetMessageForViewer(r.Context(), messageID, userID)
+	if err != nil || updated == nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load updated message")
+		return
+	}
+	if HubInstance != nil {
+		broadcast := *updated
+		broadcast.ReactionUpdate = &models.ReactionUpdate{
+			UserID:   userID,
+			Reaction: req.Reaction,
+			Emoji:    req.Reaction,
+			Active:   r.Method == http.MethodPut,
+		}
+		HubInstance.BroadcastUpdate(broadcast)
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+var HubInstance *chat.Hub
+
+func InitChat() {
+	HubInstance = chat.NewHub(
+		func(_ context.Context, msg *models.Message) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return repository.SaveMessageContext(ctx, msg)
+		},
+		func(ctx context.Context, msg *models.Message) {
+			if Push != nil && msg.Kind == "text" {
+				Push.NotifyNewMessage(ctx, msg.GroupID, msg.UserID, msg.Content)
+			}
+		},
+	)
+	go HubInstance.Run()
+}
+
+func CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
+		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	token, err := auth.GenerateOpaqueToken(32)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
+		return
+	}
+	if err := repository.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), time.Now().Add(60*time.Second)); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60, "server_time": time.Now()})
+}
+
+func HandleChat(w http.ResponseWriter, r *http.Request) {
+	if HubInstance == nil {
+		writeError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat is unavailable")
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	if groupID == "" || ticket == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket required")
+		return
+	}
+	// Reject unknown origins before consuming the ticket so a bad origin can
+	// never burn a valid one-time ticket.
+	allowed := []string{}
+	if RuntimeConfig != nil {
+		allowed = RuntimeConfig.AllowedOrigins
+	}
+	if !chat.OriginAllowed(r.Header.Get("Origin"), allowed) {
+		writeError(w, http.StatusForbidden, "origin_not_allowed", "Origin is not allowed")
+		return
+	}
+	userID, err := repository.ConsumeWebSocketTicket(r.Context(), auth.HashToken(ticket), groupID)
+	if err != nil || userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket is invalid or expired")
+		return
+	}
+	chat.ServeWs(HubInstance, w, r, groupID, userID, allowed)
 }

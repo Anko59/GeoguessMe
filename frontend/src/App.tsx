@@ -67,6 +67,14 @@ function AppChrome() {
                     }
                 />
                 <Route
+                    path="/profile/:userId"
+                    element={
+                        <ProtectedRoute>
+                            <ProfilePage />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
                     path="/settings"
                     element={
                         <ProtectedRoute>

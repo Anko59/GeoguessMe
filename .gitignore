@@ -27,6 +27,7 @@ dist/
 /playwright/.cache/
 /frontend/test-results/
 /frontend/playwright-report/
+/frontend/.playwright-run/
 /frontend/coverage/
 
 # --- Local storage, database dumps, backups ---

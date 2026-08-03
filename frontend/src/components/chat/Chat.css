@@ -129,6 +129,12 @@
     object-fit: cover;
 }
 
+.avatar-container > a {
+    width: 100%;
+    height: 100%;
+    display: flex;
+}
+
 .avatar-placeholder {
     visibility: hidden;
 }
@@ -144,6 +150,15 @@
     color: var(--ink-subtle);
     font-size: 0.68rem;
     font-weight: 700;
+    text-decoration: none;
+}
+
+.message-username:hover {
+    color: var(--brand-blue-accessible);
+}
+
+.message-hover-target {
+    min-width: 0;
 }
 
 .message-content {

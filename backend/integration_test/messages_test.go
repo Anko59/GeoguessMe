@@ -29,18 +29,18 @@ func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	require.NotEmpty(t, sent.ID)
 
 	path := "/api/v1/group/message-reactions/" + sent.ID
-	resp, data := doJSON(t, http.MethodPut, path, map[string]string{"emoji": "👍"}, bob.access, nil)
+	resp, data := doJSON(t, http.MethodPut, path, map[string]string{"reaction": "like"}, bob.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
 	var updated struct {
 		Reactions []struct {
-			Emoji     string   `json:"emoji"`
+			Reaction  string   `json:"reaction"`
 			Count     int      `json:"count"`
 			Reacted   bool     `json:"reacted"`
 			Usernames []string `json:"usernames"`
 		} `json:"reactions"`
 	}
 	require.NoError(t, json.Unmarshal(data, &updated))
-	require.Equal(t, "👍", updated.Reactions[0].Emoji)
+	require.Equal(t, "like", updated.Reactions[0].Reaction)
 	require.Equal(t, 1, updated.Reactions[0].Count)
 	require.True(t, updated.Reactions[0].Reacted)
 	require.Equal(t, []string{bobName}, updated.Reactions[0].Usernames)
@@ -49,14 +49,14 @@ func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	require.NoError(t, err)
 	var liveUpdate struct {
 		ReactionUpdate struct {
-			UserID string `json:"user_id"`
-			Emoji  string `json:"emoji"`
-			Active bool   `json:"active"`
+			UserID   string `json:"user_id"`
+			Reaction string `json:"reaction"`
+			Active   bool   `json:"active"`
 		} `json:"reaction_update"`
 	}
 	require.NoError(t, json.Unmarshal(livePayload, &liveUpdate))
 	require.Equal(t, bob.userID, liveUpdate.ReactionUpdate.UserID)
-	require.Equal(t, "👍", liveUpdate.ReactionUpdate.Emoji)
+	require.Equal(t, "like", liveUpdate.ReactionUpdate.Reaction)
 	require.True(t, liveUpdate.ReactionUpdate.Active)
 
 	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, alice.access, nil)
@@ -74,11 +74,11 @@ func TestMessageReactionsAreScopedAndToggleable(t *testing.T) {
 	require.Equal(t, 1, page.Items[0].Reactions[0].Count)
 	require.Equal(t, []string{bobName}, page.Items[0].Reactions[0].Usernames)
 
-	resp, data = doJSON(t, http.MethodDelete, path, map[string]string{"emoji": "👍"}, bob.access, nil)
+	resp, data = doJSON(t, http.MethodDelete, path, map[string]string{"reaction": "like"}, bob.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
 	var removed struct {
 		Reactions []struct {
-			Emoji string `json:"emoji"`
+			Reaction string `json:"reaction"`
 		} `json:"reactions"`
 	}
 	require.NoError(t, json.Unmarshal(data, &removed))
@@ -172,7 +172,7 @@ func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
 
 	require.Eventually(t, func() bool { return messageStatus(t, alice.access) == "results" }, 5*time.Second, 100*time.Millisecond, "uploader status must be available once the challenge message is persisted")
 	require.Equal(t, "available", messageStatus(t, bob.access), "participant starts with Accept challenge")
-	accepted := acceptChallenge(t, bob.access, photoID)
+	accepted := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.Equal(t, "accepted", messageStatus(t, bob.access), "accepted participant sees Continue challenge")
 
 	conn := mustDialWS(t, groupID, wsTicket(t, alice.access, groupID), baseURL)

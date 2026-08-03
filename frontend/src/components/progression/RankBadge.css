@@ -1,0 +1,59 @@
+.rank-badge-stack {
+    display: inline-flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+}
+
+.rank-badge {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.rank-badge-stack--inline {
+    width: 1.1rem;
+}
+
+.rank-badge-stack--large {
+    width: clamp(6rem, 18vw, 9rem);
+}
+
+.rank-badge-stack--large .rank-badge {
+    filter: drop-shadow(0 0.4rem 0.45rem rgba(17, 26, 77, 0.16));
+}
+
+.rank-badge-numeral {
+    color: var(--brand-blue-accessible);
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-align: center;
+}
+
+.rank-badge-stack--inline .rank-badge-numeral {
+    margin-top: 0.12rem;
+    font-size: 0.5rem;
+}
+
+.rank-badge-stack--large .rank-badge-numeral {
+    margin-top: 0.4rem;
+    font-size: 1.15rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .rank-badge-stack--large {
+        animation: rankBadgeFloat 3.8s ease-in-out infinite;
+    }
+}
+
+@keyframes rankBadgeFloat {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-1deg);
+    }
+
+    50% {
+        transform: translateY(-0.25rem) rotate(1deg);
+    }
+}

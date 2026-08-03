@@ -419,8 +419,8 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	setupHandlers(t)
 	messageID := "00000000-0000-0000-0000-000000000002"
 	groupID := "00000000-0000-0000-0000-000000000001"
-	reactionRequest := func(method, emoji string) *http.Request {
-		request := requestWithUser(method, "/", `{"emoji":"`+emoji+`"}`, "user-1")
+	reactionRequest := func(method, reaction string) *http.Request {
+		request := requestWithUser(method, "/", `{"reaction":"`+reaction+`"}`, "user-1")
 		request.SetPathValue("messageID", messageID)
 		return request
 	}
@@ -438,13 +438,13 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 			AddRow(messageID, groupID, "user-2", "bob", "", kind, nil, nil, nil, nil, "hello", time.Now())
 	}
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
-	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
 
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
-	mock.ExpectQuery("SELECT message_id, emoji, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "emoji", "count", "reacted", "usernames"}))
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)

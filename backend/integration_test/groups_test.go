@@ -170,7 +170,7 @@ func TestCrossGroupIsolation(t *testing.T) {
 	joinGroup(t, bob.access, codeB)
 
 	photoA := uploadPhoto(t, alice.access, groupA)
-	acc := acceptChallenge(t, bob.access, photoA)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoA))
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
 	require.Equal(t, http.StatusCreated, guess(t, bob.access, photoA, 51.5, -0.1))
 

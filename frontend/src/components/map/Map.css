@@ -1,0 +1,7 @@
+.guess-popup-score {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+}

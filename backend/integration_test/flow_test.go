@@ -17,7 +17,7 @@ func TestFullGameFlow(t *testing.T) {
 	joinGroup(t, bob.access, code)
 	photoID := uploadPhoto(t, alice.access, groupID)
 
-	acc := acceptChallenge(t, bob.access, photoID)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.True(t, strings.HasPrefix(acc.MediaURL, "/api/v1/challenges/"), "media must be same-origin, got %q", acc.MediaURL)
 
 	// Guessing is rejected while the viewing window is open.
@@ -59,7 +59,7 @@ func TestGuessRejectedDuringViewingWindow(t *testing.T) {
 	joinGroup(t, bob.access, code)
 	photoID := uploadPhoto(t, alice.access, groupID)
 
-	acc := acceptChallenge(t, bob.access, photoID)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.True(t, time.Now().Before(acc.ViewExpiresAt.Add(2*time.Second)))
 	resp, _ := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/guess",
 		map[string]float64{"lat": 0, "long": 0}, bob.access, nil)
@@ -79,8 +79,11 @@ func TestReAcceptDoesNotExtendWindow(t *testing.T) {
 	// Within microsecond precision (DB storage rounds nanosecond time).
 	require.True(t, first.ViewExpiresAt.UTC().Sub(second.ViewExpiresAt.UTC()).Abs() < time.Microsecond,
 		"re-accepting must not extend or reset the viewing window")
-	resp, _ := doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/media", nil, bob.access, nil)
-	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	// A player who never received the media in full can still fetch it after
+	// the accept window: the viewing window starts at the first delivery, so a
+	// slow connection gets the full viewing time.
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/media", nil, bob.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "never-delivered media after accept window: %s", data)
 }
 
 func TestResultVisibilityAuthorization(t *testing.T) {
@@ -97,7 +100,7 @@ func TestResultVisibilityAuthorization(t *testing.T) {
 	resp, _ = doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/results", nil, bob.access, nil)
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 
-	acc := acceptChallenge(t, bob.access, photoID)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
 	status := guess(t, bob.access, photoID, 10, 10)
 	require.Equal(t, http.StatusCreated, status)
@@ -114,7 +117,7 @@ func TestConcurrentDuplicateGuess(t *testing.T) {
 	joinGroup(t, bob.access, code)
 	photoID := uploadPhoto(t, alice.access, groupID)
 
-	acc := acceptChallenge(t, bob.access, photoID)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
 
 	const workers = 10
@@ -168,11 +171,9 @@ func TestMediaIsRemovedAfterViewWindow(t *testing.T) {
 	joinGroup(t, bob.access, code)
 	photoID := uploadPhoto(t, alice.access, groupID)
 
-	acc := acceptChallenge(t, bob.access, photoID)
-	resp, _ := doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/media", nil, bob.access, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
-	resp, _ = doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/media", nil, bob.access, nil)
+	resp, _ := doJSON(t, http.MethodGet, "/api/v1/challenges/"+photoID+"/media", nil, bob.access, nil)
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 

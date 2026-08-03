@@ -16,6 +16,7 @@ vi.mock('react-leaflet', () => ({
     MapContainer: createComponent('MapContainer'),
     TileLayer: createComponent('TileLayer'),
     Marker: createComponent('Marker'),
+    Popup: createComponent('Popup'),
     useMapEvents: vi.fn(),
 }));
 
@@ -79,7 +80,7 @@ describe('Map component', () => {
         expect(markers[0]).toHaveAttribute('position', '40.7,-74');
     });
 
-    it('renders guess markers for every provided guess', () => {
+    it('renders guess markers with a popup naming the guesser', () => {
         const guesses = [
             { user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 100 },
             { user_id: 'u2', lat: 49.0, long: 2.5, username: 'bob', avatar: 'b.png', score: 80 },
@@ -88,10 +89,12 @@ describe('Map component', () => {
         const markers = screen.getAllByTestId('Marker');
         expect(markers).toHaveLength(2);
         expect(markers[0]).toHaveAttribute('position', '48.8,2.3');
-        expect(markers[0]).toHaveAttribute('title', 'alice: 100 pts');
         expect(markers[0]).toHaveAttribute('opacity', '0.8');
+        const firstPopup = markers[0].querySelector('[data-testid="Popup"]') as HTMLElement;
+        expect(firstPopup).toHaveTextContent('alice');
+        expect(firstPopup).toHaveTextContent('100 pts');
         expect(markers[1]).toHaveAttribute('position', '49,2.5');
-        expect(markers[1]).toHaveAttribute('title', 'bob: 80 pts');
+        expect(markers[1].querySelector('[data-testid="Popup"]')).toHaveTextContent('bob');
     });
 
     it('renders selected, actual, and guess markers together', () => {
