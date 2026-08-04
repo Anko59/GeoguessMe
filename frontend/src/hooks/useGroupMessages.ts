@@ -8,7 +8,12 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'offline';
 const MAX_RECONNECT_DELAY_MS = 30000;
 const BASE_RECONNECT_DELAY_MS = 500;
 const JITTER_CEILING_MS = 500;
-const DEFAULT_LIMIT = 500;
+// The initial page (and each older page) is capped so opening a long
+// conversation stays cheap; older history loads on scroll-up. Forward
+// catch-up pages after a reconnect use a larger size and loop until the
+// cursor drains so nothing created during a disconnect is ever skipped.
+const PAGE_SIZE = 50;
+const CATCHUP_LIMIT = 200;
 
 export interface UseGroupMessagesResult {
     messages: Message[];
@@ -17,6 +22,11 @@ export interface UseGroupMessagesResult {
     error: string;
     updateChallengeStatus: (photoId: string, status: NonNullable<Message['challenge_status']>) => void;
     updateMessage: (message: Message) => void;
+    /** Load the page of messages older than the oldest rendered one. */
+    loadOlder: () => Promise<void>;
+    /** True while more history exists below the rendered messages. */
+    hasMoreOlder: boolean;
+    loadingOlder: boolean;
 }
 
 // reconnectPlan derives the next backoff delay and the incremented retry
@@ -61,6 +71,8 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     const [messages, setMessages] = useState<Message[]>(() => readCachedMessages(userID, groupId));
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [error, setError] = useState('');
+    const [loadingOlder, setLoadingOlder] = useState(false);
+    const [hasMoreOlder, setHasMoreOlder] = useState(false);
     const [activeCacheIdentity, setActiveCacheIdentity] = useState(cacheIdentity);
     const wsRef = useRef<WebSocket | null>(null);
     const messagesRef = useRef<Message[]>([]);
@@ -69,6 +81,8 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     const retryRef = useRef(0);
     const reconnectTimerRef = useRef<number | undefined>(undefined);
     const hasConnectedRef = useRef(false);
+    const loadingOlderRef = useRef(false);
+    const hasMoreOlderRef = useRef(false);
 
     // Reset per-group state when the group changes. Adjusting state during
     // render (rather than in an effect) is the React idiom for resetting state
@@ -78,6 +92,10 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
         setMessages(readCachedMessages(userID, groupId));
         setConnectionStatus('connecting');
         setError('');
+        setLoadingOlder(false);
+        setHasMoreOlder(false);
+        loadingOlderRef.current = false;
+        hasMoreOlderRef.current = false;
     }
 
     const mergeMessages = useCallback(
@@ -153,28 +171,75 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
         return list.length > 0 ? list[list.length - 1].id : '';
     }, []);
 
-    const loadAfter = useCallback(
-        async (cursor: string, generation: number): Promise<void> => {
-            if (!groupId || stoppedRef.current || generation !== generationRef.current) return;
-            try {
-                const response = await api.get<MessagesPage | Message[]>('/group/messages', {
-                    params: {
-                        group_id: groupId,
-                        limit: DEFAULT_LIMIT,
-                        ...(cursor ? { after_id: cursor } : {}),
-                    },
-                });
+    // fetchForward pages through the messages API. An empty anchor selects the
+    // latest page; a non-empty anchor resumes strictly after that message id.
+    // It follows next_cursor until drained, so reconnect catch-up is lossless
+    // even after a long disconnect, and delivers every page to onPage.
+    const fetchForward = useCallback(
+        async (anchorID: string, generation: number, onPage: (items: Message[]) => void): Promise<void> => {
+            if (!groupId) return;
+            let cursor = '';
+            let anchor = anchorID;
+            let limit = PAGE_SIZE;
+            for (;;) {
                 if (stoppedRef.current || generation !== generationRef.current) return;
-                const payload = response.data;
-                const items = Array.isArray(payload) ? payload : payload.items;
-                mergeMessages(items ?? []);
-            } catch (requestError: unknown) {
-                if (stoppedRef.current || generation !== generationRef.current) return;
-                setError(getAPIErrorMessage(requestError, 'Unable to load messages'));
+                try {
+                    const params: Record<string, string | number> = { group_id: groupId, limit };
+                    if (cursor !== '') {
+                        params.cursor = cursor;
+                    } else if (anchor !== '') {
+                        params.after_id = anchor;
+                    }
+                    const response = await api.get<MessagesPage | Message[]>('/group/messages', { params });
+                    if (stoppedRef.current || generation !== generationRef.current) return;
+                    const payload = response.data;
+                    const items = Array.isArray(payload) ? payload : payload.items;
+                    onPage(items ?? []);
+                    const nextCursor = !Array.isArray(payload) ? payload.next_cursor : '';
+                    if (!nextCursor) return;
+                    cursor = nextCursor;
+                    anchor = '';
+                    limit = CATCHUP_LIMIT;
+                } catch (requestError: unknown) {
+                    if (stoppedRef.current || generation !== generationRef.current) return;
+                    setError(getAPIErrorMessage(requestError, 'Unable to load messages'));
+                    return;
+                }
             }
         },
-        [groupId, mergeMessages],
+        [groupId],
     );
+
+    // loadOlder prepends the page of messages before the oldest rendered one,
+    // like scrolling up in a messaging app. The page is chronological, so
+    // mergeMessages' stable sort re-inserts it at the front, and hasMoreOlder
+    // turns off once a page comes back shorter than the page size.
+    const loadOlder = useCallback(async (): Promise<void> => {
+        if (!groupId || stoppedRef.current || loadingOlderRef.current) return;
+        const oldest = messagesRef.current[0];
+        if (!oldest) return;
+        const generation = generationRef.current;
+        loadingOlderRef.current = true;
+        setLoadingOlder(true);
+        try {
+            const response = await api.get<MessagesPage | Message[]>('/group/messages', {
+                params: { group_id: groupId, before_id: oldest.id, limit: PAGE_SIZE },
+            });
+            if (stoppedRef.current || generation !== generationRef.current) return;
+            const payload = response.data;
+            const items = Array.isArray(payload) ? payload : (payload.items ?? []);
+            const more = items.length >= PAGE_SIZE;
+            hasMoreOlderRef.current = more;
+            setHasMoreOlder(more);
+            mergeMessages(items);
+        } catch (requestError: unknown) {
+            if (stoppedRef.current || generation !== generationRef.current) return;
+            setError(getAPIErrorMessage(requestError, 'Unable to load older messages'));
+        } finally {
+            loadingOlderRef.current = false;
+            setLoadingOlder(false);
+        }
+    }, [groupId, mergeMessages]);
 
     useEffect(() => {
         if (!groupId) return;
@@ -221,15 +286,30 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                     if (stoppedRef.current || generation !== generationRef.current) return;
                     retryRef.current = 0;
                     setConnectionStatus('connected');
-                    // Catch up only after the socket is registered so messages
-                    // created during the REST window are also delivered live
-                    // and deduplicated by id.
-                    // A local cache makes the first screen immediate, but the
-                    // first server sync still reloads the recent page so edited
-                    // challenge state cannot remain stale. Later reconnects use
-                    // the cursor-only path to stay lossless and inexpensive.
-                    void loadAfter(hasConnectedRef.current ? cursor : '', generation);
+                    const firstSync = !hasConnectedRef.current;
                     hasConnectedRef.current = true;
+                    // A local cache makes the first screen immediate, but the
+                    // first server sync prunes any cached message older than
+                    // the fetched page so stale session history can never sit
+                    // below the live tail with a gap. Live messages arriving
+                    // during the fetch are newer than the page and survive the
+                    // prune; older pages still load on scroll-up. Later
+                    // reconnects use the cursor-only path to stay lossless and
+                    // inexpensive.
+                    let firstPageHandled = false;
+                    const onPage = (items: Message[]): void => {
+                        if (firstSync && !firstPageHandled) {
+                            firstPageHandled = true;
+                            const pageOldest = items.length > 0 ? items[0] : null;
+                            setMessages((current) =>
+                                pageOldest === null ? [] : current.filter((m) => compareMessages(m, pageOldest) >= 0),
+                            );
+                            hasMoreOlderRef.current = items.length >= PAGE_SIZE;
+                            setHasMoreOlder(items.length >= PAGE_SIZE);
+                        }
+                        mergeMessages(items);
+                    };
+                    void fetchForward(firstSync ? '' : cursor, generation, onPage);
                 };
                 socket.onmessage = (event: MessageEvent<string>) => {
                     if (stoppedRef.current || generation !== generationRef.current) return;
@@ -277,7 +357,17 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 wsRef.current = null;
             }
         };
-    }, [groupId, lastStableCursor, loadAfter, mergeMessages]);
+    }, [groupId, lastStableCursor, fetchForward, mergeMessages]);
 
-    return { messages, connectionStatus, wsRef, error, updateChallengeStatus, updateMessage };
+    return {
+        messages,
+        connectionStatus,
+        wsRef,
+        error,
+        updateChallengeStatus,
+        updateMessage,
+        loadOlder,
+        hasMoreOlder,
+        loadingOlder,
+    };
 }

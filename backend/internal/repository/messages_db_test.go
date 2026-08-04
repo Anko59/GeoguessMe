@@ -217,6 +217,58 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	}
 }
 
+// TestGetGroupMessagesPageBefore covers the backward pagination direction used
+// to prepend chat history when the client scrolls up: the page is strictly
+// before the referenced message, chronological, capped at limit, and drains to
+// an empty page at the start of the conversation.
+func TestGetGroupMessagesPageBefore(t *testing.T) {
+	mock := newMockPool(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	t0 := now
+	t1 := now.Add(time.Second)
+	t2 := now.Add(2 * time.Second)
+	t3 := now.Add(3 * time.Second)
+
+	// Resolve the anchor position (scoped to the group) then fetch the older
+	// page newest-first (DESC) and expose it chronologically.
+	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("message-d", "group-1").WillReturnRows(pgxmock.NewRows([]string{"created_at"}).AddRow(t3))
+	mock.ExpectQuery("SELECT .*FROM messages.*ROW\\(m.created_at, m.id\\) < ROW").
+		WithArgs("group-1", t3, "message-d", 2).
+		WillReturnRows(messageRowsByID([]string{"message-c", "message-b"}, []time.Time{t2, t1}))
+	page, err := GetGroupMessagesPageBefore(context.Background(), "group-1", "message-d", 2)
+	if err != nil {
+		t.Fatalf("older page: %v", err)
+	}
+	if len(page.Items) != 2 || page.NextCursor != "" {
+		t.Fatalf("older page = %+v", page)
+	}
+	if page.Items[0].ID != "message-b" || page.Items[1].ID != "message-c" {
+		t.Fatalf("older page order = %s, %s, want message-b, message-c", page.Items[0].ID, page.Items[1].ID)
+	}
+
+	// A page that starts at the conversation start returns fewer than limit
+	// items so the client knows history is exhausted.
+	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("message-b", "group-1").WillReturnRows(pgxmock.NewRows([]string{"created_at"}).AddRow(t1))
+	mock.ExpectQuery("SELECT .*FROM messages.*ROW\\(m.created_at, m.id\\) < ROW").
+		WithArgs("group-1", t1, "message-b", 2).
+		WillReturnRows(messageRowsByID([]string{"message-a"}, []time.Time{t0}))
+	page, err = GetGroupMessagesPageBefore(context.Background(), "group-1", "message-b", 2)
+	if err != nil {
+		t.Fatalf("draining page: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != "message-a" {
+		t.Fatalf("draining page = %+v", page)
+	}
+
+	// An unknown anchor (or one outside the group) yields an empty page instead
+	// of failing, so a stale client cursor never errors out.
+	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("message-x", "group-1").WillReturnRows(pgxmock.NewRows([]string{"created_at"}))
+	page, err = GetGroupMessagesPageBefore(context.Background(), "group-1", "message-x", 2)
+	if err != nil || len(page.Items) != 0 {
+		t.Fatalf("unknown anchor = %+v, %v", page, err)
+	}
+}
+
 // TestCursorAfterMessageResolvesLegacyID covers the bridge from the legacy
 // after_id message id onto the stable opaque cursor, including the empty and
 // unknown-id fallbacks that keep a reconnect catch-up request from failing.

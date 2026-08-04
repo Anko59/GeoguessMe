@@ -40,6 +40,35 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			limit = parsed
+		}
+	}
+
+	// Backward direction: before_id loads the page of messages older than the
+	// referenced message (ascending), so the client can prepend history when
+	// the user scrolls up. It takes precedence over the forward cursor and is
+	// resolved scoped to the group.
+	if beforeID := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeID != "" {
+		page, err := repository.GetGroupMessagesPageBefore(r.Context(), groupID, beforeID, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			return
+		}
+		page, err = repository.EnrichMessagesPageForViewer(r.Context(), page, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			return
+		}
+		if page.Items == nil {
+			page.Items = []models.Message{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
+		return
+	}
+
 	// Stable cursor takes precedence; the legacy after_id message id is
 	// resolved onto the same opaque cursor so reconnect callers that only know
 	// the last message id keep working. A raw id must never reach the cursor
@@ -52,12 +81,6 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cursor = resolved
-	}
-	limit := 0
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			limit = parsed
-		}
 	}
 
 	page, err := repository.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)

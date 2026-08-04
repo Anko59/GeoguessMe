@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { signupViaUI, uniqueGroup } from './helpers';
+import { signupViaUI, signupWithToken, uniqueGroup } from './helpers';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 interface ChatScenario {
@@ -81,6 +81,75 @@ test.describe('Chat via WebSocket', () => {
         } finally {
             await member.context.close();
             await scenario.ownerContext.close();
+        }
+    });
+
+    test('chat opens with the latest page and loads older messages on scroll up', async ({
+        browser,
+        contextOptions,
+    }) => {
+        const context = await browser.newContext(contextOptions);
+        const { page, token } = await signupWithToken(context);
+        try {
+            await page.goto('/group/create');
+            await page.getByPlaceholder('Group Name').fill(uniqueGroup());
+            await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            const groupId = page.url().split('/group/')[1];
+            await expect(page.getByRole('status')).toHaveText('Connected');
+
+            // Seed 60 text messages over the group WebSocket so the latest page
+            // (PAGE_SIZE=50) is full and older history exists below it.
+            const ticket = await page.evaluate(
+                async ({ groupId, token }) => {
+                    const response = await fetch(`/api/v1/ws/ticket?group_id=${groupId}`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!response.ok) throw new Error('ticket failed: ' + response.status);
+                    return (await response.json()) as { ticket: string };
+                },
+                { groupId, token },
+            );
+            await page.evaluate(
+                async ({ groupId, ticket }) => {
+                    const socket = new WebSocket(
+                        `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws?group_id=${encodeURIComponent(groupId)}&ticket=${encodeURIComponent(ticket)}`,
+                    );
+                    await new Promise<void>((resolve, reject) => {
+                        socket.onopen = () => resolve();
+                        socket.onerror = () => reject(new Error('seeding socket failed'));
+                    });
+                    for (let i = 1; i <= 60; i += 1) {
+                        socket.send(JSON.stringify({ content: `seed message ${i}` }));
+                        await new Promise((resolve) => setTimeout(resolve, 10));
+                    }
+                    socket.close();
+                },
+                { groupId, ticket: ticket.ticket },
+            );
+
+            // The last broadcast rendering proves every seed was persisted.
+            await expect(page.locator('.message-container').filter({ hasText: 'seed message 60' })).toBeVisible();
+
+            // Reload: the initial sync renders only the latest page, anchored at
+            // the oldest of the newest 50, with older history absent.
+            await page.reload();
+            await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await expect(page.getByRole('status')).toHaveText('Connected');
+            await expect(page.locator('.messages-list .message-container')).toHaveCount(50);
+            await expect(page.locator('.messages-list .message-container').first()).toContainText('seed message 11');
+            await expect(page.getByText('seed message 1', { exact: true })).not.toBeVisible();
+
+            // Scrolling to the top loads the older page and prepends it.
+            await page.locator('.messages-list').evaluate((el) => {
+                el.scrollTop = 0;
+                el.dispatchEvent(new Event('scroll'));
+            });
+            await expect(page.getByText('seed message 1', { exact: true })).toBeVisible();
+            await expect(page.locator('.messages-list .message-container')).toHaveCount(60);
+        } finally {
+            await context.close();
         }
     });
 
