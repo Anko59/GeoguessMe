@@ -46,6 +46,46 @@ export async function signupViaUI(page: Page, creds?: Partial<Credentials>): Pro
  * Sign up through the UI and capture the access token from the signup
  * response, for tests that drive authenticated API calls directly.
  */
+/**
+ * Seed text messages over a group WebSocket so long-conversation tests can
+ * exercise pagination without driving the UI. Each send is persisted and
+ * broadcast by the server; the caller's own chat socket receives them live.
+ */
+export async function seedChatMessages(page: Page, groupId: string, token: string, count: number): Promise<void> {
+    const ticket = await page.evaluate(
+        async ({ groupId, token }) => {
+            const response = await fetch(`/api/v1/ws/ticket?group_id=${groupId}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('ticket failed: ' + response.status);
+            return (await response.json()) as { ticket: string };
+        },
+        { groupId, token },
+    );
+    await page.evaluate(
+        async ({ groupId, ticket, count }) => {
+            const socket = new WebSocket(
+                `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws?group_id=${encodeURIComponent(groupId)}&ticket=${encodeURIComponent(ticket)}`,
+            );
+            await new Promise<void>((resolve, reject) => {
+                socket.onopen = () => resolve();
+                socket.onerror = () => reject(new Error('seeding socket failed'));
+            });
+            for (let i = 1; i <= count; i += 1) {
+                socket.send(JSON.stringify({ content: `seed message ${i}` }));
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            socket.close();
+        },
+        { groupId, ticket: ticket.ticket, count },
+    );
+}
+
+/**
+ * Sign up through the UI and capture the access token from the signup
+ * response, for tests that drive authenticated API calls directly.
+ */
 export async function signupWithToken(context: BrowserContext): Promise<{ page: Page; token: string }> {
     const page = await context.newPage();
     const signupResponsePromise = page.waitForResponse(
