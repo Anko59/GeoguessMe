@@ -95,7 +95,7 @@ describe('ProfilePage', () => {
         expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
         expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/squire.png');
-        expect(screen.getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/settings');
+        expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
     });
 
@@ -128,7 +128,7 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2');
         expect(screen.queryByText('alice@example.test')).not.toBeInTheDocument();
-        expect(screen.queryByRole('link', { name: 'Edit profile' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
     });
 
     it('shows the edit link when viewing yourself through the public route', async () => {
@@ -137,6 +137,6 @@ describe('ProfilePage', () => {
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
-        expect(screen.getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/settings');
+        expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
     });
 });

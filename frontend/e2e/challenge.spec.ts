@@ -24,8 +24,30 @@ test.describe('Challenge flow', () => {
             await uploader.getByRole('button', { name: 'Camera' }).click();
             await expect(uploader.locator('.capture-button')).toBeVisible();
             await expectUserCameraOrientation(uploader);
+            const optionsButton = uploader.getByRole('button', { name: 'Challenge options' });
+            await expect(optionsButton).toBeVisible();
+            await optionsButton.click();
+            const optionsDialog = uploader.getByRole('dialog', { name: 'Challenge options' });
+            await expect(optionsDialog).toBeVisible();
+            await expect(uploader.getByLabel(/Hide my location/)).toBeVisible();
+            // Regression: the menu must actually paint above the opaque camera
+            // feed; asserting DOM presence alone would not catch it hiding
+            // behind the <video> element.
+            await expect
+                .poll(() =>
+                    optionsDialog.evaluate((element) => {
+                        const rect = element.getBoundingClientRect();
+                        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                        return hit === element || element.contains(hit);
+                    }),
+                )
+                .toBe(true);
+            await uploader.getByRole('button', { name: 'Done' }).click();
             await uploader.locator('.capture-button').click();
             await expect(uploader.locator('.preview-image')).toBeVisible();
+            // The options entry is repeated on the preview so it stays
+            // reachable after capture (e.g. when the camera is unavailable).
+            await expect(uploader.locator('.preview-options-bar .options-toggle-btn')).toBeVisible();
 
             const uploadResponsePromise = uploader.waitForResponse(
                 (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',

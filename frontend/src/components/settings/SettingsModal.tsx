@@ -145,7 +145,7 @@ export default function SettingsModal({
                 <h3 className="group-name-display">{groupName}</h3>
 
                 <Link to="/settings" className="personal-settings-link" onClick={onClose}>
-                    Open personal settings
+                    Personal settings
                 </Link>
 
                 <div className="settings-section">

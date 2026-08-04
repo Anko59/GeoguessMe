@@ -166,10 +166,14 @@ test.describe('Keyboard navigation', () => {
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
 
             const backLink = page.locator('.back-btn');
+            const profileLink = page.getByRole('link', { name: 'Open your profile' });
             const settingsBtn = page.getByRole('button', { name: /settings/i });
 
-            // Back link → Tab → settings button are the first focusable elements.
+            // Back link → own-profile link → settings button are the first
+            // focusable elements in the group header.
             await backLink.focus();
+            await page.keyboard.press('Tab');
+            await expect(profileLink).toBeFocused();
             await page.keyboard.press('Tab');
             await expect(settingsBtn).toBeFocused();
 

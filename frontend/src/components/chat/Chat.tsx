@@ -7,8 +7,10 @@ import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
 import ChallengeTimer from './ChallengeTimer';
 import { reactionByKey, reactionOptions } from './reactionOptions';
+import { useInfiniteScroll } from './useInfiniteScroll';
 import './Chat.css';
 import './ChatActions.css';
+import './ChatHistory.css';
 
 interface ChatProps {
     messages: Message[];
@@ -18,6 +20,10 @@ interface ChatProps {
     connectionStatus?: 'connecting' | 'connected' | 'offline';
     onChallengeMessage?: (message: Message) => void;
     onMessageUpdated?: (message: Message) => void;
+    /** Load the page of messages older than the oldest rendered one. */
+    onLoadOlder?: () => void;
+    hasMoreOlder?: boolean;
+    loadingOlder?: boolean;
 }
 
 // How long a touch must be held before the reply/react panel opens. This is
@@ -39,6 +45,9 @@ export default function Chat({
     connectionStatus = 'offline',
     onChallengeMessage,
     onMessageUpdated,
+    onLoadOlder,
+    hasMoreOlder = false,
+    loadingOlder = false,
 }: ChatProps) {
     const [input, setInput] = useState('');
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -49,6 +58,7 @@ export default function Chat({
     const [reactionPending, setReactionPending] = useState<string | null>(null);
     const [reactionError, setReactionError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesListRef = useRef<HTMLDivElement>(null);
     const pressRef = useRef<PressState | null>(null);
     // Hover-capable devices reveal actions on hover and keyboard focus; touch
     // devices rely on a deliberate long press instead, like Messenger or
@@ -56,10 +66,6 @@ export default function Chat({
     const [canHover] = useState(
         () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover)').matches,
     );
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
 
     useEffect(() => {
         const dismissActions = (event: PointerEvent) => {
@@ -232,6 +238,15 @@ export default function Chat({
         setReplyingTo(null);
     };
 
+    const { onScroll: handleMessagesScroll } = useInfiniteScroll(
+        messagesListRef,
+        messagesEndRef,
+        messages,
+        loadingOlder,
+        hasMoreOlder,
+        onLoadOlder,
+    );
+
     return (
         <div className="chat-container">
             <div className={`chat-status ${connectionStatus}`} role="status" aria-live="polite">
@@ -241,7 +256,12 @@ export default function Chat({
                       ? 'Connecting…'
                       : 'Offline — retrying'}
             </div>
-            <div className="messages-list">
+            <div className="messages-list" ref={messagesListRef} onScroll={handleMessagesScroll}>
+                {loadingOlder && (
+                    <div className="messages-loading-older" aria-live="polite">
+                        Loading older messages…
+                    </div>
+                )}
                 {messages.length === 0 && (
                     <div className="chat-empty-state">
                         <img src="/chat_bubbl_icon.png" alt="" className="chat-empty-icon" />
@@ -264,7 +284,7 @@ export default function Chat({
                             <div
                                 key={message.id}
                                 data-message-id={message.id}
-                                className={`message-container ${isMe ? 'own' : 'other'} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
+                                className={`message-container ${isMe ? 'own' : 'other'} ${sameSenderGroup ? ' message-grouped' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                                 tabIndex={0}
                                 onFocus={() => setActionsMessageID(message.id)}
                                 onPointerDown={(event) => handleMessagePointerDown(event, message.id)}
@@ -354,7 +374,7 @@ export default function Chat({
                         <div
                             key={message.id}
                             data-message-id={message.id}
-                            className={`message-container ${isMe ? 'own' : 'other'} ${isSystem ? 'system' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
+                            className={`message-container ${isMe ? 'own' : 'other'} ${isSystem ? 'system' : ''} ${sameSenderGroup ? ' message-grouped' : ''} ${actionsMessageID === message.id ? 'actions-visible' : ''} slide-in-up`}
                             tabIndex={isSystem ? -1 : 0}
                             onFocus={() => !isSystem && setActionsMessageID(message.id)}
                             onPointerDown={(event) => handleMessagePointerDown(event, message.id)}
