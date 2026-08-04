@@ -86,7 +86,7 @@ export default function ProfilePage() {
                 </Link>
                 {isSelf && (
                     <Link to="/settings" className="profile-settings-link">
-                        Edit profile
+                        Settings
                     </Link>
                 )}
             </header>

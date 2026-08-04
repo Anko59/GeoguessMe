@@ -223,7 +223,7 @@ describe('App shell — protected routes with authentication', () => {
         routeRef.current = '/settings';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByText('Account settings')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     });
 });
 

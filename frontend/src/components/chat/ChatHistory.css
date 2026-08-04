@@ -1,0 +1,41 @@
+.messages-loading-older {
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    z-index: 2;
+    padding: 0.3rem 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--ink-muted);
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-xs);
+    font-size: 0.72rem;
+    font-weight: 700;
+    transform: translateX(-50%);
+}
+
+.messages-loading-older::before {
+    content: '';
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--brand-blue);
+    border-radius: 50%;
+    animation: messages-loading-spin 0.8s linear infinite;
+}
+
+@keyframes messages-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* The scroll container is the positioning context for the loading overlay; it
+   also holds the indicator as an absolutely positioned first child so the
+   overlay never shifts the message layout. */
+.messages-list {
+    position: relative;
+}
