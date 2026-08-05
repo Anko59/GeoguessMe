@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isLiveCameraFeed, useCameraDevice } from './cameraUtils';
+import { useCameraDevice } from './cameraUtils';
 
 const mocks = vi.hoisted(() => ({
     enumerateDevices: vi.fn(),
@@ -102,17 +102,5 @@ describe('useCameraDevice', () => {
         vi.stubGlobal('navigator', { mediaDevices: {} });
         const { result } = renderHook(() => useCameraDevice());
         expect(result.current.hasMultipleCameras).toBe(false);
-    });
-});
-
-describe('isLiveCameraFeed', () => {
-    it('treats a ready camera outside file mode as a live feed', () => {
-        expect(isLiveCameraFeed(true, false)).toBe(true);
-    });
-
-    it('treats loading and file-mode states as transparent (static bar) states', () => {
-        expect(isLiveCameraFeed(false, false)).toBe(false);
-        expect(isLiveCameraFeed(true, true)).toBe(false);
-        expect(isLiveCameraFeed(false, true)).toBe(false);
     });
 });

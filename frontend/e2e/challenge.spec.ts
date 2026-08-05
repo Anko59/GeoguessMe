@@ -24,15 +24,20 @@ test.describe('Challenge flow', () => {
             await uploader.getByRole('button', { name: 'Camera' }).click();
             await expect(uploader.locator('.capture-button')).toBeVisible();
             await expectUserCameraOrientation(uploader);
+            // The filming screen keeps only the camera actions: lenses and
+            // reverse. The options entry lives on the retake/send preview.
+            await expect(uploader.getByRole('button', { name: 'Challenge options' })).toHaveCount(0);
+            await uploader.locator('.capture-button').click();
+            await expect(uploader.locator('.preview-image')).toBeVisible();
             const optionsButton = uploader.getByRole('button', { name: 'Challenge options' });
             await expect(optionsButton).toBeVisible();
             await optionsButton.click();
             const optionsDialog = uploader.getByRole('dialog', { name: 'Challenge options' });
             await expect(optionsDialog).toBeVisible();
             await expect(uploader.getByLabel(/Hide my location/)).toBeVisible();
-            // Regression: the menu must actually paint above the opaque camera
-            // feed; asserting DOM presence alone would not catch it hiding
-            // behind the <video> element.
+            // Regression: the menu must actually paint above the opaque preview
+            // photo; asserting DOM presence alone would not catch it hiding
+            // behind the <img> element.
             await expect
                 .poll(() =>
                     optionsDialog.evaluate((element) => {
@@ -43,11 +48,6 @@ test.describe('Challenge flow', () => {
                 )
                 .toBe(true);
             await uploader.getByRole('button', { name: 'Done' }).click();
-            await uploader.locator('.capture-button').click();
-            await expect(uploader.locator('.preview-image')).toBeVisible();
-            // The options entry is repeated on the preview so it stays
-            // reachable after capture (e.g. when the camera is unavailable).
-            await expect(uploader.locator('.preview-options-bar .options-toggle-btn')).toBeVisible();
 
             const uploadResponsePromise = uploader.waitForResponse(
                 (response) => response.url().endsWith('/api/v1/photo/upload') && response.request().method() === 'POST',
@@ -255,12 +255,6 @@ test.describe('Challenge flow', () => {
             } else {
                 expect(await rail.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
             }
-            await page.getByRole('button', { name: /text/i }).click();
-            await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
-            await page.getByRole('button', { name: 'Neon', exact: true }).click();
-            await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
-            await page.getByRole('button', { name: 'Text', exact: true }).click();
-            await expect(page.getByPlaceholder('Say something dangerous…')).toBeHidden();
             await expect
                 .poll(() => loadedLensAssets.has('/vendor/mediapipe/face_landmarker.task'), { timeout: 30000 })
                 .toBe(true);
@@ -275,6 +269,15 @@ test.describe('Challenge flow', () => {
                 await expect(button).toHaveAttribute('aria-pressed', 'true');
             }
             await expect.poll(() => EXPECTED_LENS_ASSETS.every((path) => loadedLensAssets.has(path))).toBe(true);
+            // The text banner editor lives on the retake/send preview.
+            await page.locator('.capture-button').click();
+            await expect(page.locator('.preview-image')).toBeVisible();
+            await page.getByRole('button', { name: /text/i }).click();
+            await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
+            await page.getByRole('button', { name: 'Neon', exact: true }).click();
+            await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
+            await page.getByRole('button', { name: 'Text', exact: true }).click();
+            await expect(page.getByPlaceholder('Say something dangerous…')).toBeHidden();
             expect(pageErrors).toEqual([]);
         } finally {
             await ctx.close();
