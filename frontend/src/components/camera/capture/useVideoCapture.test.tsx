@@ -69,15 +69,23 @@ function Harness({
     videoStream,
     stillPressed,
     onComplete,
+    mirror = false,
+    videoElement = null,
 }: {
     videoStream: MediaStream;
     stillPressed: boolean;
     onComplete: () => void;
+    mirror?: boolean;
+    videoElement?: HTMLVideoElement | null;
 }) {
     const capture = useVideoCapture({ onError: vi.fn() });
     return (
         <>
-            <button onClick={() => void capture.startHeldRecording(videoStream, () => stillPressed, onComplete)}>
+            <button
+                onClick={() =>
+                    void capture.startHeldRecording(videoStream, () => stillPressed, onComplete, mirror, videoElement)
+                }
+            >
                 start
             </button>
             <button onClick={capture.stopRecording}>stop</button>
@@ -89,6 +97,8 @@ function Harness({
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    // jsdom never implements canvas.captureStream; the mirror test installs it.
+    delete (HTMLCanvasElement.prototype as unknown as Record<string, unknown>).captureStream;
 });
 
 describe('useVideoCapture', () => {
@@ -159,5 +169,60 @@ describe('useVideoCapture', () => {
         expect(audioStop).toHaveBeenCalledTimes(1);
         expect(screen.getByText('idle')).toBeInTheDocument();
         expect(recorder.current).toBeUndefined();
+    });
+
+    it('mirrors front-camera clips through a canvas capture so they match the preview', async () => {
+        installRecorder();
+        installMediaStream();
+        const videoStop = vi.fn();
+        const audioStop = vi.fn();
+        const canvasVideoStop = vi.fn();
+        const videoStream = makeStream([{ stop: videoStop }], 'video');
+        const canvasStream = makeStream([{ stop: canvasVideoStop }], 'video');
+        const getUserMedia = vi.fn().mockResolvedValue(makeStream([{ stop: audioStop }], 'audio'));
+        vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+        Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
+            configurable: true,
+            value: vi.fn(() => canvasStream),
+        });
+        vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+            setTransform: vi.fn(),
+            drawImage: vi.fn(),
+        } as unknown as CanvasRenderingContext2D);
+        vi.stubGlobal(
+            'requestAnimationFrame',
+            vi.fn(() => 1),
+        );
+        vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+        const onComplete = vi.fn();
+        render(
+            <Harness
+                videoStream={videoStream}
+                stillPressed
+                onComplete={onComplete}
+                mirror
+                videoElement={{ videoWidth: 640, videoHeight: 480, readyState: 2 } as unknown as HTMLVideoElement}
+            />,
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'start' }));
+        });
+
+        // The live camera stream is never re-requested; the recorder consumes
+        // the mirrored canvas video track merged with the microphone.
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByText('recording')).toBeInTheDocument());
+        expect(recorder.current?.stream.getTracks()).toHaveLength(2);
+        expect(recorder.current?.stream.getTracks()[0]).toBe(canvasStream.getTracks()[0]);
+        expect(videoStop).not.toHaveBeenCalled();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+        });
+        expect(onComplete).toHaveBeenCalledTimes(1);
+        expect(audioStop).toHaveBeenCalledTimes(1);
+        // The mirrored canvas source is released together with the clip.
+        expect(canvasVideoStop).toHaveBeenCalledTimes(1);
     });
 });
