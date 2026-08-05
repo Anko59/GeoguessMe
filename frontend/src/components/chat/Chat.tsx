@@ -5,7 +5,7 @@ import type { Message } from '../../types';
 import Avatar from '../common/Avatar';
 import Icon from '../ui/Icon';
 import ChatAttachment from './ChatAttachment';
-import ChallengeTimer from './ChallengeTimer';
+import ChallengeCard from './ChallengeCard';
 import { reactionByKey, reactionOptions } from './reactionOptions';
 import { useInfiniteScroll } from './useInfiniteScroll';
 import './Chat.css';
@@ -319,50 +319,11 @@ export default function Chat({
                                         </Link>
                                     )}
                                     <div className="message-hover-target" {...hoverHandlers(message.id, true)}>
-                                        <button
-                                            className={`message-content photo-challenge clickable${message.challenge_status === 'guessed' ? ' resolved' : ''}`}
-                                            data-photo-id={message.photo_id}
-                                            onClick={() => onChallengeMessage?.(message)}
-                                        >
-                                            <span className="challenge-card">
-                                                <span className="challenge-header">
-                                                    <img
-                                                        src={
-                                                            isMe
-                                                                ? '/challenge_sent_icon.png'
-                                                                : '/challenge_received_icon.png'
-                                                        }
-                                                        alt=""
-                                                        className="challenge-icon"
-                                                    />
-                                                    <span>
-                                                        {message.challenge_status === 'guessed'
-                                                            ? 'Resolved challenge'
-                                                            : message.challenge_status === 'expired'
-                                                              ? 'Challenge expired'
-                                                              : isMe
-                                                                ? 'Challenge sent'
-                                                                : 'New challenge'}
-                                                    </span>
-                                                    {message.challenge_expires_at && message.challenge_ttl_seconds ? (
-                                                        <ChallengeTimer
-                                                            expiresAt={message.challenge_expires_at}
-                                                            ttlSeconds={message.challenge_ttl_seconds}
-                                                        />
-                                                    ) : null}
-                                                </span>
-                                                <span className="start-challenge-btn">
-                                                    {isMe ||
-                                                    message.challenge_status === 'results' ||
-                                                    message.challenge_status === 'guessed' ||
-                                                    message.challenge_status === 'expired'
-                                                        ? 'View results'
-                                                        : message.challenge_status === 'accepted'
-                                                          ? 'Continue challenge'
-                                                          : 'Accept challenge'}
-                                                </span>
-                                            </span>
-                                        </button>
+                                        <ChallengeCard
+                                            message={message}
+                                            isMe={isMe}
+                                            onChallengeMessage={onChallengeMessage}
+                                        />
                                         {renderMessageActions(message)}
                                     </div>
                                     {renderReactions(message)}
