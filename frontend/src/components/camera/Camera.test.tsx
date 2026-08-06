@@ -45,6 +45,7 @@ beforeEach(() => {
     HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
         drawImage: vi.fn(),
         clearRect: vi.fn(),
+        setTransform: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,abc123');
 
@@ -82,7 +83,6 @@ describe('Camera component', () => {
         mocks.getUserMedia.mockReturnValue(new Promise(() => {}));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
         expect(screen.getByText('Loading camera...')).toBeInTheDocument();
-        // The options entry used to leak into the loading state; keep it off along with the other actions.
         expect(screen.queryByRole('button', { name: 'Challenge options' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Take photo' })).not.toBeInTheDocument();
     });
@@ -107,7 +107,6 @@ describe('Camera component', () => {
     ])('maps %s camera failures to actionable guidance', async (name, expectedMessage) => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Camera failed', name));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-
         await waitFor(() => expect(screen.getByText(expectedMessage)).toBeInTheDocument());
     });
 
@@ -433,6 +432,7 @@ describe('Camera component', () => {
             quadraticCurveTo: vi.fn(),
             restore: vi.fn(),
             save: vi.fn(),
+            setTransform: vi.fn(),
         } as unknown as CanvasRenderingContext2D;
         HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(context);
 
