@@ -25,14 +25,6 @@ export function isFilterableImageType(mimeType: string): boolean {
     return FILTERABLE_IMAGE_TYPES.has(mimeType.toLowerCase());
 }
 
-/** True while the opaque camera feed is live (camera ready and not in file
- *  mode). The static .camera-options-bar is painted below that feed and would
- *  be invisible, so the challenge-options menu must then use the floating
- *  popover layer instead. */
-export function isLiveCameraFeed(cameraReady: boolean, fileMode: boolean): boolean {
-    return cameraReady && !fileMode;
-}
-
 export function getCurrentPosition(options: PositionOptions = LOCATION_OPTIONS): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('Geolocation is not supported by your browser'));

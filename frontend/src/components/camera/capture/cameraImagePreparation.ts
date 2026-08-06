@@ -42,6 +42,9 @@ interface CapturePhotoOptions {
     sourceCanvas: HTMLCanvasElement | null;
     renderer: { render: (frame: FaceFrame | null) => void } | null;
     frame: FaceFrame | null;
+    /** Horizontally flip the composition so front-camera photos match the
+     *  mirrored live preview instead of the raw sensor feed. */
+    mirror?: boolean;
 }
 
 export function capturePhotoFrame({
@@ -51,6 +54,7 @@ export function capturePhotoFrame({
     sourceCanvas,
     renderer,
     frame,
+    mirror = false,
 }: CapturePhotoOptions): string | null {
     if (!video || !overlay || !captureCanvas || video.videoWidth === 0) return null;
     const context = captureCanvas.getContext('2d');
@@ -58,8 +62,14 @@ export function capturePhotoFrame({
     renderer?.render(frame);
     captureCanvas.width = video.videoWidth;
     captureCanvas.height = video.videoHeight;
+    if (mirror) {
+        context.setTransform(-1, 0, 0, 1, captureCanvas.width, 0);
+    }
     context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
     context.drawImage(overlay, 0, 0, captureCanvas.width, captureCanvas.height);
+    if (mirror) {
+        context.setTransform(1, 0, 0, 1, 0, 0);
+    }
     const sourceContext = sourceCanvas?.getContext('2d');
     if (sourceCanvas && sourceContext) {
         sourceCanvas.width = captureCanvas.width;

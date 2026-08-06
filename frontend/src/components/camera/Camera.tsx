@@ -282,10 +282,16 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         const videoStream = streamRef.current;
         if (!videoStream) return;
         setError('');
-        await startHeldRecording(videoStream, isStillPressed, () => {
-            destroyEffects();
-            stopCamera();
-        });
+        await startHeldRecording(
+            videoStream,
+            isStillPressed,
+            () => {
+                destroyEffects();
+                stopCamera();
+            },
+            facingMode === 'user',
+            videoRef.current,
+        );
     };
     useEffect(() => {
         setRestart(() => {
@@ -339,6 +345,9 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             sourceCanvas: sourceCanvasRef.current,
             renderer: rendererRef.current,
             frame: lastFrameRef.current,
+            // Front cameras preview mirrored, so the captured photo must be
+            // flipped to match what the user saw; back cameras stay as-is.
+            mirror: facingMode === 'user',
         });
         if (!photo) return;
         const flash = document.createElement('div');

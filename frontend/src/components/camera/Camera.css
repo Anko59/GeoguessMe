@@ -371,16 +371,6 @@
     object-fit: contain;
 }
 
-.preview-filter-picker {
-    position: absolute;
-    right: 0;
-    bottom: max(6.5rem, calc(env(safe-area-inset-bottom) + 5.5rem));
-    left: 0;
-    z-index: 3;
-    display: flex;
-    justify-content: center;
-}
-
 .preview-controls {
     padding: 0 clamp(1rem, 4vw, 2rem);
     position: absolute;
@@ -422,79 +412,46 @@
     }
 }
 
-.camera-options-bar {
-    width: min(100%, 22rem);
-    align-self: center;
+.preview-action-row {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: var(--space-2);
-}
-
-.preview-options-bar {
-    width: 100%;
-    margin-bottom: var(--space-3);
+    justify-content: center;
+    gap: 0.55rem;
 }
 
 .camera-options-summary {
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.68rem;
     font-weight: 700;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
 }
 
+/* Challenge-options menu: a compact dark popover that floats above the
+   preview actions, matching the text-banner editor's look. */
 .camera-options-menu {
-    width: min(100%, 22rem);
-    padding: var(--space-4);
+    width: min(92vw, 21rem);
+    padding: 0.8rem;
     display: grid;
-    gap: var(--space-4);
-    background: rgba(255, 255, 255, 0.97);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+    gap: 0.6rem;
+    color: white;
+    background: rgba(7, 9, 22, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 1rem;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(22px);
 }
 
 .camera-options-title {
-    margin: 0 0 var(--space-2);
-    color: var(--brand-blue-accessible);
-    font-size: 0.72rem;
+    margin: 0 0 0.4rem;
+    color: var(--brand-yellow);
+    font-size: 0.68rem;
     font-weight: 850;
     letter-spacing: 0.09em;
     text-transform: uppercase;
 }
 
-.camera-options-groups {
-    max-height: 11rem;
-    overflow-y: auto;
-    display: grid;
-    gap: var(--space-2);
-}
-
-.camera-options-group,
-.camera-options-hide {
-    padding: var(--space-2);
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    color: var(--brand-navy);
-    font-weight: 750;
-    cursor: pointer;
-}
-
-.camera-options-hide small {
-    display: block;
-    margin-top: 0.15rem;
-    color: var(--ink-muted);
-    font-size: 0.72rem;
-    font-weight: 600;
-    line-height: 1.35;
-}
-
 .camera-options-hint {
     margin: 0;
-    color: var(--ink-muted);
-    font-size: 0.85rem;
-}
-
-.camera-options-close {
-    justify-self: end;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.8rem;
 }

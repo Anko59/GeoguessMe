@@ -45,6 +45,7 @@ beforeEach(() => {
     HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
         drawImage: vi.fn(),
         clearRect: vi.fn(),
+        setTransform: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,abc123');
 
@@ -82,6 +83,8 @@ describe('Camera component', () => {
         mocks.getUserMedia.mockReturnValue(new Promise(() => {}));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
         expect(screen.getByText('Loading camera...')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Challenge options' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Take photo' })).not.toBeInTheDocument();
     });
 
     it('shows error UI when camera access is denied', async () => {
@@ -104,7 +107,6 @@ describe('Camera component', () => {
     ])('maps %s camera failures to actionable guidance', async (name, expectedMessage) => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Camera failed', name));
         render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-
         await waitFor(() => expect(screen.getByText(expectedMessage)).toBeInTheDocument());
     });
 
@@ -237,30 +239,27 @@ describe('Camera component', () => {
     });
 
     it('lets the user pick target groups and hide the location before sending', async () => {
-        mocks.get.mockResolvedValueOnce({
-            data: [
-                { id: 'group-1', name: 'Paris', code: 'ABC123' },
-                { id: 'group-2', name: 'Berlin', code: 'DEF456' },
-            ],
-        });
+        const groups = [
+            { id: 'group-1', name: 'Paris', code: 'ABC123' },
+            { id: 'group-2', name: 'Berlin', code: 'DEF456' },
+        ];
+        mocks.get.mockResolvedValueOnce({ data: groups }).mockResolvedValue({ data: {} });
         mocks.getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
         stubGeolocation();
         const onUploadComplete = vi.fn();
         render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);
-
+        await useDeviceFallback();
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText('Choose photo from device'), {
+                target: { files: [new File(['image'], 'upload.jpg', { type: 'image/jpeg' })] },
+            });
+        });
+        await waitFor(() => expect(screen.getByAltText('Captured')).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: 'Challenge options' }));
         await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/user/groups'));
-        const berlin = screen.getByLabelText('Berlin');
-        fireEvent.click(berlin);
+        fireEvent.click(screen.getByLabelText('Berlin'));
         fireEvent.click(screen.getByLabelText(/Hide my location/));
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-
-        await useDeviceFallback();
-        const file = new File(['image'], 'upload.jpg', { type: 'image/jpeg' });
-        const picker = screen.getByLabelText('Choose photo from device') as HTMLInputElement;
-        await act(async () => {
-            fireEvent.change(picker, { target: { files: [file] } });
-        });
         fireEvent.click(screen.getByRole('button', { name: /Send/ }));
         await waitFor(() => expect(mocks.post).toHaveBeenCalled());
         const formData = mocks.post.mock.calls[0][1] as FormData;
@@ -433,6 +432,7 @@ describe('Camera component', () => {
             quadraticCurveTo: vi.fn(),
             restore: vi.fn(),
             save: vi.fn(),
+            setTransform: vi.fn(),
         } as unknown as CanvasRenderingContext2D;
         HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(context);
 
