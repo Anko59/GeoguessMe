@@ -198,6 +198,44 @@ describe('Chat', () => {
         expect(myChallenge).toHaveTextContent('Resolved challenge');
     });
 
+    it('keeps a challenge resolved after its results have been viewed', () => {
+        const { container } = renderChat({
+            messages: [
+                message({
+                    id: 'ch4',
+                    kind: 'challenge',
+                    photo_id: 'photo-4',
+                    content: '',
+                    challenge_status: 'results',
+                }),
+            ],
+        });
+        // Opening the results of an old challenge sets the local status to
+        // 'results'; the card must not flip back to the yellow 'New challenge'
+        // state until the next refresh.
+        const card = container.querySelector('button[data-photo-id="photo-4"]') as HTMLButtonElement;
+        expect(card).toHaveClass('resolved');
+        expect(card).toHaveTextContent('Resolved challenge');
+    });
+
+    it('keeps the Challenge sent label for the poster viewing results', () => {
+        const { container } = renderChat({
+            messages: [
+                message({
+                    id: 'ch5',
+                    kind: 'challenge',
+                    photo_id: 'photo-5',
+                    content: '',
+                    user_id: 'user-1',
+                    challenge_status: 'results',
+                }),
+            ],
+        });
+        const card = container.querySelector('button[data-photo-id="photo-5"]') as HTMLButtonElement;
+        expect(card).not.toHaveClass('resolved');
+        expect(card).toHaveTextContent('Challenge sent');
+    });
+
     it('labels an expired challenge', () => {
         const { container } = renderChat({
             messages: [
