@@ -2,7 +2,6 @@ import React from 'react';
 import { CameraErrorPanel, CameraOptionsMenu, CameraTopControls, PreviewActions } from './CameraPanels';
 import FilterPicker from './FilterPicker';
 import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
-import { isLiveCameraFeed } from './cameraUtils';
 import type { Group } from '../../types';
 import type { LensId } from './lenses/lensCatalog';
 import type { TextBanner } from './textBanner';
@@ -97,7 +96,6 @@ export default function CameraView({
     onCapturedVideoError,
 }: CameraViewProps) {
     const mirrorLivePreview = facingMode === 'user';
-    const liveFeed = isLiveCameraFeed(cameraReady, fileMode);
     const filterPicker = (
         <FilterPicker
             selectedFilter={selectedFilter}
@@ -156,13 +154,6 @@ export default function CameraView({
                         aria-hidden="true"
                     />
                     <TextBannerOverlay banner={textBanner} />
-                    {!liveFeed && (
-                        <div className="camera-options-bar">
-                            {optionsButton}
-                            {showOptions && optionsMenu}
-                        </div>
-                    )}
-                    {liveFeed && showOptions && <div className="camera-options-popover">{optionsMenu}</div>}
                     {cameraReady && !fileMode && (
                         <div className="camera-controls">
                             {!recording && (
@@ -170,14 +161,11 @@ export default function CameraView({
                                     hasMultipleCameras={hasMultipleCameras}
                                     facingMode={facingMode}
                                     showFilters={showFilters}
-                                    showOptions={showOptions}
                                     onSwitchCamera={onSwitchCamera}
                                     onToggleFilters={onToggleFilters}
-                                    onToggleOptions={onToggleOptions}
                                 />
                             )}
                             {showFilters && filterPicker}
-                            {textEditor}
                             <button
                                 className={`capture-button${recording ? ' recording' : ''}`}
                                 onClick={onCaptureButtonClick}
@@ -215,37 +203,34 @@ export default function CameraView({
                 </div>
             ) : (
                 <div className="photo-preview">
-                    <div className="camera-options-bar preview-options-bar">
-                        {optionsButton}
-                        <span className="camera-options-summary">
-                            {selectedGroupIDs.length} group{selectedGroupIDs.length === 1 ? '' : 's'}
-                            {hideLocation ? ' · location hidden' : ''}
-                        </span>
-                        {showOptions && optionsMenu}
-                    </div>
                     {capturedPhoto ? (
                         <>
                             <img src={capturedPhoto} alt="Captured" className="preview-image" />
                             <canvas ref={overlayCanvasRef} className="photo-filter-overlay" aria-hidden="true" />
                             <TextBannerOverlay banner={textBanner} />
-                            <div className="preview-composer">
-                                {textEditor}
-                                {fileMode && filterPicker}
-                            </div>
                         </>
                     ) : (
-                        <>
-                            <video
-                                src={capturedVideo ?? undefined}
-                                className="preview-image"
-                                controls
-                                playsInline
-                                aria-label="Recorded video preview"
-                                onError={onCapturedVideoError}
-                            />
-                            {textEditor}
-                        </>
+                        <video
+                            src={capturedVideo ?? undefined}
+                            className="preview-image"
+                            controls
+                            playsInline
+                            aria-label="Recorded video preview"
+                            onError={onCapturedVideoError}
+                        />
                     )}
+                    <div className="preview-composer">
+                        <div className="preview-action-row">
+                            {textEditor}
+                            {optionsButton}
+                        </div>
+                        <span className="camera-options-summary">
+                            {selectedGroupIDs.length} group{selectedGroupIDs.length === 1 ? '' : 's'}
+                            {hideLocation ? ' · location hidden' : ''}
+                        </span>
+                        {capturedPhoto && fileMode && filterPicker}
+                        {showOptions && <div className="camera-options-popover">{optionsMenu}</div>}
+                    </div>
                     <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
                 </div>
             )}

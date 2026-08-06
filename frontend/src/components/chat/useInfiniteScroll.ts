@@ -21,6 +21,7 @@ export function useInfiniteScroll(
     const atBottomRef = useRef(true);
     const pendingOlderScrollRef = useRef<number | null>(null);
     const loadOlderRequestedRef = useRef(false);
+    const mountedRef = useRef(false);
 
     useEffect(() => {
         if (!loadingOlder) loadOlderRequestedRef.current = false;
@@ -29,6 +30,8 @@ export function useInfiniteScroll(
     useEffect(() => {
         const list = scrollContainerRef.current;
         if (!list) return;
+        const firstRender = !mountedRef.current;
+        mountedRef.current = true;
         // After an older page is prepended, restore the previous scroll anchor
         // so the visible conversation does not jump; otherwise keep the view
         // pinned to the bottom only while the user is already there.
@@ -38,7 +41,15 @@ export function useInfiniteScroll(
             return;
         }
         if (atBottomRef.current) {
-            endRef.current?.scrollIntoView({ behavior: 'smooth' });
+            if (firstRender) {
+                // Open the chat anchored at the newest message without gliding
+                // through the whole history: a smooth glide fires scroll events
+                // near the top, which the scroll handler treats as a request
+                // to load older messages, racing the initial page.
+                list.scrollTop = list.scrollHeight;
+            } else {
+                endRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
         }
     }, [endRef, messagesDependency, scrollContainerRef]);
 

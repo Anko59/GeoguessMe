@@ -17,6 +17,7 @@ vi.mock('react-leaflet', () => ({
     TileLayer: createComponent('TileLayer'),
     Marker: createComponent('Marker'),
     Popup: createComponent('Popup'),
+    useMap: vi.fn(),
     useMapEvents: vi.fn(),
 }));
 
@@ -24,10 +25,12 @@ vi.mock('leaflet', () => ({
     default: {
         icon: () => 'mock-icon',
         divIcon: () => 'mock-div-icon',
+        latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
         Marker: { prototype: { options: { icon: null } } },
     },
     icon: () => 'mock-icon',
     divIcon: () => 'mock-div-icon',
+    latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
     Marker: { prototype: { options: { icon: null } } },
 }));
 
@@ -37,10 +40,11 @@ vi.mock('leaflet/dist/images/marker-icon.png', () => ({ default: 'marker-icon.pn
 vi.mock('leaflet/dist/images/marker-shadow.png', () => ({ default: 'marker-shadow.png' }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { useMapEvents } = vi.mocked(await import('react-leaflet')) as any;
+const { useMap, useMapEvents } = vi.mocked(await import('react-leaflet')) as any;
 
 beforeEach(() => {
     vi.clearAllMocks();
+    useMap.mockReturnValue({ fitBounds: vi.fn() });
 });
 
 describe('Map component', () => {
@@ -109,5 +113,59 @@ describe('Map component', () => {
         );
         const markers = screen.getAllByTestId('Marker');
         expect(markers).toHaveLength(3);
+    });
+
+    it('fits the view to every guess and the revealed spot', () => {
+        const fitBounds = vi.fn();
+        useMap.mockReturnValue({ fitBounds });
+        const guesses = [
+            { user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 100 },
+            { user_id: 'u2', lat: 49.0, long: 2.5, username: 'bob', avatar: 'b.png', score: 80 },
+        ];
+        render(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                actualLocation={{ lat: 48.85, long: 2.4 }}
+                guesses={guesses}
+            />,
+        );
+        expect(fitBounds).toHaveBeenCalledTimes(1);
+        expect(fitBounds).toHaveBeenCalledWith(
+            expect.objectContaining({
+                points: expect.arrayContaining([
+                    [48.8, 2.3],
+                    [49.0, 2.5],
+                    [48.85, 2.4],
+                ]),
+            }),
+            expect.objectContaining({ padding: [40, 40], maxZoom: 17 }),
+        );
+    });
+
+    it('keeps the world view when there are no points to fit', () => {
+        const fitBounds = vi.fn();
+        useMap.mockReturnValue({ fitBounds });
+        render(<Map onLocationSelect={vi.fn()} selectedLocation={null} />);
+        expect(fitBounds).not.toHaveBeenCalled();
+    });
+
+    it('refits only when the points change, never on plain re-renders', () => {
+        const fitBounds = vi.fn();
+        useMap.mockReturnValue({ fitBounds });
+        const guesses = [{ user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 100 }];
+        const { rerender } = render(<Map onLocationSelect={vi.fn()} selectedLocation={null} guesses={guesses} />);
+        // A re-render with the same points (e.g. the results clock tick) must
+        // not re-fit, otherwise it would fight the user's manual zoom.
+        rerender(<Map onLocationSelect={vi.fn()} selectedLocation={null} guesses={guesses} />);
+        expect(fitBounds).toHaveBeenCalledTimes(1);
+        rerender(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                guesses={[{ user_id: 'u1', lat: 48.81, long: 2.31, username: 'alice', avatar: 'a.png', score: 100 }]}
+            />,
+        );
+        expect(fitBounds).toHaveBeenCalledTimes(2);
     });
 });
