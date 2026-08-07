@@ -107,6 +107,11 @@ describe('ProfilePage', () => {
         expect(screen.getByRole('heading', { name: 'Next rank: Clueless Wanderer' })).toBeInTheDocument();
         expect(screen.getByText(/9,000 to go/)).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+        // The hero avatar opens full screen.
+        fireEvent.click(screen.getByRole('button', { name: "View alice's avatar full screen" }));
+        expect(screen.getByRole('dialog', { name: "alice's avatar full screen" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Close full-screen photo' }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Lost Tourist badge' })).toHaveAttribute(
             'src',
             '/rank-badges/lost-tourist.png',

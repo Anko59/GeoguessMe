@@ -1,0 +1,52 @@
+/* Full-screen image dialog, mirroring the challenge-photo dialogs. The expand
+ * button is display:contents so it never disturbs the thumbnail's layout. */
+.fullscreen-toggle {
+    padding: 0;
+    display: contents;
+    background: none;
+    border: 0;
+    cursor: zoom-in;
+}
+
+.fullscreen-toggle img {
+    cursor: zoom-in;
+}
+
+.fullscreen-toggle:focus-visible img {
+    outline: 3px solid var(--brand-yellow);
+    outline-offset: 3px;
+}
+
+.fullscreen-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    display: grid;
+    place-items: center;
+    background: rgba(5, 7, 18, 0.98);
+}
+
+.fullscreen-dialog-photo {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 0.4rem;
+}
+
+.fullscreen-dialog-close {
+    width: 2.75rem;
+    height: 2.75rem;
+    position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    color: white;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    cursor: pointer;
+}
