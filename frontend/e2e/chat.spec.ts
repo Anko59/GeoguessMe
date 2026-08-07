@@ -333,7 +333,7 @@ test.describe('Chat via WebSocket', () => {
             }
 
             // Wait until the hook automatically reconnects.
-            await expect(memberPage.getByRole('status')).toHaveText('Connected', { timeout: 15000 });
+            await expectConnected(memberPage);
 
             // ── 3. renewed ticket ──────────────────────────────────────────────
             const urlsAfter = await wsControl(memberPage).ticketUrls();
@@ -386,7 +386,7 @@ test.describe('Chat via WebSocket', () => {
 
             // Wait for the hook to reconnect. After this the WebSocket is
             // open and receiving live events, but catch-up is still blocked.
-            await expect(memberPage.getByRole('status')).toHaveText('Connected', { timeout: 15000 });
+            await expectConnected(memberPage);
 
             // Now send the overlap message while the member is connected via
             // the live WebSocket but the catch-up REST window is still open.

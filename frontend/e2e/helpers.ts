@@ -22,10 +22,6 @@ export interface Credentials {
     password: string;
 }
 
-/**
- * Sign up a new user entirely through the UI.
- * Returns the credentials used and the page (already at /groups on success).
- */
 // The group WebSocket handshake can take several seconds under CI parallel
 // load. Waiting for the actual 'Connected' state with a generous timeout is
 // deterministic state-based synchronization (never a fixed sleep); the default
@@ -37,6 +33,10 @@ export async function expectConnected(page: Page): Promise<void> {
     await expect(page.getByRole('status')).toHaveText('Connected', { timeout: CONNECTED_TIMEOUT_MS });
 }
 
+/**
+ * Sign up a new user entirely through the UI.
+ * Returns the credentials used and the page (already at /groups on success).
+ */
 export async function signupViaUI(page: Page, creds?: Partial<Credentials>): Promise<Credentials> {
     const username = creds?.username ?? uniqueUsername();
     const email = creds?.email ?? uniqueEmail();
