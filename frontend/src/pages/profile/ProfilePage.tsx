@@ -15,8 +15,12 @@ interface ProfileViewData {
     email?: string;
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 export default function ProfilePage() {
@@ -120,12 +124,42 @@ export default function ProfilePage() {
                 <article className="profile-stat-card profile-stat-points">
                     <span className="profile-stat-label">Total points</span>
                     <strong>{profile.total_points.toLocaleString()}</strong>
-                    <span>Lifetime guess score</span>
+                    {profile.global_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_rank.rank} of {profile.global_rank.total_players.toLocaleString()} players
+                        </span>
+                    ) : (
+                        <span>Guess a location to enter the ranking</span>
+                    )}
                 </article>
                 <article className="profile-stat-card profile-stat-guesses">
                     <span className="profile-stat-label">Guesses made</span>
                     <strong>{profile.guess_count.toLocaleString()}</strong>
                     <span>Places explored</span>
+                </article>
+                <article className="profile-stat-card profile-stat-average">
+                    <span className="profile-stat-label">Average score</span>
+                    <strong>{profile.average_score.toFixed(1)}</strong>
+                    {profile.global_average_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_average_rank.rank} of{' '}
+                            {profile.global_average_rank.total_players.toLocaleString()} players
+                        </span>
+                    ) : (
+                        <span>Guess a location to enter the ranking</span>
+                    )}
+                </article>
+                <article className="profile-stat-card profile-stat-elo">
+                    <span className="profile-stat-label">Elo rating</span>
+                    <strong>{profile.elo > 0 ? profile.elo.toLocaleString() : '—'}</strong>
+                    {profile.global_elo_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_elo_rank.rank} of {profile.global_elo_rank.total_players.toLocaleString()}{' '}
+                            rated players
+                        </span>
+                    ) : (
+                        <span>Guess a shared challenge to get rated</span>
+                    )}
                 </article>
                 <article className="profile-stat-card profile-stat-rank">
                     <span className="profile-stat-label">Current rank</span>
@@ -134,20 +168,6 @@ export default function ProfilePage() {
                         <RankBadge rank={rank} />
                         {rank.name}
                     </span>
-                </article>
-                <article className="profile-stat-card profile-stat-global">
-                    <span className="profile-stat-label">Global rank</span>
-                    {profile.global_rank.rank > 0 ? (
-                        <>
-                            <strong>#{profile.global_rank.rank}</strong>
-                            <span>of {profile.global_rank.total_players.toLocaleString()} players</span>
-                        </>
-                    ) : (
-                        <>
-                            <strong>Unranked</strong>
-                            <span>Guess a location to enter the ranking</span>
-                        </>
-                    )}
                 </article>
             </section>
 

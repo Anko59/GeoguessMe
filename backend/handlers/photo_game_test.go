@@ -87,11 +87,14 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(int64(7600), int64(3), 2533.33))
 	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
+	mock.ExpectQuery("WITH scores AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(7), int64(1943)))
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"average_score":2533.33`) || !strings.Contains(recorder.Body.String(), `"global_average_rank":{"rank":7,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"elo":0`) {
 		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }

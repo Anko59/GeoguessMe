@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import type { LeaderboardEntry, LeaderboardPeriod } from '../../types';
+import type { LeaderboardEntry, LeaderboardMetric, LeaderboardPeriod } from '../../types';
 import Avatar from '../common/Avatar';
 import RankBadge from '../progression/RankBadge';
 import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
@@ -14,6 +14,7 @@ interface LeaderboardProps {
 export default function Leaderboard({ groupID }: LeaderboardProps) {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [period, setPeriod] = useState<LeaderboardPeriod>('week');
+    const [metric, setMetric] = useState<LeaderboardMetric>('total');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const mountedRef = useRef(true);
@@ -24,7 +25,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         if (!currentUserId) return;
         if (!mountedRef.current) return;
         setError('');
-        const cached = getCachedLeaderboard(currentUserId, groupID, period);
+        const cached = getCachedLeaderboard(currentUserId, groupID, period, metric);
         if (cached) {
             setLeaderboard(cached);
             setLoading(false);
@@ -32,7 +33,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
             setLoading(true);
         }
         try {
-            const leaderboard = await refreshLeaderboard(currentUserId, groupID, period);
+            const leaderboard = await refreshLeaderboard(currentUserId, groupID, period, metric);
             if (!mountedRef.current) return;
             setLeaderboard(leaderboard);
         } catch {
@@ -41,7 +42,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         } finally {
             if (mountedRef.current) setLoading(false);
         }
-    }, [currentUserId, groupID, period]);
+    }, [currentUserId, groupID, period, metric]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -80,6 +81,25 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
     };
 
     const periodLabel: Record<LeaderboardPeriod, string> = { week: 'This week', month: 'This month', all: 'All time' };
+    const metricLabel: Record<LeaderboardMetric, string> = { total: 'Total', average: 'Average', elo: 'Elo' };
+
+    const metricValue = (entry: LeaderboardEntry): number => {
+        switch (metric) {
+            case 'average':
+                return entry.average_score;
+            case 'elo':
+                return entry.elo;
+            default:
+                return entry.score;
+        }
+    };
+
+    const formatMetric = (value: number): string => {
+        if (metric === 'elo' && value === 0) return '—';
+        return metric === 'average' ? value.toFixed(1) : Math.round(value).toLocaleString();
+    };
+
+    const metricUnit: Record<LeaderboardMetric, string> = { total: 'pts', average: 'avg', elo: 'elo' };
 
     return (
         <div className="leaderboard-container">
@@ -89,6 +109,23 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                     <p>Group rankings</p>
                     <h2>Leaderboard</h2>
                 </div>
+            </div>
+
+            <div className="leaderboard-metric-tabs" role="tablist" aria-label="Leaderboard metric">
+                {(Object.keys(metricLabel) as LeaderboardMetric[]).map((option) => (
+                    <button
+                        key={option}
+                        type="button"
+                        role="tab"
+                        aria-selected={metric === option}
+                        className={`leaderboard-metric-tab${metric === option ? ' selected' : ''}`}
+                        onClick={() => {
+                            setMetric(option);
+                        }}
+                    >
+                        {metricLabel[option]}
+                    </button>
+                ))}
             </div>
 
             <div className="leaderboard-period-tabs" role="tablist" aria-label="Leaderboard period">
@@ -139,8 +176,11 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                     {leaderboard.map((entry, index) => {
                         const rank = index + 1;
                         const isCurrentUser = entry.user_id === currentUserId;
-                        const rankMedal = getRankMedal(rank);
-                        const rankClass = getRankClass(rank);
+                        const isUnrated = metric === 'elo' && entry.elo === 0;
+                        const rankMedal = isUnrated ? null : getRankMedal(rank);
+                        const rankClass = isUnrated ? '' : getRankClass(rank);
+                        const value = metricValue(entry);
+                        const leaderValue = leaderboard[0] ? metricValue(leaderboard[0]) : 1;
 
                         return (
                             <div
@@ -149,7 +189,9 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 style={{ animationDelay: `${index * 0.05}s` }}
                             >
                                 <div className="entry-rank">
-                                    {rankMedal ? (
+                                    {isUnrated ? (
+                                        '—'
+                                    ) : rankMedal ? (
                                         <img src={rankMedal} alt="" className="entry-rank-medal" />
                                     ) : (
                                         `#${rank}`
@@ -185,16 +227,14 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                     <div className="entry-score-bar">
                                         <div
                                             className="score-fill"
-                                            style={{
-                                                width: `${Math.min(100, (entry.score / (leaderboard[0]?.score || 1)) * 100)}%`,
-                                            }}
+                                            style={{ width: `${Math.min(100, (value / (leaderValue || 1)) * 100)}%` }}
                                         ></div>
                                     </div>
                                 </div>
 
                                 <div className="entry-score">
-                                    {entry.score}
-                                    <span className="score-label">pts</span>
+                                    {formatMetric(value)}
+                                    <span className="score-label">{metricUnit[metric]}</span>
                                 </div>
                             </div>
                         );

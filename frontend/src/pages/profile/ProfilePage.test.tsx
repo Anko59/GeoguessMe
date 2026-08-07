@@ -37,6 +37,8 @@ const profile = {
     avatar: 'avatar.png',
     total_points: 6000,
     guess_count: 4,
+    average_score: 1500,
+    elo: 1152,
     rank: {
         level: 2,
         name: 'Lost Tourist',
@@ -59,6 +61,14 @@ const profile = {
     global_rank: {
         rank: 3,
         total_players: 1943,
+    },
+    global_average_rank: {
+        rank: 7,
+        total_players: 1943,
+    },
+    global_elo_rank: {
+        rank: 5,
+        total_players: 512,
     },
 };
 
@@ -86,13 +96,16 @@ describe('ProfilePage', () => {
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(screen.getByText('6,000')).toBeInTheDocument();
+        expect(screen.getByText('#3 of 1,943 players')).toBeInTheDocument();
+        expect(screen.getByText('1500.0')).toBeInTheDocument();
+        expect(screen.getByText('#7 of 1,943 players')).toBeInTheDocument();
+        expect(screen.getByText('1,152')).toBeInTheDocument();
+        expect(screen.getByText('#5 of 512 rated players')).toBeInTheDocument();
         expect(screen.getAllByText('Lost Tourist')).toHaveLength(2);
         expect(screen.getAllByText('II')).toHaveLength(4);
         expect(screen.getByText('III')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Next rank: Clueless Wanderer' })).toBeInTheDocument();
         expect(screen.getByText(/9,000 to go/)).toBeInTheDocument();
-        expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
-        expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
         expect(screen.getByRole('img', { name: 'Lost Tourist badge' })).toHaveAttribute(
             'src',
@@ -116,12 +129,20 @@ describe('ProfilePage', () => {
 
     it('marks a player who never guessed as unranked', async () => {
         mocks.get.mockResolvedValueOnce({
-            data: { ...profile, total_points: 0, guess_count: 0, global_rank: { rank: 0, total_players: 1943 } },
+            data: {
+                ...profile,
+                total_points: 0,
+                guess_count: 0,
+                global_rank: { rank: 0, total_players: 1943 },
+                global_average_rank: { rank: 0, total_players: 1943 },
+                global_elo_rank: { rank: 0, total_players: 0 },
+                elo: 0,
+                average_score: 0,
+            },
         });
         renderProfile();
 
-        expect(await screen.findByText('Unranked')).toBeInTheDocument();
-        expect(screen.getByText('Guess a location to enter the ranking')).toBeInTheDocument();
+        expect((await screen.findAllByText('Guess a location to enter the ranking')).length).toBeGreaterThan(0);
     });
 
     it('loads another player public profile without account details', async () => {

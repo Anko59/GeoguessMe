@@ -144,7 +144,7 @@
 
 .profile-trackers {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--space-3);
 }
 
@@ -299,6 +299,12 @@
 
 .profile-error .btn {
     justify-self: center;
+}
+
+@media (max-width: 64rem) {
+    .profile-trackers {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 700px) {

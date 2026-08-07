@@ -24,6 +24,7 @@ describe('leaderboardCache', () => {
                 guess_count: number;
                 average_score: number;
                 total_points: number;
+                elo: number;
                 rank: {
                     level: number;
                     name: string;
@@ -41,11 +42,11 @@ describe('leaderboardCache', () => {
             }),
         );
 
-        const first = refreshLeaderboard('user-a', 'group-a', 'week');
-        const second = refreshLeaderboard('user-a', 'group-a', 'week');
+        const first = refreshLeaderboard('user-a', 'group-a', 'week', 'total');
+        const second = refreshLeaderboard('user-a', 'group-a', 'week', 'total');
         expect(mocks.get).toHaveBeenCalledTimes(1);
         expect(mocks.get).toHaveBeenCalledWith('/group/leaderboard', {
-            params: { group_id: 'group-a', period: 'week' },
+            params: { group_id: 'group-a', period: 'week', metric: 'total' },
         });
 
         resolve({
@@ -58,6 +59,7 @@ describe('leaderboardCache', () => {
                     guess_count: 1,
                     average_score: 10,
                     total_points: 10,
+                    elo: 1000,
                     rank: {
                         level: 1,
                         name: 'Page',
@@ -71,7 +73,7 @@ describe('leaderboardCache', () => {
             ],
         });
         await expect(first).resolves.toEqual(await second);
-        expect(getCachedLeaderboard('user-a', 'group-a', 'week')).toEqual([
+        expect(getCachedLeaderboard('user-a', 'group-a', 'week', 'total')).toEqual([
             {
                 user_id: 'user-a',
                 username: 'alice',
@@ -80,6 +82,7 @@ describe('leaderboardCache', () => {
                 guess_count: 1,
                 average_score: 10,
                 total_points: 10,
+                elo: 1000,
                 rank: {
                     level: 1,
                     name: 'Page',
@@ -91,6 +94,6 @@ describe('leaderboardCache', () => {
                 },
             },
         ]);
-        expect(getCachedLeaderboard('user-b', 'group-a', 'week')).toBeUndefined();
+        expect(getCachedLeaderboard('user-b', 'group-a', 'week', 'total')).toBeUndefined();
     });
 });

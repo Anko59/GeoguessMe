@@ -187,13 +187,19 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 		t.Fatalf("members = %+v, %v", members, err)
 	}
 	leaderboardQuery := `(?s)SELECT u\.id, u\.username, u\.avatar.*SUM\(g\.score\).*ORDER BY COALESCE\(SUM\(g\.score\), 0\) DESC`
+	challengesQuery := `(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`
+	emptyChallenges := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"})
+	}
 	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0, 7600))
+	mock.ExpectQuery(challengesQuery).WithArgs("g1").WillReturnRows(emptyChallenges())
 	entries, err := GetGroupLeaderboardContext(context.Background(), "g1")
-	if err != nil || len(entries) != 1 || entries[0].Score != 160 || entries[0].Average != 80.0 || entries[0].Avatar != "avatar4.png" || entries[0].TotalPoints != 7600 || entries[0].Rank.Name != "Lost Tourist" {
+	if err != nil || len(entries) != 1 || entries[0].Score != 160 || entries[0].Average != 80.0 || entries[0].Avatar != "avatar4.png" || entries[0].TotalPoints != 7600 || entries[0].Elo != 0 || entries[0].Rank.Name != "Lost Tourist" {
 		t.Fatalf("leaderboard = %+v, %v", entries, err)
 	}
 	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0, 7600))
-	if entries, err := GetGroupLeaderboard("g1"); err != nil || len(entries) != 1 {
+	mock.ExpectQuery(challengesQuery).WithArgs("g1").WillReturnRows(emptyChallenges())
+	if entries, err := GetGroupLeaderboard("g1"); err != nil || len(entries) != 1 || entries[0].Elo != 0 {
 		t.Fatalf("GetGroupLeaderboard = %+v, %v", entries, err)
 	}
 }
@@ -210,5 +216,89 @@ func TestLeaderboardPeriodStart(t *testing.T) {
 	}
 	if start := leaderboardPeriodStart(LeaderboardAllTime, now); start != nil {
 		t.Fatalf("all-time start = %v", start)
+	}
+}
+
+func TestLoadChallengesDropsSingleGuesserPhotos(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).
+		WithArgs("g1").
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "u1", 4000).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "u2", 1000).
+			AddRow("p2", time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), "u1", 2000))
+	challenges, err := LoadChallengesContext(context.Background(), "g1", nil)
+	if err != nil {
+		t.Fatalf("LoadChallengesContext = %v", err)
+	}
+	if len(challenges) != 1 {
+		t.Fatalf("challenges = %d, want 1 (single-gueser photo dropped)", len(challenges))
+	}
+	if challenges[0].ID != "p1" || len(challenges[0].Guesses) != 2 {
+		t.Fatalf("challenge = %+v", challenges[0])
+	}
+}
+
+func TestGetGlobalEloContextRanksByComputedRating(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	stats, err := GetGlobalEloContext(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("GetGlobalEloContext = %v", err)
+	}
+	if stats.Elo <= 1000 || stats.Rank != 1 || stats.TotalPlayers != 2 {
+		t.Fatalf("elo stats = %+v", stats)
+	}
+}
+
+func TestGetGlobalEloContextUnratedPlayer(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	stats, err := GetGlobalEloContext(context.Background(), "carol")
+	if err != nil {
+		t.Fatalf("GetGlobalEloContext = %v", err)
+	}
+	if stats.Elo != 0 || stats.Rank != 0 || stats.TotalPlayers != 2 {
+		t.Fatalf("unrated stats = %+v", stats)
+	}
+}
+
+func TestGetGlobalAverageRankContext(t *testing.T) {
+	mock := newMockPool(t)
+	mock.ExpectQuery(`(?s)WITH scores AS.*ranked`).
+		WithArgs("alice").
+		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(2), int64(5)))
+	stats, err := GetGlobalAverageRankContext(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("GetGlobalAverageRankContext = %v", err)
+	}
+	if stats.Rank != 2 || stats.TotalPlayers != 5 {
+		t.Fatalf("average rank stats = %+v", stats)
+	}
+}
+
+func TestSortLeaderboardByMetric(t *testing.T) {
+	entries := []LeaderboardEntry{
+		{UserID: "a", Username: "alice", Score: 100, Average: 90, Elo: 900, TotalPoints: 100},
+		{UserID: "b", Username: "bob", Score: 200, Average: 95, Elo: 1100, TotalPoints: 200},
+		{UserID: "c", Username: "carol", Score: 150, Average: 60, Elo: 1200, TotalPoints: 150},
+	}
+	SortLeaderboard(entries, LeaderboardMetricTotal)
+	if entries[0].UserID != "b" {
+		t.Fatalf("total order = %+v, want bob first", entries)
+	}
+	SortLeaderboard(entries, LeaderboardMetricAverage)
+	if entries[0].UserID != "b" || entries[1].UserID != "a" {
+		t.Fatalf("average order = %+v", entries)
+	}
+	SortLeaderboard(entries, LeaderboardMetricElo)
+	if entries[0].UserID != "c" || entries[1].UserID != "b" {
+		t.Fatalf("elo order = %+v", entries)
 	}
 }
