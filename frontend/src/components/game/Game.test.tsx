@@ -217,7 +217,7 @@ describe('Game', () => {
         withGame(<Game gameMessage={message({ photo_id: 'photo-5', kind: 'challenge' })} onClose={vi.fn()} />);
 
         fireEvent.click(await screen.findByRole('button', { name: 'Map' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Submit guess ✓' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Submit guess' }));
 
         expect(await screen.findByRole('status')).toHaveTextContent('Masterstroke');
         expect(screen.getByRole('status')).toHaveTextContent('4,920 points');

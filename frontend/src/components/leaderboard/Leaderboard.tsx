@@ -54,14 +54,14 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
         };
     }, [fetchLeaderboard]);
 
-    const getRankEmoji = (rank: number) => {
+    const getRankMedal = (rank: number) => {
         switch (rank) {
             case 1:
-                return '🥇';
+                return '/ui/medal-gold.png';
             case 2:
-                return '🥈';
+                return '/ui/medal-silver.png';
             case 3:
-                return '🥉';
+                return '/ui/medal-bronze.png';
             default:
                 return null;
         }
@@ -177,7 +177,7 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                         const rank = index + 1;
                         const isCurrentUser = entry.user_id === currentUserId;
                         const isUnrated = metric === 'elo' && entry.elo === 0;
-                        const rankEmoji = isUnrated ? null : getRankEmoji(rank);
+                        const rankMedal = isUnrated ? null : getRankMedal(rank);
                         const rankClass = isUnrated ? '' : getRankClass(rank);
                         const value = metricValue(entry);
                         const leaderValue = leaderboard[0] ? metricValue(leaderboard[0]) : 1;
@@ -191,8 +191,8 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 <div className="entry-rank">
                                     {isUnrated ? (
                                         '—'
-                                    ) : rankEmoji ? (
-                                        <img src={rankEmoji} alt="" className="entry-rank-medal" />
+                                    ) : rankMedal ? (
+                                        <img src={rankMedal} alt="" className="entry-rank-medal" />
                                     ) : (
                                         `#${rank}`
                                     )}

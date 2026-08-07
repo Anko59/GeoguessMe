@@ -182,13 +182,22 @@
     text-align: center;
 }
 
-.leaderboard-entry.gold .entry-rank {
-    font-size: 1.7rem;
+.entry-rank-medal {
+    width: 1.6rem;
+    height: 1.6rem;
+    object-fit: contain;
+    vertical-align: middle;
 }
 
-.leaderboard-entry.silver .entry-rank,
-.leaderboard-entry.bronze .entry-rank {
-    font-size: 1.5rem;
+.leaderboard-entry.gold .entry-rank .entry-rank-medal {
+    width: 1.9rem;
+    height: 1.9rem;
+}
+
+.leaderboard-entry.silver .entry-rank .entry-rank-medal,
+.leaderboard-entry.bronze .entry-rank .entry-rank-medal {
+    width: 1.75rem;
+    height: 1.75rem;
 }
 
 .entry-avatar {
