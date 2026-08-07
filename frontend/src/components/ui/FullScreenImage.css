@@ -12,6 +12,11 @@
     cursor: zoom-in;
 }
 
+.fullscreen-toggle:focus-visible img {
+    outline: 3px solid var(--brand-yellow);
+    outline-offset: 3px;
+}
+
 .fullscreen-dialog {
     position: fixed;
     inset: 0;

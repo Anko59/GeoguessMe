@@ -3,17 +3,23 @@ import { describe, expect, it } from 'vitest';
 import FullScreenImage from './FullScreenImage';
 
 describe('FullScreenImage', () => {
-    it('opens the dialog on click and closes via the close button', () => {
+    it('opens the dialog with contained focus and restores the trigger on close', () => {
         render(
             <FullScreenImage src="/photo.png" alt="alice's avatar">
                 <img src="/photo.png" alt="alice" />
             </FullScreenImage>,
         );
-        fireEvent.click(screen.getByRole('button', { name: "View alice's avatar full screen" }));
+        const trigger = screen.getByRole('button', { name: "View alice's avatar full screen" });
+        fireEvent.click(trigger);
         const dialog = screen.getByRole('dialog', { name: "alice's avatar full screen" });
         expect(dialog.querySelector('img')).toHaveAttribute('src', '/photo.png');
-        fireEvent.click(screen.getByRole('button', { name: 'Close full-screen photo' }));
+        const close = screen.getByRole('button', { name: 'Close full-screen photo' });
+        expect(close).toHaveFocus();
+        fireEvent.keyDown(window, { key: 'Tab' });
+        expect(close).toHaveFocus();
+        fireEvent.click(close);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
     });
 
     it('closes the dialog with the Escape key', () => {

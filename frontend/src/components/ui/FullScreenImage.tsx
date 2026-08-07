@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from './Icon';
 import './FullScreenImage.css';
 
@@ -20,14 +20,31 @@ interface FullScreenImageProps {
  *  layout (avatars, headers, cards all keep their own sizing). */
 export default function FullScreenImage({ src, alt, children, className = '' }: FullScreenImageProps) {
     const [expanded, setExpanded] = useState(false);
+    const toggleRef = useRef<HTMLButtonElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         if (!expanded) return undefined;
-        const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setExpanded(false);
+        const previousOverflow = document.body.style.overflow;
+        const toggle = toggleRef.current;
+        document.body.style.overflow = 'hidden';
+        closeRef.current?.focus();
+        const handleDialogKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setExpanded(false);
+            } else if (event.key === 'Tab') {
+                // The close button is the dialog's only interactive control.
+                // Keep keyboard focus inside the modal until it is dismissed.
+                event.preventDefault();
+                closeRef.current?.focus();
+            }
         };
-        window.addEventListener('keydown', closeOnEscape);
-        return () => window.removeEventListener('keydown', closeOnEscape);
+        window.addEventListener('keydown', handleDialogKey);
+        return () => {
+            window.removeEventListener('keydown', handleDialogKey);
+            document.body.style.overflow = previousOverflow;
+            toggle?.focus();
+        };
     }, [expanded]);
 
     if (!src) return <>{children}</>;
@@ -35,6 +52,7 @@ export default function FullScreenImage({ src, alt, children, className = '' }: 
     return (
         <>
             <button
+                ref={toggleRef}
                 type="button"
                 className={`fullscreen-toggle ${className}`.trim()}
                 onClick={() => setExpanded(true)}
@@ -46,6 +64,7 @@ export default function FullScreenImage({ src, alt, children, className = '' }: 
             {expanded && (
                 <div className="fullscreen-dialog" role="dialog" aria-modal="true" aria-label={`${alt} full screen`}>
                     <button
+                        ref={closeRef}
                         type="button"
                         className="fullscreen-dialog-close"
                         onClick={() => setExpanded(false)}
