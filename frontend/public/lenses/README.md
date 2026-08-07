@@ -3,6 +3,14 @@
 All lens assets are served by the application. No camera frame or photo is sent
 to an asset-generation service at runtime.
 
+## Picker icons
+
+`icons/` contains the brand icon artwork shown in the lens rail tiles (one per
+catalog entry, named `{lens-id}.png`). The artwork is generated with
+`minimax/image-01` and post-processed to a transparent background; see
+[docs/custom-icons.md](../../../docs/custom-icons.md) for the recipe and display
+rules. The icons are committed assets; they are not generated at runtime.
+
 ## Jeeliz puppy
 
 `jeeliz-dog/` contains the ears and nose geometry, textures, and alpha map from

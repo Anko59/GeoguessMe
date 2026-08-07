@@ -102,11 +102,11 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 
 func TestGetUserScoreStats(t *testing.T) {
 	mock := newMockPool(t)
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").
 		WithArgs("user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(7600), int64(3)))
+		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(int64(7600), int64(3), 2533.33))
 	stats, err := GetUserScoreStatsContext(context.Background(), "user-1")
-	if err != nil || stats.TotalPoints != 7600 || stats.GuessCount != 3 {
+	if err != nil || stats.TotalPoints != 7600 || stats.GuessCount != 3 || stats.AverageScore != 2533.33 {
 		t.Fatalf("user score stats = %+v, %v", stats, err)
 	}
 }

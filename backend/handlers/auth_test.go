@@ -6,11 +6,8 @@ import (
 	"errors"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
-	"geoguessme/internal/config"
-	"geoguessme/internal/database"
 	"geoguessme/internal/email"
 	"geoguessme/internal/models"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -265,10 +262,7 @@ func TestProfileReadErrorAndMethodBranches(t *testing.T) {
 	requireStatus(t, GetProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusInternalServerError)
 
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\)").WithArgs(user.ID).
-		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count"}).AddRow(int64(0), int64(0)))
-	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).
-		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(0), int64(0)))
+	expectProfileQueries(t, mock, user.ID, 0, 0, 0, 0, 0, 0, 0)
 	requireStatus(t, UpdateProfile, requestWithUser(http.MethodGet, "/", "", user.ID), http.StatusOK)
 }
 
@@ -319,6 +313,8 @@ func TestGroupAndReadHandlers(t *testing.T) {
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("user-1", "alice", "avatar.png", 10, 1, 10.0, 10))
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).WithArgs(group.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder = httptest.NewRecorder()
 	GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
@@ -454,46 +450,4 @@ func TestGroupAndUploadValidation(t *testing.T) {
 	if mediaURL(&models.Photo{ID: "photo-1"}, false) != "/api/v1/challenges/photo-1/media" || mediaURL(&models.Photo{ID: "photo-1"}, true) == mediaURL(&models.Photo{ID: "photo-1"}, false) {
 		t.Fatal("media URLs are not distinct")
 	}
-}
-
-type validationStore struct{}
-
-func (validationStore) Put(context.Context, string, io.Reader, int64, string) error { return nil }
-func (validationStore) Delete(context.Context, string) error                        { return nil }
-func (validationStore) Get(context.Context, string) (io.ReadCloser, error)          { return nil, nil }
-func (validationStore) Stat(context.Context, string) (int64, error)                 { return 0, nil }
-func (validationStore) Health(context.Context) error                                { return nil }
-
-func handlerMock(t *testing.T) pgxmock.PgxPoolIface {
-	t.Helper()
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
-	previous := database.DB
-	database.DB = mock
-	t.Cleanup(func() {
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Error(err)
-		}
-		mock.Close()
-		database.DB = previous
-	})
-	return mock
-}
-
-func handlerConfig() *config.Config {
-	return &config.Config{
-		Environment: "test", PublicURL: "http://localhost:8080", JWTSecret: "test_secret_key_at_least_32_characters_long",
-		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour, VerificationTTL: 24 * time.Hour, ResetTTL: time.Hour,
-		PasswordHashCost: 4, UploadMaxBytes: 5 * 1024 * 1024, AvatarMaxBytes: 25 * 1024 * 1024, UploadMaxPixels: 100000, ChallengeTTL: time.Hour,
-		ViewWindow: time.Minute, LocationHide: 48 * time.Hour, PhotoRetention: 24 * time.Hour, AllowedOrigins: []string{"http://localhost:8080"},
-	}
-}
-
-func setupHandlers(t *testing.T) {
-	t.Helper()
-	cfg := handlerConfig()
-	Configure(cfg, nil, nil)
-	auth.Init(cfg.JWTSecret)
 }

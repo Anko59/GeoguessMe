@@ -128,7 +128,7 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 	require.Equal(t, 0, progression.TotalPoints)
 	require.Equal(t, 0, progression.GuessCount)
 	require.Equal(t, 1, progression.Rank.Level)
-	require.Equal(t, "Page", progression.Rank.Name)
+	require.Equal(t, "Completely Lost", progression.Rank.Name)
 	// A player who never guessed is not part of the ranked population.
 	require.Equal(t, 0, progression.GlobalRank.Rank)
 

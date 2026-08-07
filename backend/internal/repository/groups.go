@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"geoguessme/internal/database"
+	"geoguessme/internal/elo"
 	"geoguessme/internal/models"
 	"geoguessme/internal/progression"
 
@@ -141,7 +143,25 @@ type LeaderboardEntry struct {
 	GuessCount  int              `json:"guess_count"`
 	Average     float64          `json:"average_score"`
 	TotalPoints int              `json:"total_points"`
+	Elo         int              `json:"elo"`
 	Rank        progression.Rank `json:"rank"`
+}
+
+type LeaderboardMetric string
+
+const (
+	LeaderboardMetricTotal   LeaderboardMetric = "total"
+	LeaderboardMetricAverage LeaderboardMetric = "average"
+	LeaderboardMetricElo     LeaderboardMetric = "elo"
+)
+
+func ParseLeaderboardMetric(value string) (LeaderboardMetric, bool) {
+	switch LeaderboardMetric(value) {
+	case LeaderboardMetricTotal, LeaderboardMetricAverage, LeaderboardMetricElo:
+		return LeaderboardMetric(value), true
+	default:
+		return "", false
+	}
 }
 
 type LeaderboardPeriod string
@@ -236,7 +256,21 @@ func GetGroupLeaderboardForPeriodContext(ctx context.Context, groupID string, pe
 		entry.Rank = progression.RankForPoints(entry.TotalPoints)
 		result = append(result, entry)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Elo ratings come from pairwise comparisons on the period's challenges;
+	// they are recomputed here so a late guess on an old challenge moves the
+	// whole period ladder, not just one row.
+	challenges, err := LoadChallengesContext(ctx, groupID, start)
+	if err != nil {
+		return nil, err
+	}
+	ratings := elo.ComputeRatings(challenges)
+	for index := range result {
+		result[index].Elo = ratings[result[index].UserID]
+	}
+	return result, nil
 }
 
 func GetGroupByID(groupID string) (*models.Group, error) {
@@ -271,4 +305,151 @@ func GetUserGroupsContext(ctx context.Context, userID string) ([]models.Group, e
 		groups = append(groups, group)
 	}
 	return groups, rows.Err()
+}
+
+// LoadChallengesContext returns every challenge (photo with guesses) for a
+// group, optionally limited to photos created at or after start, ordered by
+// photo creation time. Challenges with fewer than two guessers are dropped:
+// they produce no Elo comparisons. Guesses by deleted accounts are excluded.
+func LoadChallengesContext(ctx context.Context, groupID string, start *time.Time) ([]elo.Challenge, error) {
+	return loadChallengesContext(ctx, &groupID, start)
+}
+
+// LoadGlobalChallengesContext returns every challenge across all groups,
+// ordered by photo creation time. It is the input for the global Elo ladder.
+func LoadGlobalChallengesContext(ctx context.Context) ([]elo.Challenge, error) {
+	return loadChallengesContext(ctx, nil, nil)
+}
+
+func loadChallengesContext(ctx context.Context, groupID *string, start *time.Time) ([]elo.Challenge, error) {
+	query := `
+		SELECT p.id, p.created_at, g.user_id, g.score
+		FROM guesses g
+		JOIN photos p ON p.id = g.photo_id
+		JOIN users u ON u.id = g.user_id AND u.deleted_at IS NULL
+		WHERE TRUE`
+	args := []any{}
+	if groupID != nil {
+		query += ` AND g.group_id = $1`
+		args = append(args, *groupID)
+	}
+	if start != nil {
+		query += ` AND p.created_at >= $2`
+		args = append(args, *start)
+	}
+	query += ` ORDER BY p.created_at, p.id, g.user_id`
+
+	rows, err := database.DB.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byPhoto := map[string]*elo.Challenge{}
+	var order []string
+	for rows.Next() {
+		var photoID, userID string
+		var createdAt time.Time
+		var score int
+		if err := rows.Scan(&photoID, &createdAt, &userID, &score); err != nil {
+			return nil, err
+		}
+		challenge, ok := byPhoto[photoID]
+		if !ok {
+			challenge = &elo.Challenge{ID: photoID, CreatedAt: createdAt}
+			byPhoto[photoID] = challenge
+			order = append(order, photoID)
+		}
+		challenge.Guesses = append(challenge.Guesses, elo.Guess{UserID: userID, Score: score})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	challenges := make([]elo.Challenge, 0, len(order))
+	for _, photoID := range order {
+		challenge := byPhoto[photoID]
+		if len(challenge.Guesses) >= 2 {
+			challenges = append(challenges, *challenge)
+		}
+	}
+	return challenges, nil
+}
+
+// GetGlobalAverageRankContext ranks the player by average guess score among
+// every player with at least one guess.
+func GetGlobalAverageRankContext(ctx context.Context, userID string) (GlobalRankStats, error) {
+	var rank, totalPlayers int64
+	err := database.DB.QueryRow(ctx, `
+		WITH scores AS (
+			SELECT g.user_id, AVG(g.score) AS value
+			FROM guesses g
+			JOIN users u ON u.id = g.user_id AND u.deleted_at IS NULL
+			GROUP BY g.user_id
+		), ranked AS (
+			SELECT user_id, RANK() OVER (ORDER BY value DESC) AS r
+			FROM scores
+		)
+		SELECT COALESCE(MAX(r) FILTER (WHERE user_id = $1), 0), COUNT(*)
+		FROM ranked`, userID).Scan(&rank, &totalPlayers)
+	if err != nil {
+		return GlobalRankStats{}, err
+	}
+	return GlobalRankStats{Rank: int(rank), TotalPlayers: int(totalPlayers)}, nil
+}
+
+// EloStats is the player's global Elo rating and competition rank among every
+// rated player.
+type EloStats struct {
+	Elo          int
+	Rank         int
+	TotalPlayers int
+}
+
+// GetGlobalEloContext recomputes the global Elo ladder and returns the
+// player's rating and competition rank. A player with no qualifying challenge
+// (never compared against anyone) is unrated: Elo 0, rank 0.
+func GetGlobalEloContext(ctx context.Context, userID string) (EloStats, error) {
+	challenges, err := LoadGlobalChallengesContext(ctx)
+	if err != nil {
+		return EloStats{}, err
+	}
+	ratings := elo.ComputeRatings(challenges)
+	myElo, rated := ratings[userID]
+	if !rated {
+		return EloStats{Elo: 0, Rank: 0, TotalPlayers: len(ratings)}, nil
+	}
+	rank := 1
+	for _, rating := range ratings {
+		if rating > myElo {
+			rank++
+		}
+	}
+	return EloStats{Elo: myElo, Rank: rank, TotalPlayers: len(ratings)}, nil
+}
+
+// SortLeaderboard orders leaderboard entries by the requested metric, with
+// total points and username as stable tie-breakers.
+func SortLeaderboard(entries []LeaderboardEntry, metric LeaderboardMetric) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		switch metric {
+		case LeaderboardMetricAverage:
+			if a.Average != b.Average {
+				return a.Average > b.Average
+			}
+		case LeaderboardMetricElo:
+			if a.Elo != b.Elo {
+				return a.Elo > b.Elo
+			}
+		default:
+			if a.Score != b.Score {
+				return a.Score > b.Score
+			}
+		}
+		if a.TotalPoints != b.TotalPoints {
+			return a.TotalPoints > b.TotalPoints
+		}
+		return a.Username < b.Username
+	})
 }

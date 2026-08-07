@@ -26,8 +26,12 @@ export interface GlobalRank {
 export interface Profile extends User {
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 /** Another player's profile: identity and progression, never email. */
@@ -37,8 +41,12 @@ export interface PublicProfile {
     avatar: string;
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 export interface AuthResponse {
@@ -95,10 +103,13 @@ export interface LeaderboardEntry {
     guess_count: number;
     average_score: number;
     total_points: number;
+    elo: number;
     rank: ProgressionRank;
 }
 
 export type LeaderboardPeriod = 'week' | 'month' | 'all';
+
+export type LeaderboardMetric = 'total' | 'average' | 'elo';
 
 export interface Member {
     id: string;
@@ -145,10 +156,13 @@ export interface ChallengeGuess {
     user_id: string;
     username: string;
     avatar: string;
-    lat: number;
-    long: number;
+    /** Omitted for other players' guesses while a hidden-location challenge is
+     *  still hidden: only the viewer's own guessed point is returned. */
+    lat?: number;
+    long?: number;
     score: number;
-    distance: number;
+    /** Omitted alongside the coordinates while the location is hidden. */
+    distance?: number;
     created_at: string;
 }
 
