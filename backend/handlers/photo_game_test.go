@@ -91,7 +91,7 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
 	recorder := httptest.NewRecorder()
 	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Knight"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) {
 		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }

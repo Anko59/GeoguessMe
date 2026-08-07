@@ -189,7 +189,7 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	leaderboardQuery := `(?s)SELECT u\.id, u\.username, u\.avatar.*SUM\(g\.score\).*ORDER BY COALESCE\(SUM\(g\.score\), 0\) DESC`
 	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0, 7600))
 	entries, err := GetGroupLeaderboardContext(context.Background(), "g1")
-	if err != nil || len(entries) != 1 || entries[0].Score != 160 || entries[0].Average != 80.0 || entries[0].Avatar != "avatar4.png" || entries[0].TotalPoints != 7600 || entries[0].Rank.Name != "Knight" {
+	if err != nil || len(entries) != 1 || entries[0].Score != 160 || entries[0].Average != 80.0 || entries[0].Avatar != "avatar4.png" || entries[0].TotalPoints != 7600 || entries[0].Rank.Name != "Lost Tourist" {
 		t.Fatalf("leaderboard = %+v, %v", entries, err)
 	}
 	mock.ExpectQuery(leaderboardQuery).WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("u1", "alice", "avatar4.png", 160, 2, 80.0, 7600))

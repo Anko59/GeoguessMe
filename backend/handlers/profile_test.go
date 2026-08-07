@@ -47,7 +47,7 @@ func TestGetPublicProfile(t *testing.T) {
 		t.Fatalf("public profile status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 	body := recorder.Body.String()
-	for _, want := range []string{`"username":"bob"`, `"total_points":7600`, `"name":"Knight"`, `"global_rank":{"rank":3,"total_players":1943}`} {
+	for _, want := range []string{`"username":"bob"`, `"total_points":7600`, `"name":"Lost Tourist"`, `"global_rank":{"rank":3,"total_players":1943}`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("public profile missing %s: %s", want, body)
 		}
