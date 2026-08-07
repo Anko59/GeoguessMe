@@ -56,12 +56,13 @@ environment. Generation is a one-time manual step, not part of the build: the
 finished transparent PNGs are committed as 256×256 assets.
 
 Because `image-01` outputs JPEG (no alpha channel), generated images are
-post-processed once before being committed: a border flood fill makes the white
-background transparent, enclosed near-white regions above a size threshold are
-removed, near-white edge pixels are faded to remove JPEG halos, and the result
-is trimmed, padded, and resized to 256×256. If a generation comes back with a
-gray vignette instead of a white background it must be regenerated with the same
-post-processing applied.
+post-processed once before being committed: a two-pass border flood fill removes
+the white background and the JPEG compression ring around the artwork,
+near-white pixels adjacent to transparency are snapped to alpha 0, enclosed
+near-white regions above a size threshold are removed, and the result is trimmed
+to its solid content, padded with a uniform margin, centered, and resized to
+256×256. If a generation comes back with a gray vignette instead of a white
+background it must be regenerated with the same post-processing applied.
 
 ## Display rules
 
