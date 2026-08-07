@@ -395,7 +395,9 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                                     >
                                         <div>
                                             <strong>{guess.user_id === user?.id ? 'You' : guess.username}</strong>
-                                            <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            {guess.distance !== undefined && (
+                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            )}
                                         </div>
                                         <b>{guess.score} pts</b>
                                     </div>
@@ -407,7 +409,8 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                                 <div className="result-location-hidden" role="note">
                                     <strong>The poster hasn’t revealed this location yet</strong>
                                     <span>
-                                        Only distances are shown. The exact spot will appear here after 48 hours.
+                                        Only your own guess is shown on the map. The exact spot and everyone else’s
+                                        guesses will appear here after 48 hours.
                                     </span>
                                 </div>
                             )}

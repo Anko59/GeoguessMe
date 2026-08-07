@@ -156,10 +156,13 @@ export interface ChallengeGuess {
     user_id: string;
     username: string;
     avatar: string;
-    lat: number;
-    long: number;
+    /** Omitted for other players' guesses while a hidden-location challenge is
+     *  still hidden: only the viewer's own guessed point is returned. */
+    lat?: number;
+    long?: number;
     score: number;
-    distance: number;
+    /** Omitted alongside the coordinates while the location is hidden. */
+    distance?: number;
     created_at: string;
 }
 

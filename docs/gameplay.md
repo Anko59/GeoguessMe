@@ -94,6 +94,13 @@ and `media_url` plus `media_type` (with `?result=1`) if the media is still
 available. Result photos can be opened full screen; videos retain playback
 controls in the result panel.
 
+When a poster hid the location (`hide_location`), the exact spot stays private
+for the `LOCATION_HIDE_DURATION` (48 hours by default): the response omits
+`actual_lat`/`actual_long`, sets `location_hidden: true` and
+`location_reveals_at`, and strips the guessed point (`lat`/`long`) and distance
+from every guess except the viewer's own — other players' rows are score-only
+until the location is revealed.
+
 ## Group join codes
 
 Groups are joined via a 6-character alphanumeric code (uppercase A–Z, 0–9).

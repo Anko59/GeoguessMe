@@ -33,6 +33,8 @@ export default function TextBannerEditor({ banner, onChange }: TextBannerEditorP
             <button
                 type="button"
                 className="text-banner-toggle"
+                aria-label="Text banner"
+                title="Text banner"
                 aria-expanded={open}
                 aria-controls="camera-text-banner-controls"
                 onClick={() => setOpen((current) => !current)}
@@ -40,7 +42,6 @@ export default function TextBannerEditor({ banner, onChange }: TextBannerEditorP
                 <span aria-hidden="true">
                     <img src="/ui/add-text.png" alt="" className="text-banner-icon" />
                 </span>
-                Text
             </button>
             {open && (
                 <div id="camera-text-banner-controls" className="text-banner-controls">

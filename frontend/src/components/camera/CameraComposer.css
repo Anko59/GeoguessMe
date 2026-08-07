@@ -110,12 +110,11 @@
 }
 
 .text-banner-toggle {
-    min-width: 4.5rem;
-    padding: 0.55rem 0.8rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    display: grid;
+    place-items: center;
     color: white;
     background: rgba(5, 7, 18, 0.72);
     border: 1px solid rgba(255, 255, 255, 0.34);
@@ -320,7 +319,9 @@
 .camera-options-hide input[type='checkbox'] {
     width: 1.05rem;
     height: 1.05rem;
+    min-height: 1.05rem;
     margin: 0;
+    padding: 0;
     flex: none;
     appearance: none;
     background: rgba(255, 255, 255, 0.12);
@@ -424,8 +425,15 @@
 }
 
 .options-toggle-btn {
-    min-width: 4.5rem;
-    padding: 0.55rem 0.8rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+}
+
+.options-toggle-btn span,
+.filter-toggle-btn span {
+    font-size: 1.35rem;
+    line-height: 1;
 }
 
 .options-toggle-btn.active {
@@ -441,8 +449,9 @@
 }
 
 .filter-toggle-btn {
-    min-width: 4.5rem;
-    padding: 0.55rem 0.8rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
     display: none;
 }
 

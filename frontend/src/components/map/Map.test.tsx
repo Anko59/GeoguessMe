@@ -101,6 +101,19 @@ describe('Map component', () => {
         expect(markers[1].querySelector('[data-testid="Popup"]')).toHaveTextContent('bob');
     });
 
+    it('skips guesses without coordinates (hidden-location challenges)', () => {
+        const guesses = [
+            { user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 100 },
+            // The other guesser's point is omitted by the server while the
+            // challenge location is hidden; no marker may render for it.
+            { user_id: 'u2', username: 'bob', avatar: 'b.png', score: 80 },
+        ];
+        render(<Map onLocationSelect={vi.fn()} selectedLocation={null} guesses={guesses} />);
+        const markers = screen.getAllByTestId('Marker');
+        expect(markers).toHaveLength(1);
+        expect(markers[0]).toHaveAttribute('position', '48.8,2.3');
+    });
+
     it('renders selected, actual, and guess markers together', () => {
         const guesses = [{ user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 100 }];
         render(

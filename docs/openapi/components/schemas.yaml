@@ -305,16 +305,21 @@ ChallengeResults:
 
 Guess:
   type: object
-  required: [id, photo_id, user_id, group_id, lat, long, score, distance, created_at]
+  required: [id, photo_id, user_id, group_id, score, created_at]
   properties:
     id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
     user_id: { type: string, format: uuid }
     group_id: { type: string, format: uuid }
-    lat: { type: number, format: double }
-    long: { type: number, format: double }
+    lat:
+      {
+        type: number,
+        format: double,
+        description: Omitted for other players' guesses while a hidden-location challenge is still hidden; only the viewer's own guessed point is returned.,
+      }
+    long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
-    distance: { type: number }
+    distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }
