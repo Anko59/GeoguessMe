@@ -7,6 +7,7 @@ import {
     uniqueGroup,
     uniqueUsername,
     uniqueEmail,
+    expectConnected,
 } from './helpers';
 
 interface ResultScenario {
@@ -83,8 +84,8 @@ async function createResultScenario(browser: Browser, contextOptions: BrowserCon
 
     await uploader.goto('/group/' + groupId);
     await guesser.goto('/group/' + groupId);
-    await expect(uploader.getByRole('status')).toHaveText('Connected');
-    await expect(guesser.getByRole('status')).toHaveText('Connected');
+    await expectConnected(uploader);
+    await expectConnected(guesser);
 
     // Upload photo.
     await uploader.getByRole('button', { name: 'Camera' }).click();
@@ -289,10 +290,10 @@ test.describe('Challenge result authorization', () => {
                 await p.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
                 await p.waitForURL(/\/group\//);
                 await p.goto('/group/' + groupId);
-                await expect(p.getByRole('status')).toHaveText('Connected');
+                await expectConnected(p);
             }
             await uploader.goto('/group/' + groupId);
-            await expect(uploader.getByRole('status')).toHaveText('Connected');
+            await expectConnected(uploader);
 
             // Upload photo.
             await uploader.getByRole('button', { name: 'Camera' }).click();

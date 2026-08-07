@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { signupViaUI, uniqueGroup, installDeterministicCamera, newAuthContext } from './helpers';
+import { expectConnected, signupViaUI, uniqueGroup, installDeterministicCamera, newAuthContext } from './helpers';
 import type { Browser, BrowserContext, BrowserContextOptions } from '@playwright/test';
 
 async function expectAccessible(page: Page): Promise<void> {
@@ -325,7 +325,7 @@ test.describe('Authenticated page Axe checks', () => {
                 .getByRole('button', { name: /create/i })
                 .click();
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
-            await expect(page.getByRole('status')).toHaveText('Connected');
+            await expectConnected(page);
             await expect(page.locator('.chat-container')).toBeVisible();
             await expectAccessible(page);
         } finally {

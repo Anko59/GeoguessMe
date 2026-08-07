@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { seedChatMessages, signupViaUI, signupWithToken, uniqueGroup } from './helpers';
+import { expectConnected, seedChatMessages, signupViaUI, signupWithToken, uniqueGroup } from './helpers';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 interface ChatScenario {
@@ -23,7 +23,7 @@ async function createScenario(browser: Browser, contextOptions: BrowserContextOp
     const settings = owner.getByRole('dialog');
     const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
     await settings.getByRole('button', { name: 'Close settings' }).click();
-    await expect(owner.getByRole('status')).toHaveText('Connected');
+    await expectConnected(owner);
 
     return { ownerContext, owner, groupId, groupCode };
 }
@@ -41,7 +41,7 @@ async function addMember(
     await page.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
     await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
     await page.goto(`/group/${scenario.groupId}`);
-    await expect(page.getByRole('status')).toHaveText('Connected');
+    await expectConnected(page);
     return { context, page };
 }
 
@@ -76,7 +76,7 @@ test.describe('Chat via WebSocket', () => {
 
             await member.page.reload();
             await member.page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
-            await expect(member.page.getByRole('status')).toHaveText('Connected');
+            await expectConnected(member.page);
             await expect(member.page.locator('.message-container').filter({ hasText: msgText })).toBeVisible();
         } finally {
             await member.context.close();
@@ -96,7 +96,7 @@ test.describe('Chat via WebSocket', () => {
             await page.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
             const groupId = page.url().split('/group/')[1];
-            await expect(page.getByRole('status')).toHaveText('Connected');
+            await expectConnected(page);
 
             // Seed 60 text messages over the group WebSocket so the latest page
             // (PAGE_SIZE=50) is full and older history exists below it.
@@ -109,7 +109,7 @@ test.describe('Chat via WebSocket', () => {
             // the oldest of the newest 50, with older history absent.
             await page.reload();
             await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
-            await expect(page.getByRole('status')).toHaveText('Connected');
+            await expectConnected(page);
             await expect(page.locator('.messages-list .message-container')).toHaveCount(50);
             await expect(page.locator('.messages-list .message-container').first()).toContainText('seed message 11');
             await expect(page.getByText('seed message 1', { exact: true })).not.toBeVisible();
@@ -295,7 +295,7 @@ test.describe('Chat via WebSocket', () => {
         await memberPage.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
         await memberPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
         await memberPage.goto(`/group/${scenario.groupId}`);
-        await expect(memberPage.getByRole('status')).toHaveText('Connected');
+        await expectConnected(memberPage);
 
         try {
             // Establish cursor baseline: send two messages so the member has
@@ -333,7 +333,7 @@ test.describe('Chat via WebSocket', () => {
             }
 
             // Wait until the hook automatically reconnects.
-            await expect(memberPage.getByRole('status')).toHaveText('Connected', { timeout: 15000 });
+            await expectConnected(memberPage);
 
             // ── 3. renewed ticket ──────────────────────────────────────────────
             const urlsAfter = await wsControl(memberPage).ticketUrls();
@@ -386,7 +386,7 @@ test.describe('Chat via WebSocket', () => {
 
             // Wait for the hook to reconnect. After this the WebSocket is
             // open and receiving live events, but catch-up is still blocked.
-            await expect(memberPage.getByRole('status')).toHaveText('Connected', { timeout: 15000 });
+            await expectConnected(memberPage);
 
             // Now send the overlap message while the member is connected via
             // the live WebSocket but the catch-up REST window is still open.
@@ -444,7 +444,7 @@ test.describe('Chat via WebSocket', () => {
             );
             await scenario.owner.reload();
             await scenario.owner.waitForURL(/\/group\/[0-9a-f-]{36}$/);
-            await expect(scenario.owner.getByRole('status')).toHaveText('Connected');
+            await expectConnected(scenario.owner);
             const { ticket: usedTicket } = (await (await ticketResponse).json()) as { ticket: string };
             expect(usedTicket).toMatch(/^\S+$/);
 
