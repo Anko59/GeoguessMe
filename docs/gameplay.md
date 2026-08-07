@@ -76,8 +76,9 @@ the selected calendar week, month, or all-time period:
   harder challenges.
 
 A player who never compared against another guesser on a shared challenge has
-Elo 0 and sorts below rated players. The same per-period Elo ladder feeds the
-profile's global Elo rating and rank across every group.
+Elo 0, sorts below rated players, and has no numbered place. Profiles use the
+same Elo model across all groups and all-time challenges for the global rating
+and rank.
 
 ## Result visibility
 

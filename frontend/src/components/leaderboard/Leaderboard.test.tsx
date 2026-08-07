@@ -203,7 +203,12 @@ describe('Leaderboard', () => {
         mocks.get
             .mockResolvedValueOnce({ data: [entry] })
             .mockResolvedValueOnce({ data: [{ ...entry, username: 'bob' }] })
-            .mockResolvedValueOnce({ data: [{ ...entry, username: 'carol' }] });
+            .mockResolvedValueOnce({
+                data: [
+                    { ...entry, username: 'carol' },
+                    { ...entry, user_id: 'user-2', username: 'dave', elo: 0 },
+                ],
+            });
         renderLeaderboard();
 
         expect(await screen.findByText('alice')).toBeInTheDocument();
@@ -224,7 +229,10 @@ describe('Leaderboard', () => {
             params: { group_id: 'group-1', period: 'week', metric: 'elo' },
         });
         expect(screen.getByText('1,120')).toBeInTheDocument();
-        expect(screen.getByText('elo')).toBeInTheDocument();
+        expect(screen.getAllByText('elo')).toHaveLength(2);
         expect(screen.getByRole('tab', { name: 'Elo' })).toHaveAttribute('aria-selected', 'true');
+        const unratedRow = screen.getByText('dave').closest('.leaderboard-entry');
+        expect(unratedRow?.querySelector('.entry-rank')).toHaveTextContent('—');
+        expect(unratedRow).not.toHaveClass('gold', 'silver', 'bronze');
     });
 });

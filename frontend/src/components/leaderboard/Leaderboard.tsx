@@ -176,8 +176,9 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                     {leaderboard.map((entry, index) => {
                         const rank = index + 1;
                         const isCurrentUser = entry.user_id === currentUserId;
-                        const rankEmoji = getRankEmoji(rank);
-                        const rankClass = getRankClass(rank);
+                        const isUnrated = metric === 'elo' && entry.elo === 0;
+                        const rankEmoji = isUnrated ? null : getRankEmoji(rank);
+                        const rankClass = isUnrated ? '' : getRankClass(rank);
                         const value = metricValue(entry);
                         const leaderValue = leaderboard[0] ? metricValue(leaderboard[0]) : 1;
 
@@ -188,7 +189,9 @@ export default function Leaderboard({ groupID }: LeaderboardProps) {
                                 style={{ animationDelay: `${index * 0.05}s` }}
                             >
                                 <div className="entry-rank">
-                                    {rankEmoji ? (
+                                    {isUnrated ? (
+                                        '—'
+                                    ) : rankEmoji ? (
                                         <img src={rankEmoji} alt="" className="entry-rank-medal" />
                                     ) : (
                                         `#${rank}`
