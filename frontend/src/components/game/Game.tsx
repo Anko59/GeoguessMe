@@ -3,6 +3,7 @@ import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { ChallengeAcceptance, ChallengeMediaDelivered, ChallengeResults, GuessResult, Message } from '../../types';
 import Map from '../map/Map';
+import Icon from '../ui/Icon';
 import './Game.css';
 import GuessScoreFeedback from './GuessScoreFeedback';
 import { feedbackForScore } from './guessFeedback';
@@ -314,11 +315,15 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         disabled={!selectedLocation || state.status === 'submitting'}
                         className="guess-button btn btn-primary"
                     >
-                        {state.status === 'submitting'
-                            ? 'Submitting…'
-                            : selectedLocation
-                              ? 'Submit guess ✓'
-                              : 'Select a location…'}
+                        {state.status === 'submitting' ? (
+                            'Submitting…'
+                        ) : selectedLocation ? (
+                            <>
+                                Submit guess <Icon name="check" />
+                            </>
+                        ) : (
+                            'Select a location…'
+                        )}
                     </button>
                 </div>
             </div>,
@@ -332,7 +337,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     onClick={() => setExpandedResultImage(null)}
                     aria-label="Close full-screen photo"
                 >
-                    ×
+                    <Icon name="close" />
                 </button>
                 <img
                     src={expandedResultImage}

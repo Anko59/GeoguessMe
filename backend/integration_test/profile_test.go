@@ -20,10 +20,22 @@ func TestPublicProfileVisibility(t *testing.T) {
 	resp, data := doJSON(t, http.MethodGet, "/api/v1/user/profile/"+alice.userID, nil, bob.access, nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "shared profile: %s", data)
 	var profile struct {
-		ID       string `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Rank     struct {
+		ID         string  `json:"id"`
+		Username   string  `json:"username"`
+		Email      string  `json:"email"`
+		TotalPts   int     `json:"total_points"`
+		AvgScore   float64 `json:"average_score"`
+		Elo        int     `json:"elo"`
+		GlobalRank struct {
+			Rank int `json:"rank"`
+		} `json:"global_rank"`
+		GlobalAvgRank struct {
+			Rank int `json:"rank"`
+		} `json:"global_average_rank"`
+		GlobalEloRank struct {
+			Rank int `json:"rank"`
+		} `json:"global_elo_rank"`
+		Rank struct {
 			Level    int    `json:"level"`
 			Name     string `json:"name"`
 			NextRank *struct {
@@ -34,9 +46,15 @@ func TestPublicProfileVisibility(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &profile))
 	require.Equal(t, alice.userID, profile.ID)
 	require.Equal(t, 1, profile.Rank.Level)
-	require.Equal(t, "Page", profile.Rank.Name)
+	require.Equal(t, "Completely Lost", profile.Rank.Name)
 	require.Empty(t, profile.Email, "public profile must not expose email")
 	require.NotNil(t, profile.Rank.NextRank)
+	// The three global rankings are present; a fresh player is unranked in
+	// all of them until they guess a location.
+	require.Zero(t, profile.GlobalRank.Rank)
+	require.Zero(t, profile.GlobalAvgRank.Rank)
+	require.Zero(t, profile.GlobalEloRank.Rank)
+	require.Zero(t, profile.Elo)
 
 	// A player who shares no group gets a 403.
 	resp, data = doJSON(t, http.MethodGet, "/api/v1/user/profile/"+alice.userID, nil, charlie.access, nil)

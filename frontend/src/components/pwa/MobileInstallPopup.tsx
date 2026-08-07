@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { isIosSafari, isStandaloneDisplay, usePwaInstall } from './usePwaInstall';
+import Icon from '../ui/Icon';
 import './MobileInstallPopup.css';
 
 export default function MobileInstallPopup() {
@@ -40,7 +41,7 @@ export default function MobileInstallPopup() {
         <div className="mobile-install-popup" role="dialog" aria-label="Install GeoGuessMe">
             <div className="mobile-install-popup__card">
                 <button type="button" className="mobile-install-popup__close" aria-label="Close" onClick={dismiss}>
-                    ×
+                    <Icon name="close" />
                 </button>
                 <p className="mobile-install-popup__text">
                     {iosGuide

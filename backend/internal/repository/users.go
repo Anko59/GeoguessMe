@@ -51,22 +51,25 @@ func GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 }
 
 type UserScoreStats struct {
-	TotalPoints int
-	GuessCount  int
+	TotalPoints  int
+	GuessCount   int
+	AverageScore float64
 }
 
 func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStats, error) {
 	var stats UserScoreStats
 	var totalPoints, guessCount int64
+	var averageScore float64
 	err := database.DB.QueryRow(ctx, `
-		SELECT COALESCE(SUM(score), 0), COUNT(*)
+		SELECT COALESCE(SUM(score), 0), COUNT(*), COALESCE(AVG(score), 0)
 		FROM guesses
-		WHERE user_id = $1`, userID).Scan(&totalPoints, &guessCount)
+		WHERE user_id = $1`, userID).Scan(&totalPoints, &guessCount, &averageScore)
 	if err != nil {
 		return UserScoreStats{}, err
 	}
 	stats.TotalPoints = int(totalPoints)
 	stats.GuessCount = int(guessCount)
+	stats.AverageScore = averageScore
 	return stats, nil
 }
 

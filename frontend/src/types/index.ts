@@ -26,8 +26,12 @@ export interface GlobalRank {
 export interface Profile extends User {
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 /** Another player's profile: identity and progression, never email. */
@@ -37,8 +41,12 @@ export interface PublicProfile {
     avatar: string;
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 export interface AuthResponse {
@@ -95,10 +103,13 @@ export interface LeaderboardEntry {
     guess_count: number;
     average_score: number;
     total_points: number;
+    elo: number;
     rank: ProgressionRank;
 }
 
 export type LeaderboardPeriod = 'week' | 'month' | 'all';
+
+export type LeaderboardMetric = 'total' | 'average' | 'elo';
 
 export interface Member {
     id: string;

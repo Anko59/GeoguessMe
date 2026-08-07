@@ -257,6 +257,38 @@
     line-height: 1;
 }
 
+.camera-filter-icon-img {
+    width: 2rem;
+    height: 2rem;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.text-banner-toggle .text-banner-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: contain;
+}
+
+.camera-options-hide-icon {
+    display: grid;
+    place-items: center;
+}
+
+.camera-options-hide-icon-img {
+    width: 1.2rem;
+    height: 1.2rem;
+    object-fit: contain;
+}
+
+.camera-switch-icon,
+.filter-toggle-icon,
+.options-toggle-icon {
+    width: 1.3rem;
+    height: 1.3rem;
+    object-fit: contain;
+}
+
 .camera-filter-option-label {
     width: 100%;
     overflow: hidden;

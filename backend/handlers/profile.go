@@ -91,21 +91,29 @@ type GlobalRank struct {
 // excludes email and account details; it contains only the identity and
 // progression data already visible inside a shared group.
 type PublicProfileResponse struct {
-	ID          string           `json:"id"`
-	Username    string           `json:"username"`
-	Avatar      string           `json:"avatar"`
-	TotalPoints int              `json:"total_points"`
-	GuessCount  int              `json:"guess_count"`
-	Rank        progression.Rank `json:"rank"`
-	GlobalRank  GlobalRank       `json:"global_rank"`
+	ID                string           `json:"id"`
+	Username          string           `json:"username"`
+	Avatar            string           `json:"avatar"`
+	TotalPoints       int              `json:"total_points"`
+	GuessCount        int              `json:"guess_count"`
+	AverageScore      float64          `json:"average_score"`
+	Elo               int              `json:"elo"`
+	Rank              progression.Rank `json:"rank"`
+	GlobalRank        GlobalRank       `json:"global_rank"`
+	GlobalAverageRank GlobalRank       `json:"global_average_rank"`
+	GlobalEloRank     GlobalRank       `json:"global_elo_rank"`
 }
 
 type ProfileResponse struct {
 	AuthUser
-	TotalPoints int              `json:"total_points"`
-	GuessCount  int              `json:"guess_count"`
-	Rank        progression.Rank `json:"rank"`
-	GlobalRank  GlobalRank       `json:"global_rank"`
+	TotalPoints       int              `json:"total_points"`
+	GuessCount        int              `json:"guess_count"`
+	AverageScore      float64          `json:"average_score"`
+	Elo               int              `json:"elo"`
+	Rank              progression.Rank `json:"rank"`
+	GlobalRank        GlobalRank       `json:"global_rank"`
+	GlobalAverageRank GlobalRank       `json:"global_average_rank"`
+	GlobalEloRank     GlobalRank       `json:"global_elo_rank"`
 }
 
 func GetProfile(w http.ResponseWriter, r *http.Request) {
@@ -128,12 +136,26 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	globalAverageRank, err := repository.GetGlobalAverageRankContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	globalElo, err := repository.GetGlobalEloContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	writeJSON(w, http.StatusOK, ProfileResponse{
-		AuthUser:    userResponse(user),
-		TotalPoints: stats.TotalPoints,
-		GuessCount:  stats.GuessCount,
-		Rank:        progression.RankForPoints(stats.TotalPoints),
-		GlobalRank:  GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
+		AuthUser:          userResponse(user),
+		TotalPoints:       stats.TotalPoints,
+		GuessCount:        stats.GuessCount,
+		AverageScore:      stats.AverageScore,
+		Elo:               globalElo.Elo,
+		Rank:              progression.RankForPoints(stats.TotalPoints),
+		GlobalRank:        GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
+		GlobalAverageRank: GlobalRank{Rank: globalAverageRank.Rank, TotalPlayers: globalAverageRank.TotalPlayers},
+		GlobalEloRank:     GlobalRank{Rank: globalElo.Rank, TotalPlayers: globalElo.TotalPlayers},
 	})
 }
 
@@ -177,14 +199,28 @@ func GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	globalAverageRank, err := repository.GetGlobalAverageRankContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
+	globalElo, err := repository.GetGlobalEloContext(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	writeJSON(w, http.StatusOK, PublicProfileResponse{
-		ID:          user.ID,
-		Username:    user.Username,
-		Avatar:      user.Avatar,
-		TotalPoints: stats.TotalPoints,
-		GuessCount:  stats.GuessCount,
-		Rank:        progression.RankForPoints(stats.TotalPoints),
-		GlobalRank:  GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
+		ID:                user.ID,
+		Username:          user.Username,
+		Avatar:            user.Avatar,
+		TotalPoints:       stats.TotalPoints,
+		GuessCount:        stats.GuessCount,
+		AverageScore:      stats.AverageScore,
+		Elo:               globalElo.Elo,
+		Rank:              progression.RankForPoints(stats.TotalPoints),
+		GlobalRank:        GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
+		GlobalAverageRank: GlobalRank{Rank: globalAverageRank.Rank, TotalPlayers: globalAverageRank.TotalPlayers},
+		GlobalEloRank:     GlobalRank{Rank: globalElo.Rank, TotalPlayers: globalElo.TotalPlayers},
 	})
 }
 
