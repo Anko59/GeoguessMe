@@ -72,14 +72,15 @@ finished transparent PNGs are committed under `frontend/public/rank-badges/` as
 `{trophy_key}.png` (for example `lost-tourist.png`), one per rank.
 
 Because `image-01` outputs JPEG (no alpha channel), generated images are
-post-processed once before being committed: a border flood fill makes the white
-background transparent, enclosed near-white regions above a size threshold are
-removed (leftover background inside emblem outlines), near-white edge pixels are
-faded to remove JPEG halos, and the result is trimmed, padded, and resized to
-256×256. Rarely the model draws a gray vignette instead of a white background;
-such images must be regenerated and the same post-processing applied. The
-committed PNGs are final assets: regeneration is a one-off manual step, never
-part of the build.
+post-processed once before being committed: a two-pass border flood fill removes
+the white background and the JPEG compression ring around the emblem, near-white
+pixels adjacent to transparency are snapped to alpha 0, enclosed near-white
+regions above a size threshold are removed (leftover background inside emblem
+outlines), and the result is trimmed to its solid content, padded with a uniform
+margin, centered, and resized to 256×256. Rarely the model draws a gray vignette
+instead of a white background; such images must be regenerated and the same
+post-processing applied. The committed PNGs are final assets: regeneration is a
+one-off manual step, never part of the build.
 
 To regenerate a badge, run the same prompt recipe for that rank through the
 model, post-process with the flood-fill script, verify transparency and margins
