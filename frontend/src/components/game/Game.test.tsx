@@ -141,7 +141,31 @@ describe('Game', () => {
                 group_id: 'group-1',
                 location_hidden: true,
                 location_reveals_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-                guesses: [],
+                guesses: [
+                    {
+                        id: 'guess-1',
+                        photo_id: 'photo-7',
+                        user_id: 'user-1',
+                        username: 'alice',
+                        avatar: 'a.png',
+                        lat: 48.8,
+                        long: 2.3,
+                        score: 100,
+                        distance: 1500,
+                        created_at: new Date().toISOString(),
+                    },
+                    // Another player's guessed point and distance are omitted
+                    // while the location is hidden: score only.
+                    {
+                        id: 'guess-2',
+                        photo_id: 'photo-7',
+                        user_id: 'user-2',
+                        username: 'bob',
+                        avatar: 'b.png',
+                        score: 80,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
                 media_available: false,
                 server_time: new Date().toISOString(),
             },
@@ -153,7 +177,14 @@ describe('Game', () => {
             />,
         );
         expect(await screen.findByText(/hasn’t revealed this location yet/)).toBeInTheDocument();
-        expect(screen.getByText(/after 48 hours/)).toBeInTheDocument();
+        expect(screen.getByText(/Only your own guess is shown on the map.*after 48 hours/)).toBeInTheDocument();
+        // The viewer's own guess keeps its distance; the other player's row
+        // shows only the score.
+        expect(screen.getByText('1.5 km away')).toBeInTheDocument();
+        expect(screen.queryByText(/km away/)).toBeInTheDocument();
+        const bobRow = screen.getByText('bob').closest('.score-card') as HTMLElement;
+        expect(bobRow).not.toHaveTextContent(/km away/);
+        expect(bobRow).toHaveTextContent('80 pts');
     });
 
     it('accepts a challenge, selects a location, and submits a guess', async () => {
@@ -217,7 +248,7 @@ describe('Game', () => {
         withGame(<Game gameMessage={message({ photo_id: 'photo-5', kind: 'challenge' })} onClose={vi.fn()} />);
 
         fireEvent.click(await screen.findByRole('button', { name: 'Map' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Submit guess ✓' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Submit guess' }));
 
         expect(await screen.findByRole('status')).toHaveTextContent('Masterstroke');
         expect(screen.getByRole('status')).toHaveTextContent('4,920 points');

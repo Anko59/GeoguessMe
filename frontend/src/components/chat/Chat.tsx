@@ -30,6 +30,12 @@ interface ChatProps {
 // the deliberate long press that replaces tap-to-open on touch devices.
 const LONG_PRESS_MS = 1000;
 
+function formatMessageTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+}
+
 interface PressState {
     messageID: string;
     startX: number;
@@ -376,7 +382,13 @@ export default function Chat({
                                         {message.reply_to_id && (
                                             <div className="reply-context">
                                                 <strong>{replyTarget?.username || 'Original message'}</strong>
-                                                <span>{replyTarget?.content || 'Message unavailable'}</span>
+                                                <span>
+                                                    {replyTarget
+                                                        ? replyTarget.kind === 'challenge'
+                                                            ? `Message sent at ${formatMessageTime(replyTarget.created_at)}`
+                                                            : replyTarget.content || 'Message unavailable'
+                                                        : 'Message unavailable'}
+                                                </span>
                                             </div>
                                         )}
                                         {message.kind === 'media' && message.media_id && message.media_type && (

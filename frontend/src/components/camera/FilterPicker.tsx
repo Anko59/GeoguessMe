@@ -134,7 +134,9 @@ export default function FilterPicker({
                                     className={`camera-filter-icon ${previewRequested ? 'has-preview' : ''}`}
                                     aria-hidden="true"
                                 >
-                                    {previewRequested ? null : option.icon}
+                                    {previewRequested ? null : (
+                                        <img src={option.icon} alt="" className="camera-filter-icon-img" />
+                                    )}
                                 </span>
                                 <span className="camera-filter-option-label">{option.label}</span>
                             </button>

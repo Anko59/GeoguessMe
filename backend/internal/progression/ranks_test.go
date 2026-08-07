@@ -3,8 +3,8 @@ package progression
 import "testing"
 
 func TestRankForPointsCoversEveryRank(t *testing.T) {
-	if RankCount < 20 {
-		t.Fatalf("rank count = %d, want at least 20", RankCount)
+	if RankCount != 30 {
+		t.Fatalf("rank count = %d, want 30", RankCount)
 	}
 	for index, definition := range rankDefinitions {
 		rank := RankForPoints(definition.minPoints)
@@ -25,8 +25,8 @@ func TestRankForPointsCoversEveryRank(t *testing.T) {
 }
 
 func TestRankProgressIsBoundedBetweenThresholds(t *testing.T) {
-	rank := RankForPoints(600)
-	if rank.Name != "Squire" || rank.PointsInRank != 100 || rank.PointsToNext != 1000 || rank.ProgressPercent != 10 {
+	rank := RankForPoints(6000)
+	if rank.Name != "Lost Tourist" || rank.PointsInRank != 1000 || rank.PointsToNext != 10000 || rank.ProgressPercent != 10 {
 		t.Fatalf("rank progress = %+v", rank)
 	}
 	if got := RankForPoints(-10); got.Level != 1 || got.PointsInRank != 0 {

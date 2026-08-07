@@ -90,14 +90,36 @@ func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
 	}
+	// A poster who hid the location keeps the exact spot private from guessers
+	// until the hide duration has passed; the owner always sees their own spot.
+	// While hidden, other players' guessed points and distances are not sent at
+	// all (score-only), and only the viewer's own guessed point is returned.
+	viewerID := GetUserIDFromContext(r)
+	hidden := photo.HideLocation && photo.UserID != viewerID && time.Now().Before(photo.CreatedAt.Add(RuntimeConfig.LocationHide))
 	if guesses == nil {
 		guesses = []repository.GuessWithUser{}
 	}
-	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "guesses": guesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
-	// A poster who hid the location keeps the exact spot private from guessers
-	// until the hide duration has passed; the owner always sees their own spot.
-	viewerID := GetUserIDFromContext(r)
-	if photo.HideLocation && photo.UserID != viewerID && time.Now().Before(photo.CreatedAt.Add(RuntimeConfig.LocationHide)) {
+	responseGuesses := make([]resultsGuess, 0, len(guesses))
+	for _, guess := range guesses {
+		item := resultsGuess{
+			ID:        guess.ID,
+			PhotoID:   guess.PhotoID,
+			UserID:    guess.UserID,
+			GroupID:   guess.GroupID,
+			Score:     guess.Score,
+			CreatedAt: guess.CreatedAt,
+			Username:  guess.Username,
+			Avatar:    guess.Avatar,
+		}
+		if !hidden || guess.UserID == viewerID {
+			item.Lat = &guess.Lat
+			item.Long = &guess.Long
+			item.Distance = &guess.Distance
+		}
+		responseGuesses = append(responseGuesses, item)
+	}
+	response := map[string]any{"photo_id": photo.ID, "group_id": photo.GroupID, "guesses": responseGuesses, "media_available": photo.LifecycleStatus != "removed", "server_time": time.Now()}
+	if hidden {
 		response["location_hidden"] = true
 		response["location_reveals_at"] = photo.CreatedAt.Add(RuntimeConfig.LocationHide)
 	} else {
@@ -109,4 +131,21 @@ func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		response["media_type"] = photo.MIMEType
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+// resultsGuess is the results payload for a single guess. Lat, long, and
+// distance are optional and omitted while a hidden-location challenge keeps
+// other players' guessed points private.
+type resultsGuess struct {
+	ID        string    `json:"id"`
+	PhotoID   string    `json:"photo_id"`
+	UserID    string    `json:"user_id"`
+	GroupID   string    `json:"group_id"`
+	Lat       *float64  `json:"lat,omitempty"`
+	Long      *float64  `json:"long,omitempty"`
+	Score     int       `json:"score"`
+	Distance  *float64  `json:"distance,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	Username  string    `json:"username"`
+	Avatar    string    `json:"avatar"`
 }

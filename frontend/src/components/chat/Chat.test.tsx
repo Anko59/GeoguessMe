@@ -168,6 +168,34 @@ describe('Chat', () => {
         expect(screen.getByRole('link', { name: "View bob's profile" })).toHaveAttribute('href', '/profile/user-2');
     });
 
+    it('shows the challenge sent time instead of unavailable content when replying to a challenge', () => {
+        renderChat({
+            messages: [
+                message({
+                    id: 'reply',
+                    user_id: 'user-1',
+                    username: 'alice',
+                    kind: 'text',
+                    content: 'Same here',
+                    reply_to_id: 'challenge-target',
+                    created_at: '2026-01-02T00:00:00Z',
+                }),
+                message({
+                    id: 'challenge-target',
+                    kind: 'challenge',
+                    photo_id: 'photo-1',
+                    content: '',
+                    created_at: '2026-01-01T12:30:00Z',
+                }),
+            ],
+        });
+        const context = screen.getByText(/Message sent at/);
+        expect(context).toHaveTextContent(/12:30/);
+        // The reply context still names the sender of the original challenge.
+        expect(screen.getAllByText('bob').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Message unavailable')).not.toBeInTheDocument();
+    });
+
     it('marks a challenge resolved only for the viewer who answered it', () => {
         const { container } = renderChat({
             messages: [

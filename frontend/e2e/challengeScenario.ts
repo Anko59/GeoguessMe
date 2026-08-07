@@ -5,6 +5,7 @@ import {
     newAuthContext,
     signupViaUI,
     uniqueGroup,
+    expectConnected,
 } from './helpers';
 
 export interface Scenario {
@@ -50,8 +51,8 @@ export async function createScenario(browser: Browser, contextOptions: BrowserCo
 
     await uploader.goto('/group/' + groupId);
     await guesser.goto('/group/' + groupId);
-    await expect(uploader.getByRole('status')).toHaveText('Connected');
-    await expect(guesser.getByRole('status')).toHaveText('Connected');
+    await expectConnected(uploader);
+    await expectConnected(guesser);
     return { uploader, guesser, uploaderContext, guesserContext };
 }
 

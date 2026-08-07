@@ -62,9 +62,23 @@ After a guess is recorded, the frontend presents a short, animated tier label
 from **Cartographic Catastrophe** through **Masterstroke**. These labels are
 presentation-only; the score returned by the server remains authoritative.
 
-The group leaderboard ranks each member by the sum of all of their guess scores
-in the selected calendar week, month, or all-time period. The response also
-retains the average score as metadata, but it does not affect ranking.
+The group leaderboard ranks each member by one of three metrics, each scoped to
+the selected calendar week, month, or all-time period:
+
+- **Total** — the sum of all of the member's guess scores in the period.
+- **Average** — the member's average guess score in the period.
+- **Elo** — a rating computed from the period's challenges. Every photo that at
+  least two group members guessed is a challenge; each pair of guessers is
+  compared by raw score (win/draw/loss) and both ratings move by the standard
+  `K = 32` Elo update. Ratings are recomputed from guess history on every read,
+  so a late guess on an old challenge retroactively moves everyone who played it
+  — this is what makes Elo measure guessing skill independently of who posts the
+  harder challenges.
+
+A player who never compared against another guesser on a shared challenge has
+Elo 0, sorts below rated players, and has no numbered place. Profiles use the
+same Elo model across all groups and all-time challenges for the global rating
+and rank.
 
 ## Result visibility
 
@@ -79,6 +93,13 @@ The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 and `media_url` plus `media_type` (with `?result=1`) if the media is still
 available. Result photos can be opened full screen; videos retain playback
 controls in the result panel.
+
+When a poster hid the location (`hide_location`), the exact spot stays private
+for the `LOCATION_HIDE_DURATION` (48 hours by default): the response omits
+`actual_lat`/`actual_long`, sets `location_hidden: true` and
+`location_reveals_at`, and strips the guessed point (`lat`/`long`) and distance
+from every guess except the viewer's own — other players' rows are score-only
+until the location is revealed.
 
 ## Group join codes
 
