@@ -177,7 +177,7 @@ describe('Game', () => {
             />,
         );
         expect(await screen.findByText(/hasn’t revealed this location yet/)).toBeInTheDocument();
-        expect(screen.getByText(/after 48 hours/)).toBeInTheDocument();
+        expect(screen.getByText(/Only your own guess is shown on the map.*after 48 hours/)).toBeInTheDocument();
         // The viewer's own guess keeps its distance; the other player's row
         // shows only the score.
         expect(screen.getByText('1.5 km away')).toBeInTheDocument();
