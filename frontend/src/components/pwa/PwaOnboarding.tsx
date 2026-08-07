@@ -8,6 +8,7 @@ import {
     type PushSubscriptionState,
 } from '../../push/push';
 import { isIosSafari, usePwaInstall } from './usePwaInstall';
+import Icon from '../ui/Icon';
 import './PwaOnboarding.css';
 
 export default function PwaOnboarding() {
@@ -71,7 +72,7 @@ export default function PwaOnboarding() {
                     aria-label="Dismiss install prompt"
                     onClick={dismiss}
                 >
-                    ×
+                    <Icon name="close" />
                 </button>
             )}
             <div className="pwa-onboarding__body">

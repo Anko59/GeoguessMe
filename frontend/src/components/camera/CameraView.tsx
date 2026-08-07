@@ -114,7 +114,9 @@ export default function CameraView({
             aria-label="Challenge options"
             aria-expanded={showOptions}
         >
-            <span aria-hidden="true">⚙️</span>
+            <span aria-hidden="true">
+                <img src="/ui/options-gear.png" alt="" className="options-toggle-icon" />
+            </span>
             <span>{showOptions ? 'Hide options' : 'Options'}</span>
         </button>
     );

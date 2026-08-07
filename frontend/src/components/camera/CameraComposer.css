@@ -127,11 +127,6 @@
     backdrop-filter: blur(16px);
 }
 
-.text-banner-toggle span {
-    font-family: Georgia, serif;
-    font-size: 1.05rem;
-}
-
 .text-banner-editor.open .text-banner-toggle {
     color: #16131f;
     background: var(--brand-yellow);
@@ -364,11 +359,6 @@
 
 .camera-options-hide > input {
     margin-top: 0.2rem;
-}
-
-.camera-options-hide-icon {
-    font-size: 1rem;
-    line-height: 1.3;
 }
 
 .camera-options-hide-text strong {

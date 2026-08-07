@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../api';
+import Icon from '../ui/Icon';
 import './ChatAttachment.css';
 
 interface ChatAttachmentProps {
@@ -71,7 +72,7 @@ export default function ChatAttachment({ mediaID, mediaType }: ChatAttachmentPro
                         onClick={() => setExpanded(false)}
                         aria-label="Close full-screen photo"
                     >
-                        ×
+                        <Icon name="close" />
                     </button>
                     <img src={url} alt="Shared photo full screen" className="chat-image-dialog-photo" />
                 </div>
