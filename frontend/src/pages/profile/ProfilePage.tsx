@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
 import RankBadge from '../../components/progression/RankBadge';
+import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import type { GlobalRank, ProgressionRank } from '../../types';
 import './ProfilePage.css';
@@ -82,7 +83,8 @@ export default function ProfilePage() {
         <main className="profile-page">
             <header className="profile-topbar">
                 <Link to="/groups" className="profile-back-link">
-                    ← Groups
+                    <Icon name="arrow-left" className="profile-back-icon" />
+                    Groups
                 </Link>
                 {isSelf && (
                     <Link to="/settings" className="profile-settings-link">
@@ -159,7 +161,9 @@ export default function ProfilePage() {
                         <>
                             <div className="profile-rank-path" aria-hidden="true">
                                 <RankBadge rank={rank} />
-                                <span className="profile-rank-arrow">→</span>
+                                <span className="profile-rank-arrow">
+                                    <Icon name="chevron-right" />
+                                </span>
                                 <RankBadge rank={rank.next_rank} />
                             </div>
                             <p className="profile-next-rank-progress">
@@ -168,7 +172,10 @@ export default function ProfilePage() {
                             </p>
                         </>
                     ) : (
-                        <p className="profile-next-rank-progress">You’ve reached the top of the ladder. 👑</p>
+                        <p className="profile-next-rank-progress">
+                            You’ve reached the top of the ladder.{' '}
+                            <img src="/ui/crown.png" alt="" className="profile-crown-icon" />
+                        </p>
                     )}
                 </div>
                 <div

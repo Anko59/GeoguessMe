@@ -58,7 +58,7 @@ export function CameraTopControls({
                     onClick={onSwitchCamera}
                     aria-label={`Switch to ${facingMode === 'user' ? 'back' : 'front'} camera`}
                 >
-                    🔄
+                    <img src="/ui/switch-camera.png" alt="" className="camera-switch-icon" />
                 </button>
             )}
             <button
@@ -68,7 +68,9 @@ export function CameraTopControls({
                 aria-label={showFilters ? 'Hide lenses' : 'Show lenses'}
                 aria-expanded={showFilters}
             >
-                <span aria-hidden="true">🎭</span>
+                <span aria-hidden="true">
+                    <img src="/ui/lenses-toggle.png" alt="" className="filter-toggle-icon" />
+                </span>
                 <span>{showFilters ? 'Hide' : 'Lenses'}</span>
             </button>
         </div>
@@ -112,7 +114,7 @@ export function CameraOptionsMenu({
             <label className="camera-options-hide">
                 <input type="checkbox" checked={hideLocation} onChange={onToggleHideLocation} />
                 <span className="camera-options-hide-icon" aria-hidden="true">
-                    🕵️
+                    <img src="/ui/hide-location.png" alt="" className="camera-options-hide-icon-img" />
                 </span>
                 <span className="camera-options-hide-text">
                     <strong>Hide my location</strong>

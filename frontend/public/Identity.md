@@ -99,7 +99,9 @@ colors remain distinctive instead of becoming visual noise.
   introduce unrelated feature gradients.
 - **Illustration:** Use the branded PNG artwork for major moments and feature
   cues, not for routine controls. Utility actions use the consistent inline SVG
-  icon set.
+  icon set; camera controls use the dedicated brand PNG set
+  (`frontend/public/ui/` and `frontend/public/lenses/icons/`, see
+  [docs/custom-icons.md](../../docs/custom-icons.md)).
 - **Responsive behavior:** Mobile layouts use edge-to-edge workspaces and a
   bottom group navigation bar. At 768px and above, content is constrained to a
   1120px frame and group navigation moves to a left rail.
