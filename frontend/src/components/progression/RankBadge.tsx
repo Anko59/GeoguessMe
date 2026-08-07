@@ -29,6 +29,16 @@ const ROMAN_NUMERALS = [
     'XVIII',
     'XIX',
     'XX',
+    'XXI',
+    'XXII',
+    'XXIII',
+    'XXIV',
+    'XXV',
+    'XXVI',
+    'XXVII',
+    'XXVIII',
+    'XXIX',
+    'XXX',
 ];
 
 function toRoman(level: number): string {
@@ -37,11 +47,11 @@ function toRoman(level: number): string {
 
 /** Renders the AI-generated badge artwork for a progression rank with the
  *  rank number in roman numerals beneath it, so the ordering is readable even
- *  when only the badge is in view. Each of the 20 ranks has its own emblem;
- *  the material step-up (bronze → silver → gold shields, then royal →
- *  imperial crowns) reinforces the ordering. Inline badges sit next to rank
- *  names and are decorative; the large badge is the progression artwork on
- *  the profile hero. */
+ *  when only the badge is in view. Each of the 30 ranks has its own emblem;
+ *  the material step-up (gray → bronze → silver → gold pins, compasses,
+ *  globes, then ornate globes) reinforces the ordering. Inline badges sit
+ *  next to rank names and are decorative; the large badge is the progression
+ *  artwork on the profile hero. */
 export default function RankBadge({ rank, size = 'inline', alt = '', className = '' }: RankBadgeProps) {
     return (
         <span className={`rank-badge-stack rank-badge-stack--${size} ${className}`}>

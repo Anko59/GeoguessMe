@@ -34,7 +34,7 @@ func TestPublicProfileVisibility(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &profile))
 	require.Equal(t, alice.userID, profile.ID)
 	require.Equal(t, 1, profile.Rank.Level)
-	require.Equal(t, "Page", profile.Rank.Name)
+	require.Equal(t, "Completely Lost", profile.Rank.Name)
 	require.Empty(t, profile.Email, "public profile must not expose email")
 	require.NotNil(t, profile.Rank.NextRank)
 

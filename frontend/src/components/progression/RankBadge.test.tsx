@@ -15,47 +15,54 @@ const rankAt = (trophyKey: string, level: number): ProgressionRank => ({
 
 describe('RankBadge', () => {
     it('renders the badge artwork for the rank', () => {
-        render(<RankBadge rank={rankAt('squire', 2)} alt="Squire badge" />);
-        expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/squire.png');
+        render(<RankBadge rank={rankAt('lost-tourist', 2)} alt="Lost Tourist badge" />);
+        expect(screen.getByRole('img', { name: 'Lost Tourist badge' })).toHaveAttribute(
+            'src',
+            '/rank-badges/lost-tourist.png',
+        );
     });
 
     it('maps each rank to its own emblem', () => {
         const { container } = render(
             <>
-                <RankBadge rank={rankAt('page', 1)} alt="Page badge" />
-                <RankBadge rank={rankAt('knight-errant', 5)} alt="Knight Errant badge" />
-                <RankBadge rank={rankAt('emperor', 20)} alt="Emperor badge" />
+                <RankBadge rank={rankAt('completely-lost', 1)} alt="Completely Lost badge" />
+                <RankBadge rank={rankAt('explorer', 11)} alt="Explorer badge" />
+                <RankBadge rank={rankAt('living-atlas', 30)} alt="Living Atlas badge" />
             </>,
         );
         const srcs = [...container.querySelectorAll<HTMLImageElement>('.rank-badge')].map((img) =>
             img.getAttribute('src'),
         );
-        expect(srcs).toEqual(['/rank-badges/page.png', '/rank-badges/knight-errant.png', '/rank-badges/emperor.png']);
+        expect(srcs).toEqual([
+            '/rank-badges/completely-lost.png',
+            '/rank-badges/explorer.png',
+            '/rank-badges/living-atlas.png',
+        ]);
     });
 
     it('shows the rank number in roman numerals beneath the badge', () => {
-        const { container, rerender } = render(<RankBadge rank={rankAt('squire', 2)} alt="Squire badge" />);
+        const { container, rerender } = render(<RankBadge rank={rankAt('lost-tourist', 2)} alt="Lost Tourist badge" />);
         expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('II');
 
-        rerender(<RankBadge rank={rankAt('herald', 4)} alt="Herald badge" />);
-        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('IV');
+        rerender(<RankBadge rank={rankAt('map-reader', 7)} alt="Map Reader badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('VII');
 
-        rerender(<RankBadge rank={rankAt('knight-errant', 5)} alt="Knight Errant badge" />);
-        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('V');
+        rerender(<RankBadge rank={rankAt('explorer', 11)} alt="Explorer badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('XI');
 
-        rerender(<RankBadge rank={rankAt('emperor', 20)} alt="Emperor badge" />);
-        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('XX');
+        rerender(<RankBadge rank={rankAt('living-atlas', 30)} alt="Living Atlas badge" />);
+        expect(container.querySelector('.rank-badge-numeral')).toHaveTextContent('XXX');
     });
 
     it('renders a large badge for the profile hero', () => {
-        render(<RankBadge rank={rankAt('high-king', 19)} size="large" alt="High King badge" />);
-        const img = screen.getByRole('img', { name: 'High King badge' });
-        expect(img).toHaveAttribute('src', '/rank-badges/high-king.png');
+        render(<RankBadge rank={rankAt('world-sage', 29)} size="large" alt="World Sage badge" />);
+        const img = screen.getByRole('img', { name: 'World Sage badge' });
+        expect(img).toHaveAttribute('src', '/rank-badges/world-sage.png');
         expect(img).toHaveClass('rank-badge--large');
     });
 
     it('is decorative by default', () => {
-        const { container } = render(<RankBadge rank={rankAt('page', 1)} />);
+        const { container } = render(<RankBadge rank={rankAt('completely-lost', 1)} />);
         const img = container.querySelector('.rank-badge') as HTMLImageElement;
         expect(img).toHaveAttribute('alt', '');
         expect(img).not.toHaveAttribute('aria-label');
