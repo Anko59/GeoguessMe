@@ -43,17 +43,28 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   `challenge_resolved` update to open conversations.
 
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
-with lifetime guess points, guess count, the server-calculated rank progression,
-and the player's global rank. Lifetime points are the sum of all accepted guess
-scores; rank thresholds and the 20 medieval-inspired rank names are
-server-owned. `global_rank.rank` is the player's position among every player who
-has guessed at least once, ordered by lifetime points with standard competition
-ranking (equal totals share a rank), and `global_rank.total_players` is the size
-of that population; a player who has never guessed has `rank` 0. Each rank
-object carries a `next_rank` with the following rank's name and badge key
+with lifetime guess points, guess count, average score, global Elo rating, the
+server-calculated rank progression, and three global rankings. Lifetime points
+are the sum of all accepted guess scores; rank thresholds and the geography
+themed rank names are server-owned. `global_rank.rank` is the player's position
+among every player who has guessed at least once, ordered by lifetime points
+with standard competition ranking (equal totals share a rank), and
+`global_rank.total_players` is the size of that population; a player who has
+never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
+average guess score, and `global_elo_rank` ranks the player among everyone who
+has been compared against another guesser on a shared challenge, ordered by Elo
+rating (`elo` is 0 and the rank is 0 for a player with no such challenge). Each
+rank object carries a `next_rank` with the following rank's name and badge key
 (omitted at the highest rank). Group leaderboard entries include the same rank
 object beneath each player's name while their `score` remains the selected
-period's sum.
+period's sum; entries also carry `average_score` and `elo` for the same period.
+
+The group leaderboard is ranked by one of three metrics — `total` (period score
+sum, the default), `average` (period average score), or `elo` (Elo rating
+computed from the period's challenges) — selected with the `metric` query
+parameter, and can be scoped to a calendar week, month, or all time with
+`period`. Elo ratings are recomputed from guess history on every read, so a late
+guess on an old challenge retroactively moves the whole ladder.
 
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must
@@ -84,23 +95,23 @@ page reachable from chat and leaderboards.
 
 ### Groups
 
-| Method | Path                                                         | Auth   | Description                                                                    |
-| ------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ |
-| GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                             |
-| POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                          |
-| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{code}`                                                            |
-| GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                    |
-| GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                     |
-| GET    | `/api/v1/group/leaderboard?group_id=&period=`                | Bearer | Sum-based calendar week/month or all-time leaderboard (member only)            |
-| GET    | `/api/v1/group/photo?group_id=`                              | Bearer | Stream the private group photo (member only)                                   |
-| POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                |
-| GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                               |
-| PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                          |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`/`after_id`, backward via `before_id`) |
-| PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                          |
-| DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                       |
-| POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                    |
-| GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                   |
+| Method | Path                                                         | Auth   | Description                                                                            |
+| ------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                                     |
+| POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
+| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{code}`                                                                    |
+| GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |
+| GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                             |
+| GET    | `/api/v1/group/leaderboard?group_id=&period=&metric=`        | Bearer | Total, average, or Elo leaderboard for a calendar week/month or all time (member only) |
+| GET    | `/api/v1/group/photo?group_id=`                              | Bearer | Stream the private group photo (member only)                                           |
+| POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                        |
+| GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
+| PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`/`after_id`, backward via `before_id`)         |
+| PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
+| DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                               |
+| POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
+| GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                           |
 
 ### Challenges
 
