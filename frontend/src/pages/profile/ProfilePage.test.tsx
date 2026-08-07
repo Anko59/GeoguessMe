@@ -94,6 +94,11 @@ describe('ProfilePage', () => {
         expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+        // The hero avatar opens full screen.
+        fireEvent.click(screen.getByRole('button', { name: "View alice's avatar full screen" }));
+        expect(screen.getByRole('dialog', { name: "alice's avatar full screen" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Close full-screen photo' }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/squire.png');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
+import { useAvatarUrl } from '../../components/common/avatarCache';
 import RankBadge from '../../components/progression/RankBadge';
+import FullScreenImage from '../../components/ui/FullScreenImage';
 import { useAuth } from '../../context/AuthContext';
 import type { GlobalRank, ProgressionRank } from '../../types';
 import './ProfilePage.css';
@@ -26,6 +28,10 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<ProfileViewData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    // Resolved once per profile so the hero avatar can open full screen; the
+    // hook is called unconditionally to keep the hook order stable across the
+    // loading/error early returns.
+    const avatarURL = useAvatarUrl(profile?.id ?? '', profile?.avatar);
 
     const loadProfile = useCallback(async () => {
         setError('');
@@ -94,12 +100,14 @@ export default function ProfilePage() {
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">
                     <div className="profile-avatar-ring">
-                        <Avatar
-                            userID={profile.id}
-                            avatar={profile.avatar}
-                            username={profile.username}
-                            className="profile-avatar"
-                        />
+                        <FullScreenImage src={avatarURL} alt={`${profile.username}'s avatar`}>
+                            <Avatar
+                                userID={profile.id}
+                                avatar={profile.avatar}
+                                username={profile.username}
+                                className="profile-avatar"
+                            />
+                        </FullScreenImage>
                     </div>
                     <div>
                         <p className="profile-eyebrow">Adventurer card</p>

@@ -14,6 +14,7 @@ import TabBar, { type TabType } from '../../components/navigation/TabBar';
 import Avatar from '../../components/common/Avatar';
 import { useGroupMessages } from '../../hooks/useGroupMessages';
 import Icon from '../../components/ui/Icon';
+import FullScreenImage from '../../components/ui/FullScreenImage';
 import './GroupView.css';
 
 export default function GroupView() {
@@ -62,7 +63,13 @@ export default function GroupView() {
                         <Icon name="arrow-left" className="back-arrow-icon" />
                         <span className="visually-hidden">Back to groups</span>
                     </Link>
-                    <img src={groupPhotoURL} alt="" className="header-logo" />
+                    <FullScreenImage
+                        src={groupPhotoURL}
+                        alt={`${group?.name ?? 'Group'} group photo`}
+                        className="header-logo-toggle"
+                    >
+                        <img src={groupPhotoURL} alt="" className="header-logo" />
+                    </FullScreenImage>
                     <div className="group-title-block">
                         <span>Group</span>
                         <h1 className="group-name">{group?.name ?? 'Group'}</h1>
