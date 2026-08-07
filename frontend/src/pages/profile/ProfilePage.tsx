@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
+import { useAvatarUrl } from '../../components/common/avatarCache';
 import RankBadge from '../../components/progression/RankBadge';
+import FullScreenImage from '../../components/ui/FullScreenImage';
+import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import type { GlobalRank, ProgressionRank } from '../../types';
 import './ProfilePage.css';
@@ -14,8 +17,12 @@ interface ProfileViewData {
     email?: string;
     total_points: number;
     guess_count: number;
+    average_score: number;
+    elo: number;
     rank: ProgressionRank;
     global_rank: GlobalRank;
+    global_average_rank: GlobalRank;
+    global_elo_rank: GlobalRank;
 }
 
 export default function ProfilePage() {
@@ -26,6 +33,10 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<ProfileViewData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    // Resolved once per profile so the hero avatar can open full screen; the
+    // hook is called unconditionally to keep the hook order stable across the
+    // loading/error early returns.
+    const avatarURL = useAvatarUrl(profile?.id ?? '', profile?.avatar);
 
     const loadProfile = useCallback(async () => {
         setError('');
@@ -82,7 +93,8 @@ export default function ProfilePage() {
         <main className="profile-page">
             <header className="profile-topbar">
                 <Link to="/groups" className="profile-back-link">
-                    ← Groups
+                    <Icon name="arrow-left" className="profile-back-icon" />
+                    Groups
                 </Link>
                 {isSelf && (
                     <Link to="/settings" className="profile-settings-link">
@@ -94,12 +106,14 @@ export default function ProfilePage() {
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">
                     <div className="profile-avatar-ring">
-                        <Avatar
-                            userID={profile.id}
-                            avatar={profile.avatar}
-                            username={profile.username}
-                            className="profile-avatar"
-                        />
+                        <FullScreenImage src={avatarURL} alt={`${profile.username}'s avatar`}>
+                            <Avatar
+                                userID={profile.id}
+                                avatar={profile.avatar}
+                                username={profile.username}
+                                className="profile-avatar"
+                            />
+                        </FullScreenImage>
                     </div>
                     <div>
                         <p className="profile-eyebrow">Adventurer card</p>
@@ -118,12 +132,42 @@ export default function ProfilePage() {
                 <article className="profile-stat-card profile-stat-points">
                     <span className="profile-stat-label">Total points</span>
                     <strong>{profile.total_points.toLocaleString()}</strong>
-                    <span>Lifetime guess score</span>
+                    {profile.global_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_rank.rank} of {profile.global_rank.total_players.toLocaleString()} players
+                        </span>
+                    ) : (
+                        <span>Guess a location to enter the ranking</span>
+                    )}
                 </article>
                 <article className="profile-stat-card profile-stat-guesses">
                     <span className="profile-stat-label">Guesses made</span>
                     <strong>{profile.guess_count.toLocaleString()}</strong>
                     <span>Places explored</span>
+                </article>
+                <article className="profile-stat-card profile-stat-average">
+                    <span className="profile-stat-label">Average score</span>
+                    <strong>{profile.average_score.toFixed(1)}</strong>
+                    {profile.global_average_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_average_rank.rank} of{' '}
+                            {profile.global_average_rank.total_players.toLocaleString()} players
+                        </span>
+                    ) : (
+                        <span>Guess a location to enter the ranking</span>
+                    )}
+                </article>
+                <article className="profile-stat-card profile-stat-elo">
+                    <span className="profile-stat-label">Elo rating</span>
+                    <strong>{profile.elo > 0 ? profile.elo.toLocaleString() : '—'}</strong>
+                    {profile.global_elo_rank.rank > 0 ? (
+                        <span>
+                            #{profile.global_elo_rank.rank} of {profile.global_elo_rank.total_players.toLocaleString()}{' '}
+                            rated players
+                        </span>
+                    ) : (
+                        <span>Guess a shared challenge to get rated</span>
+                    )}
                 </article>
                 <article className="profile-stat-card profile-stat-rank">
                     <span className="profile-stat-label">Current rank</span>
@@ -132,20 +176,6 @@ export default function ProfilePage() {
                         <RankBadge rank={rank} />
                         {rank.name}
                     </span>
-                </article>
-                <article className="profile-stat-card profile-stat-global">
-                    <span className="profile-stat-label">Global rank</span>
-                    {profile.global_rank.rank > 0 ? (
-                        <>
-                            <strong>#{profile.global_rank.rank}</strong>
-                            <span>of {profile.global_rank.total_players.toLocaleString()} players</span>
-                        </>
-                    ) : (
-                        <>
-                            <strong>Unranked</strong>
-                            <span>Guess a location to enter the ranking</span>
-                        </>
-                    )}
                 </article>
             </section>
 
@@ -159,7 +189,9 @@ export default function ProfilePage() {
                         <>
                             <div className="profile-rank-path" aria-hidden="true">
                                 <RankBadge rank={rank} />
-                                <span className="profile-rank-arrow">→</span>
+                                <span className="profile-rank-arrow">
+                                    <Icon name="chevron-right" />
+                                </span>
                                 <RankBadge rank={rank.next_rank} />
                             </div>
                             <p className="profile-next-rank-progress">
@@ -168,7 +200,10 @@ export default function ProfilePage() {
                             </p>
                         </>
                     ) : (
-                        <p className="profile-next-rank-progress">You’ve reached the top of the ladder. 👑</p>
+                        <p className="profile-next-rank-progress">
+                            You’ve reached the top of the ladder.{' '}
+                            <img src="/ui/crown.png" alt="" className="profile-crown-icon" />
+                        </p>
                     )}
                 </div>
                 <div

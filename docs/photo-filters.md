@@ -18,11 +18,12 @@ expressions such as mouth opening, and animated particles continue rendering
 while the camera is active.
 
 The compact, camera-first lens rail uses circular previews and keeps the
-selected lens name in a small chip above the rail. It supports touch swiping,
-mouse dragging, mouse-wheel scrolling, and desktop previous/next controls. The
-compact preview artwork is requested only after a lens is focused, hovered, or
-tapped, so opening the rail does not download the whole catalog and each
-carousel tile transfers only a thumbnail-sized WebP. The text tool adds an
+selected lens name in a small chip above the rail. Each tile shows its brand
+icon (`/lenses/icons/`) until preview artwork is requested. It supports touch
+swiping, mouse dragging, mouse-wheel scrolling, and desktop previous/next
+controls. The compact preview artwork is requested only after a lens is focused,
+hovered, or tapped, so opening the rail does not download the whole catalog and
+each carousel tile transfers only a thumbnail-sized WebP. The text tool adds an
 editable banner before or after capture, with Classic, Neon, and Clean themes
 and adjustable vertical placement. Banner text is rendered into the final JPEG
 rather than uploaded as separate metadata.

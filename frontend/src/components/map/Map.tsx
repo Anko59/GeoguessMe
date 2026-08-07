@@ -19,11 +19,15 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 interface Guess {
     user_id: string;
-    lat: number;
-    long: number;
+    lat?: number;
+    long?: number;
     username: string;
     avatar: string;
     score: number;
+}
+
+function hasCoordinates(guess: Guess): guess is Guess & { lat: number; long: number } {
+    return guess.lat !== undefined && guess.long !== undefined;
 }
 
 interface MapProps {
@@ -74,7 +78,9 @@ function FitBoundsToMarkers({
     const points = useMemo<L.LatLngTuple[]>(() => {
         const markers: L.LatLngTuple[] = [];
         if (actualLat !== undefined && actualLong !== undefined) markers.push([actualLat, actualLong]);
-        for (const guess of guesses ?? []) markers.push([guess.lat, guess.long]);
+        for (const guess of guesses ?? []) {
+            if (guess.lat !== undefined && guess.long !== undefined) markers.push([guess.lat, guess.long]);
+        }
         return markers;
     }, [actualLat, actualLong, guesses]);
 
@@ -112,8 +118,9 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                 />
             )}
 
-            {/* User Guesses */}
-            {guesses?.map((guess) => (
+            {/* User Guesses (only guesses with returned coordinates render; a
+                hidden-location challenge sends just the viewer's own point) */}
+            {guesses?.filter(hasCoordinates).map((guess) => (
                 <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
                     <Popup>
                         <strong>{guess.username}</strong>

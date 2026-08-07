@@ -113,9 +113,11 @@ export default function CameraView({
             onClick={onToggleOptions}
             aria-label="Challenge options"
             aria-expanded={showOptions}
+            title="Challenge options"
         >
-            <span aria-hidden="true">⚙️</span>
-            <span>{showOptions ? 'Hide options' : 'Options'}</span>
+            <span aria-hidden="true">
+                <img src="/ui/options-gear.png" alt="" className="options-toggle-icon" />
+            </span>
         </button>
     );
     const optionsMenu = (

@@ -32,12 +32,12 @@ const authValue = {
 
 const pageRank = {
     level: 1,
-    name: 'Page',
+    name: 'Completely Lost',
     min_points: 0,
     points_in_rank: 0,
-    points_to_next: 500,
+    points_to_next: 5000,
     progress_percent: 0,
-    trophy_key: 'page',
+    trophy_key: 'completely-lost',
 };
 
 const renderLeaderboard = (groupID = 'group-1') =>
@@ -63,7 +63,7 @@ describe('Leaderboard', () => {
         });
         expect(await screen.findByText('No scores yet')).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/group/leaderboard', {
-            params: { group_id: 'group-1', period: 'week' },
+            params: { group_id: 'group-1', period: 'week', metric: 'total' },
         });
         emptyLeaderboard!.unmount();
 
@@ -77,6 +77,7 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 100,
                     total_points: 100,
+                    elo: 1000,
                     rank: pageRank,
                 },
                 {
@@ -87,6 +88,7 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 80,
                     total_points: 80,
+                    elo: 950,
                     rank: pageRank,
                 },
                 {
@@ -97,6 +99,7 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 60,
                     total_points: 60,
+                    elo: 900,
                     rank: pageRank,
                 },
                 {
@@ -107,7 +110,8 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 40,
                     total_points: 40,
-                    rank: { ...pageRank, level: 17, name: 'Emperor', trophy_key: 'emperor' },
+                    elo: 850,
+                    rank: { ...pageRank, level: 17, name: 'Cartographer', trophy_key: 'cartographer' },
                 },
             ],
         });
@@ -117,8 +121,8 @@ describe('Leaderboard', () => {
         });
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
-        expect(screen.getAllByText('Page')).toHaveLength(3);
-        expect(screen.getByText('Emperor')).toBeInTheDocument();
+        expect(screen.getAllByText('Completely Lost')).toHaveLength(3);
+        expect(screen.getByText('Cartographer')).toBeInTheDocument();
         expect(screen.getAllByText('I')).toHaveLength(3);
         expect(screen.getByText('XVII')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
@@ -127,7 +131,7 @@ describe('Leaderboard', () => {
         expect(screen.getByRole('link', { name: "View alice's profile" })).toHaveAttribute('href', '/profile/user-1');
         const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');
         expect(badges).toHaveLength(4);
-        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/emperor.png');
+        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/cartographer.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));
@@ -179,8 +183,56 @@ describe('Leaderboard', () => {
 
         expect(await screen.findByText('bob')).toBeInTheDocument();
         expect(mocks.get).toHaveBeenLastCalledWith('/group/leaderboard', {
-            params: { group_id: 'group-1', period: 'month' },
+            params: { group_id: 'group-1', period: 'month', metric: 'total' },
         });
         expect(screen.getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('switches between total, average, and elo rankings', async () => {
+        const entry = {
+            user_id: 'user-1',
+            username: 'alice',
+            avatar: 'avatar2.png',
+            score: 100,
+            guess_count: 2,
+            average_score: 50,
+            total_points: 100,
+            elo: 1120,
+            rank: pageRank,
+        };
+        mocks.get
+            .mockResolvedValueOnce({ data: [entry] })
+            .mockResolvedValueOnce({ data: [{ ...entry, username: 'bob' }] })
+            .mockResolvedValueOnce({
+                data: [
+                    { ...entry, username: 'carol' },
+                    { ...entry, user_id: 'user-2', username: 'dave', elo: 0 },
+                ],
+            });
+        renderLeaderboard();
+
+        expect(await screen.findByText('alice')).toBeInTheDocument();
+        expect(screen.getByText('100')).toBeInTheDocument();
+        expect(screen.getByText('pts')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Average' }));
+        expect(await screen.findByText('bob')).toBeInTheDocument();
+        expect(mocks.get).toHaveBeenLastCalledWith('/group/leaderboard', {
+            params: { group_id: 'group-1', period: 'week', metric: 'average' },
+        });
+        expect(screen.getByText('50.0')).toBeInTheDocument();
+        expect(screen.getByText('avg')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Elo' }));
+        expect(await screen.findByText('carol')).toBeInTheDocument();
+        expect(mocks.get).toHaveBeenLastCalledWith('/group/leaderboard', {
+            params: { group_id: 'group-1', period: 'week', metric: 'elo' },
+        });
+        expect(screen.getByText('1,120')).toBeInTheDocument();
+        expect(screen.getAllByText('elo')).toHaveLength(2);
+        expect(screen.getByRole('tab', { name: 'Elo' })).toHaveAttribute('aria-selected', 'true');
+        const unratedRow = screen.getByText('dave').closest('.leaderboard-entry');
+        expect(unratedRow?.querySelector('.entry-rank')).toHaveTextContent('—');
+        expect(unratedRow).not.toHaveClass('gold', 'silver', 'bronze');
     });
 });

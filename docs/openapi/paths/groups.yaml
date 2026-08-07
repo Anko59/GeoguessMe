@@ -176,6 +176,12 @@ leaderboard:
           description: "Calendar period in UTC. Omit for all time.",
           schema: { type: string, enum: [week, month, all], default: all },
         }
+      - {
+          name: metric,
+          in: query,
+          description: "Ranking metric. Omit for total.",
+          schema: { type: string, enum: [total, average, elo], default: total },
+        }
     responses:
       "200":
         {
