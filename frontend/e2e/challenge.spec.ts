@@ -276,7 +276,7 @@ test.describe('Challenge flow', () => {
             await page.getByPlaceholder('Say something dangerous…').fill('CEO OF BAD IDEAS');
             await page.getByRole('button', { name: 'Neon', exact: true }).click();
             await expect(page.locator('.camera-text-banner-neon')).toHaveText('CEO OF BAD IDEAS');
-            await page.getByRole('button', { name: 'Text', exact: true }).click();
+            await page.getByRole('button', { name: 'Text banner', exact: true }).click();
             await expect(page.getByPlaceholder('Say something dangerous…')).toBeHidden();
             expect(pageErrors).toEqual([]);
         } finally {

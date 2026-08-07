@@ -145,6 +145,15 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_period", "period must be week, month, or all")
 		return
 	}
+	metric, validMetric := repository.ParseLeaderboardMetric(r.URL.Query().Get("metric"))
+	if r.URL.Query().Get("metric") == "" {
+		metric = repository.LeaderboardMetricTotal
+		validMetric = true
+	}
+	if !validMetric {
+		writeError(w, http.StatusBadRequest, "invalid_metric", "metric must be total, average, or elo")
+		return
+	}
 	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
 		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		return
@@ -157,6 +166,7 @@ func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []repository.LeaderboardEntry{}
 	}
+	repository.SortLeaderboard(entries, metric)
 	writeJSON(w, http.StatusOK, entries)
 }
 

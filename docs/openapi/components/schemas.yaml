@@ -63,24 +63,46 @@ Profile:
   allOf:
     - $ref: "#/AuthUser"
     - type: object
-      required: [total_points, guess_count, rank, global_rank]
+      required: [total_points, guess_count, average_score, elo, rank, global_rank, global_average_rank, global_elo_rank]
       properties:
         total_points: { type: integer, minimum: 0 }
         guess_count: { type: integer, minimum: 0 }
+        average_score: { type: number, minimum: 0 }
+        elo:
+          { type: integer, minimum: 0, description: Global Elo rating; 0 while never compared against another guesser. }
         rank: { $ref: "#/ProgressionRank" }
         global_rank: { $ref: "#/GlobalRank" }
+        global_average_rank: { $ref: "#/GlobalRank" }
+        global_elo_rank: { $ref: "#/GlobalRank" }
 
 PublicProfile:
   type: object
-  required: [id, username, avatar, total_points, guess_count, rank, global_rank]
+  required:
+    [
+      id,
+      username,
+      avatar,
+      total_points,
+      guess_count,
+      average_score,
+      elo,
+      rank,
+      global_rank,
+      global_average_rank,
+      global_elo_rank,
+    ]
   properties:
     id: { type: string }
     username: { type: string }
     avatar: { type: string }
     total_points: { type: integer, minimum: 0 }
     guess_count: { type: integer, minimum: 0 }
+    average_score: { type: number, minimum: 0 }
+    elo: { type: integer, minimum: 0 }
     rank: { $ref: "#/ProgressionRank" }
     global_rank: { $ref: "#/GlobalRank" }
+    global_average_rank: { $ref: "#/GlobalRank" }
+    global_elo_rank: { $ref: "#/GlobalRank" }
   description: >
     Another player's progression profile. Never contains email or account
     details; only visible when the player shares a group with the requester.
@@ -119,16 +141,21 @@ Member:
 
 LeaderboardEntry:
   type: object
-  required: [user_id, username, avatar, score, guess_count, average_score, total_points, rank]
+  required: [user_id, username, avatar, score, guess_count, average_score, total_points, elo, rank]
   properties:
     user_id: { type: string, format: uuid }
     username: { type: string }
     avatar: { type: string }
     score: { type: integer, description: Sum of all guess scores in the selected period. }
     guess_count: { type: integer }
-    average_score:
-      { type: number, description: Average guess score for display metadata; it does not determine ranking. }
+    average_score: { type: number, description: Average guess score in the selected period. }
     total_points: { type: integer, minimum: 0, description: Lifetime guess points used for rank progression. }
+    elo:
+      {
+        type: integer,
+        minimum: 0,
+        description: Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period.,
+      }
     rank: { $ref: "#/ProgressionRank" }
 
 Message:
@@ -278,16 +305,21 @@ ChallengeResults:
 
 Guess:
   type: object
-  required: [id, photo_id, user_id, group_id, lat, long, score, distance, created_at]
+  required: [id, photo_id, user_id, group_id, score, created_at]
   properties:
     id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
     user_id: { type: string, format: uuid }
     group_id: { type: string, format: uuid }
-    lat: { type: number, format: double }
-    long: { type: number, format: double }
+    lat:
+      {
+        type: number,
+        format: double,
+        description: Omitted for other players' guesses while a hidden-location challenge is still hidden; only the viewer's own guessed point is returned.,
+      }
+    long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
-    distance: { type: number }
+    distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }
