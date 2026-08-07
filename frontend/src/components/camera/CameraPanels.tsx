@@ -67,9 +67,9 @@ export function CameraTopControls({
                 onClick={onToggleFilters}
                 aria-label={showFilters ? 'Hide lenses' : 'Show lenses'}
                 aria-expanded={showFilters}
+                title={showFilters ? 'Hide lenses' : 'Show lenses'}
             >
                 <span aria-hidden="true">🎭</span>
-                <span>{showFilters ? 'Hide' : 'Lenses'}</span>
             </button>
         </div>
     );

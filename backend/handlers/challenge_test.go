@@ -121,7 +121,8 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, LifecycleStatus: "ready", HideLocation: true, CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	guessesRows := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).
-			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png")
+			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png").
+			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, now, "carol", "c.png")
 	}
 	fetch := func(viewerID string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
@@ -130,20 +131,37 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 		GetChallengeResults(recorder, request)
 		return recorder
 	}
-	// A guesser sees distances but not the actual location while it is hidden.
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	if recorder := fetch("user-2"); recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), "actual_lat") || !strings.Contains(recorder.Body.String(), `"location_hidden":true`) {
-		t.Fatalf("hidden results = %d (%s)", recorder.Code, recorder.Body.String())
+	expectResultsQueries := func(viewerID string) {
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
 	}
-	// The owner always sees their own location.
+	// A guesser sees scores, their own guessed point and distance, but not the
+	// actual location nor the other players' guessed points while it is hidden.
+	expectResultsQueries("user-2")
+	recorder := fetch("user-2")
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || strings.Contains(body, "actual_lat") || !strings.Contains(body, `"location_hidden":true`) {
+		t.Fatalf("hidden results = %d (%s)", recorder.Code, body)
+	}
+	if strings.Count(body, `"lat":`) != 1 {
+		t.Fatalf("hidden results must return only the viewer's guessed point, got %s", body)
+	}
+	if strings.Contains(body, `"distance":10`) && strings.Contains(body, `"username":"carol"`) && strings.Index(body, `"distance":10`) > strings.Index(body, `"username":"carol"`) {
+		t.Fatalf("carol's distance must be hidden, got %s", body)
+	}
+	if !strings.Contains(body, `"distance":10`) {
+		t.Fatalf("viewer's own guess distance must be present, got %s", body)
+	}
+	// The owner always sees every guess and their own location.
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	if recorder := fetch("user-1"); recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "actual_lat") {
-		t.Fatalf("owner results = %d (%s)", recorder.Code, recorder.Body.String())
+	recorder = fetch("user-1")
+	body = recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Count(body, `"lat":`) != 2 {
+		t.Fatalf("owner results = %d (%s)", recorder.Code, body)
 	}
 	// After the hide duration the location is revealed to everyone.
 	revealed := *photo
@@ -152,8 +170,10 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	if recorder := fetch("user-2"); recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "actual_lat") || strings.Contains(recorder.Body.String(), "location_hidden") {
-		t.Fatalf("revealed results = %d (%s)", recorder.Code, recorder.Body.String())
+	recorder = fetch("user-2")
+	body = recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Contains(body, "location_hidden") || strings.Count(body, `"lat":`) != 2 {
+		t.Fatalf("revealed results = %d (%s)", recorder.Code, body)
 	}
 }
 

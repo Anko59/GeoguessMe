@@ -390,7 +390,9 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                                     >
                                         <div>
                                             <strong>{guess.user_id === user?.id ? 'You' : guess.username}</strong>
-                                            <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            {guess.distance !== undefined && (
+                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            )}
                                         </div>
                                         <b>{guess.score} pts</b>
                                     </div>
