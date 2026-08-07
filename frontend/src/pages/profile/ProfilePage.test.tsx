@@ -35,25 +35,25 @@ const profile = {
     email: 'alice@example.test',
     email_verified_at: null,
     avatar: 'avatar.png',
-    total_points: 600,
+    total_points: 6000,
     guess_count: 4,
     rank: {
         level: 2,
-        name: 'Squire',
-        min_points: 500,
-        next_points: 1500,
-        points_in_rank: 100,
-        points_to_next: 1000,
+        name: 'Lost Tourist',
+        min_points: 5000,
+        next_points: 15000,
+        points_in_rank: 1000,
+        points_to_next: 10000,
         progress_percent: 10,
-        trophy_key: 'squire',
+        trophy_key: 'lost-tourist',
         next_rank: {
             level: 3,
-            name: 'Yeoman',
-            min_points: 1500,
+            name: 'Clueless Wanderer',
+            min_points: 15000,
             points_in_rank: 0,
-            points_to_next: 1500,
+            points_to_next: 15000,
             progress_percent: 0,
-            trophy_key: 'yeoman',
+            trophy_key: 'clueless-wanderer',
         },
     },
     global_rank: {
@@ -85,16 +85,19 @@ describe('ProfilePage', () => {
         renderProfile();
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
-        expect(screen.getByText('600')).toBeInTheDocument();
-        expect(screen.getAllByText('Squire')).toHaveLength(2);
+        expect(screen.getByText('6,000')).toBeInTheDocument();
+        expect(screen.getAllByText('Lost Tourist')).toHaveLength(2);
         expect(screen.getAllByText('II')).toHaveLength(4);
         expect(screen.getByText('III')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Next rank: Yeoman' })).toBeInTheDocument();
-        expect(screen.getByText(/900 to go/)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Next rank: Clueless Wanderer' })).toBeInTheDocument();
+        expect(screen.getByText(/9,000 to go/)).toBeInTheDocument();
         expect(screen.getByText('of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('#3')).toBeInTheDocument();
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
-        expect(screen.getByRole('img', { name: 'Squire badge' })).toHaveAttribute('src', '/rank-badges/squire.png');
+        expect(screen.getByRole('img', { name: 'Lost Tourist badge' })).toHaveAttribute(
+            'src',
+            '/rank-badges/lost-tourist.png',
+        );
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
     });

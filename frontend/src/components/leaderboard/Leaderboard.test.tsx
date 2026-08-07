@@ -32,12 +32,12 @@ const authValue = {
 
 const pageRank = {
     level: 1,
-    name: 'Page',
+    name: 'Completely Lost',
     min_points: 0,
     points_in_rank: 0,
-    points_to_next: 500,
+    points_to_next: 5000,
     progress_percent: 0,
-    trophy_key: 'page',
+    trophy_key: 'completely-lost',
 };
 
 const renderLeaderboard = (groupID = 'group-1') =>
@@ -107,7 +107,7 @@ describe('Leaderboard', () => {
                     guess_count: 1,
                     average_score: 40,
                     total_points: 40,
-                    rank: { ...pageRank, level: 17, name: 'Emperor', trophy_key: 'emperor' },
+                    rank: { ...pageRank, level: 17, name: 'Cartographer', trophy_key: 'cartographer' },
                 },
             ],
         });
@@ -117,8 +117,8 @@ describe('Leaderboard', () => {
         });
         expect(await screen.findByText('alice')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
-        expect(screen.getAllByText('Page')).toHaveLength(3);
-        expect(screen.getByText('Emperor')).toBeInTheDocument();
+        expect(screen.getAllByText('Completely Lost')).toHaveLength(3);
+        expect(screen.getByText('Cartographer')).toBeInTheDocument();
         expect(screen.getAllByText('I')).toHaveLength(3);
         expect(screen.getByText('XVII')).toBeInTheDocument();
         expect(screen.getByText('#4')).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe('Leaderboard', () => {
         expect(screen.getByRole('link', { name: "View alice's profile" })).toHaveAttribute('href', '/profile/user-1');
         const badges = rankedLeaderboard!.container.querySelectorAll('.rank-badge');
         expect(badges).toHaveLength(4);
-        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/emperor.png');
+        expect((badges[3] as HTMLImageElement).src).toContain('/rank-badges/cartographer.png');
         rankedLeaderboard!.unmount();
 
         mocks.get.mockRejectedValueOnce(new Error('rankings unavailable'));
