@@ -317,6 +317,12 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = a.messages.DeleteMessageReaction(r.Context(), messageID, userID, req.Reaction)
 	}
+	// TOCTOU no-op: if the message is deleted between the load above and this
+	// statement, the mutation is a harmless no-op (the insert carries a WHERE
+	// EXISTS guard; the delete is naturally empty), so a stale write can never
+	// affect an unknown message. The reload below then answers 500 — an
+	// acceptable error path for a race that cannot occur while the message
+	// still exists.
 	if errors.Is(err, chatrepo.ErrInvalidReaction) {
 		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return

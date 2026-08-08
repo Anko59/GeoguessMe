@@ -284,3 +284,33 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestReactionEmojiAliasIsMapped(t *testing.T) {
+	// Pins the legacy request-field alias (PR 12 removes it): a reaction sent
+	// via the emoji field must be accepted and treated as the reaction key so
+	// old clients keep working.
+	setupHandlers(t)
+	mock := handlerMock(t)
+	chatAPI := newChatAPI(t, mock, nil, nil)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	messageID := "00000000-0000-0000-0000-000000000002"
+	messageRows := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}).
+			AddRow(messageID, "group-1", "user-2", "bob", "", "text", nil, nil, nil, nil, "hello", now)
+	}
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	// The emoji field maps onto the reaction key: the mutation stores "👍".
+	mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "👍").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}).
+			AddRow(messageID, "👍", 1, true, []string{"alice"}))
+	request := requestWithUser(http.MethodPut, "/", `{"emoji":"👍"}`, "user-1")
+	request.SetPathValue("messageID", messageID)
+	requireStatus(t, chatAPI.SetMessageReaction, request, http.StatusOK)
+}
