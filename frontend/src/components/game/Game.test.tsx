@@ -187,6 +187,68 @@ describe('Game', () => {
         expect(bobRow).toHaveTextContent('80 pts');
     });
 
+    it('derives the reveal duration from location_reveals_at instead of hardcoding it', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-7b',
+                group_id: 'group-1',
+                location_hidden: true,
+                location_reveals_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+                guesses: [
+                    {
+                        id: 'guess-1',
+                        photo_id: 'photo-7b',
+                        user_id: 'user-1',
+                        username: 'alice',
+                        avatar: 'a.png',
+                        score: 100,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+                media_available: false,
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-7b', kind: 'challenge' })}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(await screen.findByText(/hasn’t revealed this location yet/)).toBeInTheDocument();
+        expect(screen.getByText(/will appear here after 24 hours/)).toBeInTheDocument();
+    });
+
+    it('shows the hide notice without a duration when location_reveals_at is absent', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-7c',
+                group_id: 'group-1',
+                location_hidden: true,
+                guesses: [
+                    {
+                        id: 'guess-1',
+                        photo_id: 'photo-7c',
+                        user_id: 'user-1',
+                        username: 'alice',
+                        avatar: 'a.png',
+                        score: 100,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+                media_available: false,
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-7c', kind: 'challenge' })}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(await screen.findByText(/when the reveal period ends/)).toBeInTheDocument();
+    });
+
     it('accepts a challenge, selects a location, and submits a guess', async () => {
         mocks.get.mockRejectedValueOnce(new Error('results not ready'));
         mocks.post
