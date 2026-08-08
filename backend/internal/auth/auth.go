@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,9 +28,6 @@ type Claims struct {
 // Init is kept for existing package consumers. Production startup uses
 // InitWithSettings so issuer, audience, and lifetime are explicit.
 func Init(secret string) {
-	if secret == "" && (os.Getenv("GO_TEST") == "1" || strings.Contains(os.Args[0], ".test")) {
-		secret = "test_secret_key_for_testing_only"
-	}
 	jwtKey = []byte(secret)
 }
 
