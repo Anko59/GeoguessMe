@@ -313,9 +313,9 @@ describe('useGroupMessages reconnect sequence', () => {
         expect(result.current.hasMoreOlder).toBe(true); // full page: older history exists
 
         mocks.get.mockResolvedValueOnce({ data: { items: [message('oldest', '2025-12-31T23:59:00Z')] } });
-        const first = result.current.loadOlder();
-        const second = result.current.loadOlder(); // ignored while in flight
         await act(async () => {
+            const first = result.current.loadOlder();
+            const second = result.current.loadOlder(); // ignored while in flight
             await Promise.all([first, second]);
         });
         expect(mocks.get).toHaveBeenCalledTimes(2); // initial sync + one loadOlder
