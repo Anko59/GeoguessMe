@@ -1,3 +1,7 @@
+---
+status: archival
+---
+
 # July 2026 release recovery
 
 ## Purpose and scope

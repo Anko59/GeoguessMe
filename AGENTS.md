@@ -1,6 +1,12 @@
 # Repository working agreement
 
-These rules apply to humans and AI coding agents alike.
+These rules apply to humans and AI coding agents alike. AI agents: start with
+[docs/agent-engineering.md](docs/agent-engineering.md) for the package map,
+change-impact matrix, canonical commands, invariants, and compatibility ledger,
+then follow the scoped rules in `backend/AGENTS.md`, `frontend/AGENTS.md`, and
+`deployment/AGENTS.md` when your change touches those layers. Human-readable
+explanations live in the [documentation index](docs/index.md); do not duplicate
+them into prompts or instruction files.
 
 ## Production quality
 
@@ -17,11 +23,9 @@ Dockerized Make targets are the required repository interface. Use a Make target
 whenever one exists. Do not run project compilers, package managers, linters,
 formatters, Playwright, migration tools, or test runners directly on the host.
 Add or improve a Dockerized Make target instead of documenting a host command.
-The supported host prerequisites are Git, Make, Docker, and Docker Compose.
-
-Start with the repository navigation points: [README](README.md),
-[documentation index](docs/index.md), [deployment guide](deployment/README.md),
-[testing guide](docs/testing.md), and `make help`.
+The supported host prerequisites are Git, Make, Docker, and Docker Compose. See
+[docs/local-development.md](docs/local-development.md) for setup and the
+canonical target list in `make help`.
 
 ## Hooks
 
@@ -41,7 +45,7 @@ No human-authored tracked file may exceed 500 lines. No directory may directly
 contain more than 14 code or configuration files. Refactor before crossing
 either limit. Generated files are excluded only when the committed allowlist and
 generated marker identify them; vendored dependencies and binary media are also
-excluded as described by the structural checker.
+excluded as described by `tools/quality/structure-check`.
 
 ## Testing
 
@@ -53,6 +57,7 @@ changed paths. The complete `make verify` suite runs once on the exact `dev`
 revision before development deployment and nightly. Run it locally when changing
 deployment, test infrastructure, or the gates themselves. Do not claim
 production readiness unless the exact revision has a successful complete gate.
+The gate matrix is in [docs/testing.md](docs/testing.md).
 
 ## Handoff
 
@@ -68,11 +73,15 @@ requests use a short-lived repository `release/*` branch based on `main` whose
 tree exactly matches the successfully deployed `dev` tree. Both protected
 branches require signed commits, strict checks, and squash merging; do not push
 directly to either branch. Production promotes the exact signed image digests
-that passed the complete dev gate instead of rebuilding source.
+that passed the complete dev gate instead of rebuilding source. See
+[docs/deployment.md](docs/deployment.md) and
+[deployment/README.md](deployment/README.md).
 
 ## Documentation
 
 Update the README, API documentation, deployment instructions, and operational
 documentation whenever behavior or interfaces change. Keep local development,
 testing, contributing, and deployment documentation aligned with the Docker-only
-workflow without duplicating this entire file.
+workflow without duplicating this entire file. Every canonical document must be
+reachable from [docs/index.md](docs/index.md); the docs/agent-config checker in
+`make lint-docs` enforces that and link integrity.
