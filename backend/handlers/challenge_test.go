@@ -80,7 +80,7 @@ func TestUploadPhotoToMultipleGroups(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(insertArgs()...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
+	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("multi-group upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -108,7 +108,7 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupID}, true))
+	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupID}, true))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("hide-location upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -196,15 +196,16 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	}
 
 	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil, nil)
+	hub := chat.NewHub(nil, nil)
+	defer hub.Stop()
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), hub)
 	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
 	badOrigin.Header.Set("Origin", "http://evil.test")
 	recorder = httptest.NewRecorder()
-	HandleChat(recorder, badOrigin)
+	chatAPI.HandleChat(recorder, badOrigin)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("bad origin status = %d", recorder.Code)
 	}
-	HubInstance = nil
 }
 
 // TestChallengeMediaViewWindow pins the challenge viewing-window contract:
@@ -282,4 +283,34 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) {
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestReactionEmojiAliasIsMapped(t *testing.T) {
+	// Pins the legacy request-field alias (PR 12 removes it): a reaction sent
+	// via the emoji field must be accepted and treated as the reaction key so
+	// old clients keep working.
+	setupHandlers(t)
+	mock := handlerMock(t)
+	chatAPI := newChatAPI(t, mock, nil, nil)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	messageID := "00000000-0000-0000-0000-000000000002"
+	messageRows := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}).
+			AddRow(messageID, "group-1", "user-2", "bob", "", "text", nil, nil, nil, nil, "hello", now)
+	}
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	// The emoji field maps onto the reaction key: the mutation stores "👍".
+	mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "👍").
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}).
+			AddRow(messageID, "👍", 1, true, []string{"alice"}))
+	request := requestWithUser(http.MethodPut, "/", `{"emoji":"👍"}`, "user-1")
+	request.SetPathValue("messageID", messageID)
+	requireStatus(t, chatAPI.SetMessageReaction, request, http.StatusOK)
 }

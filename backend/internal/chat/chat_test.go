@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,6 +78,62 @@ func TestHubReportsPersistenceFailureToSender(t *testing.T) {
 		t.Fatal("sender was not notified")
 	}
 	hub.Stop()
+}
+
+// TestHubPersistTimeoutBoundsHungPersistence pins the bounded-persist
+// invariant: the hub Run loop is single-threaded, so a database write that
+// hangs must fail within the persist deadline instead of stalling every
+// broadcast forever. The fake persist honors context cancellation exactly like
+// the pgx-backed save (it returns when the context expires); the hub must
+// report the failure to the sender and keep processing later broadcasts. This
+// test fails against an unbounded persist call because the first save would
+// block on the never-cancelled background context and the sender would never
+// receive the failure message.
+func TestHubPersistTimeoutBoundsHungPersistence(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	persist := func(ctx context.Context, _ *models.Message) error {
+		mu.Lock()
+		first := calls == 0
+		calls++
+		mu.Unlock()
+		if first {
+			// Simulate a database call that hangs but honors cancellation
+			// (pgx aborts the query when the context expires).
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}
+	hub := NewHubWithTimeout(persist, nil, 30*time.Millisecond)
+	go hub.Run()
+	sender := &Client{groupID: "group-a", send: make(chan models.Message, 4)}
+	hub.register <- sender
+	defer hub.Stop()
+
+	// The first persist hangs; the hub must bound it and report the dropped
+	// message to the sender instead of wedging the loop.
+	hub.BroadcastFrom(sender, models.Message{GroupID: "group-a", Content: "stuck"})
+	select {
+	case message := <-sender.send:
+		if message.Kind != "system" || message.ErrorCode != "message_not_saved" {
+			t.Fatalf("unexpected failure message: %+v", message)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("hub stalled: hung persistence was not bounded by the persist timeout")
+	}
+
+	// The hub loop is still alive: a later broadcast persists successfully and
+	// reaches the sender.
+	hub.BroadcastFrom(sender, models.Message{GroupID: "group-a", Content: "second"})
+	select {
+	case message := <-sender.send:
+		if message.Content != "second" {
+			t.Fatalf("unexpected second message: %+v", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("hub did not continue processing broadcasts after a bounded persist failure")
+	}
 }
 
 // TestHubNotifiesOnlyForChatMessages asserts the push callback fires for text

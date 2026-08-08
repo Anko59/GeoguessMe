@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/repository"
+	chatrepo "geoguessme/internal/repository/chat"
 )
 
 type GuessRequest struct {
@@ -14,54 +16,60 @@ type GuessRequest struct {
 	Long float64 `json:"long"`
 }
 
-func SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
-		return
-	}
-	photoID := r.PathValue("photoID")
-	if err := validateID(photoID, "photo_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
-		return
-	}
-	var req GuessRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	result, err := repository.SubmitGuess(r.Context(), photoID, GetUserIDFromContext(r), req.Lat, req.Long, time.Now())
-	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrForbidden):
-			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
-		case errors.Is(err, repository.ErrOwnPhoto):
-			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
-		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
-		case errors.Is(err, repository.ErrChallengeExpired):
-			writeError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
-		case errors.Is(err, repository.ErrViewNotFinished):
-			writeError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
-		case errors.Is(err, repository.ErrInvalidCoordinate):
-			writeError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
+// SubmitChallengeGuess is a handler factory over the challenge slice (PR 6
+// migrates it onto a GameAPI). The realtime hub and the chat repository are
+// injected explicitly: they are the dependencies the guess flow needs to
+// publish the live resolved-state update without touching package globals.
+func SubmitChallengeGuess(hub *chatHub.Hub, messages *chatrepo.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
 		}
-		return
-	}
-	status := http.StatusCreated
-	if result.Existing {
-		status = http.StatusOK
-	}
-	if !result.Existing && HubInstance != nil {
-		message, messageErr := repository.GetChallengeMessageForViewer(r.Context(), photoID, "")
-		if messageErr != nil {
-			slog.Error("failed to load challenge message after guess", "photo_id", photoID, "error", messageErr)
-		} else if message != nil {
-			message.ChallengeResolved = true
-			HubInstance.BroadcastUpdate(*message)
+		photoID := r.PathValue("photoID")
+		if err := validateID(photoID, "photo_id"); err != nil {
+			writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+			return
 		}
+		var req GuessRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		result, err := repository.SubmitGuess(r.Context(), photoID, GetUserIDFromContext(r), req.Lat, req.Long, time.Now())
+		if err != nil {
+			switch {
+			case errors.Is(err, repository.ErrForbidden):
+				writeError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
+			case errors.Is(err, repository.ErrOwnPhoto):
+				writeError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
+			case errors.Is(err, repository.ErrNotFound):
+				writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+			case errors.Is(err, repository.ErrChallengeExpired):
+				writeError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
+			case errors.Is(err, repository.ErrViewNotFinished):
+				writeError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+			case errors.Is(err, repository.ErrInvalidCoordinate):
+				writeError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
+			default:
+				writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
+			}
+			return
+		}
+		status := http.StatusCreated
+		if result.Existing {
+			status = http.StatusOK
+		}
+		if !result.Existing && hub != nil {
+			message, messageErr := messages.GetChallengeMessageForViewer(r.Context(), photoID, "")
+			if messageErr != nil {
+				slog.Error("failed to load challenge message after guess", "photo_id", photoID, "error", messageErr)
+			} else if message != nil {
+				message.ChallengeResolved = true
+				hub.BroadcastUpdate(*message)
+			}
+		}
+		writeJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": time.Now()})
 	}
-	writeJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": time.Now()})
 }
 
 func GetChallengeResults(w http.ResponseWriter, r *http.Request) {
