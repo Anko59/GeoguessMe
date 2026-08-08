@@ -41,25 +41,26 @@ func main() {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := database.ConnectWithLimits(cfg.DatabaseURL, cfg.DatabaseMinConns, cfg.DatabaseMaxConns); err != nil {
+	pool, err := database.ConnectWithLimits(cfg.DatabaseURL, cfg.DatabaseMinConns, cfg.DatabaseMaxConns)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "database error: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer pool.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
 	switch command {
 	case "migrate":
 		if len(os.Args) < 3 || os.Args[2] == "up" {
-			if err := database.MigrateUp(ctx, logger); err != nil {
+			if err := database.MigrateUp(ctx, pool, logger); err != nil {
 				logger.Error("migration failed", "error", err)
 				os.Exit(1)
 			}
 			return
 		}
 		if os.Args[2] == "status" {
-			statuses, err := database.MigrationStatus(ctx)
+			statuses, err := database.MigrationStatus(ctx, pool)
 			if err != nil {
 				logger.Error("migration status failed", "error", err)
 				os.Exit(1)
@@ -75,7 +76,7 @@ func main() {
 		// Schema changes are intentionally not run here. Deployments execute the
 		// migration job before starting the API process.
 	case "healthcheck":
-		if err := database.DB.Ping(ctx); err != nil {
+		if err := pool.Ping(ctx); err != nil {
 			logger.Error("healthcheck failed", "error", err)
 			os.Exit(1)
 		}
@@ -98,13 +99,13 @@ func main() {
 	mailer := email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
-	pushSvc := configurePush(cfg, logger)
+	pushSvc := configurePush(cfg, logger, pool)
 	pushSvc.Start(workerCtx, 2)
 
 	// The realtime hub is constructed by the composition root with its
 	// persistence and push callbacks injected: message persistence goes
 	// through the chat repository, and push fan-out through the push service.
-	repos := repository.NewRepository(database.DB)
+	repos := repository.NewRepository(pool)
 	hub := chat.NewHub(
 		func(ctx context.Context, msg *models.Message) error {
 			return repos.Chat.SaveMessage(ctx, msg)
@@ -117,7 +118,7 @@ func main() {
 	)
 	go hub.Run()
 
-	app := NewApp(cfg, database.DB, repos, store, mailer, pushSvc, hub, logger, time.Now)
+	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
 	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
 
 	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
@@ -153,7 +154,7 @@ func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
 // an omitted VAPID configuration as an explicit opt-out: minting a new keypair
 // there would invalidate every subscription on the next restart. Development
 // and test retain ephemeral keys for convenient local end-to-end coverage.
-func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
+func configurePush(cfg *config.Config, logger *slog.Logger, pool database.Pool) *push.Service {
 	if cfg.Environment == config.EnvProduction && cfg.VapidPublicKey == "" && cfg.VapidPrivateKey == "" {
 		logger.Info("Web Push is disabled because no VAPID keypair is configured")
 		return push.NewService(push.Deps{Config: cfg, Logger: logger})
@@ -172,7 +173,7 @@ func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
 		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
 	}
 	sender := push.NewSender(keyPair, subject, nil)
-	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
+	return push.NewService(push.Deps{Store: push.NewStore(pool), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
 }
 
 // printVapidKeys generates a fresh Web Push keypair and prints it in the

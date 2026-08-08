@@ -256,25 +256,18 @@ func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, object)
 }
 
-var allowedReactions = map[string]struct{}{
-	// Custom reaction artwork keys offered by the UI.
-	"like":       {},
-	"love":       {},
-	"laugh":      {},
-	"wow":        {},
-	"sad":        {},
-	"spot-on":    {},
-	"lost":       {},
-	"mind-blown": {},
-	"wrong-way":  {},
-	"vacation":   {},
+// allowedReaction reports whether a reaction key is one of the supported
+// reactions. It is a pure lookup (no package-level mutable state).
+func allowedReaction(reaction string) bool {
+	switch reaction {
+	case "like", "love", "laugh", "wow", "sad", "spot-on", "lost", "mind-blown", "wrong-way", "vacation":
+		return true
 	// Legacy emoji reactions stay valid so existing data keeps working.
-	"👍":  {},
-	"❤️": {},
-	"😂":  {},
-	"😮":  {},
-	"😢":  {},
-	"🙏":  {},
+	case "👍", "❤️", "😂", "😮", "😢", "🙏":
+		return true
+	default:
+		return false
+	}
 }
 
 type messageReactionRequest struct {
@@ -303,7 +296,7 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if req.Reaction == "" {
 		req.Reaction = strings.TrimSpace(req.Emoji)
 	}
-	if _, ok := allowedReactions[req.Reaction]; !ok {
+	if !allowedReaction(req.Reaction) {
 		WriteError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}

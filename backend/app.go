@@ -157,7 +157,7 @@ func (a *App) routes() http.Handler {
 	// with Open Graph meta tags for messengers and redirects browsers.
 	mux.HandleFunc("GET /invite/{code}", a.Game.HandleInvitePreview)
 
-	registerSystemRoutes(mux, a.Config, a.Metrics, a.Store)
+	registerSystemRoutes(mux, a.Config, a.DB, a.Metrics, a.Store)
 
 	var handler http.Handler = mux
 	handler = middleware.SecurityHeaders(handler)

@@ -44,13 +44,15 @@ type Store interface {
 	Username(ctx context.Context, userID string) (string, error)
 }
 
-// pgStore implements Store against the shared connection pool.
-type pgStore struct{}
+// pgStore implements Store against an injected connection pool.
+type pgStore struct {
+	pool database.Pool
+}
 
-// NewStore returns a Store backed by the application database pool.
-func NewStore() Store { return pgStore{} }
+// NewStore returns a Store backed by the given application database pool.
+func NewStore(pool database.Pool) Store { return pgStore{pool: pool} }
 
-func (pgStore) Upsert(ctx context.Context, sub *Subscription) error {
+func (s pgStore) Upsert(ctx context.Context, sub *Subscription) error {
 	if sub.ID == "" {
 		sub.ID = uuid.NewString()
 	}
@@ -60,15 +62,15 @@ func (pgStore) Upsert(ctx context.Context, sub *Subscription) error {
 	const query = `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (user_id, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent`
-	_, err := database.DB.Exec(ctx, query, sub.ID, sub.UserID, sub.Endpoint, sub.P256DH, sub.Auth, sub.UserAgent, sub.CreatedAt)
+	_, err := s.pool.Exec(ctx, query, sub.ID, sub.UserID, sub.Endpoint, sub.P256DH, sub.Auth, sub.UserAgent, sub.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("upsert push subscription: %w", err)
 	}
 	return nil
 }
 
-func (pgStore) Delete(ctx context.Context, userID, endpoint string) error {
-	tag, err := database.DB.Exec(ctx, `DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2`, userID, endpoint)
+func (s pgStore) Delete(ctx context.Context, userID, endpoint string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2`, userID, endpoint)
 	if err != nil {
 		return fmt.Errorf("delete push subscription: %w", err)
 	}
@@ -78,8 +80,8 @@ func (pgStore) Delete(ctx context.Context, userID, endpoint string) error {
 	return nil
 }
 
-func (pgStore) ListForUser(ctx context.Context, userID string) ([]Subscription, error) {
-	rows, err := database.DB.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at`, userID)
+func (s pgStore) ListForUser(ctx context.Context, userID string) ([]Subscription, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +89,11 @@ func (pgStore) ListForUser(ctx context.Context, userID string) ([]Subscription, 
 	return scanSubscriptions(rows)
 }
 
-func (pgStore) ListForUsers(ctx context.Context, userIDs []string) ([]Subscription, error) {
+func (s pgStore) ListForUsers(ctx context.Context, userIDs []string) ([]Subscription, error) {
 	if len(userIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := database.DB.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = ANY($1)`, userIDs)
+	rows, err := s.pool.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = ANY($1)`, userIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +101,13 @@ func (pgStore) ListForUsers(ctx context.Context, userIDs []string) ([]Subscripti
 	return scanSubscriptions(rows)
 }
 
-func (pgStore) DeleteByID(ctx context.Context, id string) error {
-	_, err := database.DB.Exec(ctx, `DELETE FROM push_subscriptions WHERE id = $1`, id)
+func (s pgStore) DeleteByID(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE id = $1`, id)
 	return err
 }
 
-func (pgStore) GroupTargets(ctx context.Context, groupID, excludeUserID string) ([]NotificationTarget, error) {
-	rows, err := database.DB.Query(ctx, `SELECT u.id, u.username
+func (s pgStore) GroupTargets(ctx context.Context, groupID, excludeUserID string) ([]NotificationTarget, error) {
+	rows, err := s.pool.Query(ctx, `SELECT u.id, u.username
 		FROM group_members gm
 		JOIN users u ON u.id = gm.user_id AND u.deleted_at IS NULL
 		LEFT JOIN group_notification_preferences np ON np.group_id = gm.group_id AND np.user_id = gm.user_id
@@ -125,18 +127,18 @@ func (pgStore) GroupTargets(ctx context.Context, groupID, excludeUserID string) 
 	return targets, rows.Err()
 }
 
-func (pgStore) GroupName(ctx context.Context, groupID string) (string, error) {
+func (s pgStore) GroupName(ctx context.Context, groupID string) (string, error) {
 	var name string
-	err := database.DB.QueryRow(ctx, `SELECT name FROM groups WHERE id = $1`, groupID).Scan(&name)
+	err := s.pool.QueryRow(ctx, `SELECT name FROM groups WHERE id = $1`, groupID).Scan(&name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNoGroup
 	}
 	return name, err
 }
 
-func (pgStore) Username(ctx context.Context, userID string) (string, error) {
+func (s pgStore) Username(ctx context.Context, userID string) (string, error) {
 	var username string
-	err := database.DB.QueryRow(ctx, `SELECT username FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&username)
+	err := s.pool.QueryRow(ctx, `SELECT username FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&username)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNoUser
 	}

@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"testing"
 	"time"
@@ -15,22 +14,18 @@ func TestMigrationDiscoveryAndDisconnectedDatabase(t *testing.T) {
 	if err != nil || len(all) != 13 || all[0].Version != 1 || all[1].Version != 2 || all[2].Version != 3 || all[3].Version != 4 || all[4].Version != 5 || all[5].Version != 6 || all[6].Version != 7 || all[7].Version != 8 || all[8].Version != 9 || all[9].Version != 10 || all[10].Version != 11 || all[11].Version != 12 || all[12].Version != 13 {
 		t.Fatalf("migrations = %+v, %v", all, err)
 	}
-	if err := Connect(""); err == nil {
+	if _, err := Connect(""); err == nil {
 		t.Fatal("empty database URL accepted")
 	}
-	if err := ConnectWithLimits("://invalid", 0, 1); err == nil {
+	if _, err := ConnectWithLimits("://invalid", 0, 1); err == nil {
 		t.Fatal("invalid database URL accepted")
 	}
-	DB = nil
-	if err := MigrateUp(context.Background(), nil); err == nil || err.Error() != "database is not connected" {
+	if err := MigrateUp(context.Background(), nil, nil); err == nil || err.Error() != "database is not connected" {
 		t.Fatalf("disconnected migration error = %v", err)
 	}
-	if _, err := MigrationStatus(context.Background()); err == nil {
+	if _, err := MigrationStatus(context.Background(), nil); err == nil {
 		t.Fatal("disconnected status unexpectedly succeeded")
 	}
-	Close()
-	InitSchema()
-	log.Print("database compatibility helpers exercised")
 }
 
 func TestMigrationStatusUsesPool(t *testing.T) {
@@ -38,19 +33,16 @@ func TestMigrationStatusUsesPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := DB
-	DB = mock
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		DB = previous
 	})
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").WillReturnResult(pgxmock.NewResult("CREATE", 0))
 	when := time.Now().UTC()
 	mock.ExpectQuery("SELECT version, applied_at FROM schema_migrations").WillReturnRows(pgxmock.NewRows([]string{"version", "applied_at"}).AddRow(1, when))
-	records, err := MigrationStatus(context.Background())
+	records, err := MigrationStatus(context.Background(), mock)
 	if err != nil || len(records) != 13 || !records[0].Applied || records[1].Applied || records[2].Applied || records[3].Applied || records[4].Applied || records[5].Applied || records[6].Applied || records[7].Applied || records[8].Applied || records[9].Applied || records[10].Applied || records[11].Applied || records[12].Applied {
 		t.Fatalf("migration records = %+v, %v", records, err)
 	}
@@ -61,19 +53,11 @@ func TestMigrateUpSkipsAppliedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := DB
-	previousAcquire := acquireMigrationConnection
-	DB = mock
-	acquireMigrationConnection = func(context.Context) (migrationConnection, error) {
-		return migrationMockConnection{PgxPoolIface: mock}, nil
-	}
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		DB = previous
-		acquireMigrationConnection = previousAcquire
 	})
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").WillReturnResult(pgxmock.NewResult("CREATE", 0))
 	mock.ExpectExec("SELECT pg_advisory_lock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
@@ -82,7 +66,7 @@ func TestMigrateUpSkipsAppliedMigrations(t *testing.T) {
 	)
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
-	if err := MigrateUp(context.Background(), slog.Default()); err != nil {
+	if err := MigrateUp(context.Background(), mock, slog.Default()); err != nil {
 		t.Fatalf("MigrateUp returned an error: %v", err)
 	}
 }
@@ -92,19 +76,11 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := DB
-	previousAcquire := acquireMigrationConnection
-	DB = mock
-	acquireMigrationConnection = func(context.Context) (migrationConnection, error) {
-		return migrationMockConnection{PgxPoolIface: mock}, nil
-	}
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		DB = previous
-		acquireMigrationConnection = previousAcquire
 	})
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").WillReturnResult(pgxmock.NewResult("CREATE", 0))
 	mock.ExpectExec("SELECT pg_advisory_lock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
@@ -163,13 +139,7 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
-	if err := MigrateUp(context.Background(), slog.Default()); err != nil {
+	if err := MigrateUp(context.Background(), mock, slog.Default()); err != nil {
 		t.Fatalf("MigrateUp returned an error: %v", err)
 	}
 }
-
-type migrationMockConnection struct {
-	pgxmock.PgxPoolIface
-}
-
-func (migrationMockConnection) Release() {}
