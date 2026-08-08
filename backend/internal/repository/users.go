@@ -73,17 +73,10 @@ func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStat
 	return stats, nil
 }
 
-// GlobalRankStats is the player's position among every player who has guessed
-// at least once, ordered by lifetime guess points. Rank uses standard
-// competition ranking: players with equal totals share a rank and the next
-// rank is skipped accordingly.
-type GlobalRankStats struct {
-	Rank         int
-	TotalPlayers int
-}
-
 // GetGlobalRankContext calculates a stable snapshot in one query. Deleted
-// accounts are excluded from both the requested rank and the population.
+// accounts are excluded from both the requested rank and the population. The
+// returned GlobalRankStats type is defined in the groups persistence slice
+// (see the type alias in groups.go).
 func GetGlobalRankContext(ctx context.Context, userID string) (GlobalRankStats, error) {
 	var rank, totalPlayers int64
 	err := database.DB.QueryRow(ctx, `

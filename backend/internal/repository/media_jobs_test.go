@@ -23,15 +23,16 @@ func (d *recordingDeleter) Delete(_ context.Context, key string) error {
 
 func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	mock := newMockPool(t)
+	repo := NewRepository(mock)
 	ctx := context.Background()
-	if err := EnqueueMediaDeletion(ctx, "test", nil); err != nil {
+	if err := repo.EnqueueMediaDeletion(ctx, "test", nil); err != nil {
 		t.Fatal(err)
 	}
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO media_deletion_jobs").WithArgs(pgxmock.AnyArg(), "photos/a", "test").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectExec("INSERT INTO media_deletion_jobs").WithArgs(pgxmock.AnyArg(), "photos/b", "test").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
-	if err := EnqueueMediaDeletion(ctx, "test", []string{"photos/a", "photos/b"}); err != nil {
+	if err := repo.EnqueueMediaDeletion(ctx, "test", []string{"photos/a", "photos/b"}); err != nil {
 		t.Fatal(err)
 	}
 	mock.ExpectBegin()

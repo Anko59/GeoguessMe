@@ -6,16 +6,25 @@ import (
 
 	"geoguessme/internal/database"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
+// newID returns a new UUID string. It backs durable deletion-job rows; the
+// gameplay slice uses its own copy inside internal/repository/groups.
+func newID() string {
+	return uuid.NewString()
+}
+
 // EnqueueMediaDeletion records durable deletion jobs for object-storage keys.
-// Used by account/group deletion so media can never be orphaned.
-func EnqueueMediaDeletion(ctx context.Context, source string, keys []string) error {
+// Used by account/group deletion so media can never be orphaned. It is a
+// method on the injected Repository so the gameplay and chat slices can call
+// it without reaching the database.DB package global (PR 6).
+func (r *Repository) EnqueueMediaDeletion(ctx context.Context, source string, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	tx, err := database.DB.Begin(ctx)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

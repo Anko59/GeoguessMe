@@ -1,11 +1,10 @@
-package repository
+package groups
 
 import (
 	"context"
 	"errors"
 	"time"
 
-	"geoguessme/internal/database"
 	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 
@@ -15,29 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var (
-	ErrNotFound          = errors.New("not found")
-	ErrForbidden         = errors.New("forbidden")
-	ErrChallengeExpired  = errors.New("challenge expired")
-	ErrViewNotFinished   = errors.New("viewing window is still open")
-	ErrOwnPhoto          = errors.New("cannot use own challenge")
-	ErrAlreadyGuessed    = errors.New("guess already submitted")
-	ErrInvalidCoordinate = errors.New("invalid coordinate")
-)
-
-func CreatePhoto(photo *models.Photo) error {
-	return CreatePhotoContext(context.Background(), photo)
-}
-
-func CreatePhotoContext(ctx context.Context, photo *models.Photo) error {
-	_, err := database.DB.Exec(ctx, `INSERT INTO photos (id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
-	return err
-}
-
-// CreatePhotosContext inserts every photo atomically so a multi-group upload
-// either lands in all selected groups or in none.
-func CreatePhotosContext(ctx context.Context, photos []*models.Photo) error {
-	tx, err := database.DB.Begin(ctx)
+// CreatePhotos inserts every photo atomically so a multi-group upload either
+// lands in all selected groups or in none.
+func (r *Repository) CreatePhotos(ctx context.Context, photos []*models.Photo) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -50,26 +30,12 @@ func CreatePhotosContext(ctx context.Context, photos []*models.Photo) error {
 	return tx.Commit(ctx)
 }
 
-func scanPhoto(row interface{ Scan(...any) error }) (*models.Photo, error) {
-	var photo models.Photo
-	err := row.Scan(&photo.ID, &photo.UserID, &photo.GroupID, &photo.URL, &photo.StorageKey, &photo.MIMEType, &photo.ByteSize, &photo.Lat, &photo.Long, &photo.LifecycleStatus, &photo.HideLocation, &photo.CreatedAt, &photo.ExpiresAt, &photo.RetentionAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &photo, nil
+// Photo returns a photo by id, or nil when it does not exist.
+func (r *Repository) Photo(ctx context.Context, id string) (*models.Photo, error) {
+	return scanPhoto(r.pool.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1`, id))
 }
 
-func GetPhoto(id string) (*models.Photo, error) {
-	return GetPhotoContext(context.Background(), id)
-}
-
-func GetPhotoContext(ctx context.Context, id string) (*models.Photo, error) {
-	return scanPhoto(database.DB.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1`, id))
-}
-
+// ChallengeView is the accepted viewing state of a challenge.
 type ChallengeView struct {
 	PhotoID       string    `json:"photo_id"`
 	UserID        string    `json:"user_id"`
@@ -77,8 +43,12 @@ type ChallengeView struct {
 	ViewExpiresAt time.Time `json:"view_expires_at"`
 }
 
-func AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (*models.Photo, *ChallengeView, error) {
-	tx, err := database.DB.Begin(ctx)
+// AcceptChallenge opens a private viewing window for a member on a challenge
+// they did not post, in a single transaction. The membership and ownership
+// rules are enforced here so the data layer and the transport layer share one
+// access rule.
+func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (*models.Photo, *ChallengeView, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -122,12 +92,12 @@ func AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow tim
 	return photo, &view, nil
 }
 
-// MarkChallengeMediaDelivered starts the one-time private viewing window. It
-// is idempotent so the streaming handler and the client's delivery
+// MarkMediaDelivered starts the one-time private viewing window. It is
+// idempotent so the streaming handler and the client's delivery
 // acknowledgement can safely race without extending an existing window.
-func MarkChallengeMediaDelivered(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (time.Time, error) {
+func (r *Repository) MarkMediaDelivered(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (time.Time, error) {
 	var expiresAt time.Time
-	err := database.DB.QueryRow(ctx, `
+	err := r.pool.QueryRow(ctx, `
 		UPDATE challenge_views v
 		SET media_delivered_at = COALESCE(v.media_delivered_at, $3),
 			view_expires_at = CASE
@@ -143,14 +113,31 @@ func MarkChallengeMediaDelivered(ctx context.Context, photoID, userID string, vi
 	return expiresAt, err
 }
 
+// ViewDeliveryStatus reports the delivery state of a challenge view: whether
+// the media was ever fully delivered and when the viewing window expires. A
+// view row that does not exist is surfaced as pgx.ErrNoRows so callers keep
+// the exact error handling they had when this query lived in the transport
+// layer.
+func (r *Repository) ViewDeliveryStatus(ctx context.Context, photoID, userID string) (delivered bool, viewExpiresAt time.Time, err error) {
+	var deliveredAt pgtype.Timestamptz
+	err = r.pool.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt)
+	if err != nil {
+		return false, time.Time{}, err
+	}
+	return deliveredAt.Valid, viewExpiresAt, nil
+}
+
+// GuessResult is the outcome of a guess submission.
 type GuessResult struct {
 	Guess    models.Guess
 	Photo    *models.Photo
 	Existing bool
 }
 
-func CanViewResults(ctx context.Context, photoID, userID string, now time.Time) (*models.Photo, bool, error) {
-	photo, err := GetPhotoContext(ctx, photoID)
+// CanViewResults reports whether a member may view a challenge's results:
+// owners and anyone after expiry may always view; others must have guessed.
+func (r *Repository) CanViewResults(ctx context.Context, photoID, userID string, now time.Time) (*models.Photo, bool, error) {
+	photo, err := r.Photo(ctx, photoID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -158,7 +145,7 @@ func CanViewResults(ctx context.Context, photoID, userID string, now time.Time) 
 		return nil, false, ErrNotFound
 	}
 	var member bool
-	if err := database.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`, photo.GroupID, userID).Scan(&member); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`, photo.GroupID, userID).Scan(&member); err != nil {
 		return nil, false, err
 	}
 	if !member {
@@ -168,20 +155,23 @@ func CanViewResults(ctx context.Context, photoID, userID string, now time.Time) 
 		return photo, true, nil
 	}
 	var guessed bool
-	if err := database.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM guesses WHERE photo_id = $1 AND user_id = $2)`, photoID, userID).Scan(&guessed); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM guesses WHERE photo_id = $1 AND user_id = $2)`, photoID, userID).Scan(&guessed); err != nil {
 		return nil, false, err
 	}
 	return photo, guessed, nil
 }
 
-func SubmitGuess(ctx context.Context, photoID, userID string, lat, long float64, now time.Time) (*GuessResult, error) {
+// SubmitGuess records a guess for a challenge after validating the viewing
+// window, retrying transient serialization failures within the documented
+// limit. It is idempotent: a repeated guess returns the existing result.
+func (r *Repository) SubmitGuess(ctx context.Context, photoID, userID string, lat, long float64, now time.Time) (*GuessResult, error) {
 	if lat != lat || long != long || lat < -90 || lat > 90 || long < -180 || long > 180 {
 		return nil, ErrInvalidCoordinate
 	}
 	const maxAttempts = 3
 	var last error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		result, retry, err := submitGuessOnce(ctx, photoID, userID, lat, long, now)
+		result, retry, err := r.submitGuessOnce(ctx, photoID, userID, lat, long, now)
 		if !retry {
 			return result, err
 		}
@@ -193,8 +183,8 @@ func SubmitGuess(ctx context.Context, photoID, userID string, lat, long float64,
 // submitGuessOnce performs a single guess attempt. It returns retry=true only
 // for transient serialization/deadlock SQLSTATEs so the caller can try again
 // within the documented limit.
-func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long float64, now time.Time) (*GuessResult, bool, error) {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string, lat, long float64, now time.Time) (*GuessResult, bool, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -249,7 +239,7 @@ func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long floa
 	if _, err := tx.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, guess.Lat, guess.Long, guess.Score, guess.Distance, guess.CreatedAt); err != nil {
 		// A concurrent duplicate lost the race; read the persisted winner.
 		if isUniqueViolation(err) {
-			return readExistingGuess(ctx, photoID, userID, photo)
+			return r.readExistingGuess(ctx, photoID, userID, photo)
 		}
 		return nil, isRetryable(err), err
 	}
@@ -261,13 +251,59 @@ func submitGuessOnce(ctx context.Context, photoID, userID string, lat, long floa
 
 // readExistingGuess resolves the idempotent-duplicate case after a unique
 // violation using a separate read so the original result is returned verbatim.
-func readExistingGuess(ctx context.Context, photoID, userID string, photo *models.Photo) (*GuessResult, bool, error) {
+func (r *Repository) readExistingGuess(ctx context.Context, photoID, userID string, photo *models.Photo) (*GuessResult, bool, error) {
 	var existing models.Guess
-	err := database.DB.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.CreatedAt)
+	err := r.pool.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.CreatedAt)
 	if err != nil {
 		return nil, false, err
 	}
 	return &GuessResult{Guess: existing, Photo: photo, Existing: true}, false, nil
+}
+
+// GuessWithUser is a guess joined with its guesser's profile for results
+// rendering.
+type GuessWithUser struct {
+	models.Guess
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+}
+
+// GuessesForPhoto returns every guess on a challenge with the guesser's
+// profile, ordered by score descending then creation time ascending.
+func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]GuessWithUser, error) {
+	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.created_at, u.username, u.avatar FROM guesses g JOIN users u ON g.user_id = u.id WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var guesses []GuessWithUser
+	for rows.Next() {
+		var g GuessWithUser
+		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.CreatedAt, &g.Username, &g.Avatar); err != nil {
+			return nil, err
+		}
+		guesses = append(guesses, g)
+	}
+	return guesses, rows.Err()
+}
+
+// UserGuessedPhotoIDs returns the ids of every challenge in a group the user
+// has guessed, oldest first.
+func (r *Repository) UserGuessedPhotoIDs(ctx context.Context, groupID, userID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT photo_id FROM guesses WHERE group_id = $1 AND user_id = $2 ORDER BY created_at`, groupID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func isUniqueViolation(err error) bool {
@@ -291,48 +327,4 @@ func isRetryable(err error) bool {
 
 func newID() string {
 	return uuid.NewString()
-}
-
-type GuessWithUser struct {
-	models.Guess
-	Username string `json:"username"`
-	Avatar   string `json:"avatar"`
-}
-
-func GetGuessesForPhoto(photoID string) ([]GuessWithUser, error) {
-	return GetGuessesForPhotoContext(context.Background(), photoID)
-}
-
-func GetGuessesForPhotoContext(ctx context.Context, photoID string) ([]GuessWithUser, error) {
-	rows, err := database.DB.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.created_at, u.username, u.avatar FROM guesses g JOIN users u ON g.user_id = u.id WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var guesses []GuessWithUser
-	for rows.Next() {
-		var g GuessWithUser
-		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.CreatedAt, &g.Username, &g.Avatar); err != nil {
-			return nil, err
-		}
-		guesses = append(guesses, g)
-	}
-	return guesses, rows.Err()
-}
-
-func GetUserGuessedPhotoIDs(groupID, userID string) ([]string, error) {
-	rows, err := database.DB.Query(context.Background(), `SELECT photo_id FROM guesses WHERE group_id = $1 AND user_id = $2 ORDER BY created_at`, groupID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
