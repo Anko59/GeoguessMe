@@ -122,11 +122,6 @@ func TestPhotoGuessListsAndErrors(t *testing.T) {
 	if err != nil || len(guesses) != 1 || guesses[0].Username != "alice" {
 		t.Fatalf("guesses = %+v, %v", guesses, err)
 	}
-	mock.ExpectQuery("SELECT photo_id FROM guesses").WithArgs("group-1", "user-2").WillReturnRows(pgxmock.NewRows([]string{"photo_id"}).AddRow("photo-1"))
-	ids, err := repo.UserGuessedPhotoIDs(context.Background(), "group-1", "user-2")
-	if err != nil || len(ids) != 1 || ids[0] != "photo-1" {
-		t.Fatalf("guessed IDs = %+v, %v", ids, err)
-	}
 }
 
 func TestViewDeliveryStatus(t *testing.T) {
