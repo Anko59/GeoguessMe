@@ -97,11 +97,23 @@ SMTP_PORT=1025
 SMTP_FROM=no-reply@localhost
 ```
 
+## Startup validation
+
+The backend fails to start when a configured variable is present but malformed
+(for example an integer variable set to `abc`). `APP_ENV`, `PORT`, `PUBLIC_URL`,
+`S3_ENDPOINT`, `TRUSTED_PROXY_CIDRS`, database/rate-limit/SMTP integers,
+timings, and upload byte limits are all strictly parsed at startup, and every
+malformed variable is reported in a single error so an operator can fix the
+whole configuration in one attempt. Defaults apply only when a variable is
+absent, never when it is present but invalid. Empty values remain valid for
+optional string settings (for example `STORAGE_DRIVER=` falls back to S3 and
+`TRUSTED_PROXY_CIDRS=` means no trusted proxies).
+
 ## Testing
 
-Tests auto-detect the test environment and use safe defaults when variables are
-not set. Override by setting environment variables before running the relevant
-Dockerized Make target.
+Tests supply explicit configuration (`APP_ENV=test` and explicit secrets via the
+Dockerized test stack). Override by setting environment variables before running
+the relevant Dockerized Make target.
 
 ## `.env` file lookup
 

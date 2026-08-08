@@ -161,14 +161,23 @@ are gone together.
 | Single challenge `group_id` input   | `backend/handlers/photo.go` (`challengeGroupIDs` fallback)               | Challenge upload handler tests                                                | Repeated `group_ids` form field    | PR 12   |
 | `CleanupAuthTokens` no-op reference | `backend/main.go`                                                        | Cleanup worker tests                                                          | Explicit cleanup worker dependency | PR 7    |
 | `InitSchema` compatibility helper   | `backend/internal/database/db.go`                                        | Database tests                                                                | `geoguessme migrate up`            | PR 7    |
-| `GO_TEST` and argv test heuristics  | `backend/internal/auth/auth.go`                                          | Auth tests                                                                    | Explicit test configuration        | PR 3    |
 | `database.DB` package global        | `backend/internal/database/`, `backend/routes.go`, `backend/main.go`     | Handler and integration tests                                                 | Composition root injection         | PR 7    |
-| Direct `STORAGE_DRIVER` env read    | `backend/main.go`                                                        | Config tests                                                                  | Central `StorageDriver` setting    | PR 3    |
 
 The compatibility-removal PR (PR 12) uses a two-deployment sequence: deploy code
 that reads and writes only the new fields while the database stays backward
 compatible, confirm no old writers remain, then apply the cleanup migration. Do
 not remove entries before their rollout conditions are met.
+
+## Residual risks
+
+- The frontend video-recording guard (`MAX_VIDEO_BYTES` in
+  `frontend/src/components/camera/capture/useVideoRecording.ts`) mirrors the
+  backend `UPLOAD_MAX_BYTES` default (10 MiB) as a pre-upload UX stop. The
+  server stays authoritative (`http.MaxBytesReader`); the client cap exists only
+  because no bootstrap/config endpoint serves the effective limit today.
+  Sourcing the limit from a dedicated config/bootstrap endpoint is a candidate
+  follow-up PR (roadmap item J in PR 3); it was deliberately not added to the
+  config refactor because no such endpoint exists yet.
 
 ## Where to start
 

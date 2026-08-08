@@ -31,6 +31,15 @@ interface GameProps {
     onClose: () => void;
 }
 
+// locationRevealClause renders the remaining hide duration for a hidden
+// challenge location from the API's location_reveals_at timestamp so the UI
+// never hardcodes the configured reveal period.
+function locationRevealClause(revealsAt: string, referenceMs: number): string {
+    const hours = Math.round((Date.parse(revealsAt) - referenceMs) / 3_600_000);
+    if (hours < 1) return 'in under an hour';
+    return `after ${hours} hours`;
+}
+
 export default function Game({ gameMessage, onChallengeStatusChange, onClose }: GameProps) {
     const { user } = useAuth();
     const [state, setState] = useState<GameState>({ status: 'idle', serverOffset: 0 });
@@ -346,7 +355,11 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 />
             </div>,
         );
-    if (state.status === 'results' && state.results)
+    if (state.status === 'results' && state.results) {
+        const revealClause =
+            state.results.location_reveals_at === undefined
+                ? 'when the reveal period ends'
+                : locationRevealClause(state.results.location_reveals_at, clock + state.serverOffset);
         return renderWithFeedback(
             <div className="game-overlay">
                 <div className="result-view scale-in">
@@ -410,7 +423,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                                     <strong>The poster hasn’t revealed this location yet</strong>
                                     <span>
                                         Only your own guess is shown on the map. The exact spot and everyone else’s
-                                        guesses will appear here after 48 hours.
+                                        guesses will appear here {revealClause}.
                                     </span>
                                 </div>
                             )}
@@ -434,5 +447,6 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 </div>
             </div>,
         );
+    }
     return null;
 }
