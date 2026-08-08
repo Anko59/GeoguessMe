@@ -68,7 +68,11 @@ Start with these canonical entry points, then drill into the map below.
 - Mutable package globals are banned. All backend slices read their dependencies
   from the composition root: the `database.DB` global, the handler runtime
   globals, and the package-level auth token state were removed in the PR 7
-  migration. Only `backend/internal/config/` reads environment variables.
+  migration. Only `backend/internal/config/` reads environment variables. The
+  single allowlisted exception is the pre-existing rate-limiter singleton in
+  `backend/internal/middleware/rate_limit.go` (mutex-protected process-global
+  rate-limiting state; test hooks gated to `APP_ENV=test`); it is recorded here
+  and will be formalized in PR 14's architecture-checker allowlist.
 - Frontend data flows down: pages compose components, components use hooks, and
   hooks call `api.ts`. Wire shapes live in `frontend/src/types/`; view models
   and local UI state are separate from wire types.

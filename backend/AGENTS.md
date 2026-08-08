@@ -12,7 +12,10 @@ Go backend at `backend/`. Applies in addition to the root
   opens the pool, starts background workers, and owns process lifecycle.
 - Do not add mutable package-level globals. The `database.DB` global, the
   handler runtime globals, and the package-level auth token state were removed
-  in PR 7; new code must reach dependencies through the composition root.
+  in PR 7; new code must reach dependencies through the composition root. The
+  sole allowlisted exception is the rate-limiter singleton in
+  `backend/internal/middleware/rate_limit.go` (process-global rate-limiting
+  infra; to be formalized in PR 14's architecture-checker allowlist).
 - Persistence belongs in `backend/internal/repository/` (and its responsibility
   sub-packages such as `backend/internal/repository/chat/`,
   `backend/internal/repository/groups/`). Handlers perform transport parsing,
