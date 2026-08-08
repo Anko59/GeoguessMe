@@ -321,9 +321,9 @@ func TestGroupAndReadHandlers(t *testing.T) {
 		t.Fatalf("leaderboard status = %d", recorder.Code)
 	}
 
-	mock.ExpectQuery("SELECT g.id, g.name, g.code").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, now))
+	groupsAPI := NewGroupAPI(stubGroupReader{groups: []models.Group{*group}})
 	recorder = httptest.NewRecorder()
-	GetUserGroups(recorder, ownerRequest(http.MethodGet, "/", ""))
+	groupsAPI.GetUserGroups(recorder, ownerRequest(http.MethodGet, "/", ""))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("user groups status = %d", recorder.Code)
 	}
@@ -378,6 +378,7 @@ func requireStatus(t *testing.T, handler http.HandlerFunc, request *http.Request
 
 func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 	setupHandlers(t)
+	groupsAPI := NewGroupAPI(stubGroupReader{})
 	tests := []struct {
 		name string
 		hand http.HandlerFunc
@@ -387,7 +388,7 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 		{"reset password", ResetPassword}, {"change password", ChangePassword}, {"delete account", DeleteAccount}, {"create group", CreateGroup},
 		{"join group", JoinGroup}, {"leaderboard", GetLeaderboard}, {"ticket", CreateWebSocketTicket},
 		{"guess", SubmitChallengeGuess}, {"results", GetChallengeResults}, {"messages", GetGroupMessages},
-		{"group details", GetGroupDetails}, {"group members", GetGroupMembers}, {"user groups", GetUserGroups},
+		{"group details", GetGroupDetails}, {"group members", GetGroupMembers}, {"user groups", groupsAPI.GetUserGroups},
 		{"upload", UploadPhoto}, {"accept", AcceptChallenge}, {"media", ServeChallengeMedia},
 	}
 	for _, testCase := range tests {

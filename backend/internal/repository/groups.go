@@ -14,6 +14,25 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Repository is the concrete PostgreSQL persistence collection. PR 4
+// introduces it as the dependency-injected seam: each migrated slice becomes a
+// method on Repository bound to the injected pool, and the matching
+// package-level function that read the database.DB global is removed. Slices
+// not yet migrated still use the package-level functions. The struct lives
+// with the first migrated slice (user groups); PR 6 splits the package by
+// responsibility.
+//
+// Instances are independent: two Repositories built on different pools never
+// share state.
+type Repository struct {
+	pool database.Pool
+}
+
+// NewRepository returns a Repository bound to the given pool.
+func NewRepository(pool database.Pool) *Repository {
+	return &Repository{pool: pool}
+}
+
 func CreateGroup(group *models.Group) error {
 	return CreateGroupAndMembership(context.Background(), group, "")
 }
@@ -286,12 +305,12 @@ func GetGroupByIDContext(ctx context.Context, groupID string) (*models.Group, er
 	return &group, err
 }
 
-func GetUserGroups(userID string) ([]models.Group, error) {
-	return GetUserGroupsContext(context.Background(), userID)
-}
-
-func GetUserGroupsContext(ctx context.Context, userID string) ([]models.Group, error) {
-	rows, err := database.DB.Query(ctx, `SELECT g.id, g.name, g.code, g.created_at FROM groups g JOIN group_members gm ON g.id = gm.group_id WHERE gm.user_id = $1 ORDER BY g.created_at DESC`, userID)
+// UserGroups returns the groups a user belongs to, newest first. It is the
+// read-only pilot slice (PR 4) migrated onto the injected repository seam; the
+// previous package-level GetUserGroups and GetUserGroupsContext were removed
+// so the query has a single implementation.
+func (r *Repository) UserGroups(ctx context.Context, userID string) ([]models.Group, error) {
+	rows, err := r.pool.Query(ctx, `SELECT g.id, g.name, g.code, g.created_at FROM groups g JOIN group_members gm ON g.id = gm.group_id WHERE gm.user_id = $1 ORDER BY g.created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}

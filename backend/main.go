@@ -16,7 +16,6 @@ import (
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
-	"geoguessme/internal/middleware"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
@@ -97,75 +96,22 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	handlers.Configure(cfg, store, email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout})
-	handlers.InitChat()
-	metrics := &middleware.Metrics{}
+	mailer := email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout}
+	handlers.Configure(cfg, store, mailer)
+	hub := handlers.NewChatHub()
+	handlers.HubInstance = hub
+	go hub.Run()
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
-	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: logger, Backlog: metrics.SetCleanupBacklog}).Run(workerCtx)
 	pushSvc := configurePush(cfg, logger)
 	pushSvc.Start(workerCtx, 2)
 	handlers.Push = pushSvc
-	pushHTTP := push.NewHTTP(pushSvc)
+	app := NewApp(cfg, database.DB, repository.NewRepository(database.DB), store, mailer, pushSvc, hub, logger, time.Now)
+	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
 
-	mux := http.NewServeMux()
-	authLimit := middleware.RateLimitByIdentity(cfg.RateLimitRequests, cfg.RateLimitWindow, cfg.TrustedProxyCIDRs)
-	protected := func(handler http.HandlerFunc) http.Handler { return http.HandlerFunc(handlers.AuthMiddleware(handler)) }
-
-	mux.Handle("/api/v1/auth/signup", authLimit(http.HandlerFunc(handlers.Signup)))
-	mux.Handle("/api/v1/auth/login", authLimit(http.HandlerFunc(handlers.Login)))
-	mux.Handle("/api/v1/auth/refresh", http.HandlerFunc(handlers.Refresh))
-	mux.Handle("/api/v1/auth/logout", http.HandlerFunc(handlers.Logout))
-	mux.Handle("/api/v1/auth/verify/request", authLimit(protected(handlers.RequestVerification)))
-	mux.Handle("/api/v1/auth/verify", authLimit(http.HandlerFunc(handlers.VerifyEmail)))
-	mux.Handle("/api/v1/auth/password/forgot", authLimit(http.HandlerFunc(handlers.ForgotPassword)))
-	mux.Handle("/api/v1/auth/password/reset", authLimit(http.HandlerFunc(handlers.ResetPassword)))
-	mux.Handle("/api/v1/auth/password/change", authLimit(protected(handlers.ChangePassword)))
-	mux.Handle("/api/v1/auth/profile", authLimit(protected(handlers.UpdateProfile)))
-	mux.Handle("/api/v1/auth/profile/avatar", authLimit(protected(handlers.UploadAvatar)))
-	mux.Handle("/api/v1/auth/account", protected(handlers.DeleteAccount))
-
-	mux.Handle("/api/v1/user/groups", protected(handlers.GetUserGroups))
-	mux.Handle("/api/v1/user/profile/{userID}", protected(handlers.GetPublicProfile))
-	mux.Handle("/api/v1/group/create", protected(handlers.CreateGroup))
-	mux.Handle("/api/v1/group/join", protected(handlers.JoinGroup))
-	mux.Handle("/api/v1/group/details", protected(handlers.GetGroupDetails))
-	mux.Handle("/api/v1/group/members", protected(handlers.GetGroupMembers))
-	mux.Handle("/api/v1/group/leaderboard", protected(handlers.GetLeaderboard))
-	mux.Handle("/api/v1/group/photo", protected(handlers.GroupPhoto))
-	mux.Handle("/api/v1/group/notifications", protected(handlers.GroupNotifications))
-	mux.Handle("/api/v1/group/messages", protected(handlers.GetGroupMessages))
-	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(handlers.SetMessageReaction))
-	mux.Handle("/api/v1/group/messages/media", protected(handlers.UploadChatMedia))
-	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(handlers.ServeChatMedia))
-	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto))
-	mux.Handle("/api/v1/ws/ticket", protected(handlers.CreateWebSocketTicket))
-	mux.HandleFunc("/api/v1/ws", handlers.HandleChat)
-	mux.Handle("/api/v1/push/subscribe", protected(pushHTTP.Subscribe))
-	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
-	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
-	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(handlers.AcceptChallenge))
-	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(handlers.ConfirmChallengeMediaDelivered))
-	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
-	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
-	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
-	mux.Handle("/api/v1/users/{userID}/avatar", protected(handlers.ServeUserAvatar))
-	// Link-preview endpoint for group invites: unauthenticated, returns HTML
-	// with Open Graph meta tags for messengers and redirects browsers.
-	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)
-
-	registerSystemRoutes(mux, cfg, metrics, store)
-
-	var handler http.Handler = mux
-	handler = middleware.SecurityHeaders(handler)
-	handler = middleware.CORS(cfg.AllowedOrigins)(handler)
-	handler = middleware.RequestLog(logger, metrics, handler)
-	handler = middleware.Recover(logger, handler)
-	handler = middleware.RequestID(handler)
-
-	srv := &http.Server{Addr: ":" + cfg.Port, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
-		logger.Info("server listening", "port", cfg.Port, "environment", cfg.Environment)
+		logger.Info("server listening", "port", app.Config.Port, "environment", app.Config.Environment)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server stopped unexpectedly", "error", err)
 		}

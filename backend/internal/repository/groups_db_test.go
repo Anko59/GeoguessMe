@@ -172,14 +172,11 @@ func TestSharesGroup(t *testing.T) {
 func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 	mock := newMockPool(t)
 	now := time.Now().UTC()
+	repo := NewRepository(mock)
 	mock.ExpectQuery("SELECT g.id, g.name, g.code").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow("g1", "One", "AAA111", now))
-	groups, err := GetUserGroupsContext(context.Background(), "user-1")
-	if err != nil || len(groups) != 1 {
+	groups, err := repo.UserGroups(context.Background(), "user-1")
+	if err != nil || len(groups) != 1 || groups[0].ID != "g1" || groups[0].Name != "One" {
 		t.Fatalf("groups = %+v, %v", groups, err)
-	}
-	mock.ExpectQuery("SELECT g.id, g.name, g.code").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow("g1", "One", "AAA111", now))
-	if groups, err := GetUserGroups("user-1"); err != nil || len(groups) != 1 {
-		t.Fatalf("GetUserGroups = %+v, %v", groups, err)
 	}
 	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs("g1").WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar"}).AddRow("u1", "alice", "a.png"))
 	members, err := GetGroupMembers("g1")
