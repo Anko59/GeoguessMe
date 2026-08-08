@@ -8,7 +8,7 @@
 	test-cache-status-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression cache-status structure-check \
 	test-prod-container-verify-regression test-migration-fixture-regression \
 	test-prune-regression prune-report prune artifacts-clean \
-	test-ci-retention-regression test-artifacts-clean-regression \
+	test-ci-retention-regression test-artifacts-clean-regression test-docs-agent-config \
 	test-disk-cleanup-regression disk-cleanup-report disk-cleanup \
 	test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all coverage audit \
 	build build-backend build-frontend build-images clean-build build-cache-prune test-build-caching \
@@ -147,9 +147,6 @@ lint-frontend: ## Run ESLint with zero warnings.
 
 lint-css: ## Run Stylelint.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
-
-lint-docs: ## Run Markdownlint.
-	git ls-files -z '*.md' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools markdownlint
 
 lint-shell: ## Run ShellCheck on every tracked shell script.
 	find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck -x
@@ -435,17 +432,20 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-preflight: structure-check format-check lint test-structure-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint test-structure-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
-preflight-docs: structure-check format-check lint-docs test-ci-classifier ## Run the documentation-only pull-request gate.
+preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
 pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint test-structure-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint test-structure-regression test-docs-agent-config test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
+
+# Docs and agent-config quality checks keep the root Makefile under 500 lines.
+include Makefile.docs-agent-config.mk
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh

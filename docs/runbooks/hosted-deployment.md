@@ -1,3 +1,7 @@
+---
+status: primary
+---
+
 # Hosted deployment runbook
 
 This runbook is the production change checklist for the shared Hetzner host. The
