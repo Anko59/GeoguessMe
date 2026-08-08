@@ -59,7 +59,7 @@ if [ -x "$SCRIPT" ]; then pass "disk-cleanup.sh is executable"; else fail "disk-
 echo "--- Test 2: Outside Git repo ---"
 TEMP_DIR=$(mktemp -d)
 out=$(cd "$TEMP_DIR" && "$SCRIPT" --dry-run 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "repository"; then
+if [ "$ec" -ne 0 ] && grep -qi "repository" <<<"$out"; then
     pass "refuses outside Git repo (exit=$ec)"
 else
     fail "did not refuse outside Git repo (exit=$ec)"
@@ -78,7 +78,7 @@ git config user.name "test" 2>/dev/null || true
 git commit -m "init" --allow-empty --quiet 2>/dev/null || true
 
 out=$(CONFIRM="" "$SCRIPT" --force 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "CONFIRM"; then
+if [ "$ec" -ne 0 ] && grep -qi "CONFIRM" <<<"$out"; then
     pass "refuses --force without CONFIRM=disk-cleanup (exit=$ec)"
 else
     fail "did not refuse --force without CONFIRM (exit=$ec)"
@@ -120,7 +120,7 @@ else
     echo "  after:  $(echo "$after_files" | wc -l) files"
 fi
 
-if echo "$out" | grep -q "DRY-RUN"; then
+if grep -q "DRY-RUN" <<<"$out"; then
     pass "dry-run: output confirms DRY-RUN mode"
 else
     fail "dry-run: output missing DRY-RUN marker"
@@ -195,14 +195,14 @@ git commit -m "init" --quiet 2>/dev/null || true
 # With min-age-days=7, the fresh file should be skipped.
 out=$("$SCRIPT" --dry-run --min-age-days=7 2>&1) || true
 
-if echo "$out" | grep -qi "No eligible"; then
+if grep -qi "No eligible" <<<"$out"; then
     pass "age filter: fresh files skipped (No eligible artifacts)"
-elif echo "$out" | grep -qi "0 candidate"; then
+elif grep -qi "0 candidate" <<<"$out"; then
     pass "age filter: fresh files skipped (0 candidates)"
 else
     # Could also be that the file is git-tracked (added above).
     # Let's check that it wasn't proposed for removal.
-    if ! echo "$out" | grep -q "fresh.js"; then
+    if ! grep -q "fresh.js" <<<"$out"; then
         pass "age filter: fresh file not listed for removal"
     else
         fail "age filter: fresh file was listed despite min-age-days=7"
@@ -231,9 +231,9 @@ git commit -m "init" --quiet 2>/dev/null || true
 
 out=$("$SCRIPT" --dry-run --min-age-days=7 2>&1) || true
 
-if echo "$out" | grep -q "stale.js"; then
+if grep -q "stale.js" <<<"$out"; then
     pass "age filter: old untracked file reported"
-elif echo "$out" | grep -qi "No eligible"; then
+elif grep -qi "No eligible" <<<"$out"; then
     # The dist directory may need to be non-recursive (not in RECURSIVE_CLEAN_DIRS).
     # In that case, the directory itself would be reported.
     pass "age filter: handled (non-recursive dir behavior)"
@@ -328,7 +328,7 @@ git config user.name "test" 2>/dev/null || true
 git commit -m "init" --allow-empty --quiet 2>/dev/null || true
 
 out=$("$SCRIPT" --dry-run 2>&1) || true
-if echo "$out" | grep -q "Repository:"; then
+if grep -q "Repository:" <<<"$out"; then
     pass "resolves and reports repository root"
 else
     fail "does not report repository root"
@@ -347,7 +347,7 @@ git config user.name "test" 2>/dev/null || true
 git commit -m "init" --allow-empty --quiet 2>/dev/null || true
 
 out=$("$SCRIPT" --help 2>&1) && ec=0 || ec=$?
-if [ "$ec" -eq 0 ] && echo "$out" | grep -qi "usage"; then
+if [ "$ec" -eq 0 ] && grep -qi "usage" <<<"$out"; then
     pass "--help returns usage (exit=$ec)"
 else
     fail "--help did not return usage (exit=$ec)"
@@ -372,13 +372,13 @@ git commit -m "init" --allow-empty --quiet 2>/dev/null || true
 
 out=$("$SCRIPT" --dry-run --min-age-days=1 2>&1) || true
 
-if echo "$out" | grep -q "Summary"; then
+if grep -q "Summary" <<<"$out"; then
     pass "output contains Summary section"
 else
     fail "output missing Summary section"
 fi
 
-if echo "$out" | grep -q "Status: complete"; then
+if grep -q "Status: complete" <<<"$out"; then
     pass "output has completion status"
 else
     fail "output missing completion status"
@@ -416,7 +416,7 @@ else
     pass "force: completed (exit=$ec, files: $before_count -> $after_count)"
 fi
 
-if echo "$out" | grep -q "Removed"; then
+if grep -q "Removed" <<<"$out"; then
     pass "force: output reports removals"
 fi
 
@@ -441,9 +441,9 @@ git commit -m "init" --allow-empty --quiet 2>/dev/null || true
 # Set max-total-mb=1, but the file is ~2MB. Should refuse.
 out=$("$SCRIPT" --dry-run --min-age-days=1 --max-total-mb=1 2>&1) && ec=0 || ec=$?
 
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "exceeds safety bound"; then
+if [ "$ec" -ne 0 ] && grep -qi "exceeds safety bound" <<<"$out"; then
     pass "max-total-mb: refuses when total exceeds bound"
-elif echo "$out" | grep -qi "exceeds"; then
+elif grep -qi "exceeds" <<<"$out"; then
     pass "max-total-mb: reports size exceeds bound"
 else
     # The dist dir is not recursive, so it reports the dir itself which is
