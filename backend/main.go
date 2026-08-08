@@ -13,9 +13,11 @@ import (
 
 	"geoguessme/handlers"
 	"geoguessme/internal/auth"
+	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
+	"geoguessme/internal/models"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
@@ -98,15 +100,29 @@ func main() {
 	}
 	mailer := email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout}
 	handlers.Configure(cfg, store, mailer)
-	hub := handlers.NewChatHub()
-	handlers.HubInstance = hub
-	go hub.Run()
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	pushSvc := configurePush(cfg, logger)
 	pushSvc.Start(workerCtx, 2)
 	handlers.Push = pushSvc
-	app := NewApp(cfg, database.DB, repository.NewRepository(database.DB), store, mailer, pushSvc, hub, logger, time.Now)
+
+	// The realtime hub is constructed by the composition root with its
+	// persistence and push callbacks injected: message persistence goes
+	// through the chat repository, and push fan-out through the push service.
+	repos := repository.NewRepository(database.DB)
+	hub := chat.NewHub(
+		func(ctx context.Context, msg *models.Message) error {
+			return repos.Chat.SaveMessage(ctx, msg)
+		},
+		func(ctx context.Context, msg *models.Message) {
+			if msg.Kind == "text" {
+				pushSvc.NotifyNewMessage(ctx, msg.GroupID, msg.UserID, msg.Content)
+			}
+		},
+	)
+	go hub.Run()
+
+	app := NewApp(cfg, database.DB, repos, store, mailer, pushSvc, hub, logger, time.Now)
 	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
 
 	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
@@ -124,9 +140,7 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server shutdown failed", "error", err)
 	}
-	if handlers.HubInstance != nil {
-		handlers.HubInstance.Stop()
-	}
+	hub.Stop()
 	// Cancel background worker contexts so in-flight cleanup and push delivery
 	// stop promptly, then drain the push queue. Stop is idempotent.
 	stopWorkers()

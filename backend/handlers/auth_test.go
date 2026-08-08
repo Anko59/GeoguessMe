@@ -8,6 +8,8 @@ import (
 	"geoguessme/internal/chat"
 	"geoguessme/internal/email"
 	"geoguessme/internal/models"
+	chatrepo "geoguessme/internal/repository/chat"
+	"geoguessme/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -328,10 +330,11 @@ func TestGroupAndReadHandlers(t *testing.T) {
 		t.Fatalf("user groups status = %d", recorder.Code)
 	}
 
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "reply_to_id", "content", "created_at"}))
+	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}))
 	recorder = httptest.NewRecorder()
-	GetGroupMessages(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
+	chatAPI.GetGroupMessages(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("messages status = %d", recorder.Code)
 	}
@@ -340,11 +343,12 @@ func TestGroupAndReadHandlers(t *testing.T) {
 func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectExec("INSERT INTO websocket_tickets").WithArgs(pgxmock.AnyArg(), "user-1", groupID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	CreateWebSocketTicket(recorder, requestWithUser(http.MethodPost, "/?group_id="+groupID, "", "user-1"))
+	chatAPI.CreateWebSocketTicket(recorder, requestWithUser(http.MethodPost, "/?group_id="+groupID, "", "user-1"))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("ticket status = %d", recorder.Code)
 	}
@@ -354,17 +358,33 @@ func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {
 		t.Fatalf("missing auth status = %d", recorder.Code)
 	}
 
-	previous := HubInstance
-	HubInstance = nil
-	if HubInstance != nil {
-		t.Fatal("chat hub was not reset")
-	}
-	HubInstance = previous
+	// A nil hub makes the WebSocket endpoint report chat unavailable. This
+	// replaces the old HubInstance nil-reset check: the hub is an injected
+	// dependency, not a swappable global.
+	requireStatus(t, newChatAPI(t, mock, mustTestStore(t), nil).HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
 }
 
 func requestWithUser(method, target, body, userID string) *http.Request {
 	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))
 	return request.WithContext(context.WithValue(request.Context(), userIDKey, userID))
+}
+
+func mustTestStore(t *testing.T) storage.ObjectStore {
+	t.Helper()
+	store, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+// newChatAPI builds the migrated chat transport on the caller's mock pool
+// (the same pool serves auth membership checks and chat persistence), with the
+// given store and hub. It replaces the package globals the old chat handlers
+// read: MediaStore, RuntimeConfig, and HubInstance.
+func newChatAPI(t *testing.T, mock pgxmock.PgxPoolIface, store storage.ObjectStore, hub *chat.Hub) *ChatAPI {
+	t.Helper()
+	return NewChatAPI(chatrepo.NewRepository(mock), store, handlerConfig(), hub, time.Now)
 }
 
 func requireStatus(t *testing.T, handler http.HandlerFunc, request *http.Request, status int) {
@@ -379,6 +399,8 @@ func requireStatus(t *testing.T, handler http.HandlerFunc, request *http.Request
 func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 	setupHandlers(t)
 	groupsAPI := NewGroupAPI(stubGroupReader{})
+	mock := handlerMock(t)
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	tests := []struct {
 		name string
 		hand http.HandlerFunc
@@ -386,10 +408,10 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 		{"signup", Signup}, {"login", Login}, {"refresh", Refresh}, {"logout", Logout},
 		{"request verification", RequestVerification}, {"verify email", VerifyEmail}, {"forgot password", ForgotPassword},
 		{"reset password", ResetPassword}, {"change password", ChangePassword}, {"delete account", DeleteAccount}, {"create group", CreateGroup},
-		{"join group", JoinGroup}, {"leaderboard", GetLeaderboard}, {"ticket", CreateWebSocketTicket},
-		{"guess", SubmitChallengeGuess}, {"results", GetChallengeResults}, {"messages", GetGroupMessages},
+		{"join group", JoinGroup}, {"leaderboard", GetLeaderboard}, {"ticket", chatAPI.CreateWebSocketTicket},
+		{"guess", SubmitChallengeGuess(nil, nil)}, {"results", GetChallengeResults}, {"messages", chatAPI.GetGroupMessages},
 		{"group details", GetGroupDetails}, {"group members", GetGroupMembers}, {"user groups", groupsAPI.GetUserGroups},
-		{"upload", UploadPhoto}, {"accept", AcceptChallenge}, {"media", ServeChallengeMedia},
+		{"upload", UploadPhoto(nil)}, {"accept", AcceptChallenge}, {"media", ServeChallengeMedia},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -410,20 +432,18 @@ func TestAuthValidationAndUnauthenticatedBranches(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, DeleteAccount, requestWithUser(http.MethodDelete, "/", `{}`, "user-1"), http.StatusUnauthorized)
 
-	previous := HubInstance
-	HubInstance = nil
-	requireStatus(t, HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
-	HubInstance = chat.NewHub(nil, nil)
-	requireStatus(t, HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusUnauthorized)
-	HubInstance = previous
+	nilHubAPI := newChatAPI(t, mock, mustTestStore(t), nil)
+	requireStatus(t, nilHubAPI.HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
+	hubAPI := newChatAPI(t, mock, mustTestStore(t), chat.NewHub(nil, nil))
+	requireStatus(t, hubAPI.HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusUnauthorized)
 
-	requireStatus(t, CreateWebSocketTicket, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, nilHubAPI.CreateWebSocketTicket, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/?group_id=group-1&period=year", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, GetGroupMessages, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, nilHubAPI.GetGroupMessages, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, SubmitChallengeGuess, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
+	requireStatus(t, SubmitChallengeGuess(nil, nil), requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, GetChallengeResults, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusNotFound)
 	requireStatus(t, AcceptChallenge, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
@@ -434,10 +454,10 @@ func TestGroupAndUploadValidation(t *testing.T) {
 	setupHandlers(t)
 	requireStatus(t, CreateGroup, requestWithUser(http.MethodPost, "/", `{"name":""}`, "user-1"), http.StatusBadRequest)
 	requireStatus(t, JoinGroup, requestWithUser(http.MethodPost, "/", `{"code":"bad"}`, "user-1"), http.StatusBadRequest)
-	requireStatus(t, UploadPhoto, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusServiceUnavailable)
+	requireStatus(t, UploadPhoto(nil), requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusServiceUnavailable)
 
 	MediaStore = &validationStore{}
-	requireStatus(t, UploadPhoto, requestWithUser(http.MethodPost, "/", "not-multipart", "user-1"), http.StatusBadRequest)
+	requireStatus(t, UploadPhoto(nil), requestWithUser(http.MethodPost, "/", "not-multipart", "user-1"), http.StatusBadRequest)
 	MediaStore = nil
 	if err := validateID("", "id"); err == nil {
 		t.Fatal("empty identifier accepted")

@@ -10,27 +10,34 @@ import (
 	"geoguessme/internal/elo"
 	"geoguessme/internal/models"
 	"geoguessme/internal/progression"
+	"geoguessme/internal/repository/chat"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // Repository is the concrete PostgreSQL persistence collection. PR 4
 // introduces it as the dependency-injected seam: each migrated slice becomes a
-// method on Repository bound to the injected pool, and the matching
+// method on a repository bound to the injected pool, and the matching
 // package-level function that read the database.DB global is removed. Slices
-// not yet migrated still use the package-level functions. The struct lives
-// with the first migrated slice (user groups); PR 6 splits the package by
-// responsibility.
+// not yet migrated still use the package-level functions. The chat slice was
+// split into its own sub-package (Chat) in PR 5 because this directory is at
+// its structural file limit; PR 6 continues the split for groups and
+// leaderboards.
 //
 // Instances are independent: two Repositories built on different pools never
 // share state.
 type Repository struct {
 	pool database.Pool
+	// Chat is the chat slice's persistence collection (messages, reactions,
+	// chat media, and WebSocket tickets). The application composition root
+	// hands it to the ChatAPI through App.Repos.Chat.
+	Chat *chat.Repository
 }
 
-// NewRepository returns a Repository bound to the given pool.
+// NewRepository returns a Repository bound to the given pool, including the
+// chat persistence slice.
 func NewRepository(pool database.Pool) *Repository {
-	return &Repository{pool: pool}
+	return &Repository{pool: pool, Chat: chat.NewRepository(pool)}
 }
 
 func CreateGroup(group *models.Group) error {

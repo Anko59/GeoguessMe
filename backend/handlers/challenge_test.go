@@ -80,7 +80,7 @@ func TestUploadPhotoToMultipleGroups(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(insertArgs()...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
+	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("multi-group upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -108,7 +108,7 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupID}, true))
+	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupID}, true))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("hide-location upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -196,15 +196,16 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	}
 
 	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
-	HubInstance = chat.NewHub(nil, nil)
+	hub := chat.NewHub(nil, nil)
+	defer hub.Stop()
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), hub)
 	badOrigin := requestWithUser(http.MethodGet, "/?group_id="+groupID+"&ticket=t", "", "user-1")
 	badOrigin.Header.Set("Origin", "http://evil.test")
 	recorder = httptest.NewRecorder()
-	HandleChat(recorder, badOrigin)
+	chatAPI.HandleChat(recorder, badOrigin)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("bad origin status = %d", recorder.Code)
 	}
-	HubInstance = nil
 }
 
 // TestChallengeMediaViewWindow pins the challenge viewing-window contract:

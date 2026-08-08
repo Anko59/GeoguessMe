@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -13,16 +12,38 @@ import (
 	"unicode/utf8"
 
 	"geoguessme/internal/auth"
-	"geoguessme/internal/chat"
+	chatHub "geoguessme/internal/chat"
+	"geoguessme/internal/config"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
+	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/storage"
 
 	"github.com/google/uuid"
 )
 
-func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
+// ChatAPI serves the chat slice from injected dependencies (PR 5). It owns
+// transport only: request parsing, authorization delegation, service calls,
+// and response writing. Persistence and WebSocket-ticket handling live in
+// internal/repository/chat; the object store, hub, and clock are injected.
+// ChatAPI replaced the package-level chat handlers and the HubInstance,
+// MediaStore, and RuntimeConfig globals they read.
+type ChatAPI struct {
+	messages *chatrepo.Repository
+	store    storage.ObjectStore
+	cfg      *config.Config
+	hub      *chatHub.Hub
+	now      func() time.Time
+}
+
+// NewChatAPI constructs the chat transport with its explicit dependencies.
+// now is the injectable clock (time.Now in production).
+func NewChatAPI(messages *chatrepo.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time) *ChatAPI {
+	return &ChatAPI{messages: messages, store: store, cfg: cfg, hub: hub, now: now}
+}
+
+func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
@@ -52,12 +73,12 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	// the user scrolls up. It takes precedence over the forward cursor and is
 	// resolved scoped to the group.
 	if beforeID := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeID != "" {
-		page, err := repository.GetGroupMessagesPageBefore(r.Context(), groupID, beforeID, limit)
+		page, err := a.messages.GetGroupMessagesPageBefore(r.Context(), groupID, beforeID, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
 		}
-		page, err = repository.EnrichMessagesPageForViewer(r.Context(), page, userID)
+		page, err = a.messages.EnrichMessagesPageForViewer(r.Context(), page, userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
@@ -75,7 +96,7 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	// decoder, which expects an opaque base64 value.
 	cursor := r.URL.Query().Get("cursor")
 	if cursor == "" {
-		resolved, err := repository.CursorAfterMessage(r.Context(), r.URL.Query().Get("after_id"))
+		resolved, err := a.messages.CursorAfterMessage(r.Context(), r.URL.Query().Get("after_id"))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
@@ -83,7 +104,7 @@ func GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		cursor = resolved
 	}
 
-	page, err := repository.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)
+	page, err := a.messages.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 		return
@@ -100,16 +121,16 @@ const maxChatMediaTextLength = 1000
 // creates its message in the same database transaction as the attachment row.
 // Challenge uploads must not be reused here: chat media has no location or
 // expiry semantics and is readable only by active members of its group.
-func UploadChatMedia(w http.ResponseWriter, r *http.Request) {
+func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
 		return
 	}
-	if MediaStore == nil || RuntimeConfig == nil || HubInstance == nil {
+	if a.store == nil || a.cfg == nil || a.hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat media is unavailable")
 		return
 	}
-	maxBytes := RuntimeConfig.UploadMaxBytes
+	maxBytes := a.cfg.UploadMaxBytes
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
@@ -144,45 +165,45 @@ func UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeChallengeUpload(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
+	normalized, err := media.NormalizeChallengeUpload(file, header.Size, maxBytes, a.cfg.UploadMaxPixels)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
 
-	now := time.Now().UTC()
+	now := a.now().UTC()
 	asset := &models.ChatMedia{ID: uuid.NewString(), GroupID: groupID, UserID: userID, StorageKey: "chat-media/" + uuid.NewString(), MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: now}
-	if err := MediaStore.Put(r.Context(), asset.StorageKey, bytes.NewReader(normalized.Data), asset.ByteSize, asset.MIMEType); err != nil {
+	if err := a.store.Put(r.Context(), asset.StorageKey, bytes.NewReader(normalized.Data), asset.ByteSize, asset.MIMEType); err != nil {
 		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
 		return
 	}
 	message := &models.Message{ID: uuid.NewString(), GroupID: groupID, UserID: userID, Kind: "media", ReplyToID: replyToID, Content: content, CreatedAt: now}
-	if err := repository.CreateChatMediaMessage(r.Context(), message, asset); err != nil {
-		if deleteErr := MediaStore.Delete(r.Context(), asset.StorageKey); deleteErr != nil {
+	if err := a.messages.CreateChatMediaMessage(r.Context(), message, asset); err != nil {
+		if deleteErr := a.store.Delete(r.Context(), asset.StorageKey); deleteErr != nil {
 			if queueErr := repository.EnqueueMediaDeletion(r.Context(), "manual", []string{asset.StorageKey}); queueErr != nil {
 				slog.Error("failed to persist chat media upload compensation", "storage_key", asset.StorageKey, "delete_error", deleteErr, "enqueue_error", queueErr)
 			}
 		}
-		if errors.Is(err, repository.ErrInvalidMessageReply) {
+		if errors.Is(err, chatrepo.ErrInvalidMessageReply) {
 			writeError(w, http.StatusBadRequest, "invalid_message", "Reply target is not in this group")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create message")
 		return
 	}
-	HubInstance.BroadcastPersisted(*message)
+	a.hub.BroadcastPersisted(*message)
 	writeJSON(w, http.StatusCreated, message)
 }
 
 // ServeChatMedia streams an attachment only after checking that the requester
 // is still a member of the message's group. The opaque storage key is never
 // returned to clients and the response is deliberately non-cacheable.
-func ServeChatMedia(w http.ResponseWriter, r *http.Request) {
+func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
 	}
-	if MediaStore == nil {
+	if a.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Chat media is unavailable")
 		return
 	}
@@ -191,7 +212,7 @@ func ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing_media_id", "Media ID is required")
 		return
 	}
-	asset, err := repository.GetChatMedia(r.Context(), mediaID)
+	asset, err := a.messages.GetChatMedia(r.Context(), mediaID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load media")
 		return
@@ -204,7 +225,7 @@ func ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "Media is not available")
 		return
 	}
-	object, err := MediaStore.Get(r.Context(), asset.StorageKey)
+	object, err := a.store.Get(r.Context(), asset.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {
 			writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
@@ -249,7 +270,7 @@ type messageReactionRequest struct {
 // SetMessageReaction adds a reaction, while DELETE removes the same user's
 // reaction for that reaction key. Both operations return the updated aggregate so
 // every client can render the same reaction counts immediately.
-func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
+func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
 		methodNotAllowed(w)
 		return
@@ -273,7 +294,7 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := GetUserIDFromContext(r)
-	message, err := repository.GetMessageForViewer(r.Context(), messageID, userID)
+	message, err := a.messages.GetMessageForViewer(r.Context(), messageID, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load message")
 		return
@@ -292,15 +313,11 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPut {
-		err = repository.SetMessageReaction(r.Context(), messageID, userID, req.Reaction)
+		err = a.messages.SetMessageReaction(r.Context(), messageID, userID, req.Reaction)
 	} else {
-		err = repository.DeleteMessageReaction(r.Context(), messageID, userID, req.Reaction)
+		err = a.messages.DeleteMessageReaction(r.Context(), messageID, userID, req.Reaction)
 	}
-	if errors.Is(err, repository.ErrMessageNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "Message not found")
-		return
-	}
-	if errors.Is(err, repository.ErrInvalidReaction) {
+	if errors.Is(err, chatrepo.ErrInvalidReaction) {
 		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}
@@ -308,12 +325,12 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save reaction")
 		return
 	}
-	updated, err := repository.GetMessageForViewer(r.Context(), messageID, userID)
+	updated, err := a.messages.GetMessageForViewer(r.Context(), messageID, userID)
 	if err != nil || updated == nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load updated message")
 		return
 	}
-	if HubInstance != nil {
+	if a.hub != nil {
 		broadcast := *updated
 		broadcast.ReactionUpdate = &models.ReactionUpdate{
 			UserID:   userID,
@@ -321,35 +338,12 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 			Emoji:    req.Reaction,
 			Active:   r.Method == http.MethodPut,
 		}
-		HubInstance.BroadcastUpdate(broadcast)
+		a.hub.BroadcastUpdate(broadcast)
 	}
 	writeJSON(w, http.StatusOK, updated)
 }
 
-var HubInstance *chat.Hub
-
-// NewChatHub builds the realtime chat hub with its persistence and push
-// notification callbacks. The composition root owns the returned hub: it
-// passes the instance to the application, installs it on HubInstance for the
-// handlers that still read the global, and starts it with hub.Run(). Creating
-// the hub and starting it are separate lifecycle steps (PR 4); InitChat was
-// removed because it conflated the two.
-func NewChatHub() *chat.Hub {
-	return chat.NewHub(
-		func(_ context.Context, msg *models.Message) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			return repository.SaveMessageContext(ctx, msg)
-		},
-		func(ctx context.Context, msg *models.Message) {
-			if Push != nil && msg.Kind == "text" {
-				Push.NotifyNewMessage(ctx, msg.GroupID, msg.UserID, msg.Content)
-			}
-		},
-	)
-}
-
-func CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
+func (a *ChatAPI) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
 		return
@@ -369,15 +363,19 @@ func CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}
-	if err := repository.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), time.Now().Add(60*time.Second)); err != nil {
+	now := a.now()
+	if err := a.messages.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), now.Add(60*time.Second)); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60, "server_time": time.Now()})
+	writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60, "server_time": now})
 }
 
-func HandleChat(w http.ResponseWriter, r *http.Request) {
-	if HubInstance == nil {
+// HandleChat upgrades an authenticated WebSocket connection after validating
+// the one-time ticket scoped to the group. The hub is the injected instance
+// owned by the composition root.
+func (a *ChatAPI) HandleChat(w http.ResponseWriter, r *http.Request) {
+	if a.hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat is unavailable")
 		return
 	}
@@ -390,17 +388,17 @@ func HandleChat(w http.ResponseWriter, r *http.Request) {
 	// Reject unknown origins before consuming the ticket so a bad origin can
 	// never burn a valid one-time ticket.
 	allowed := []string{}
-	if RuntimeConfig != nil {
-		allowed = RuntimeConfig.AllowedOrigins
+	if a.cfg != nil {
+		allowed = a.cfg.AllowedOrigins
 	}
-	if !chat.OriginAllowed(r.Header.Get("Origin"), allowed) {
+	if !chatHub.OriginAllowed(r.Header.Get("Origin"), allowed) {
 		writeError(w, http.StatusForbidden, "origin_not_allowed", "Origin is not allowed")
 		return
 	}
-	userID, err := repository.ConsumeWebSocketTicket(r.Context(), auth.HashToken(ticket), groupID)
+	userID, err := a.messages.ConsumeWebSocketTicket(r.Context(), auth.HashToken(ticket), groupID)
 	if err != nil || userID == "" {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket is invalid or expired")
 		return
 	}
-	chat.ServeWs(HubInstance, w, r, groupID, userID, allowed)
+	chatHub.ServeWs(a.hub, w, r, groupID, userID, allowed)
 }
