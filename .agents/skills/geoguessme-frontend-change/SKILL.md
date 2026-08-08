@@ -13,8 +13,10 @@ description:
 1. Follow [frontend/AGENTS.md](../../../frontend/AGENTS.md) and the ownership
    rules in [docs/agent-engineering.md](../../../docs/agent-engineering.md).
 2. Locate the component: feature components in `frontend/src/components/`,
-   shared logic in `frontend/src/hooks/`, wire types in `frontend/src/types/`,
-   and the client in `frontend/src/api.ts`.
+   shared logic in `frontend/src/hooks/`, wire types in `frontend/src/types/`
+   (generated from the OpenAPI contract into
+   `frontend/src/types/openapi.generated.ts`), and the client in
+   `frontend/src/api.ts`.
 3. Keep data flowing down: pages compose components, components use hooks, and
    hooks call the client. Do not duplicate wire fields in view components.
 4. Manage browser resources explicitly: every stream track, animation frame,
@@ -43,4 +45,4 @@ description:
 - [docs/architecture.md](../../../docs/architecture.md) — request flows.
 - `frontend/src/api.ts` — API client.
 - `make test-frontend`, `make lint-frontend`, `make type-check`,
-  `make test-e2e`.
+  `make openapi-check`, `make test-e2e`.
