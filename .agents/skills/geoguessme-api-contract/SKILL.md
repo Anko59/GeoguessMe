@@ -16,8 +16,11 @@ description:
 2. Locate the endpoint: the OpenAPI path entry, the matching handler in
    `backend/handlers/`, and its client call in `frontend/src/api.ts`.
 3. Change the contract, the handler DTOs, and the frontend wire types together
-   in the same PR. Wire shapes in `frontend/src/types/` must stay in sync with
-   the OpenAPI schemas.
+   in the same PR. Wire types in `frontend/src/types/` are generated from the
+   OpenAPI schemas (`frontend/src/types/openapi.generated.ts`); after a schema
+   change, run `make openapi-generate` to regenerate them and add/adjust narrow
+   view-model aliases in `frontend/src/types/index.ts` only when the client
+   needs a shape the wire contract does not express.
 4. Keep the JSON error envelope and status codes stable unless the PR explicitly
    removes a compatibility path.
 5. Add or update contract tests: handler tests for request parsing and response
@@ -43,4 +46,5 @@ description:
   cookies.
 - [docs/index.md](../../../docs/index.md) — documentation index.
 - `backend/handlers/response.go` — response envelope helpers.
-- `make lint-openapi`, `make preflight`.
+- `make lint-openapi`, `make openapi-generate`, `make openapi-check`,
+  `make preflight`.

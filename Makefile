@@ -17,7 +17,7 @@
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
 	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
-	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update
+	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci clean reset-dev deps-go-security-update deps-npm-security-update openapi-generate openapi-check
 
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
@@ -432,7 +432,7 @@ smoke-rehearsal: build-images ## Run the smoke test against a disposable test st
 	deployment/scripts/smoke-rehearsal.sh
 
 ##@ Gates
-preflight: structure-check format-check lint test-structure-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check test-structure-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -440,12 +440,12 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint test-structure-regression test-docs-agent-config test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check test-structure-regression test-docs-agent-config test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 
-# Docs and agent-config quality checks keep the root Makefile under 500 lines.
-include Makefile.docs-agent-config.mk
+# Documentation and API-contract fragments keep the root Makefile under 500 lines.
+include Makefile.docs-agent-config.mk Makefile.openapi-contract.mk
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh

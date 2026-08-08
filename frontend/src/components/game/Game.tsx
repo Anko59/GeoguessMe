@@ -134,7 +134,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     status: 'results',
                     photoId,
                     mediaUrl,
-                    mediaType: results.media_type,
+                    mediaType: results.media_type ?? undefined,
                     serverOffset: Date.parse(results.server_time) - Date.now(),
                     results,
                 });
