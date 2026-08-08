@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"geoguessme/internal/database"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -51,8 +49,8 @@ type ClaimedMediaJob struct {
 
 // ClaimDeletionJobs reserves up to limit pending jobs for the caller by pushing
 // their next_attempt_at into the future, preventing immediate re-claim.
-func ClaimDeletionJobs(ctx context.Context, limit int, backoff time.Duration) ([]ClaimedMediaJob, error) {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) ClaimDeletionJobs(ctx context.Context, limit int, backoff time.Duration) ([]ClaimedMediaJob, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -82,20 +80,22 @@ func ClaimDeletionJobs(ctx context.Context, limit int, backoff time.Duration) ([
 	return jobs, nil
 }
 
-func CompleteDeletionJob(ctx context.Context, id string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = $1`, id)
+// CompleteDeletionJob marks a deletion job finished with no error.
+func (r *Repository) CompleteDeletionJob(ctx context.Context, id string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = $1`, id)
 	return err
 }
 
-func FailDeletionJob(ctx context.Context, id, message string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE media_deletion_jobs SET last_error = $1 WHERE id = $2`, message, id)
+// FailDeletionJob records the last error of a deletion job for observability.
+func (r *Repository) FailDeletionJob(ctx context.Context, id, message string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE media_deletion_jobs SET last_error = $1 WHERE id = $2`, message, id)
 	return err
 }
 
 // CountDeletionBacklog reports jobs awaiting completion (for health/metrics).
-func CountDeletionBacklog(ctx context.Context) (int, error) {
+func (r *Repository) CountDeletionBacklog(ctx context.Context) (int, error) {
 	var count int
-	err := database.DB.QueryRow(ctx, `SELECT COUNT(*) FROM media_deletion_jobs WHERE completed_at IS NULL`).Scan(&count)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM media_deletion_jobs WHERE completed_at IS NULL`).Scan(&count)
 	if err != nil && err != pgx.ErrNoRows {
 		return 0, err
 	}

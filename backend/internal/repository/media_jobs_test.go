@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"geoguessme/internal/database"
-
 	"github.com/pashagolub/pgxmock/v4"
 )
 
@@ -38,26 +36,26 @@ func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE media_deletion_jobs").WithArgs(15*time.Minute, 25).WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key", "attempts"}).AddRow("job-1", "photos/a", 1))
 	mock.ExpectCommit()
-	jobs, err := ClaimDeletionJobs(ctx, 25, 15*time.Minute)
+	jobs, err := repo.ClaimDeletionJobs(ctx, 25, 15*time.Minute)
 	if err != nil || len(jobs) != 1 || jobs[0].StorageKey != "photos/a" {
 		t.Fatalf("claimed jobs = %+v, %v", jobs, err)
 	}
 	mock.ExpectExec("UPDATE media_deletion_jobs SET completed_at").WithArgs("job-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectExec("UPDATE media_deletion_jobs SET last_error").WithArgs("temporary", "job-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	if err := CompleteDeletionJob(ctx, "job-1"); err != nil {
+	if err := repo.CompleteDeletionJob(ctx, "job-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := FailDeletionJob(ctx, "job-1", "temporary"); err != nil {
+	if err := repo.FailDeletionJob(ctx, "job-1", "temporary"); err != nil {
 		t.Fatal(err)
 	}
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM media_deletion_jobs").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(2))
-	count, err := CountDeletionBacklog(ctx)
+	count, err := repo.CountDeletionBacklog(ctx)
 	if err != nil || count != 2 {
 		t.Fatalf("backlog = %d, %v", count, err)
 	}
 
 	mock.ExpectQuery("SELECT id, storage_key FROM photos").WithArgs(10).WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key"}).AddRow("photo-1", "photos/one"))
-	items, err := FindExpiredMedia(ctx, 10)
+	items, err := repo.FindExpiredMedia(ctx, 10)
 	if err != nil || len(items) != 1 || items[0].ID != "photo-1" {
 		t.Fatalf("expired media = %+v, %v", items, err)
 	}
@@ -74,11 +72,11 @@ func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 		WithArgs("photo-1").
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
-	if err := RetireRetainedMedia(ctx, "photo-1"); err != nil {
+	if err := repo.RetireRetainedMedia(ctx, "photo-1"); err != nil {
 		t.Fatal(err)
 	}
 	mock.ExpectExec("DELETE FROM challenge_views").WillReturnResult(pgxmock.NewResult("DELETE", 1))
-	if err := ExpireChallengeViews(ctx); err != nil {
+	if err := repo.ExpireChallengeViews(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +88,7 @@ func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	mock.ExpectQuery("UPDATE media_deletion_jobs").WithArgs(15*time.Minute, 25).WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key", "attempts"}))
 	mock.ExpectCommit()
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM media_deletion_jobs").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(0))
-	CleanupRunner{Store: deleter, Interval: time.Hour, Backlog: func(int) {}}.runOnce(ctx, slog.Default())
+	CleanupRunner{Store: deleter, Repos: repo, Interval: time.Hour, Backlog: func(int) {}}.runOnce(ctx, slog.Default())
 	if len(deleter.keys) != 0 {
 		t.Fatalf("unexpected cleanup deletions: %v", deleter.keys)
 	}
@@ -102,14 +100,11 @@ func newMockPool(t *testing.T) pgxmock.PgxPoolIface {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := database.DB
-	database.DB = mock
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		database.DB = previous
 	})
 	return mock
 }
@@ -127,6 +122,7 @@ func retainedMediaRow(lifecycleStatus, storageKey string) *pgxmock.Rows {
 func TestRetireRetainedMediaSuccess(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	const photoID = "photo-1"
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
@@ -139,7 +135,7 @@ func TestRetireRetainedMediaSuccess(t *testing.T) {
 		WithArgs(photoID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
-	if err := RetireRetainedMedia(ctx, photoID); err != nil {
+	if err := repo.RetireRetainedMedia(ctx, photoID); err != nil {
 		t.Fatalf("retire retained media: %v", err)
 	}
 }
@@ -150,6 +146,7 @@ func TestRetireRetainedMediaSuccess(t *testing.T) {
 func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	const photoID = "photo-1"
 	jobErr := errors.New("job insert failed")
 	mock.ExpectBegin()
@@ -160,7 +157,7 @@ func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
 		WithArgs(pgxmock.AnyArg(), "photos/original").
 		WillReturnError(jobErr)
 	mock.ExpectRollback()
-	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, jobErr) {
+	if err := repo.RetireRetainedMedia(ctx, photoID); !errors.Is(err, jobErr) {
 		t.Fatalf("expected job insert error to propagate, got %v", err)
 	}
 }
@@ -171,6 +168,7 @@ func TestRetireRetainedMediaRollsBackOnJobInsertFailure(t *testing.T) {
 func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	const photoID = "photo-1"
 	updateErr := errors.New("media update failed")
 	mock.ExpectBegin()
@@ -184,7 +182,7 @@ func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
 		WithArgs(photoID).
 		WillReturnError(updateErr)
 	mock.ExpectRollback()
-	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, updateErr) {
+	if err := repo.RetireRetainedMedia(ctx, photoID); !errors.Is(err, updateErr) {
 		t.Fatalf("expected media update error to propagate, got %v", err)
 	}
 }
@@ -194,6 +192,7 @@ func TestRetireRetainedMediaRollsBackOnMediaUpdateFailure(t *testing.T) {
 func TestRetireRetainedMediaCommitFailure(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	const photoID = "photo-1"
 	commitErr := errors.New("commit failed")
 	mock.ExpectBegin()
@@ -207,7 +206,7 @@ func TestRetireRetainedMediaCommitFailure(t *testing.T) {
 		WithArgs(photoID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit().WillReturnError(commitErr)
-	if err := RetireRetainedMedia(ctx, photoID); !errors.Is(err, commitErr) {
+	if err := repo.RetireRetainedMedia(ctx, photoID); !errors.Is(err, commitErr) {
 		t.Fatalf("expected commit error to propagate, got %v", err)
 	}
 }
@@ -217,12 +216,13 @@ func TestRetireRetainedMediaCommitFailure(t *testing.T) {
 func TestRetireRetainedMediaAlreadyRemovedIsIdempotent(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	const photoID = "photo-1"
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT lifecycle_status, COALESCE.*FOR UPDATE").
 		WithArgs(photoID).
 		WillReturnRows(retainedMediaRow("removed", ""))
-	if err := RetireRetainedMedia(ctx, photoID); err != nil {
+	if err := repo.RetireRetainedMedia(ctx, photoID); err != nil {
 		t.Fatalf("already-removed media should retire idempotently, got %v", err)
 	}
 }
@@ -233,6 +233,7 @@ func TestRetireRetainedMediaAlreadyRemovedIsIdempotent(t *testing.T) {
 func TestSweepRetainedMediaUsesAtomicOperationAndPropagatesError(t *testing.T) {
 	mock := newMockPool(t)
 	ctx := context.Background()
+	repo := NewRepository(mock)
 	jobErr := errors.New("job insert failed")
 	mock.ExpectQuery("SELECT id, storage_key FROM photos").
 		WithArgs(100).
@@ -244,7 +245,7 @@ func TestSweepRetainedMediaUsesAtomicOperationAndPropagatesError(t *testing.T) {
 	mock.ExpectExec("INSERT INTO media_deletion_jobs").
 		WithArgs(pgxmock.AnyArg(), "photos/original").
 		WillReturnError(jobErr)
-	runner := CleanupRunner{Store: &recordingDeleter{}, Interval: time.Hour}
+	runner := CleanupRunner{Store: &recordingDeleter{}, Repos: repo, Interval: time.Hour}
 	if err := runner.sweepRetainedMedia(ctx, slog.Default()); !errors.Is(err, jobErr) {
 		t.Fatalf("expected sweep to propagate retire error, got %v", err)
 	}

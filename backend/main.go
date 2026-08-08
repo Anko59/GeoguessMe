@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"geoguessme/handlers"
-	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
@@ -51,7 +49,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
-	auth.InitWithSettings(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL)
 	switch command {
 	case "migrate":
 		if len(os.Args) < 3 || os.Args[2] == "up" {
@@ -99,12 +96,10 @@ func main() {
 		}
 	}
 	mailer := email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout}
-	handlers.Configure(cfg, store, mailer)
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	pushSvc := configurePush(cfg, logger)
 	pushSvc.Start(workerCtx, 2)
-	handlers.Push = pushSvc
 
 	// The realtime hub is constructed by the composition root with its
 	// persistence and push callbacks injected: message persistence goes
@@ -123,7 +118,7 @@ func main() {
 	go hub.Run()
 
 	app := NewApp(cfg, database.DB, repos, store, mailer, pushSvc, hub, logger, time.Now)
-	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
+	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
 
 	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
@@ -207,5 +202,3 @@ func parseLevel(value string) slog.Level {
 		return slog.LevelInfo
 	}
 }
-
-var _ = repository.CleanupAuthTokens

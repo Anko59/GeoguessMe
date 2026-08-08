@@ -26,53 +26,53 @@ import (
 // bytes are left behind.
 func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	if a.store == nil || a.cfg == nil {
-		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Photo storage is unavailable")
+		WriteError(w, http.StatusServiceUnavailable, "storage_unavailable", "Photo storage is unavailable")
 		return
 	}
 	userID := GetUserIDFromContext(r)
 	maxBytes := a.cfg.UploadMaxBytes
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
+		WriteError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
 		return
 	}
 	groupIDs, err := a.challengeGroupIDs(r, userID)
 	if err != nil {
 		if errors.Is(err, errNotGroupMember) {
-			writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+			WriteError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 			return
 		}
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
 	lat, err := strconv.ParseFloat(r.FormValue("lat"), 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_latitude", "Latitude is invalid")
+		WriteError(w, http.StatusBadRequest, "invalid_latitude", "Latitude is invalid")
 		return
 	}
 	long, err := strconv.ParseFloat(r.FormValue("long"), 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_longitude", "Longitude is invalid")
+		WriteError(w, http.StatusBadRequest, "invalid_longitude", "Longitude is invalid")
 		return
 	}
 	if err := validation.ValidateCoordinates(lat, long); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_coordinates", err.Error())
+		WriteError(w, http.StatusBadRequest, "invalid_coordinates", err.Error())
 		return
 	}
 	hideLocation := strings.EqualFold(strings.TrimSpace(r.FormValue("hide_location")), "true")
 	file, header, err := r.FormFile("photo")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo", "A photo or video is required")
+		WriteError(w, http.StatusBadRequest, "missing_photo", "A photo or video is required")
 		return
 	}
 	defer file.Close()
 	normalized, err := media.NormalizeChallengeUpload(file, header.Size, maxBytes, a.cfg.UploadMaxPixels)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_media", err.Error())
+		WriteError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
 	now := a.clock()
@@ -85,7 +85,7 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		key := "photos/" + uuid.NewString()
 		if err := a.store.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
 			a.compensateMediaDeletes(r, keys)
-			writeError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
+			WriteError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
 			return
 		}
 		keys = append(keys, key)
@@ -93,7 +93,7 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.groups.CreatePhotos(r.Context(), photos); err != nil {
 		a.compensateMediaDeletes(r, keys)
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create challenge")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create challenge")
 		return
 	}
 	for _, photo := range photos {
@@ -112,7 +112,7 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		photoSummaries = append(photoSummaries, map[string]any{"id": photo.ID, "group_id": photo.GroupID})
 	}
 	response["photos"] = photoSummaries
-	writeJSON(w, http.StatusCreated, response)
+	WriteJSON(w, http.StatusCreated, response)
 }
 
 // errNotGroupMember distinguishes a membership failure from an invalid id so
@@ -149,7 +149,7 @@ func (a *GameAPI) challengeGroupIDs(r *http.Request, userID string) ([]string, e
 			continue
 		}
 		seen[id] = true
-		if err := validateID(id, "group_id"); err != nil {
+		if err := ValidateID(id, "group_id"); err != nil {
 			return nil, err
 		}
 		if err := a.groups.RequireMember(r.Context(), id, userID); err != nil {
@@ -180,12 +180,12 @@ func (a *GameAPI) compensateMediaDeletes(r *http.Request, keys []string) {
 // by the persistence layer inside the same transaction that records the view.
 func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	photoID := r.PathValue("photoID")
-	if err := validateID(photoID, "photo_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+	if err := ValidateID(photoID, "photo_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
 	photo, view, err := a.groups.AcceptChallenge(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.clock())
@@ -193,7 +193,7 @@ func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 		challengeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	WriteJSON(w, http.StatusOK, map[string]any{
 		"photo_id":             photo.ID,
 		"media_url":            mediaURL(photo, false),
 		"media_type":           photo.MIMEType,
@@ -209,24 +209,24 @@ func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 // media and starts the authoritative viewing window.
 func (a *GameAPI) ConfirmChallengeMediaDelivered(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	photoID := r.PathValue("photoID")
-	if err := validateID(photoID, "photo_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+	if err := ValidateID(photoID, "photo_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
 	expiresAt, err := a.groups.MarkMediaDelivered(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.clock())
 	if err != nil {
 		if errors.Is(err, groups.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden", "Challenge media was not accepted")
+			WriteError(w, http.StatusForbidden, "forbidden", "Challenge media was not accepted")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to start the viewing window")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to start the viewing window")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"view_expires_at": expiresAt, "guess_after": expiresAt, "server_time": a.clock()})
+	WriteJSON(w, http.StatusOK, map[string]any{"view_expires_at": expiresAt, "guess_after": expiresAt, "server_time": a.clock()})
 }
 
 // mediaURL always returns a same-origin, authenticated API path. Internal S3
@@ -246,21 +246,21 @@ func mediaURL(photo *models.Photo, result bool) string {
 // at the first full delivery.
 func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	if a.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Photo storage is unavailable")
+		WriteError(w, http.StatusServiceUnavailable, "storage_unavailable", "Photo storage is unavailable")
 		return
 	}
 	photoID := r.PathValue("photoID")
-	if err := validateID(photoID, "photo_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+	if err := ValidateID(photoID, "photo_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
 	photo, err := a.groups.Photo(r.Context(), photoID)
 	if err != nil || photo == nil {
-		writeError(w, http.StatusNotFound, "not_found", "Media not found")
+		WriteError(w, http.StatusNotFound, "not_found", "Media not found")
 		return
 	}
 	userID := GetUserIDFromContext(r)
@@ -268,7 +268,7 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("result") == "1" {
 		_, allowed, err := a.groups.CanViewResults(r.Context(), photoID, userID, now)
 		if err != nil || !allowed {
-			writeError(w, http.StatusForbidden, "forbidden", "Media is not available")
+			WriteError(w, http.StatusForbidden, "forbidden", "Media is not available")
 			return
 		}
 	} else {
@@ -282,21 +282,21 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 		// denied, preserving the view-once guarantee.
 		delivered, expiresAt, err := a.groups.ViewDeliveryStatus(r.Context(), photoID, userID)
 		if err != nil {
-			writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
+			WriteError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
 			return
 		}
 		if delivered {
 			if !now.Before(expiresAt) {
-				writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
+				WriteError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
 				return
 			}
 		} else if !now.Before(photo.ExpiresAt) {
-			writeError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
+			WriteError(w, http.StatusForbidden, "media_expired", "The viewing window has expired")
 			return
 		}
 	}
 	if photo.LifecycleStatus == "removed" {
-		writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
+		WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 		return
 	}
 	// Get verifies an object before returning a reader. Avoid a separate Stat
@@ -304,10 +304,10 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 	object, err := a.store.Get(r.Context(), photo.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
+			WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 			return
 		}
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
 		return
 	}
 	defer object.Close()
@@ -330,18 +330,18 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 func challengeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, groups.ErrForbidden), errors.Is(err, groups.ErrOwnPhoto):
-		writeError(w, http.StatusForbidden, "forbidden", "You cannot accept this challenge")
+		WriteError(w, http.StatusForbidden, "forbidden", "You cannot accept this challenge")
 	case errors.Is(err, groups.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+		WriteError(w, http.StatusNotFound, "not_found", "Challenge not found")
 	case errors.Is(err, groups.ErrChallengeExpired):
-		writeError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
+		WriteError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to process challenge")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to process challenge")
 	}
 }
 
-// validateID rejects empty or non-UUID path identifiers before repository calls.
-func validateID(value, _ string) error {
+// ValidateID rejects empty or non-UUID path identifiers before repository calls.
+func ValidateID(value, _ string) error {
 	if strings.TrimSpace(value) == "" {
 		return errors.New("id is required")
 	}

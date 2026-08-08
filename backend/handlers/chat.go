@@ -17,6 +17,7 @@ import (
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	chatrepo "geoguessme/internal/repository/chat"
+	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/storage"
 
 	"github.com/google/uuid"
@@ -28,9 +29,11 @@ import (
 // internal/repository/chat; the object store, hub, and clock are injected.
 // ChatAPI replaced the package-level chat handlers and the HubInstance,
 // MediaStore, and RuntimeConfig globals they read. PR 6 additionally injects
-// the durable media-deletion seam used by upload compensation.
+// the durable media-deletion seam used by upload compensation, and PR 7
+// injects the groups repository as the canonical membership gate.
 type ChatAPI struct {
 	messages *chatrepo.Repository
+	groups   *groups.Repository
 	store    storage.ObjectStore
 	cfg      *config.Config
 	hub      *chatHub.Hub
@@ -41,25 +44,36 @@ type ChatAPI struct {
 // NewChatAPI constructs the chat transport with its explicit dependencies.
 // now is the injectable clock (time.Now in production) and media is the
 // durable deletion-job seam for upload compensation.
-func NewChatAPI(messages *chatrepo.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time, media DeletionEnqueuer) *ChatAPI {
-	return &ChatAPI{messages: messages, store: store, cfg: cfg, hub: hub, now: now, media: media}
+func NewChatAPI(messages *chatrepo.Repository, groups *groups.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time, media DeletionEnqueuer) *ChatAPI {
+	return &ChatAPI{messages: messages, groups: groups, store: store, cfg: cfg, hub: hub, now: now, media: media}
+}
+
+// requireMember is the chat slice's canonical membership gate. It delegates to
+// the same groups repository the gameplay slice uses so no handler implements
+// a subtly different membership rule. It writes the error response and
+// returns false on failure.
+func (a *ChatAPI) requireMember(w http.ResponseWriter, r *http.Request, groupID, userID string) bool {
+	if err := a.groups.RequireMember(r.Context(), groupID, userID); err != nil {
+		WriteError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return false
+	}
+	return true
 }
 
 func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 
 	userID := GetUserIDFromContext(r)
 	groupID := r.URL.Query().Get("group_id")
 	if groupID == "" {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
 
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
 
@@ -77,18 +91,18 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	if beforeID := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeID != "" {
 		page, err := a.messages.GetGroupMessagesPageBefore(r.Context(), groupID, beforeID, limit)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
 		}
 		page, err = a.messages.EnrichMessagesPageForViewer(r.Context(), page, userID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
 		}
 		if page.Items == nil {
 			page.Items = []models.Message{}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
+		WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
 		return
 	}
 
@@ -100,7 +114,7 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	if cursor == "" {
 		resolved, err := a.messages.CursorAfterMessage(r.Context(), r.URL.Query().Get("after_id"))
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
 		}
 		cursor = resolved
@@ -108,13 +122,13 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 
 	page, err := a.messages.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 		return
 	}
 	if page.Items == nil {
 		page.Items = []models.Message{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
+	WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
 }
 
 const maxChatMediaTextLength = 1000
@@ -125,58 +139,57 @@ const maxChatMediaTextLength = 1000
 // expiry semantics and is readable only by active members of its group.
 func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	if a.store == nil || a.cfg == nil || a.hub == nil {
-		writeError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat media is unavailable")
+		WriteError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat media is unavailable")
 		return
 	}
 	maxBytes := a.cfg.UploadMaxBytes
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
+		WriteError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
 		return
 	}
 	groupID := strings.TrimSpace(r.FormValue("group_id"))
-	if err := validateID(groupID, "group_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
 	content := strings.TrimSpace(r.FormValue("content"))
 	if !utf8.ValidString(content) || utf8.RuneCountInString(content) > maxChatMediaTextLength {
-		writeError(w, http.StatusBadRequest, "invalid_message", "Message is too long")
+		WriteError(w, http.StatusBadRequest, "invalid_message", "Message is too long")
 		return
 	}
 	var replyToID *string
 	if value := strings.TrimSpace(r.FormValue("reply_to_id")); value != "" {
-		if err := validateID(value, "reply_to_id"); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_message", "Reply target is invalid")
+		if err := ValidateID(value, "reply_to_id"); err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid_message", "Reply target is invalid")
 			return
 		}
 		replyToID = &value
 	}
 	file, header, err := r.FormFile("media")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing_media", "A photo or video is required")
+		WriteError(w, http.StatusBadRequest, "missing_media", "A photo or video is required")
 		return
 	}
 	defer file.Close()
 	normalized, err := media.NormalizeChallengeUpload(file, header.Size, maxBytes, a.cfg.UploadMaxPixels)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_media", err.Error())
+		WriteError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
 
 	now := a.now().UTC()
 	asset := &models.ChatMedia{ID: uuid.NewString(), GroupID: groupID, UserID: userID, StorageKey: "chat-media/" + uuid.NewString(), MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: now}
 	if err := a.store.Put(r.Context(), asset.StorageKey, bytes.NewReader(normalized.Data), asset.ByteSize, asset.MIMEType); err != nil {
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
 		return
 	}
 	message := &models.Message{ID: uuid.NewString(), GroupID: groupID, UserID: userID, Kind: "media", ReplyToID: replyToID, Content: content, CreatedAt: now}
@@ -187,14 +200,14 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if errors.Is(err, chatrepo.ErrInvalidMessageReply) {
-			writeError(w, http.StatusBadRequest, "invalid_message", "Reply target is not in this group")
+			WriteError(w, http.StatusBadRequest, "invalid_message", "Reply target is not in this group")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create message")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create message")
 		return
 	}
 	a.hub.BroadcastPersisted(*message)
-	writeJSON(w, http.StatusCreated, message)
+	WriteJSON(w, http.StatusCreated, message)
 }
 
 // ServeChatMedia streams an attachment only after checking that the requester
@@ -202,38 +215,38 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 // returned to clients and the response is deliberately non-cacheable.
 func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	if a.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Chat media is unavailable")
+		WriteError(w, http.StatusServiceUnavailable, "storage_unavailable", "Chat media is unavailable")
 		return
 	}
 	mediaID := r.PathValue("mediaID")
-	if err := validateID(mediaID, "media_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_media_id", "Media ID is required")
+	if err := ValidateID(mediaID, "media_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_media_id", "Media ID is required")
 		return
 	}
 	asset, err := a.messages.GetChatMedia(r.Context(), mediaID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load media")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load media")
 		return
 	}
 	if asset == nil {
-		writeError(w, http.StatusNotFound, "not_found", "Media not found")
+		WriteError(w, http.StatusNotFound, "not_found", "Media not found")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), asset.GroupID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "Media is not available")
+	if err := a.groups.RequireMember(r.Context(), asset.GroupID, GetUserIDFromContext(r)); err != nil {
+		WriteError(w, http.StatusForbidden, "forbidden", "Media is not available")
 		return
 	}
 	object, err := a.store.Get(r.Context(), asset.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusGone, "media_removed", "The original media is no longer available")
+			WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 			return
 		}
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to read media")
 		return
 	}
 	defer object.Close()
@@ -274,16 +287,16 @@ type messageReactionRequest struct {
 // every client can render the same reaction counts immediately.
 func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	messageID := strings.TrimSpace(r.PathValue("messageID"))
-	if err := validateID(messageID, "message_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_message_id", "Message ID is required")
+	if err := ValidateID(messageID, "message_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_message_id", "Message ID is required")
 		return
 	}
 	var req messageReactionRequest
-	if !decodeJSON(w, r, &req) {
+	if !DecodeJSON(w, r, &req) {
 		return
 	}
 	req.Reaction = strings.TrimSpace(req.Reaction)
@@ -291,26 +304,25 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		req.Reaction = strings.TrimSpace(req.Emoji)
 	}
 	if _, ok := allowedReactions[req.Reaction]; !ok {
-		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
+		WriteError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}
 
 	userID := GetUserIDFromContext(r)
 	message, err := a.messages.GetMessageForViewer(r.Context(), messageID, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load message")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load message")
 		return
 	}
 	if message == nil {
-		writeError(w, http.StatusNotFound, "not_found", "Message not found")
+		WriteError(w, http.StatusNotFound, "not_found", "Message not found")
 		return
 	}
 	if message.Kind == "system" {
-		writeError(w, http.StatusBadRequest, "invalid_reaction", "System messages cannot be reacted to")
+		WriteError(w, http.StatusBadRequest, "invalid_reaction", "System messages cannot be reacted to")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), message.GroupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, message.GroupID, userID) {
 		return
 	}
 
@@ -326,16 +338,16 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 	// acceptable error path for a race that cannot occur while the message
 	// still exists.
 	if errors.Is(err, chatrepo.ErrInvalidReaction) {
-		writeError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
+		WriteError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save reaction")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to save reaction")
 		return
 	}
 	updated, err := a.messages.GetMessageForViewer(r.Context(), messageID, userID)
 	if err != nil || updated == nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load updated message")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load updated message")
 		return
 	}
 	if a.hub != nil {
@@ -348,35 +360,34 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		}
 		a.hub.BroadcastUpdate(broadcast)
 	}
-	writeJSON(w, http.StatusOK, updated)
+	WriteJSON(w, http.StatusOK, updated)
 }
 
 func (a *ChatAPI) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
 	if groupID == "" {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
 	token, err := auth.GenerateOpaqueToken(32)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}
 	now := a.now()
 	if err := a.messages.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), now.Add(60*time.Second)); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60, "server_time": now})
+	WriteJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60, "server_time": now})
 }
 
 // HandleChat upgrades an authenticated WebSocket connection after validating
@@ -384,13 +395,13 @@ func (a *ChatAPI) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) 
 // owned by the composition root.
 func (a *ChatAPI) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if a.hub == nil {
-		writeError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat is unavailable")
+		WriteError(w, http.StatusServiceUnavailable, "chat_unavailable", "Chat is unavailable")
 		return
 	}
 	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
 	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
 	if groupID == "" || ticket == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket required")
+		WriteError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket required")
 		return
 	}
 	// Reject unknown origins before consuming the ticket so a bad origin can
@@ -400,12 +411,12 @@ func (a *ChatAPI) HandleChat(w http.ResponseWriter, r *http.Request) {
 		allowed = a.cfg.AllowedOrigins
 	}
 	if !chatHub.OriginAllowed(r.Header.Get("Origin"), allowed) {
-		writeError(w, http.StatusForbidden, "origin_not_allowed", "Origin is not allowed")
+		WriteError(w, http.StatusForbidden, "origin_not_allowed", "Origin is not allowed")
 		return
 	}
 	userID, err := a.messages.ConsumeWebSocketTicket(r.Context(), auth.HashToken(ticket), groupID)
 	if err != nil || userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket is invalid or expired")
+		WriteError(w, http.StatusUnauthorized, "unauthorized", "WebSocket ticket is invalid or expired")
 		return
 	}
 	chatHub.ServeWs(a.hub, w, r, groupID, userID, allowed)

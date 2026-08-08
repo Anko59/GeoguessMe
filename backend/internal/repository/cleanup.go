@@ -6,15 +6,15 @@ import (
 	"log/slog"
 	"time"
 
-	"geoguessme/internal/database"
-
 	"github.com/jackc/pgx/v5"
 )
 
 type RetainedMedia struct{ ID, StorageKey string }
 
-func FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
-	rows, err := database.DB.Query(ctx, `SELECT id, storage_key FROM photos WHERE lifecycle_status <> 'removed' AND retention_at < CURRENT_TIMESTAMP ORDER BY retention_at LIMIT $1`, limit)
+// FindExpiredMedia returns retained photos whose retention window has ended,
+// oldest retention first, up to limit records.
+func (r *Repository) FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, storage_key FROM photos WHERE lifecycle_status <> 'removed' AND retention_at < CURRENT_TIMESTAMP ORDER BY retention_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +30,9 @@ func FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
 	return result, rows.Err()
 }
 
-func ExpireChallengeViews(ctx context.Context) error {
-	_, err := database.DB.Exec(ctx, `DELETE FROM challenge_views WHERE view_expires_at < CURRENT_TIMESTAMP - interval '1 day'`)
+// ExpireChallengeViews removes stale challenge-view rows kept for audit.
+func (r *Repository) ExpireChallengeViews(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM challenge_views WHERE view_expires_at < CURRENT_TIMESTAMP - interval '1 day'`)
 	return err
 }
 
@@ -43,9 +44,11 @@ type Deleter interface {
 // CleanupRunner drives token cleanup, challenge-view expiry, retention media
 // deletion, and the durable object-deletion queue. It runs once immediately on
 // start so a freshly booting worker clears any backlog before waiting on its
-// interval.
+// interval. Persistence is reached through the injected Repos dependency; the
+// worker never touches a package global.
 type CleanupRunner struct {
 	Store            Deleter
+	Repos            *Repository
 	Interval         time.Duration
 	Logger           *slog.Logger
 	Backlog          func(pending int)
@@ -76,10 +79,10 @@ func (r CleanupRunner) Run(ctx context.Context) {
 }
 
 func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
-	if err := CleanupAuthTokens(ctx); err != nil {
+	if err := r.Repos.CleanupAuthTokens(ctx); err != nil {
 		logger.Warn("auth token cleanup failed", "error", err)
 	}
-	if err := ExpireChallengeViews(ctx); err != nil {
+	if err := r.Repos.ExpireChallengeViews(ctx); err != nil {
 		logger.Warn("challenge view expiry failed", "error", err)
 	}
 	if err := r.sweepRetainedMedia(ctx, logger); err != nil {
@@ -87,7 +90,7 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 	}
 	r.drainDeletionQueue(ctx, logger)
 	if r.Backlog != nil {
-		if count, err := CountDeletionBacklog(ctx); err != nil {
+		if count, err := r.Repos.CountDeletionBacklog(ctx); err != nil {
 			logger.Warn("deletion backlog count failed", "error", err)
 		} else {
 			r.Backlog(count)
@@ -108,8 +111,8 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 // transaction is rolled back, leaving no committed partial state. A record
 // already marked removed (or one that no longer exists) is an idempotent success
 // and creates no new deletion job.
-func RetireRetainedMedia(ctx context.Context, id string) error {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) RetireRetainedMedia(ctx context.Context, id string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -153,13 +156,13 @@ func RetireRetainedMedia(ctx context.Context, id string) error {
 // while the remaining records are still processed; the first error propagates
 // so the caller can observe partial failures.
 func (r CleanupRunner) sweepRetainedMedia(ctx context.Context, logger *slog.Logger) error {
-	items, err := FindExpiredMedia(ctx, 100)
+	items, err := r.Repos.FindExpiredMedia(ctx, 100)
 	if err != nil {
 		return err
 	}
 	var firstErr error
 	for _, item := range items {
-		if err := RetireRetainedMedia(ctx, item.ID); err != nil {
+		if err := r.Repos.RetireRetainedMedia(ctx, item.ID); err != nil {
 			logger.Error("retiring retained media failed", "photo_id", item.ID, "key", item.StorageKey, "error", err)
 			if firstErr == nil {
 				firstErr = err
@@ -195,7 +198,7 @@ func (r CleanupRunner) DrainDeletionQueue(ctx context.Context) {
 
 func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logger) {
 	for {
-		jobs, err := ClaimDeletionJobs(ctx, 25, 15*time.Minute)
+		jobs, err := r.Repos.ClaimDeletionJobs(ctx, 25, 15*time.Minute)
 		if err != nil {
 			logger.Warn("claiming deletion jobs failed", "error", err)
 			return
@@ -206,10 +209,10 @@ func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logg
 		for _, job := range jobs {
 			if err := r.Store.Delete(ctx, job.StorageKey); err != nil {
 				logger.Warn("object deletion failed", "job_id", job.ID, "key", job.StorageKey, "attempt", job.Attempts, "error", err)
-				_ = FailDeletionJob(ctx, job.ID, err.Error())
+				_ = r.Repos.FailDeletionJob(ctx, job.ID, err.Error())
 				continue
 			}
-			if err := CompleteDeletionJob(ctx, job.ID); err != nil {
+			if err := r.Repos.CompleteDeletionJob(ctx, job.ID); err != nil {
 				logger.Warn("marking deletion job complete failed", "job_id", job.ID, "error", err)
 			}
 		}

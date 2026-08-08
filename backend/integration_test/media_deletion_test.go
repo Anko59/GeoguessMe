@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"geoguessme/internal/database"
 	"geoguessme/internal/repository"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -16,8 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testDB connects to the isolated integration database (TEST_DATABASE_URL) and
-// routes repository functions through that pool for the duration of the test. It
+// testDB connects to the isolated integration database (TEST_DATABASE_URL). It
 // is a separate connection pool from the running backend process but points at
 // the same database, so row locks and transactions interoperate correctly.
 func testDB(t *testing.T) *pgxpool.Pool {
@@ -29,10 +27,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.New(context.Background(), dsn)
 	require.NoError(t, err)
 	require.NoError(t, pool.Ping(context.Background()))
-	prev := database.DB
-	database.DB = pool
 	t.Cleanup(func() {
-		database.DB = prev
 		pool.Close()
 	})
 	return pool
@@ -108,7 +103,7 @@ func TestRetireRetainedMediaConcurrentAtomic(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-barrier
-			errs[i] = repository.RetireRetainedMedia(ctx, photoID)
+			errs[i] = repository.NewRepository(db).RetireRetainedMedia(ctx, photoID)
 		}(i)
 	}
 	close(barrier)
@@ -146,7 +141,7 @@ func TestRetireRetainedMediaSucceedsWithExistingObligation(t *testing.T) {
 		"existing-job-"+unique("x"), storageKey)
 	require.NoError(t, err)
 
-	require.NoError(t, repository.RetireRetainedMedia(ctx, photoID), "retire must succeed when an obligation exists")
+	require.NoError(t, repository.NewRepository(db).RetireRetainedMedia(ctx, photoID), "retire must succeed when an obligation exists")
 
 	var lifecycleStatus, storageKeyAfter string
 	require.NoError(t, db.QueryRow(ctx,
@@ -274,7 +269,7 @@ func TestDeletionWorkerRetryOnFailure(t *testing.T) {
 	// Use the production CleanupRunner one-cycle drain instead of a
 	// duplicated helper. DrainDeletionQueue loops until the queue is empty
 	// and logs internally; errors are recorded on the job row.
-	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
+	repository.CleanupRunner{Store: del, Repos: repository.NewRepository(db)}.DrainDeletionQueue(ctx)
 
 	// Verify the job was attempted.
 	require.Equal(t, []string{key}, del.calls(), "deleter must have been called for the key")
@@ -313,7 +308,7 @@ func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
 	del.setFail(key, errors.New("transient storage error"))
 
 	// First attempt fails via the production drain.
-	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
+	repository.CleanupRunner{Store: del, Repos: repository.NewRepository(db)}.DrainDeletionQueue(ctx)
 	require.Equal(t, []string{key}, del.calls())
 
 	// Fetch the job ID from the failed attempt.
@@ -332,7 +327,7 @@ func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
 	del.clearFail(key)
 
 	// Second drain claims and completes the same job via the production path.
-	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
+	repository.CleanupRunner{Store: del, Repos: repository.NewRepository(db)}.DrainDeletionQueue(ctx)
 
 	// The deleter must have been called with the key again (call count is now 2).
 	require.Equal(t, []string{key, key}, del.calls(), "deleter must have been called twice for the same key")
@@ -368,7 +363,7 @@ func TestCompletedJobNotClaimedAgain(t *testing.T) {
 	require.NoError(t, err)
 
 	del := &controlledDeleter{}
-	repository.CleanupRunner{Store: del}.DrainDeletionQueue(ctx)
+	repository.CleanupRunner{Store: del, Repos: repository.NewRepository(db)}.DrainDeletionQueue(ctx)
 
 	// The completed job must not be claimed.
 	require.Empty(t, del.calls(), "completed job must not be claimed for deletion")
@@ -434,7 +429,7 @@ func TestDeleteUserCascadeIdempotentWithExistingActiveJob(t *testing.T) {
 	require.NoError(t, err)
 
 	// Account deletion must succeed even though the active job already exists.
-	keys, err := repository.DeleteUserCascade(ctx, userID)
+	keys, err := repository.NewRepository(db).DeleteUserCascade(ctx, userID)
 	require.NoError(t, err, "DeleteUserCascade must succeed when an active deletion job already exists")
 	require.Contains(t, keys, storageKey, "returned keys must include the photo storage key")
 
