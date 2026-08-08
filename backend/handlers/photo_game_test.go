@@ -254,7 +254,8 @@ func TestUploadRecordedVideo(t *testing.T) {
 
 func TestSetAndRemoveMessageReaction(t *testing.T) {
 	setupHandlers(t)
-	InitChat()
+	HubInstance = NewChatHub()
+	go HubInstance.Run()
 	t.Cleanup(HubInstance.Stop)
 	mock := handlerMock(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -216,13 +217,38 @@ func GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, members)
 }
 
-func GetUserGroups(w http.ResponseWriter, r *http.Request) {
+// GroupReader is the narrow persistence contract the migrated group read
+// handlers need. It is defined at the handler boundary so handler tests can
+// substitute a fake instead of swapping the database.DB package global (PR 4
+// pilot slice). The concrete *repository.Repository satisfies it.
+type GroupReader interface {
+	UserGroups(ctx context.Context, userID string) ([]models.Group, error)
+}
+
+// GroupAPI serves group read endpoints from injected dependencies. It is the
+// target pattern for removing handler package globals: each migrated endpoint
+// becomes a method here and the application composition root holds a
+// *GroupAPI. Handlers that still read package globals remain free functions
+// until their slice is migrated.
+type GroupAPI struct {
+	groups GroupReader
+}
+
+// NewGroupAPI constructs the migrated group read API with its reader.
+func NewGroupAPI(groups GroupReader) *GroupAPI {
+	return &GroupAPI{groups: groups}
+}
+
+// GetUserGroups lists the groups the authenticated user belongs to, newest
+// first. It was migrated in PR 4 onto the injected GroupReader; the response
+// shape, status codes, and error envelope are unchanged.
+func (a *GroupAPI) GetUserGroups(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	groups, err := repository.GetUserGroups(userID)
+	groups, err := a.groups.UserGroups(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load groups")
 		return
