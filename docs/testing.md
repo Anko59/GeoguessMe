@@ -26,7 +26,7 @@ tools from pinned images and named caches.
 | make coverage                              | Backend ≥70% overall; frontend ≥80/80/80/70 (statements/branches/functions/lines)                                                                                                  | go test cover OK; Vitest --coverage PASS                                  |
 | make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                 | All integration tests PASS                                                |
 | make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                 | All Playwright projects PASS                                              |
-| make test-e2e-pr                           | Chromium desktop Playwright project                                                                                                                                                | PR browser checks PASS                                                    |
+| make test-e2e-pr                           | Chromium desktop Playwright project; CI may set `GEOGUESSME_E2E_SHARD=N/M` for isolated shards                                                                                     | PR browser checks PASS                                                    |
 | make quality                               | Structure, format, lint, type-check, audit, regression, unit, race, coverage, build, compose-validate                                                                              | Zero violations; all gates PASS                                           |
 | make migration-test                        | Concurrent, idempotent, legacy-fixture migration tests (advisory lock, backfill, dedupe)                                                                                           | migration-concurrency.sh PASS                                             |
 | make backup-rehearsal                      | Disposable backup, restore, continuity verification                                                                                                                                | backup-restore-rehearsal.sh PASS                                          |
@@ -51,7 +51,7 @@ The gates intentionally become broader as a change approaches deployment:
 | Local push              | `make preflight`                                                                                          |
 | Documentation-only PR   | `make preflight-docs`                                                                                     |
 | Backend PR              | `make preflight` and `make pr-backend` in parallel                                                        |
-| Frontend PR             | `make preflight` and Chromium-only `make pr-frontend` in parallel                                         |
+| Frontend PR             | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                          |
 | Shared or deployment PR | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
 | Merge to `dev`          | One complete `make verify`, then signed-image publication and development deployment                      |
 | Release PR to `main`    | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
@@ -89,8 +89,10 @@ E2E style checks reject waitForTimeout, networkidle, positional selectors, and
 retry-based flake masking. Accessibility scenarios run real Axe scans and fail
 on serious or critical violations.
 
-`make test-e2e-pr` runs desktop Chromium for pull-request feedback. The complete
-desktop Chromium, desktop Firefox, and mobile Chromium matrix remains part of
+`make test-e2e-pr` runs desktop Chromium for pull-request feedback. CI splits
+that project across two Playwright shards, each on its own runner and disposable
+Compose project; Playwright keeps one worker per shard. The complete desktop
+Chromium, desktop Firefox, and mobile Chromium matrix remains part of
 `make verify` on dev and nightly.
 
 ## Local/CI equivalence
@@ -100,11 +102,12 @@ locally. It does not install Go, Node, Python, Playwright, or linters directly
 on the runner. The complete `make verify` target is intentionally reserved for
 the exact dev deployment revision and nightly verification.
 
-The CI workflow uses scoped Docker layer caching (bounded by branch and lockfile
-hash), explicit artifact retention of 7 days for failure diagnostics, and
-BuildKit GC limits to prevent unbounded cache growth. No secrets or .env files
-are cached or uploaded. The check-ci-retention-regression target validates these
-properties deterministically.
+The CI workflow uses shard-scoped Docker layer caching (bounded by branch and
+lockfile hash), explicit artifact retention of 7 days for failure diagnostics,
+and BuildKit GC limits to prevent unbounded cache growth. The aggregate job
+publishes per-job elapsed times to its Actions summary. No secrets or `.env`
+files are cached or uploaded. The `check-ci-retention-regression` target
+validates these properties deterministically.
 
 ## Cache and artifact bounds
 

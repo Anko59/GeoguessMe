@@ -71,10 +71,26 @@ contains "$CI" 'classify-changes\.sh --null' \
     "changed paths select live-stack suites"
 contains "$CI" 'make preflight-docs' "documentation-only PRs use the small gate"
 contains "$CI" 'make preflight' "application PRs use the fast gate"
+contains "$CI" 'make bootstrap-preflight' "fast PR jobs prepare only consumed tools"
+contains "$CI" 'FULL_SCOPE.*needs\.classify\.outputs\.full' \
+    "tool self-tests are selected from the full-scope classification"
+contains "$CI" 'make tools-self-test' "full-scope PRs retain tool image self-tests"
 contains "$CI" 'make pr-backend' "backend changes select integration tests"
 contains "$CI" 'make pr-frontend' "frontend changes select Chromium E2E"
+contains "$CI" 'fail-fast: false' "browser shards report every isolated result"
+contains "$CI" 'shard: 1/2' "first Chromium shard is declared"
+contains "$CI" 'shard: 2/2' "second Chromium shard is declared"
+contains "$CI" 'GEOGUESSME_E2E_SHARD:.*matrix\.shard' \
+    "each browser job forwards its Playwright shard"
+contains "$CI" 'pr-frontend-.*matrix\.shard_id' \
+    "browser caches are isolated by shard"
+contains "$CI" 'geoguessme-e2e-.*matrix\.shard_id' \
+    "browser projects and artifacts are isolated by shard"
 contains "$CI" 'name: Dockerized verification gate' \
     "stable aggregate status preserves branch protection"
+contains "$CI" 'actions/runs/[$]GITHUB_RUN_ID/jobs' \
+    "aggregate gate collects exact-run timing"
+contains "$CI" 'GITHUB_STEP_SUMMARY' "aggregate gate publishes timing telemetry"
 absent "$CI" 'make verify' "pull requests do not run the operational release gate"
 
 contains "$CI" 'retention-days: 7' "failure artifacts have bounded retention"

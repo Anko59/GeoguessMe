@@ -4,6 +4,8 @@ set -euo pipefail
 PASS=0
 FAIL=0
 
+bash "$(cd "$(dirname "$0")/.." && pwd)/e2e/arguments_test.sh"
+
 # ── Stale-artifact regression ────────────────────────────────────────────────
 # The E2E runner must clear test-results and playwright-report before each
 # invocation so no stale output from a prior run is retained.
@@ -78,6 +80,14 @@ if ! grep -A 1 '^test-e2e-pr:' "${MAKEFILES[@]}" |
 fi
 if [ "$project_fail" -eq 0 ]; then
     echo "PASS: project-selection"
+    PASS=$((PASS + 1))
+fi
+
+if ! grep -q 'GEOGUESSME_E2E_SHARD' "$SCRIPT"; then
+    echo "FAIL: project-selection - runner does not forward an isolated shard"
+    FAIL=$((FAIL + 1))
+else
+    echo "PASS: shard-selection"
     PASS=$((PASS + 1))
 fi
 
