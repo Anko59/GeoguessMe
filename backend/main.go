@@ -23,7 +23,6 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
 	command := "serve"
 	if len(os.Args) > 1 {
 		command = os.Args[1]
@@ -34,7 +33,8 @@ func main() {
 		printVapidKeys()
 		return
 	}
-	if err := cfg.Validate(); err != nil {
+	cfg, err := config.LoadValidated()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		os.Exit(1)
 	}
@@ -184,7 +184,7 @@ func main() {
 }
 
 func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
-	if strings.EqualFold(os.Getenv("STORAGE_DRIVER"), "local") {
+	if strings.EqualFold(cfg.StorageDriver, "local") {
 		return storage.NewLocalStore(cfg.UploadDir)
 	}
 	return storage.NewS3Store(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UsePathStyle)
@@ -204,13 +204,15 @@ func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
 		logger.Error("VAPID key configuration is invalid; push notifications disabled", "error", err)
 		return push.NewService(push.Deps{Config: cfg, Logger: logger})
 	}
+	// The resolved keypair is returned through the service rather than written
+	// back into the loaded configuration: the config stays read-only after
+	// startup and the push handler reads keys from the service.
+	subject := cfg.VapidSubject
 	if ephemeral {
-		cfg.VapidSubject = "mailto:dev@geoguessme.invalid"
+		subject = "mailto:dev@geoguessme.invalid"
 		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
 	}
-	cfg.VapidPublicKey = keyPair.PublicKeyBase64URL()
-	cfg.VapidPrivateKey = keyPair.PrivateKeyBase64URL()
-	sender := push.NewSender(keyPair, cfg.VapidSubject, nil)
+	sender := push.NewSender(keyPair, subject, nil)
 	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
 }
 

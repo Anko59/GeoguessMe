@@ -57,7 +57,7 @@ if [ -x "$SCRIPT" ]; then pass "prune.sh is executable"; else fail "prune.sh is 
 # ── Test 2: Refuses without PROJECT_PREFIX ───────────────────────────────────
 echo "--- Test 2: Missing PROJECT_PREFIX ---"
 out=$(PROJECT_PREFIX="" "$SCRIPT" --dry-run 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "PROJECT_PREFIX"; then
+if [ "$ec" -ne 0 ] && grep -qi "PROJECT_PREFIX" <<<"$out"; then
     pass "refuses to run without PROJECT_PREFIX (exit=$ec)"
 else
     fail "did not refuse missing PROJECT_PREFIX (exit=$ec)"
@@ -69,7 +69,7 @@ echo "--- Test 3: Ambiguous PROJECT_PREFIX ---"
 
 # Too short
 out=$(PROJECT_PREFIX="ab" "$SCRIPT" --dry-run 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "too short"; then
+if [ "$ec" -ne 0 ] && grep -qi "too short" <<<"$out"; then
     pass "refuses too-short prefix 'ab' (exit=$ec)"
 else
     fail "did not refuse too-short prefix 'ab' (exit=$ec)"
@@ -77,14 +77,14 @@ fi
 
 # Generic Docker term
 out=$(PROJECT_PREFIX="docker" "$SCRIPT" --dry-run 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "ambiguous"; then
+if [ "$ec" -ne 0 ] && grep -qi "ambiguous" <<<"$out"; then
     pass "refuses generic prefix 'docker' (exit=$ec)"
 else
     fail "did not refuse generic prefix 'docker' (exit=$ec)"
 fi
 
 out=$(PROJECT_PREFIX="alpine" "$SCRIPT" --dry-run 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "ambiguous"; then
+if [ "$ec" -ne 0 ] && grep -qi "ambiguous" <<<"$out"; then
     pass "refuses generic prefix 'alpine' (exit=$ec)"
 else
     fail "did not refuse generic prefix 'alpine' (exit=$ec)"
@@ -93,7 +93,7 @@ fi
 # ── Test 4: Refuses --force without CONFIRM ──────────────────────────────────
 echo "--- Test 4: Missing CONFIRM with --force ---"
 out=$(PROJECT_PREFIX="geoguessme" "$SCRIPT" --force 2>&1) && ec=0 || ec=$?
-if [ "$ec" -ne 0 ] && echo "$out" | grep -qi "CONFIRM"; then
+if [ "$ec" -ne 0 ] && grep -qi "CONFIRM" <<<"$out"; then
     pass "refuses --force without CONFIRM=prune (exit=$ec)"
 else
     fail "did not refuse --force without CONFIRM (exit=$ec)"
@@ -131,7 +131,7 @@ if docker_available; then
     fi
 
     # Verify output contains "DRY-RUN" marker.
-    if echo "$out" | grep -q "DRY-RUN"; then
+    if grep -q "DRY-RUN" <<<"$out"; then
         pass "dry-run: output contains DRY-RUN marker"
     else
         fail "dry-run: output missing DRY-RUN marker"
@@ -168,13 +168,13 @@ else
     fail "dry-run: artifact file count changed: $before_count -> $after_count"
 fi
 
-if echo "$out" | grep -q "Workspace Artifacts"; then
+if grep -q "Workspace Artifacts" <<<"$out"; then
     pass "dry-run: reports workspace artifacts section"
 else
     fail "dry-run: missing workspace artifacts section"
 fi
 
-if echo "$out" | grep -q "artifact path"; then
+if grep -q "artifact path" <<<"$out"; then
     pass "dry-run: reports artifact paths found"
 else
     echo "  INFO: no artifacts section detail (may be normal if paths empty)"
@@ -189,7 +189,7 @@ echo "--- Test 7: --max-images bound enforcement ---"
 out=$(PROJECT_PREFIX="geoguessme" "$SCRIPT" --dry-run --max-images=0 2>&1) && ec=0 || ec=$?
 # If there are any geoguessme images, it should fail with bound error.
 # If there are none, it should pass. Either is acceptable behavior.
-if echo "$out" | grep -qiE "exceeds safety bound|No project images"; then
+if grep -qiE "exceeds safety bound|No project images" <<<"$out"; then
     pass "handles --max-images=0 sensibly"
 else
     fail "unexpected output for --max-images=0"
@@ -218,7 +218,7 @@ out=$(PROJECT_PREFIX="geoguessme" CONFIRM="prune" "$SCRIPT" --force 2>&1) && ec=
 after_paths=$(find . -type f | sort)
 
 if [ "$before_paths" != "$after_paths" ]; then
-    if echo "$out" | grep -q "Pruned"; then
+    if grep -q "Pruned" <<<"$out"; then
         pass "force: artifacts were removed (prune count in output)"
     else
         pass "force: artifacts changed (expected)"
@@ -260,7 +260,7 @@ if docker_available; then
         fail "unrelated volumes changed"
     fi
 
-    if echo "$out" | grep -qi "No project images"; then
+    if grep -qi "No project images" <<<"$out"; then
         pass "correctly reports no matching resources for nonexistent prefix"
     else
         # May also succeed if there simply aren't any matching.
@@ -309,25 +309,25 @@ TEMP_DIR=""
 echo "--- Test 11: Output structure ---"
 out=$(PROJECT_PREFIX="geoguessme" "$SCRIPT" --dry-run 2>&1) || true
 
-if echo "$out" | grep -q "Docker Images"; then
+if grep -q "Docker Images" <<<"$out"; then
     pass "output contains Docker Images section"
 else
     fail "output missing Docker Images section"
 fi
 
-if echo "$out" | grep -q "Workspace Artifacts"; then
+if grep -q "Workspace Artifacts" <<<"$out"; then
     pass "output contains Workspace Artifacts section"
 else
     fail "output missing Workspace Artifacts section"
 fi
 
-if echo "$out" | grep -q "Summary"; then
+if grep -q "Summary" <<<"$out"; then
     pass "output contains Summary section"
 else
     fail "output missing Summary section"
 fi
 
-if echo "$out" | grep -q "Status: complete"; then
+if grep -q "Status: complete" <<<"$out"; then
     pass "output has completion status"
 else
     fail "output missing completion status"
@@ -336,7 +336,7 @@ fi
 # ── Test 12: --help flag ─────────────────────────────────────────────────────
 echo "--- Test 12: Help flag ---"
 out=$(PROJECT_PREFIX="geoguessme" "$SCRIPT" --help 2>&1) && ec=0 || ec=$?
-if [ "$ec" -eq 0 ] && echo "$out" | grep -qi "usage"; then
+if [ "$ec" -eq 0 ] && grep -qi "usage" <<<"$out"; then
     pass "--help returns usage (exit=$ec)"
 else
     fail "--help did not return usage (exit=$ec)"

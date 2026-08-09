@@ -7,17 +7,35 @@ import (
 	"time"
 )
 
-func TestLoadDefaults(t *testing.T) {
-	// Clear relevant environment variables to ensure defaults are used
-	os.Unsetenv("PORT")
-	os.Unsetenv("DATABASE_URL")
-	os.Unsetenv("JWT_SECRET")
-	os.Unsetenv("ALLOWED_ORIGINS")
-	os.Unsetenv("RATE_LIMIT_REQUESTS")
-	os.Unsetenv("RATE_LIMIT_WINDOW")
-	os.Unsetenv("UPLOAD_DIR")
+// allConfigVariables lists every environment variable the strict loader reads.
+// Tests use it to guarantee a hermetic environment when asserting defaults.
+var allConfigVariables = []string{
+	"APP_ENV", "PORT", "PUBLIC_URL", "STORAGE_DRIVER",
+	"DATABASE_URL", "DB_MIN_CONNS", "DB_MAX_CONNS", "JWT_SECRET",
+	"ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL", "VERIFICATION_TOKEN_TTL", "RESET_TOKEN_TTL", "BCRYPT_COST",
+	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TLS", "SMTP_DIAL_TIMEOUT", "SMTP_TIMEOUT",
+	"S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_USE_PATH_STYLE",
+	"ALLOWED_ORIGINS", "TRUSTED_PROXY_CIDRS",
+	"UPLOAD_MAX_BYTES", "AVATAR_MAX_BYTES", "UPLOAD_MAX_PIXELS",
+	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
+	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
+	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT",
+}
 
-	cfg := Load()
+func unsetAllConfigVariables() {
+	for _, key := range allConfigVariables {
+		os.Unsetenv(key)
+	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	// Clear every configuration variable so defaults are used.
+	unsetAllConfigVariables()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("absent variables must not produce load errors, got %v", err)
+	}
 
 	if cfg.Port != "8080" {
 		t.Errorf("Expected default Port 8080, got %s", cfg.Port)
@@ -36,6 +54,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Errorf("Expected 2 default AllowedOrigins, got %d", len(cfg.AllowedOrigins))
+	}
+	if cfg.StorageDriver != "" {
+		t.Errorf("Expected default StorageDriver empty (S3), got %q", cfg.StorageDriver)
 	}
 }
 
@@ -58,7 +79,10 @@ func TestLoadEnvOverrides(t *testing.T) {
 		os.Unsetenv("UPLOAD_DIR")
 	}()
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("valid overrides must load, got %v", err)
+	}
 
 	if cfg.Port != "9090" {
 		t.Errorf("Expected Port 9090, got %s", cfg.Port)
@@ -203,7 +227,10 @@ func TestValidateRejectsUnknownEnvironment(t *testing.T) {
 
 func TestLoadNormalizesEnvironment(t *testing.T) {
 	t.Setenv("APP_ENV", "  Production ")
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("valid APP_ENV must load, got %v", err)
+	}
 	if cfg.Environment != EnvProduction {
 		t.Fatalf("expected normalized %q, got %q", EnvProduction, cfg.Environment)
 	}
@@ -312,35 +339,12 @@ func TestLoadTrimsMetricsToken(t *testing.T) {
 	// used for constant-time comparison matches what a correct client sends.
 	trimmed := strings.Repeat("t", minMetricsTokenBytes)
 	t.Setenv("METRICS_TOKEN", "  \n"+trimmed+"  ")
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("valid METRICS_TOKEN must load, got %v", err)
+	}
 	if cfg.MetricsToken != trimmed {
 		t.Fatalf("METRICS_TOKEN was not trimmed: %q", cfg.MetricsToken)
-	}
-}
-
-func TestLoadValidatedAndInvalidEnvironmentValuesUseSafeDefaults(t *testing.T) {
-	t.Setenv("DB_MIN_CONNS", "bad")
-	t.Setenv("DB_MAX_CONNS", "bad")
-	t.Setenv("UPLOAD_MAX_BYTES", "bad")
-	t.Setenv("AVATAR_MAX_BYTES", "bad")
-	t.Setenv("UPLOAD_MAX_PIXELS", "bad")
-	t.Setenv("S3_USE_PATH_STYLE", "bad")
-	t.Setenv("ACCESS_TOKEN_TTL", "bad")
-	t.Setenv("SMTP_DIAL_TIMEOUT", "bad")
-	if cfg := Load(); cfg.DatabaseMinConns != 2 || cfg.DatabaseMaxConns != 10 || cfg.UploadMaxBytes <= 0 || cfg.AvatarMaxBytes <= 0 || cfg.UploadMaxPixels == 0 || !cfg.S3UsePathStyle || cfg.AccessTokenTTL <= 0 || cfg.SMTPDialTimeout <= 0 {
-		t.Fatalf("invalid environment values were not replaced safely: %+v", cfg)
-	}
-
-	t.Setenv("DATABASE_URL", "postgres://u:p@localhost/db")
-	t.Setenv("JWT_SECRET", "a-valid-secret-that-is-at-least-32-bytes-long")
-	t.Setenv("SMTP_HOST", "localhost")
-	t.Setenv("SMTP_TLS", "off")
-	if cfg, err := LoadValidated(); err != nil || cfg == nil {
-		t.Fatalf("valid environment was rejected: %v", err)
-	}
-	t.Setenv("DATABASE_URL", "")
-	if cfg, err := LoadValidated(); err == nil || cfg != nil {
-		t.Fatal("invalid environment was accepted")
 	}
 }
 

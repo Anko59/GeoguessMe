@@ -212,7 +212,7 @@ test-dev-workflow-regression: ## Verify dev rebuilds refresh anonymous dependenc
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
-	bash tools/quality/test/check-restart-regression.sh
+	bash tools/quality/test/check-restart-regression.sh && bash tools/quality/test/check-restart-regression.sh --determinism
 
 test-migration-fixture-regression: ## Run migration fixture regression tests.
 	bash tools/quality/test/check-migration-fixture-regression.sh

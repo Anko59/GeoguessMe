@@ -230,26 +230,26 @@ echo "--- Test 14: No contradictory SMTP environment ---"
 prod_env_block=$(sed -n '/^cat.*production.env/,/^ENVEOF$/p' "$SCRIPT")
 
 # SMTP_USERNAME and SMTP_PASSWORD must not appear (unauthenticated fixture).
-if echo "$prod_env_block" | grep -qE '^SMTP_USERNAME='; then
+if grep -qE '^SMTP_USERNAME=' <<<"$prod_env_block"; then
     fail "production.env must not set SMTP_USERNAME (unauthenticated fixture)"
 else
     pass "no SMTP_USERNAME in production.env fixture"
 fi
-if echo "$prod_env_block" | grep -qE '^SMTP_PASSWORD='; then
+if grep -qE '^SMTP_PASSWORD=' <<<"$prod_env_block"; then
     fail "production.env must not set SMTP_PASSWORD (unauthenticated fixture)"
 else
     pass "no SMTP_PASSWORD in production.env fixture"
 fi
 
 # SMTP_TLS must not be "off" in production (would fail validation).
-if echo "$prod_env_block" | grep -qE '^SMTP_TLS=off'; then
+if grep -qE '^SMTP_TLS=off' <<<"$prod_env_block"; then
     fail "SMTP_TLS=off in production.env would be rejected by production validation"
 else
     pass "SMTP_TLS is not off (passes production validation)"
 fi
 
 # Verify SMTP_TLS is set to a valid non-off mode.
-if echo "$prod_env_block" | grep -qE '^SMTP_TLS=(starttls|tls)'; then
+if grep -qE '^SMTP_TLS=(starttls|tls)' <<<"$prod_env_block"; then
     pass "SMTP_TLS is set to a valid production mode (starttls or tls)"
 else
     fail "SMTP_TLS must be starttls or tls for production validation"

@@ -3,8 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +17,10 @@ type Config struct {
 	Environment string
 	Port        string
 	PublicURL   string
+
+	// StorageDriver selects the object store. "local" uses the filesystem via
+	// UploadDir; "s3" or the absent-value default uses S3-compatible storage.
+	StorageDriver string
 
 	DatabaseURL      string
 	DatabaseMinConns int32
@@ -91,60 +95,6 @@ const (
 // enough for an HTTP header.
 const minMetricsTokenBytes = 32
 
-func Load() *Config {
-	return &Config{
-		Environment:      normalizeEnvironment(getEnv("APP_ENV", EnvDevelopment)),
-		Port:             getEnv("PORT", "8080"),
-		PublicURL:        getEnv("PUBLIC_URL", "http://localhost:5173"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		DatabaseMinConns: int32(getEnvAsInt("DB_MIN_CONNS", 2)),
-		DatabaseMaxConns: int32(getEnvAsInt("DB_MAX_CONNS", 10)),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:   getEnvAsDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  getEnvAsDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		VerificationTTL:  getEnvAsDuration("VERIFICATION_TOKEN_TTL", 24*time.Hour),
-		ResetTTL:         getEnvAsDuration("RESET_TOKEN_TTL", time.Hour),
-		PasswordHashCost: getEnvAsInt("BCRYPT_COST", 12),
-
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPPort:        getEnvAsInt("SMTP_PORT", 1025),
-		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:        getEnv("SMTP_FROM", "no-reply@localhost"),
-		SMTPTLS:         getEnv("SMTP_TLS", SMTPOff),
-		SMTPDialTimeout: getEnvAsDuration("SMTP_DIAL_TIMEOUT", 10*time.Second),
-		SMTPTimeout:     getEnvAsDuration("SMTP_TIMEOUT", 30*time.Second),
-
-		S3Endpoint:     getEnv("S3_ENDPOINT", "http://localhost:9000"),
-		S3Region:       getEnv("S3_REGION", "us-east-1"),
-		S3Bucket:       getEnv("S3_BUCKET", "geoguessme-media"),
-		S3AccessKey:    getEnv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:    getEnv("S3_SECRET_KEY", "minioadmin"),
-		S3UsePathStyle: getEnvAsBool("S3_USE_PATH_STYLE", true),
-
-		AllowedOrigins:    splitList(getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")),
-		TrustedProxyCIDRs: splitList(os.Getenv("TRUSTED_PROXY_CIDRS")),
-
-		UploadMaxBytes:  getEnvAsInt64("UPLOAD_MAX_BYTES", 10*1024*1024),
-		AvatarMaxBytes:  getEnvAsInt64("AVATAR_MAX_BYTES", 25*1024*1024),
-		UploadMaxPixels: uint64(getEnvAsInt64("UPLOAD_MAX_PIXELS", 25_000_000)),
-		ChallengeTTL:    getEnvAsDuration("CHALLENGE_TTL", 24*time.Hour),
-		LocationHide:    getEnvAsDuration("LOCATION_HIDE_DURATION", 48*time.Hour),
-		ViewWindow:      getEnvAsDuration("PHOTO_VIEW_WINDOW", 10*time.Second),
-		PhotoRetention:  getEnvAsDuration("PHOTO_RETENTION", 30*24*time.Hour),
-		UploadDir:       getEnv("UPLOAD_DIR", "./uploads"),
-
-		RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 10),
-		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
-		LogLevel:          getEnv("LOG_LEVEL", "info"),
-		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
-
-		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
-	}
-}
-
 // Validate applies strict checks to every environment. Production enforces
 // additional security constraints on top of the base rules.
 func (c *Config) Validate() error {
@@ -154,6 +104,11 @@ func (c *Config) Validate() error {
 	case EnvDevelopment, EnvProduction, EnvTest:
 	default:
 		problems = append(problems, "APP_ENV must be one of development, production, test")
+	}
+	switch strings.ToLower(c.StorageDriver) {
+	case "", "s3", "local":
+	default:
+		problems = append(problems, "STORAGE_DRIVER must be one of s3, local")
 	}
 	if port, err := strconv.Atoi(strings.TrimSpace(c.Port)); err != nil || port < 1 || port > 65535 {
 		problems = append(problems, "PORT must be an integer between 1 and 65535")
@@ -186,6 +141,11 @@ func (c *Config) Validate() error {
 		u, err := url.Parse(origin)
 		if err != nil || u.Scheme == "" || u.Host == "" {
 			problems = append(problems, fmt.Sprintf("invalid browser origin %q", origin))
+		}
+	}
+	for _, cidr := range c.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			problems = append(problems, fmt.Sprintf("invalid trusted proxy CIDR %q", cidr))
 		}
 	}
 	if c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey == "" || c.S3SecretKey == "" {
@@ -307,61 +267,10 @@ func isVapidSubject(value string) bool {
 	}
 }
 
-func LoadValidated() (*Config, error) {
-	cfg := Load()
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	return cfg, nil
-}
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok && value != "" {
-		return value
-	}
-	return fallback
-}
-
 // normalizeEnvironment trims surrounding whitespace and lower-cases the value
 // so APP_ENV comparisons can be exact and case-insensitive at the same time.
 func normalizeEnvironment(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func getEnvAsInt(key string, fallback int) int {
-	if value, ok := os.LookupEnv(key); ok {
-		if i, err := strconv.Atoi(value); err == nil {
-			return i
-		}
-	}
-	return fallback
-}
-
-func getEnvAsInt64(key string, fallback int64) int64 {
-	if value, ok := os.LookupEnv(key); ok {
-		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return i
-		}
-	}
-	return fallback
-}
-
-func getEnvAsBool(key string, fallback bool) bool {
-	if value, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			return b
-		}
-	}
-	return fallback
-}
-
-func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
-	if value, ok := os.LookupEnv(key); ok {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return fallback
 }
 
 func splitList(value string) []string {
