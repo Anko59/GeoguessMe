@@ -219,6 +219,27 @@ describe('Game', () => {
         expect(screen.getByText(/will appear here after 24 hours/)).toBeInTheDocument();
     });
 
+    it('uses singular grammar when the location reveals in one hour', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                photo_id: 'photo-7-hour',
+                group_id: 'group-1',
+                location_hidden: true,
+                location_reveals_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+                guesses: [],
+                media_available: false,
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-7-hour', kind: 'challenge' })}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(await screen.findByText(/will appear here after 1 hour(?!s)/)).toBeInTheDocument();
+    });
+
     it('shows the hide notice without a duration when location_reveals_at is absent', async () => {
         mocks.get.mockResolvedValueOnce({
             data: {
