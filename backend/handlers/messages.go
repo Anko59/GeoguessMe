@@ -328,8 +328,14 @@ func SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 
 var HubInstance *chat.Hub
 
-func InitChat() {
-	HubInstance = chat.NewHub(
+// NewChatHub builds the realtime chat hub with its persistence and push
+// notification callbacks. The composition root owns the returned hub: it
+// passes the instance to the application, installs it on HubInstance for the
+// handlers that still read the global, and starts it with hub.Run(). Creating
+// the hub and starting it are separate lifecycle steps (PR 4); InitChat was
+// removed because it conflated the two.
+func NewChatHub() *chat.Hub {
+	return chat.NewHub(
 		func(_ context.Context, msg *models.Message) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -341,7 +347,6 @@ func InitChat() {
 			}
 		},
 	)
-	go HubInstance.Run()
 }
 
 func CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
