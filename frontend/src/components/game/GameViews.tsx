@@ -10,6 +10,7 @@ import type { GameState, GamePosition } from './gameState';
 function locationRevealClause(revealsAt: string, referenceMs: number): string {
     const hours = Math.round((Date.parse(revealsAt) - referenceMs) / 3_600_000);
     if (hours < 1) return 'in under an hour';
+    if (hours === 1) return 'after 1 hour';
     return `after ${hours} hours`;
 }
 
