@@ -313,9 +313,9 @@ func mailpitBase() string {
 	return "http://localhost:8025"
 }
 
-// tokenFromMailpit reads the most recent message to an address and extracts the
-// last path token from the link embedded in the body.
-func tokenFromMailpit(t *testing.T, email, linkPath string) string {
+// tokenFromMailpit reads the most recent transactional message with the given
+// fixed subject and extracts the token from the link embedded in the body.
+func tokenFromMailpit(t *testing.T, subject, linkPath string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -323,7 +323,7 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 	searchURL := mailpitBase() + "/api/v1/search"
 	queryURL, _ := url.Parse(searchURL)
 	queryVals := queryURL.Query()
-	queryVals.Set("query", "to:"+email)
+	queryVals.Set("query", `subject:"`+subject+`"`)
 	queryURL.RawQuery = queryVals.Encode()
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, queryURL.String(), nil)
@@ -354,7 +354,7 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	t.Fatalf("no mailpit message for %s containing %s", email, linkPath)
+	t.Fatalf("no mailpit message with subject %q containing %s", subject, linkPath)
 	return ""
 }
 
