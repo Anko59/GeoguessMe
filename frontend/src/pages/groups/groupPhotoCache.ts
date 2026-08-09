@@ -10,15 +10,8 @@ const fallbackGroupPhoto = '/logo.png';
 function fetchGroupPhoto(groupID: string): Promise<string> {
     return api
         .get('/group/photo', { params: { group_id: groupID }, responseType: 'blob' })
-        .then((response) => {
-            const objectURL = URL.createObjectURL(response.data as Blob);
-            store.set(groupID, objectURL);
-            return objectURL;
-        })
-        .catch(() => {
-            store.set(groupID, fallbackGroupPhoto);
-            return fallbackGroupPhoto;
-        });
+        .then((response) => URL.createObjectURL(response.data as Blob))
+        .catch(() => fallbackGroupPhoto);
 }
 
 export function bustGroupPhotoCache(groupID: string): void {
@@ -49,7 +42,7 @@ export function useGroupPhotoUrl(groupID: string, refreshKey = 0): string {
         store
             .getOrFetch(groupID, () => fetchGroupPhoto(groupID))
             .then((result) => {
-                if (!cancelled) setUrl(result);
+                if (!cancelled && result) setUrl(result);
             });
         return () => {
             cancelled = true;

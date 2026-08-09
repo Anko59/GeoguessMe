@@ -38,17 +38,31 @@ export interface GameState {
 
 export type GameAction =
     | { type: 'loading'; photoId: string }
-    | { type: 'media-ready'; mediaUrl: string; mediaType?: string; deadline: number; serverOffset: number }
-    | { type: 'media-unavailable'; deadline: number; serverOffset: number }
-    | { type: 'accept-failed'; message: string }
-    | { type: 'media-failed'; message: string }
+    | {
+          type: 'media-ready';
+          photoId: string;
+          mediaUrl: string;
+          mediaType?: string;
+          deadline: number;
+          serverOffset: number;
+      }
+    | { type: 'media-unavailable'; photoId: string; deadline: number; serverOffset: number }
+    | { type: 'accept-failed'; photoId: string; message: string }
+    | { type: 'media-failed'; photoId: string; message: string }
     | { type: 'view-expired' }
     | { type: 'guess-now' }
     | { type: 'select-location'; lat: number; long: number }
     | { type: 'guess-start' }
     | { type: 'guess-failed'; message: string }
-    | { type: 'results-ready'; mediaUrl?: string; mediaType?: string; serverOffset: number; results: ChallengeResults }
-    | { type: 'results-failed'; message: string }
+    | {
+          type: 'results-ready';
+          photoId: string;
+          mediaUrl?: string;
+          mediaType?: string;
+          serverOffset: number;
+          results: ChallengeResults;
+      }
+    | { type: 'results-failed'; photoId: string; message: string }
     | { type: 'show-feedback'; score: number }
     | { type: 'clear-feedback' }
     | { type: 'close' }
@@ -93,7 +107,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             // load clears the previous map pin.
             return { status: 'accepting', photoId: action.photoId, serverOffset: 0 };
         case 'media-ready':
-            return state.status === 'accepting'
+            return state.status === 'accepting' && state.photoId === action.photoId
                 ? {
                       status: 'viewing',
                       photoId: state.photoId,
@@ -104,7 +118,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                   }
                 : state;
         case 'media-unavailable':
-            return state.status === 'accepting'
+            return state.status === 'accepting' && state.photoId === action.photoId
                 ? {
                       status: 'guessing',
                       photoId: state.photoId,
@@ -115,11 +129,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         case 'accept-failed':
         case 'media-failed':
         case 'results-failed':
-            return state.status === 'accepting'
+            return state.status === 'accepting' && state.photoId === action.photoId
                 ? { status: 'error', photoId: state.photoId, message: action.message, serverOffset: 0 }
                 : state;
         case 'results-ready':
-            return state.status === 'accepting'
+            return state.status === 'accepting' && state.photoId === action.photoId
                 ? {
                       status: 'results',
                       photoId: state.photoId,
