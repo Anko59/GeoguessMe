@@ -8,7 +8,6 @@ import (
 
 	"geoguessme/internal/models"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 )
 
@@ -114,6 +113,9 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	if page.Items[0].ID != "message-c" || page.Items[1].ID != "message-d" {
 		t.Fatalf("latest page order = %s, %s, want message-c, message-d", page.Items[0].ID, page.Items[1].ID)
 	}
+	if page.StableCursor != encodeMessageCursor(t3, "message-d") {
+		t.Fatalf("latest page stable cursor = %q", page.StableCursor)
+	}
 
 	// Forward catch-up from the oldest cursor returns the newer messages and
 	// reports a next cursor when more remain (limit+1 probes for another page).
@@ -130,6 +132,9 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	if page.Items[0].ID != "message-b" || page.Items[1].ID != "message-c" {
 		t.Fatalf("forward page order = %s, %s, want message-b, message-c", page.Items[0].ID, page.Items[1].ID)
 	}
+	if page.StableCursor != encodeMessageCursor(t2, "message-c") {
+		t.Fatalf("forward page stable cursor = %q", page.StableCursor)
+	}
 	cursorAt, cursorID, err := decodeMessageCursor(page.NextCursor)
 	if err != nil || !cursorAt.Equal(t2) || cursorID != "message-c" {
 		t.Fatalf("next cursor = %v/%q, %v", cursorAt, cursorID, err)
@@ -143,24 +148,13 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != "message-d" || page.NextCursor != "" {
 		t.Fatalf("final page = %+v, %v", page, err)
 	}
+	if page.StableCursor != encodeMessageCursor(t3, "message-d") {
+		t.Fatalf("final page stable cursor = %q", page.StableCursor)
+	}
 
 	// A malformed cursor must be rejected rather than silently returning data.
 	if _, err := repo.GetGroupMessagesPage(context.Background(), "group-1", "not-a-cursor", 2); err == nil {
 		t.Fatal("malformed cursor accepted")
-	}
-
-	// The legacy after_id wrapper resolves the message id to the opaque cursor
-	// and then paginates forward through the remaining messages.
-	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("message-a").WillReturnRows(pgxmock.NewRows([]string{"created_at"}).AddRow(t0))
-	mock.ExpectQuery("SELECT .*FROM messages.*ROW\\(m.created_at, m.id\\) > ROW").
-		WithArgs("group-1", t0, "message-a", 501).
-		WillReturnRows(messageRowsByID([]string{"message-b", "message-c", "message-d"}, []time.Time{t1, t2, t3}))
-	messages, err := repo.GetGroupMessagesContext(context.Background(), "group-1", "message-a")
-	if err != nil {
-		t.Fatalf("legacy messages: %v", err)
-	}
-	if len(messages) != 3 || messages[0].ID != "message-b" || messages[2].ID != "message-d" {
-		t.Fatalf("legacy messages = %+v", messages)
 	}
 
 	newMessage := NewTextMessage("group-1", "user-1", "content", now)
@@ -218,38 +212,5 @@ func TestGetGroupMessagesPageBefore(t *testing.T) {
 	page, err = repo.GetGroupMessagesPageBefore(context.Background(), "group-1", "message-x", 2)
 	if err != nil || len(page.Items) != 0 {
 		t.Fatalf("unknown anchor = %+v, %v", page, err)
-	}
-}
-
-// TestCursorAfterMessageResolvesLegacyID covers the bridge from the legacy
-// after_id message id onto the stable opaque cursor, including the empty and
-// unknown-id fallbacks that keep a reconnect catch-up request from failing.
-func TestCursorAfterMessageResolvesLegacyID(t *testing.T) {
-	repo, mock := newChatRepo(t)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-
-	// An empty after id short-circuits to an empty cursor without querying.
-	got, err := repo.CursorAfterMessage(context.Background(), "")
-	if err != nil || got != "" {
-		t.Fatalf("empty after id = %q, %v", got, err)
-	}
-
-	// A known message id resolves to the opaque cursor at its position.
-	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("message-1").WillReturnRows(pgxmock.NewRows([]string{"created_at"}).AddRow(now))
-	got, err = repo.CursorAfterMessage(context.Background(), "message-1")
-	if err != nil {
-		t.Fatalf("resolve known id: %v", err)
-	}
-	createdAt, id, err := decodeMessageCursor(got)
-	if err != nil || !createdAt.Equal(now) || id != "message-1" {
-		t.Fatalf("resolved cursor = %v/%q, %v", createdAt, id, err)
-	}
-
-	// An unknown message id yields an empty cursor (latest-page fallback)
-	// instead of failing the whole pagination request.
-	mock.ExpectQuery("SELECT created_at FROM messages").WithArgs("missing").WillReturnError(pgx.ErrNoRows)
-	got, err = repo.CursorAfterMessage(context.Background(), "missing")
-	if err != nil || got != "" {
-		t.Fatalf("unknown after id = %q, %v", got, err)
 	}
 }

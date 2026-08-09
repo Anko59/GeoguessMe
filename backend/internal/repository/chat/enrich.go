@@ -158,7 +158,6 @@ func (r *Repository) enrichMessageReactions(ctx context.Context, messages []mode
 		if err := rows.Scan(&messageID, &reaction.Reaction, &reaction.Count, &reaction.Reacted, &reaction.Usernames); err != nil {
 			return err
 		}
-		reaction.Emoji = reaction.Reaction
 		reactions[messageID] = append(reactions[messageID], reaction)
 	}
 	if err := rows.Err(); err != nil {

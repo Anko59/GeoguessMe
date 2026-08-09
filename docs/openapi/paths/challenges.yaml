@@ -14,12 +14,7 @@ upload:
             properties:
               photo: { type: string, format: binary }
               group_ids:
-                {
-                  type: array,
-                  items: { type: string, format: uuid },
-                  description: Target groups (repeated form field); the legacy single group_id is still accepted,
-                }
-              group_id: { type: string, format: uuid, description: Legacy single-group field }
+                { type: array, items: { type: string, format: uuid }, description: Target groups (repeated form field) }
               hide_location:
                 {
                   type: boolean,

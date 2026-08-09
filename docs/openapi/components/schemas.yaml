@@ -204,10 +204,9 @@ ReactionKey:
 
 MessageReaction:
   type: object
-  required: [reaction, emoji, count, reacted, usernames]
+  required: [reaction, count, reacted, usernames]
   properties:
     reaction: { $ref: "#/ReactionKey" }
-    emoji: { $ref: "#/ReactionKey", deprecated: true, description: Compatibility alias for reaction }
     count: { type: integer, minimum: 1 }
     reacted: { type: boolean, description: Whether the authenticated viewer selected this reaction }
     usernames:
@@ -217,22 +216,18 @@ MessageReaction:
 
 MessageReactionRequest:
   type: object
-  description: Supply reaction. The deprecated emoji alias remains accepted during the compatibility window.
-  anyOf:
-    - required: [reaction]
-    - required: [emoji]
+  description: Supply the reaction key to set or remove.
+  required: [reaction]
   properties:
     reaction: { $ref: "#/ReactionKey" }
-    emoji: { $ref: "#/ReactionKey", deprecated: true }
 
 MessageReactionUpdate:
   type: object
   description: WebSocket-only reaction mutation metadata used to preserve each recipient's viewer-specific state.
-  required: [user_id, reaction, emoji, active]
+  required: [user_id, reaction, active]
   properties:
     user_id: { type: string, format: uuid }
     reaction: { $ref: "#/ReactionKey" }
-    emoji: { $ref: "#/ReactionKey", deprecated: true, description: Compatibility alias for reaction }
     active: { type: boolean }
 
 MessagesPage:
@@ -241,6 +236,11 @@ MessagesPage:
   properties:
     items: { type: array, items: { $ref: "#/Message" } }
     next_cursor: { type: [string, "null"] }
+    stable_cursor:
+      {
+        type: [string, "null"],
+        description: Opaque cursor strictly after the last message of the page; the reconnect catch-up anchor (empty for an empty page),
+      }
 
 ChallengeCreated:
   type: object

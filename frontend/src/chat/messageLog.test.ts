@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message, Reaction, ReactionUpdate } from '../types';
-import { compareMessages, lastStableCursor, mergeMessages, pruneBeforeAnchor } from './messageLog';
+import { compareMessages, mergeMessages, pruneBeforeAnchor } from './messageLog';
 
 function message(id: string, createdAt: string, content = id): Message {
     return {
@@ -185,17 +185,6 @@ describe('mergeMessages', () => {
         mergeMessages(current, incoming);
         expect(current).toEqual(currentCopy);
         expect(incoming).toEqual(incomingCopy);
-    });
-});
-
-describe('lastStableCursor', () => {
-    it('returns an empty cursor for an empty log', () => {
-        expect(lastStableCursor([])).toBe('');
-    });
-
-    it('returns the newest message id of a sorted log', () => {
-        const log = [message('a', '2026-01-01T00:00:00Z'), message('b', '2026-01-02T00:00:00Z')];
-        expect(lastStableCursor(log)).toBe('b');
     });
 });
 

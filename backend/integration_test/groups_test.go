@@ -21,7 +21,7 @@ func attemptUpload(t *testing.T, bearer, groupID string) int {
 	require.NoError(t, err)
 	_, err = part.Write([]byte("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
 	require.NoError(t, err)
-	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("group_ids", groupID))
 	require.NoError(t, writer.WriteField("lat", "1"))
 	require.NoError(t, writer.WriteField("long", "1"))
 	require.NoError(t, writer.Close())

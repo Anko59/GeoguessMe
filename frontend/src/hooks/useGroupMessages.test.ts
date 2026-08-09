@@ -209,9 +209,12 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('ignores stale messages from a superseded reconnect generation', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
-        // First generation catch-up returns a; the renewed generation returns c.
+        // First generation catch-up returns a (with its stable_cursor anchor);
+        // the renewed generation returns c.
         mocks.get
-            .mockResolvedValueOnce({ data: { items: [message('a', '2026-01-01T00:00:00Z')] } })
+            .mockResolvedValueOnce({
+                data: { items: [message('a', '2026-01-01T00:00:00Z')], stable_cursor: 'cursor-a' },
+            })
             .mockResolvedValueOnce({ data: { items: [message('c', '2026-01-03T00:00:00Z')] } });
 
         const { result } = renderHook(() => useGroupMessages('group-1'));
@@ -239,14 +242,14 @@ describe('useGroupMessages reconnect sequence', () => {
             renewed.fireOpen();
         });
 
-        // The renewed catch-up snapshots the last stable cursor (a) before the
-        // reconnect, so it fetches only messages after that cursor.
+        // The renewed catch-up snapshots the last stable cursor (cursor-a)
+        // before the reconnect, so it fetches only messages after that cursor.
         await waitFor(() => expect(ids(result.current.messages)).toEqual(['a', 'c']));
         expect(mocks.get).toHaveBeenNthCalledWith(
             2,
             '/group/messages',
             expect.objectContaining({
-                params: expect.objectContaining({ group_id: 'group-1', after_id: 'a' }),
+                params: expect.objectContaining({ group_id: 'group-1', cursor: 'cursor-a' }),
             }),
         );
     });

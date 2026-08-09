@@ -765,11 +765,6 @@ export interface components {
             | '🙏';
         MessageReaction: {
             reaction: components['schemas']['ReactionKey'];
-            /**
-             * @deprecated
-             * @description Compatibility alias for reaction
-             */
-            emoji: components['schemas']['ReactionKey'];
             count: number;
             /** @description Whether the authenticated viewer selected this reaction */
             reacted: boolean;
@@ -781,11 +776,6 @@ export interface components {
             /** Format: uuid */
             user_id: string;
             reaction: components['schemas']['ReactionKey'];
-            /**
-             * @deprecated
-             * @description Compatibility alias for reaction
-             */
-            emoji: components['schemas']['ReactionKey'];
             active: boolean;
         };
         Message: {
@@ -830,16 +820,13 @@ export interface components {
         MessagesPage: {
             items: components['schemas']['Message'][];
             next_cursor?: string | null;
+            /** @description Opaque cursor strictly after the last message of the page; the reconnect catch-up anchor (empty for an empty page) */
+            stable_cursor?: string | null;
         };
-        /** @description Supply reaction. The deprecated emoji alias remains accepted during the compatibility window. */
-        MessageReactionRequest:
-            | {
-                  reaction?: components['schemas']['ReactionKey'];
-                  /** @deprecated */
-                  emoji?: components['schemas']['ReactionKey'];
-              }
-            | unknown
-            | unknown;
+        /** @description Supply the reaction key to set or remove. */
+        MessageReactionRequest: {
+            reaction: components['schemas']['ReactionKey'];
+        };
         ChallengeCreated: {
             /** Format: uuid */
             id: string;
@@ -1606,8 +1593,6 @@ export interface operations {
                 /** @description Opaque base64 cursor from a previous next_cursor; empty selects the most recent page */
                 cursor?: string;
                 limit?: number;
-                /** @description Legacy message id resolved onto the cursor for reconnect catch-up; ignored when cursor is set */
-                after_id?: string;
             };
             header?: never;
             path?: never;
@@ -1753,13 +1738,8 @@ export interface operations {
                 'multipart/form-data': {
                     /** Format: binary */
                     photo: string;
-                    /** @description Target groups (repeated form field); the legacy single group_id is still accepted */
+                    /** @description Target groups (repeated form field) */
                     group_ids?: string[];
-                    /**
-                     * Format: uuid
-                     * @description Legacy single-group field
-                     */
-                    group_id?: string;
                     /** @description Hide the exact location from guessers for the configured duration (48 hours by default) */
                     hide_location?: boolean;
                     /** Format: double */

@@ -39,7 +39,7 @@ func multipartMediaUpload(t *testing.T, groupID, filename string, payload []byte
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	_ = writer.WriteField("group_id", groupID)
+	_ = writer.WriteField("group_ids", groupID)
 	_ = writer.WriteField("lat", "48.8566")
 	_ = writer.WriteField("long", "2.3522")
 	part, err := writer.CreateFormFile("photo", filename)
@@ -90,6 +90,34 @@ func mustDecodeBase64(value string) []byte {
 		panic(err)
 	}
 	return decoded
+}
+
+func TestUploadRejectsLegacySingularGroupID(t *testing.T) {
+	// The legacy singular group_id form field was removed (PR 12): an upload
+	// without the repeated group_ids field is rejected instead of falling back
+	// to the removed compatibility input.
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, mustTestStore(t), handlerConfig(), nil, nil, time.Now)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("group_id", "00000000-0000-0000-0000-000000000001")
+	_ = writer.WriteField("lat", "48.8566")
+	_ = writer.WriteField("long", "2.3522")
+	part, err := writer.CreateFormFile("photo", "photo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(mustDecodeBase64(onePixelPNG)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := requestWithUser(http.MethodPost, "/", "", "user-1")
+	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	requireStatus(t, gameAPI.UploadPhoto, request, http.StatusBadRequest)
 }
 
 func TestUploadAcceptAndServeMedia(t *testing.T) {

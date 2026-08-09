@@ -30,7 +30,6 @@ type Message struct {
 
 type Reaction struct {
 	Reaction  string   `json:"reaction"`
-	Emoji     string   `json:"emoji"`
 	Count     int      `json:"count"`
 	Reacted   bool     `json:"reacted"`
 	Usernames []string `json:"usernames"`
@@ -42,6 +41,5 @@ type Reaction struct {
 type ReactionUpdate struct {
 	UserID   string `json:"user_id"`
 	Reaction string `json:"reaction"`
-	Emoji    string `json:"emoji"`
 	Active   bool   `json:"active"`
 }

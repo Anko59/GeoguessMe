@@ -151,7 +151,7 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 	require.NoError(t, err)
 	require.NoError(t, writer.WriteField("lat", "51.505"))
 	require.NoError(t, writer.WriteField("long", "-0.09"))
-	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("group_ids", groupID))
 	require.NoError(t, writer.Close())
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/photo/upload", body)
