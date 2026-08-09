@@ -13,6 +13,13 @@ seen=false
 backend=false
 frontend=false
 full=false
+static_checks=false
+backend_unit=false
+frontend_unit=false
+backend_integration=false
+browser_e2e=false
+operational=false
+docs_candidate=true
 
 classify() {
     local path=$1
@@ -20,17 +27,62 @@ classify() {
     seen=true
     case "$path" in
         backend/*)
-            backend=true
+            docs_candidate=false
+            static_checks=true
+            backend_unit=true
+            backend_integration=true
             ;;
         frontend/*)
-            frontend=true
+            docs_candidate=false
+            static_checks=true
+            frontend_unit=true
+            browser_e2e=true
             ;;
-        docs/openapi* | .github/* | deployment/* | infra/* | tools/* | Makefile | AGENTS.md | .dockerignore | .gitignore | .sops.yaml)
+        docs/openapi*)
+            docs_candidate=false
+            static_checks=true
+            backend_unit=true
+            frontend_unit=true
+            backend_integration=true
+            browser_e2e=true
             full=true
             ;;
-        docs/* | *.md | LICENSE) ;;
+        .github/workflows/* | deployment/* | infra/* | tools/make/* | Makefile | .dockerignore | .sops.yaml)
+            docs_candidate=false
+            static_checks=true
+            backend_unit=true
+            frontend_unit=true
+            backend_integration=true
+            browser_e2e=true
+            operational=true
+            full=true
+            ;;
+        tools/quality/run-integration.sh | tools/quality/integration/*)
+            docs_candidate=false
+            static_checks=true
+            backend_integration=true
+            ;;
+        tools/quality/run-e2e.sh | tools/quality/e2e/*)
+            docs_candidate=false
+            static_checks=true
+            browser_e2e=true
+            ;;
+        tools/* | .gitignore)
+            docs_candidate=false
+            static_checks=true
+            ;;
+        .github/* | AGENTS.md | */AGENTS.md | .agents/* | docs/* | *.md | LICENSE)
+            static_checks=true
+            ;;
         *)
             # Unknown files fail safe: exercise both application surfaces.
+            docs_candidate=false
+            static_checks=true
+            backend_unit=true
+            frontend_unit=true
+            backend_integration=true
+            browser_e2e=true
+            operational=true
             full=true
             ;;
     esac
@@ -47,15 +99,27 @@ else
 fi
 
 if [ "$seen" = false ]; then
+    docs_candidate=false
+    static_checks=true
+    backend_unit=true
+    frontend_unit=true
+    backend_integration=true
+    browser_e2e=true
+    operational=true
     full=true
 fi
 if [ "$full" = true ]; then
-    backend=true
-    frontend=true
+    backend_integration=true
+    browser_e2e=true
 fi
 
+# Compatibility outputs consumed by the current workflow. They intentionally
+# mean live-stack suites, not merely that a language appears in the diff.
+backend=$backend_integration
+frontend=$browser_e2e
+
 docs_only=false
-if [ "$seen" = true ] && [ "$backend" = false ] && [ "$frontend" = false ] && [ "$full" = false ]; then
+if [ "$seen" = true ] && [ "$docs_candidate" = true ]; then
     docs_only=true
 fi
 
@@ -63,3 +127,9 @@ printf 'backend=%s\n' "$backend"
 printf 'frontend=%s\n' "$frontend"
 printf 'full=%s\n' "$full"
 printf 'docs_only=%s\n' "$docs_only"
+printf 'static_checks=%s\n' "$static_checks"
+printf 'backend_unit=%s\n' "$backend_unit"
+printf 'frontend_unit=%s\n' "$frontend_unit"
+printf 'backend_integration=%s\n' "$backend_integration"
+printf 'browser_e2e=%s\n' "$browser_e2e"
+printf 'operational=%s\n' "$operational"

@@ -10,8 +10,9 @@ description:
 
 ## Workflow
 
-1. Follow [frontend/AGENTS.md](../../../frontend/AGENTS.md) and the ownership
-   rules in [docs/agent-engineering.md](../../../docs/agent-engineering.md).
+1. Follow [frontend/AGENTS.md](../../../frontend/AGENTS.md), including the
+   bounded maintenance scan and change-impact workflow in
+   [docs/agent-engineering.md](../../../docs/agent-engineering.md).
 2. Locate the component: feature components in `frontend/src/components/`,
    shared logic in `frontend/src/hooks/`, wire types in `frontend/src/types/`
    (generated from the OpenAPI contract into
@@ -25,8 +26,9 @@ description:
    semantics, and reduced-motion behavior.
 6. Add Vitest coverage for behavior; add an E2E scenario in `frontend/e2e/` only
    for a user journey. No `act(...)` warnings, no unconditional sleeps.
-7. Run `make test-frontend`, `make lint-frontend`, `make type-check`, the
-   relevant E2E, then `make preflight`.
+7. Run `make impact BASE=origin/dev`, `make test-frontend`,
+   `make lint-frontend`, `make type-check`, the relevant E2E, then
+   `make preflight`.
 
 ## Inputs
 

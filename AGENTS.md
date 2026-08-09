@@ -17,6 +17,14 @@ Consider security, authorization, data integrity, failure handling,
 observability, migrations, rollback, and compatibility for every relevant
 change.
 
+Before handoff, perform the bounded maintenance scan documented in
+[docs/agent-engineering.md](docs/agent-engineering.md#bounded-maintenance-scan).
+Fix directly adjacent, behavior-preserving debt only when it stays in the same
+module, is covered by the same validation, changes no public contract or
+dependency, and remains a small minority of the PR. Record every other finding
+in the PR's adjacent-maintenance section; never silently ignore it or expand the
+task without authorization.
+
 ## Dockerized workflow
 
 Dockerized Make targets are the required repository interface. Use a Make target
