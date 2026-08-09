@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,8 +67,20 @@ func TestMigrateUpSkipsAppliedMigrations(t *testing.T) {
 	)
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
-	if err := MigrateUp(context.Background(), mock, slog.Default()); err != nil {
-		t.Fatalf("MigrateUp returned an error: %v", err)
+	if err := migrateUpOnConnection(context.Background(), mock.AsConn(), slog.Default()); err != nil {
+		t.Fatalf("migrateUpOnConnection returned an error: %v", err)
+	}
+}
+
+func TestMigrateUpReportsConnectionAcquisitionFailure(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(mock.Close)
+
+	if err := MigrateUp(context.Background(), mock, slog.Default()); err == nil || !strings.Contains(err.Error(), "acquire migration connection") {
+		t.Fatalf("expected connection acquisition failure, got %v", err)
 	}
 }
 
@@ -139,7 +152,7 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
-	if err := MigrateUp(context.Background(), mock, slog.Default()); err != nil {
-		t.Fatalf("MigrateUp returned an error: %v", err)
+	if err := migrateUpOnConnection(context.Background(), mock.AsConn(), slog.Default()); err != nil {
+		t.Fatalf("migrateUpOnConnection returned an error: %v", err)
 	}
 }

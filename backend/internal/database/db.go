@@ -103,8 +103,14 @@ func migrations() ([]Migration, error) {
 	return result, nil
 }
 
-func ensureMigrationTable(ctx context.Context, pool Pool) error {
-	_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+type migrationConnection interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	Begin(context.Context) (pgx.Tx, error)
+}
+
+func ensureMigrationTable(ctx context.Context, conn migrationConnection) error {
+	_, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
 	return err
 }
 
@@ -116,20 +122,32 @@ func MigrateUp(ctx context.Context, pool Pool, logger *slog.Logger) error {
 	if pool == nil {
 		return errors.New("database is not connected")
 	}
-	if err := ensureMigrationTable(ctx, pool); err != nil {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration connection: %w", err)
+	}
+	defer conn.Release()
+	return migrateUpOnConnection(ctx, conn, logger)
+}
+
+// migrateUpOnConnection keeps the session advisory lock, migration queries,
+// and transactions on one physical PostgreSQL connection. Session locks do
+// not protect work issued through arbitrary connections from the same pool.
+func migrateUpOnConnection(ctx context.Context, conn migrationConnection, logger *slog.Logger) error {
+	if err := ensureMigrationTable(ctx, conn); err != nil {
 		return fmt.Errorf("create migration table: %w", err)
 	}
-	if _, err := pool.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLockKey); err != nil {
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLockKey); err != nil {
 		return fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
-	defer func() { _, _ = pool.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationLockKey) }()
+	defer func() { _, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationLockKey) }()
 
 	all, err := migrations()
 	if err != nil {
 		return err
 	}
 	applied := make(map[int]bool, len(all))
-	rows, err := pool.Query(ctx, `SELECT version FROM schema_migrations`)
+	rows, err := conn.Query(ctx, `SELECT version FROM schema_migrations`)
 	if err != nil {
 		return err
 	}
@@ -148,7 +166,7 @@ func MigrateUp(ctx context.Context, pool Pool, logger *slog.Logger) error {
 		if applied[migration.Version] {
 			continue
 		}
-		tx, err := pool.Begin(ctx)
+		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return err
 		}
