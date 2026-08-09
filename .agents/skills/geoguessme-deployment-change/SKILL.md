@@ -10,8 +10,8 @@ description:
 
 ## Workflow
 
-1. Follow [deployment/AGENTS.md](../../../deployment/AGENTS.md) and the release
-   invariants in
+1. Follow [deployment/AGENTS.md](../../../deployment/AGENTS.md), including the
+   bounded maintenance scan, change-impact workflow, and release invariants in
    [docs/agent-engineering.md](../../../docs/agent-engineering.md).
 2. Locate the topology: `deployment/compose.*.yaml`, `deployment/caddy/`,
    `deployment/docker/`, `infra/terraform/`, `infra/cloud-init/`.
@@ -23,9 +23,10 @@ description:
 5. Update operational documentation
    ([docs/deployment.md](../../../docs/deployment.md),
    [docs/operations.md](../../../docs/operations.md)) with the change.
-6. Run `make terraform-fmt-check`, `make terraform-test`, `make lint-caddy`,
-   `make compose-validate`, then the complete `make verify` gate including the
-   backup, restart, and reconnect rehearsals.
+6. Run `make impact BASE=origin/dev`, `make terraform-fmt-check`,
+   `make terraform-test`, `make lint-caddy`, `make compose-validate`, then the
+   complete `make verify` gate including the backup, restart, and reconnect
+   rehearsals.
 
 ## Inputs
 

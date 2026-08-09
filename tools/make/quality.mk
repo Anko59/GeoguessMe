@@ -7,6 +7,9 @@
 # same gates; this fragment deliberately does not duplicate them.
 
 ##@ Quality
+impact: ## Explain test capabilities selected by changed paths (BASE=<git-ref>, HEAD=<git-ref>).
+	tools/quality/ci/report-impact.sh "$(if $(BASE),$(BASE),origin/dev)" "$(if $(HEAD),$(HEAD),HEAD)"
+
 format: ## Format tracked source/configuration files in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'git ls-files -z "*.go" | xargs -0 -r gofmt -w && git ls-files -z "*.go" | xargs -0 -r goimports -w'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --write'

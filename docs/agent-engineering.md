@@ -166,6 +166,43 @@ requires its own review, tests, and documentation.
 - Quality interface: all formatting, linting, testing, and building happens
   through Dockerized Make targets. Never bypass hooks or gates.
 
+## Bounded maintenance scan
+
+Agents own the quality of the code immediately surrounding their change, not
+only the shortest implementation of the prompt. Before handoff, inspect the
+changed symbols, their callers, tests, configuration, and nearby comments for:
+
+- duplicated rules or data transformations;
+- dead branches, stale compatibility code, abandoned bug-fix scaffolding, and
+  comments that no longer describe behavior;
+- hardcoded policy that already has a canonical configuration or wire value;
+- responsibilities in the wrong layer or dependencies that cross the package map
+  in the wrong direction;
+- missing failure, cleanup, concurrency, boundary, or regression coverage.
+
+An adjacent cleanup may join the current PR only when all of these are true:
+
+1. It is behavior-preserving and contained in the same owning module.
+2. It changes no API, schema, migration, dependency, deployment, or
+   configuration contract.
+3. The current focused tests cover it, or a deterministic regression test is
+   added.
+4. It is a small minority of the diff and does not obscure the requested change.
+
+Otherwise, record the finding in the pull request with an issue or a durable
+roadmap/compatibility-ledger reference. Do not leave a bare `TODO` or `FIXME`,
+silently discard the finding, or broaden the task without authorization.
+
+## Change-impact manifest
+
+Run `make impact BASE=origin/dev` before selecting focused validation. The
+manifest maps changed paths to capabilities (`backend_unit`, `frontend_unit`,
+`backend_integration`, `browser_e2e`, and `operational`) and preserves the
+conservative `backend`, `frontend`, and `full` decisions consumed by CI. Unknown
+paths deliberately request the complete scope. The manifest helps explain why a
+gate is needed; it never authorizes skipping a gate required by this guide, a
+scoped `AGENTS.md`, or CI.
+
 ## Frontend cache and object-URL ownership
 
 Every module-scoped frontend cache has a single owner that documents its key,

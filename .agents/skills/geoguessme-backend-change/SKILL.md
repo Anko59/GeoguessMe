@@ -10,8 +10,9 @@ description:
 
 ## Workflow
 
-1. Follow [backend/AGENTS.md](../../../backend/AGENTS.md) and the composition
-   rules in [docs/agent-engineering.md](../../../docs/agent-engineering.md).
+1. Follow [backend/AGENTS.md](../../../backend/AGENTS.md), including the bounded
+   maintenance scan and change-impact workflow in
+   [docs/agent-engineering.md](../../../docs/agent-engineering.md).
 2. Locate the responsibility: transport in `backend/handlers/`, persistence in
    `backend/internal/repository/`, business rules in the owning
    `backend/internal/*/` package.
@@ -21,9 +22,9 @@ description:
    `backend/internal/database/migrations/` and keep `make lint-sql` green.
 5. Do not add SQL to handlers, do not read environment variables outside
    `backend/internal/config/`, and do not introduce mutable package globals.
-6. Run `make test-backend`, `make test-race`, focused integration tests, then
-   `make preflight`. Run `make verify` when composition, startup, migrations, or
-   tests change.
+6. Run `make impact BASE=origin/dev`, `make test-backend`, `make test-race`,
+   focused integration tests, then `make preflight`. Run `make verify` when
+   composition, startup, migrations, or tests change.
 
 ## Inputs
 
