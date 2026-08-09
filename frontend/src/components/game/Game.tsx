@@ -17,7 +17,26 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     const { user } = useAuth();
     const [state, dispatch] = useReducer(gameReducer, initialGameState);
     const [clock, setClock] = useState(() => Date.now());
-    const [loadingMedia, setLoadingMedia] = useState(false);
+    const [loadingMediaPhotoId, setLoadingMediaPhotoId] = useState<string>();
+    const activePhotoIdRef = useRef(gameMessage?.photo_id);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        activePhotoIdRef.current = gameMessage?.photo_id;
+    }, [gameMessage?.photo_id]);
+
+    useEffect(
+        () => () => {
+            mountedRef.current = false;
+        },
+        [],
+    );
+
+    const isCurrentPhoto = useCallback(
+        (photoId: string, signal?: AbortSignal): boolean =>
+            mountedRef.current && !signal?.aborted && activePhotoIdRef.current === photoId,
+        [],
+    );
 
     const remaining = useMemo(
         () => (state.deadline ? Math.max(0, Math.ceil((state.deadline - (clock + state.serverOffset)) / 1000)) : 0),
@@ -30,44 +49,65 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     const mediaUrlRef = useRef<string | undefined>(undefined);
     useEffect(() => {
         const previous = mediaUrlRef.current;
-        if (previous && previous !== state.mediaUrl) URL.revokeObjectURL(previous);
+        if (previous?.startsWith('blob:') && previous !== state.mediaUrl) URL.revokeObjectURL(previous);
         mediaUrlRef.current = state.mediaUrl;
     }, [state.mediaUrl]);
     useEffect(
         () => () => {
             const current = mediaUrlRef.current;
-            if (current) URL.revokeObjectURL(current);
+            if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
         },
         [],
     );
 
-    const loadMedia = useCallback(async (url: string): Promise<string> => {
-        if (url.startsWith('http://') || url.startsWith('https://')) return url;
-        setLoadingMedia(true);
-        try {
-            const apiPath = url.startsWith('/api/v1/') ? url.slice('/api/v1'.length) : url;
-            const response = await api.get<Blob>(apiPath, { responseType: 'blob' });
-            return URL.createObjectURL(response.data);
-        } finally {
-            setLoadingMedia(false);
-        }
-    }, []);
+    const loadMedia = useCallback(
+        async (url: string, photoId: string, signal?: AbortSignal): Promise<string> => {
+            if (!isCurrentPhoto(photoId, signal)) throw new DOMException('Stale challenge operation', 'AbortError');
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            setLoadingMediaPhotoId(photoId);
+            try {
+                const apiPath = url.startsWith('/api/v1/') ? url.slice('/api/v1'.length) : url;
+                const response = await api.get<Blob>(apiPath, { responseType: 'blob', signal });
+                const objectUrl = URL.createObjectURL(response.data);
+                if (!isCurrentPhoto(photoId, signal)) {
+                    URL.revokeObjectURL(objectUrl);
+                    throw new DOMException('Stale challenge operation', 'AbortError');
+                }
+                return objectUrl;
+            } finally {
+                if (isCurrentPhoto(photoId, signal)) setLoadingMediaPhotoId(undefined);
+            }
+        },
+        [isCurrentPhoto],
+    );
 
     const acceptChallenge = useCallback(
-        async (photoId: string): Promise<void> => {
+        async (photoId: string, signal?: AbortSignal): Promise<void> => {
             dispatch({ type: 'loading', photoId });
             try {
-                const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`);
+                const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`, undefined, {
+                    signal,
+                });
+                if (!isCurrentPhoto(photoId, signal)) return;
                 const data = response.data;
                 const serverOffset = Date.parse(data.server_time) - Date.now();
                 const serverDeadline = Date.parse(data.view_expires_at);
                 let mediaUrl: string | undefined;
                 let mediaError: unknown;
                 try {
-                    mediaUrl = await loadMedia(data.media_url);
-                    const delivered = await api.post<ChallengeMediaDelivered>(`/challenges/${photoId}/media-delivered`);
+                    mediaUrl = await loadMedia(data.media_url, photoId, signal);
+                    const delivered = await api.post<ChallengeMediaDelivered>(
+                        `/challenges/${photoId}/media-delivered`,
+                        undefined,
+                        { signal },
+                    );
+                    if (!isCurrentPhoto(photoId, signal)) {
+                        if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                        return;
+                    }
                     dispatch({
                         type: 'media-ready',
+                        photoId,
                         mediaUrl,
                         mediaType: data.media_type,
                         deadline: Date.parse(delivered.data.view_expires_at),
@@ -79,48 +119,62 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                     mediaError = loadError;
                     if (mediaUrl) {
                         // The blob URL never entered state; revoke it directly.
-                        URL.revokeObjectURL(mediaUrl);
-                        dispatch({
-                            type: 'media-failed',
-                            message: getAPIErrorMessage(
-                                mediaError,
-                                'The viewing window could not be started. Reopen the challenge to try again.',
-                            ),
-                        });
+                        if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                        if (isCurrentPhoto(photoId, signal)) {
+                            dispatch({
+                                type: 'media-failed',
+                                photoId,
+                                message: getAPIErrorMessage(
+                                    mediaError,
+                                    'The viewing window could not be started. Reopen the challenge to try again.',
+                                ),
+                            });
+                        }
                         return;
                     }
                 }
+                if (!isCurrentPhoto(photoId, signal)) return;
                 // The media could not be loaded. If the viewing window has
                 // already elapsed (e.g. the player already viewed this
                 // challenge), they may still submit a guess.
                 if (serverDeadline <= Date.now() + serverOffset) {
-                    dispatch({ type: 'media-unavailable', deadline: serverDeadline, serverOffset });
+                    dispatch({ type: 'media-unavailable', photoId, deadline: serverDeadline, serverOffset });
                     return;
                 }
                 dispatch({
                     type: 'accept-failed',
+                    photoId,
                     message: getAPIErrorMessage(mediaError, 'This challenge is no longer available.'),
                 });
             } catch (requestError: unknown) {
+                if (!isCurrentPhoto(photoId, signal)) return;
                 dispatch({
                     type: 'accept-failed',
+                    photoId,
                     message: getAPIErrorMessage(requestError, 'This challenge is no longer available.'),
                 });
             }
         },
-        [loadMedia, onChallengeStatusChange],
+        [isCurrentPhoto, loadMedia, onChallengeStatusChange],
     );
 
     const loadResults = useCallback(
-        async (photoId: string, showError = true): Promise<boolean> => {
+        async (photoId: string, showError = true, signal?: AbortSignal): Promise<boolean> => {
             dispatch({ type: 'loading', photoId });
             try {
-                const response = await api.get<ChallengeResults>(`/challenges/${photoId}/results`);
+                const response = await api.get<ChallengeResults>(`/challenges/${photoId}/results`, { signal });
+                if (!isCurrentPhoto(photoId, signal)) return false;
                 const results = response.data;
                 let mediaUrl: string | undefined;
-                if (results.media_available && results.media_url) mediaUrl = await loadMedia(results.media_url);
+                if (results.media_available && results.media_url)
+                    mediaUrl = await loadMedia(results.media_url, photoId, signal);
+                if (!isCurrentPhoto(photoId, signal)) {
+                    if (mediaUrl?.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                    return false;
+                }
                 dispatch({
                     type: 'results-ready',
+                    photoId,
                     mediaUrl,
                     mediaType: results.media_type ?? undefined,
                     serverOffset: Date.parse(results.server_time) - Date.now(),
@@ -129,16 +183,17 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 onChallengeStatusChange?.(photoId, 'results');
                 return true;
             } catch (requestError: unknown) {
-                if (showError) {
+                if (showError && isCurrentPhoto(photoId, signal)) {
                     dispatch({
                         type: 'results-failed',
+                        photoId,
                         message: getAPIErrorMessage(requestError, 'Results are not available yet.'),
                     });
                 }
                 return false;
             }
         },
-        [loadMedia, onChallengeStatusChange],
+        [isCurrentPhoto, loadMedia, onChallengeStatusChange],
     );
 
     const submitGuess = useCallback(async (): Promise<void> => {
@@ -192,17 +247,21 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         }
         // The `loading` action resets the celebration overlay and map pin for
         // the incoming challenge, exactly like the pre-refactor effect did.
+        const controller = new AbortController();
         if (gameMessage.user_id === user.id) {
             void (async () => {
-                await loadResults(photoId);
+                await loadResults(photoId, true, controller.signal);
             })();
-            return;
+            return () => controller.abort();
         }
         void (async () => {
-            const resultsAvailable = await loadResults(photoId, false);
-            if (!resultsAvailable) await acceptChallenge(photoId);
+            const resultsAvailable = await loadResults(photoId, false, controller.signal);
+            if (!resultsAvailable && isCurrentPhoto(photoId, controller.signal)) {
+                await acceptChallenge(photoId, controller.signal);
+            }
         })();
-    }, [acceptChallenge, gameMessage, loadResults, user]);
+        return () => controller.abort();
+    }, [acceptChallenge, gameMessage, isCurrentPhoto, loadResults, user]);
 
     const feedbackOverlay = state.feedback ? (
         <GuessScoreFeedback
@@ -215,7 +274,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     return (
         <GameView
             state={state}
-            loadingMedia={loadingMedia}
+            loadingMedia={loadingMediaPhotoId === gameMessage?.photo_id}
             remaining={remaining}
             serverNowMs={clock + state.serverOffset}
             feedback={feedbackOverlay}
