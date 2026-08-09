@@ -50,6 +50,12 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
 
+bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR gate.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools
+	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff caddy terraform
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+
 bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools
