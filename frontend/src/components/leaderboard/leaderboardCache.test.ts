@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
+import { clearLeaderboardCache, getCachedLeaderboard, refreshLeaderboard } from './leaderboardCache';
 
 const mocks = vi.hoisted(() => ({
     get: vi.fn(),
@@ -12,6 +12,7 @@ vi.mock('../../api', () => ({
 describe('leaderboardCache', () => {
     beforeEach(() => {
         mocks.get.mockReset();
+        clearLeaderboardCache();
     });
 
     it('deduplicates concurrent requests and keeps results scoped to the signed-in user', async () => {
@@ -95,5 +96,35 @@ describe('leaderboardCache', () => {
             },
         ]);
         expect(getCachedLeaderboard('user-b', 'group-a', 'week', 'total')).toBeUndefined();
+    });
+
+    it('expires cached entries after the TTL so stale rankings are never served', async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.get.mockResolvedValue({ data: [] });
+            await refreshLeaderboard('user-a', 'group-a', 'week', 'total');
+            expect(getCachedLeaderboard('user-a', 'group-a', 'week', 'total')).toEqual([]);
+
+            vi.advanceTimersByTime(60_001);
+            expect(getCachedLeaderboard('user-a', 'group-a', 'week', 'total')).toBeUndefined();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('evicts the oldest entries once the cache reaches its bound', async () => {
+        mocks.get.mockResolvedValue({ data: [] });
+        for (let index = 0; index < 51; index += 1) {
+            await refreshLeaderboard(`user-${index}`, 'group-a', 'week', 'total');
+        }
+        expect(getCachedLeaderboard('user-0', 'group-a', 'week', 'total')).toBeUndefined();
+        expect(getCachedLeaderboard('user-50', 'group-a', 'week', 'total')).toEqual([]);
+    });
+
+    it('clearLeaderboardCache drops every entry and in-flight request', async () => {
+        mocks.get.mockResolvedValue({ data: [] });
+        await refreshLeaderboard('user-a', 'group-a', 'week', 'total');
+        clearLeaderboardCache();
+        expect(getCachedLeaderboard('user-a', 'group-a', 'week', 'total')).toBeUndefined();
     });
 });
