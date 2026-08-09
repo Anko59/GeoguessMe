@@ -11,7 +11,7 @@ test.describe('Email flows via Mailpit', () => {
         await expect(page.locator('text=Email not verified')).toBeVisible();
 
         // Get the verification link from Mailpit
-        const verifyUrl = await getMailpitLink(email, '/verify-email');
+        const verifyUrl = await getMailpitLink('Verify your GeoGuessMe email', '/verify-email');
         await page.goto(verifyUrl);
 
         // Should show success message
@@ -41,7 +41,7 @@ test.describe('Email flows via Mailpit', () => {
         await expect(page.locator('.auth-success')).toBeVisible({ timeout: 10000 });
 
         // Get the reset link from Mailpit
-        const resetUrl = await getMailpitLink(email, '/reset-password');
+        const resetUrl = await getMailpitLink('Reset your GeoGuessMe password', '/reset-password');
         await page.goto(resetUrl);
 
         // Set new password
