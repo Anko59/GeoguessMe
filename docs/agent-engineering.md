@@ -156,6 +156,27 @@ requires its own review, tests, and documentation.
 - Quality interface: all formatting, linting, testing, and building happens
   through Dockerized Make targets. Never bypass hooks or gates.
 
+## Frontend cache and object-URL ownership
+
+Every module-scoped frontend cache has a single owner that documents its key,
+lifetime, eviction, and object-URL revocation. Blob URLs must be revoked exactly
+once (see the Object URL cleanup invariant above).
+
+| Cache                      | Owner                                                                                    | Key                            | Lifetime / invalidation                                            | Eviction bound                                         | URL revocation                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Avatar photos              | `frontend/src/components/common/avatarCache.ts` (shared `utils/objectUrlCache.ts` store) | user id                        | `bustAvatarCache` on avatar upload; session-scoped otherwise       | none (bounded by distinct users rendered per session)  | `store.bust` revokes the blob URL                                                   |
+| Group photos               | `frontend/src/pages/groups/groupPhotoCache.ts` (shared store)                            | group id                       | `bustGroupPhotoCache` on photo update                              | none (bounded by distinct groups rendered per session) | `store.bust` revokes the blob URL; the static `/logo.png` fallback is never revoked |
+| Leaderboards               | `frontend/src/components/leaderboard/leaderboardCache.ts`                                | `userID:groupID:period:metric` | 60s TTL; `clearLeaderboardCache` is the explicit invalidation path | max 50 entries, oldest evicted                         | n/a (plain data)                                                                    |
+| PWA session + message hint | `frontend/src/utils/pwaSessionCache.ts`                                                  | localStorage keys              | `clearCachedSession` on logout                                     | 200 cached messages per user                           | n/a                                                                                 |
+| Challenge media (Game)     | `Game` component (`mediaUrlRef` in `frontend/src/components/game/Game.tsx`)              | per challenge                  | replaced on state transition, close, or unmount                    | n/a                                                    | revoked exactly once when replaced, cleared, or unmounted                           |
+| Chat attachments           | `ChatAttachment`                                                                         | per media id                   | replaced on media id change                                        | n/a                                                    | revoked on change/unmount                                                           |
+| Recorded video             | `useVideoRecording` (camera)                                                             | per recording                  | replaced per take                                                  | n/a                                                    | revoked on replace/unmount                                                          |
+
+The shared `createObjectUrlStore` (`frontend/src/utils/objectUrlCache.ts`) is
+used only by caches with identical lifecycle semantics (avatar and group
+photos); data caches with different lifetimes (leaderboard, PWA session) must
+not use it.
+
 ## Compatibility ledger
 
 Temporary compatibility paths are listed here with their tests, replacement, and
