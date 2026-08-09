@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"geoguessme/internal/database"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository/groups"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,37 +17,29 @@ const (
 	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at"
 )
 
-func CreateUser(user *models.User) error {
-	return CreateUserContext(context.Background(), user)
-}
-
-func CreateUserContext(ctx context.Context, user *models.User) error {
+// CreateUser inserts a new account.
+func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
 	query := `INSERT INTO users (id, username, email, email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`
-	_, err := database.DB.Exec(ctx, query, user.ID, user.Username, user.Email, strings.ToLower(strings.TrimSpace(user.Email)), user.Password, user.Avatar, user.CreatedAt)
+	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, user.Email, strings.ToLower(strings.TrimSpace(user.Email)), user.Password, user.Avatar, user.CreatedAt)
 	return err
 }
 
-func GetUserByUsername(username string) (*models.User, error) {
-	return GetUserByUsernameContext(context.Background(), username)
-}
-
-func GetUserByUsernameContext(ctx context.Context, username string) (*models.User, error) {
+// GetUserByUsername resolves an account by its unique username.
+func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
 	query := `SELECT ` + userColumns + ` FROM users WHERE username = $1 AND deleted_at IS NULL`
-	return scanUser(database.DB.QueryRow(ctx, query, username))
+	return scanUser(r.pool.QueryRow(ctx, query, username))
 }
 
-func GetUserByEmail(email string) (*models.User, error) {
-	return GetUserByEmailContext(context.Background(), email)
-}
-
-func GetUserByEmailContext(ctx context.Context, email string) (*models.User, error) {
+// GetUserByEmail resolves an account by its normalized email address.
+func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `SELECT ` + userColumns + ` FROM users WHERE email_normalized = $1 AND deleted_at IS NULL`
-	return scanUser(database.DB.QueryRow(ctx, query, strings.ToLower(strings.TrimSpace(email))))
+	return scanUser(r.pool.QueryRow(ctx, query, strings.ToLower(strings.TrimSpace(email))))
 }
 
-func GetUserByID(ctx context.Context, userID string) (*models.User, error) {
+// GetUserByID resolves an account by id.
+func (r *Repository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	query := `SELECT ` + userColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
-	return scanUser(database.DB.QueryRow(ctx, query, userID))
+	return scanUser(r.pool.QueryRow(ctx, query, userID))
 }
 
 type UserScoreStats struct {
@@ -56,11 +48,12 @@ type UserScoreStats struct {
 	AverageScore float64
 }
 
-func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStats, error) {
+// GetUserScoreStats aggregates a player's guess statistics.
+func (r *Repository) GetUserScoreStats(ctx context.Context, userID string) (UserScoreStats, error) {
 	var stats UserScoreStats
 	var totalPoints, guessCount int64
 	var averageScore float64
-	err := database.DB.QueryRow(ctx, `
+	err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(score), 0), COUNT(*), COALESCE(AVG(score), 0)
 		FROM guesses
 		WHERE user_id = $1`, userID).Scan(&totalPoints, &guessCount, &averageScore)
@@ -73,13 +66,11 @@ func GetUserScoreStatsContext(ctx context.Context, userID string) (UserScoreStat
 	return stats, nil
 }
 
-// GetGlobalRankContext calculates a stable snapshot in one query. Deleted
-// accounts are excluded from both the requested rank and the population. The
-// returned GlobalRankStats type is defined in the groups persistence slice
-// (see the type alias in groups.go).
-func GetGlobalRankContext(ctx context.Context, userID string) (GlobalRankStats, error) {
+// GetGlobalRank calculates a stable snapshot in one query. Deleted accounts
+// are excluded from both the requested rank and the population.
+func (r *Repository) GetGlobalRank(ctx context.Context, userID string) (groups.GlobalRankStats, error) {
 	var rank, totalPlayers int64
-	err := database.DB.QueryRow(ctx, `
+	err := r.pool.QueryRow(ctx, `
 		WITH totals AS (
 			SELECT g.user_id, SUM(g.score) AS total_points
 			FROM guesses g
@@ -92,9 +83,9 @@ func GetGlobalRankContext(ctx context.Context, userID string) (GlobalRankStats, 
 		SELECT COALESCE(MAX(global_rank) FILTER (WHERE user_id = $1), 0), COUNT(*)
 		FROM ranked`, userID).Scan(&rank, &totalPlayers)
 	if err != nil {
-		return GlobalRankStats{}, err
+		return groups.GlobalRankStats{}, err
 	}
-	return GlobalRankStats{Rank: int(rank), TotalPlayers: int(totalPlayers)}, nil
+	return groups.GlobalRankStats{Rank: int(rank), TotalPlayers: int(totalPlayers)}, nil
 }
 
 // AuthStatus summarises what protected middleware must check on every request:
@@ -104,9 +95,11 @@ type AuthStatus struct {
 	AuthVersion int
 }
 
-func GetUserAuthStatus(ctx context.Context, userID string) (AuthStatus, error) {
+// GetUserAuthStatus reports the account's activity and auth version for
+// protected-route middleware.
+func (r *Repository) GetUserAuthStatus(ctx context.Context, userID string) (AuthStatus, error) {
 	var version int
-	err := database.DB.QueryRow(ctx, `SELECT auth_version FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&version)
+	err := r.pool.QueryRow(ctx, `SELECT auth_version FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthStatus{Active: false}, nil
 	}
@@ -138,8 +131,9 @@ type RefreshSession struct {
 	ExpiresAt time.Time
 }
 
-func CreateRefreshSession(ctx context.Context, session RefreshSession, tokenHash string) error {
-	_, err := database.DB.Exec(ctx, `INSERT INTO refresh_sessions(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`, session.ID, session.UserID, tokenHash, session.ExpiresAt)
+// CreateRefreshSession persists a refresh session with its hashed token.
+func (r *Repository) CreateRefreshSession(ctx context.Context, session RefreshSession, tokenHash string) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO refresh_sessions(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`, session.ID, session.UserID, tokenHash, session.ExpiresAt)
 	return err
 }
 
@@ -147,8 +141,8 @@ func CreateRefreshSession(ctx context.Context, session RefreshSession, tokenHash
 // account is still active, and installs the replacement session. Returning a
 // non-nil user signals success; a nil user signals the presented token was
 // invalid, expired, or already used.
-func RotateRefreshSession(ctx context.Context, presentedHash, replacementID, replacementHash string, replacementExpiresAt, now time.Time) (*models.User, error) {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) RotateRefreshSession(ctx context.Context, presentedHash, replacementID, replacementHash string, replacementExpiresAt, now time.Time) (*models.User, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -179,20 +173,17 @@ func RotateRefreshSession(ctx context.Context, presentedHash, replacementID, rep
 	return user, nil
 }
 
-func RevokeRefreshSession(ctx context.Context, sessionID string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1`, sessionID)
-	return err
-}
-
-func RevokeRefreshSessionByHash(ctx context.Context, tokenHash string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND revoked_at IS NULL`, tokenHash)
+// RevokeRefreshSessionByHash revokes an active refresh session by its token
+// hash, as used by explicit logout.
+func (r *Repository) RevokeRefreshSessionByHash(ctx context.Context, tokenHash string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND revoked_at IS NULL`, tokenHash)
 	return err
 }
 
 // UserIDByRefreshHash resolves the owner of a refresh session for logout-all.
-func UserIDByRefreshHash(ctx context.Context, tokenHash string) (string, error) {
+func (r *Repository) UserIDByRefreshHash(ctx context.Context, tokenHash string) (string, error) {
 	var userID string
-	err := database.DB.QueryRow(ctx, `SELECT user_id FROM refresh_sessions WHERE token_hash = $1`, tokenHash).Scan(&userID)
+	err := r.pool.QueryRow(ctx, `SELECT user_id FROM refresh_sessions WHERE token_hash = $1`, tokenHash).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -201,21 +192,24 @@ func UserIDByRefreshHash(ctx context.Context, tokenHash string) (string, error) 
 
 // BumpAuthVersion invalidates every outstanding access token for a user by
 // changing the value their claims must match. Used by explicit "logout all".
-func BumpAuthVersion(ctx context.Context, userID string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE users SET auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID)
+func (r *Repository) BumpAuthVersion(ctx context.Context, userID string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID)
 	return err
 }
 
-func RevokeAllRefreshSessions(ctx context.Context, userID string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID)
+// RevokeAllRefreshSessions revokes every active refresh session for a user.
+func (r *Repository) RevokeAllRefreshSessions(ctx context.Context, userID string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID)
 	return err
 }
 
-func InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, expiresAt time.Time) error {
+// InsertOneTimeToken stores a fresh email-verification or password-reset
+// token, replacing any unused token of the same kind for the user.
+func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, expiresAt time.Time) error {
 	if table != "email_verification_tokens" && table != "password_reset_tokens" {
 		return errors.New("invalid one-time token table")
 	}
-	tx, err := database.DB.Begin(ctx)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -232,8 +226,8 @@ func InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, exp
 // VerifyEmailTransaction consumes a verification token and marks the account
 // verified in a single transaction so a crash cannot consume the token without
 // updating the account.
-func VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -255,8 +249,8 @@ func VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
 // ResetPasswordTransaction consumes a reset token, updates the password hash,
 // bumps the auth version (invalidating outstanding access tokens), and revokes
 // every refresh session — all atomically.
-func ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash string) error {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -282,20 +276,10 @@ func ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash strin
 // already consumed.
 var ErrTokenInvalid = errors.New("token is invalid or expired")
 
-func MarkEmailVerified(ctx context.Context, userID string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID)
-	return err
-}
-
-func UpdatePassword(ctx context.Context, userID, passwordHash string) error {
-	_, err := database.DB.Exec(ctx, `UPDATE users SET password = $1, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, userID)
-	return err
-}
-
 // SetUserAvatar stores the avatar marker for a user without touching any
 // other profile field. It backs the authenticated avatar upload endpoint.
-func SetUserAvatar(ctx context.Context, userID, avatar string) error {
-	_, err := database.DB.Exec(ctx,
+func (r *Repository) SetUserAvatar(ctx context.Context, userID, avatar string) error {
+	_, err := r.pool.Exec(ctx,
 		`UPDATE users SET avatar = $1, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = $2 AND deleted_at IS NULL`, avatar, userID)
 	return err
@@ -303,18 +287,18 @@ func SetUserAvatar(ctx context.Context, userID, avatar string) error {
 
 // UpdateProfile changes the public account fields. Changing the email address
 // clears verification so the new address must be verified independently.
-func UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
-	_, err := database.DB.Exec(ctx, `UPDATE users SET username = $1, email = $2, email_normalized = $3, avatar = $4, email_verified_at = CASE WHEN email_normalized <> $3 THEN NULL ELSE email_verified_at END, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND deleted_at IS NULL`, username, email, strings.ToLower(strings.TrimSpace(email)), avatar, userID)
+func (r *Repository) UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET username = $1, email = $2, email_normalized = $3, avatar = $4, email_verified_at = CASE WHEN email_normalized <> $3 THEN NULL ELSE email_verified_at END, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND deleted_at IS NULL`, username, email, strings.ToLower(strings.TrimSpace(email)), avatar, userID)
 	if err != nil {
 		return nil, err
 	}
-	return GetUserByID(ctx, userID)
+	return r.GetUserByID(ctx, userID)
 }
 
 // ChangePassword updates the password and invalidates every existing session
 // atomically, including the session used for the request.
-func ChangePassword(ctx context.Context, userID, passwordHash string) error {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) ChangePassword(ctx context.Context, userID, passwordHash string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -331,8 +315,8 @@ func ChangePassword(ctx context.Context, userID, passwordHash string) error {
 // DeleteUserCascade removes the account and every related row, and enqueues
 // durable deletion jobs for the media the account authored so object storage
 // can never be orphaned. The returned keys are for observability only.
-func DeleteUserCascade(ctx context.Context, userID string) ([]string, error) {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) DeleteUserCascade(ctx context.Context, userID string) ([]string, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +361,9 @@ func DeleteUserCascade(ctx context.Context, userID string) ([]string, error) {
 	return keys, nil
 }
 
-func CleanupAuthTokens(ctx context.Context) error {
-	_, err := database.DB.Exec(ctx, `DELETE FROM refresh_sessions WHERE expires_at < CURRENT_TIMESTAMP OR revoked_at < CURRENT_TIMESTAMP - interval '30 days'; DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM websocket_tickets WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'`)
+// CleanupAuthTokens deletes expired one-time and refresh tokens plus expired
+// WebSocket tickets. It backs the periodic cleanup worker.
+func (r *Repository) CleanupAuthTokens(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM refresh_sessions WHERE expires_at < CURRENT_TIMESTAMP OR revoked_at < CURRENT_TIMESTAMP - interval '30 days'; DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM websocket_tickets WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'`)
 	return err
 }

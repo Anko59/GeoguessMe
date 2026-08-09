@@ -6,15 +6,21 @@ Go backend at `backend/`. Applies in addition to the root
 
 ## Composition and dependencies
 
-- `backend/main.go` is the composition root: it validates configuration, opens
-  the pool, starts background workers, and owns process lifecycle. Route
-  registration lives in `backend/routes.go`.
-- Do not add mutable package-level globals. The `database.DB` global and related
-  handler globals are tracked migration debt (see the compatibility ledger);
-  keep them from growing and remove them when migrating a slice.
-- Persistence belongs in `backend/internal/repository/`. Handlers perform
-  transport parsing, authorization delegation, service calls, and response
-  writing. Never add SQL to a handler.
+- `backend/app.go` is the dependency composition root: it holds every injected
+  runtime dependency (auth service, repositories, store, mailer, push, hub,
+  clock) and owns route registration. `backend/main.go` validates configuration,
+  opens the pool, starts background workers, and owns process lifecycle.
+- Do not add mutable package-level globals. The `database.DB` global, the
+  handler runtime globals, and the package-level auth token state were removed
+  in PR 7; new code must reach dependencies through the composition root. The
+  sole allowlisted exception is the rate-limiter singleton in
+  `backend/internal/middleware/rate_limit.go` (process-global rate-limiting
+  infra; to be formalized in PR 14's architecture-checker allowlist).
+- Persistence belongs in `backend/internal/repository/` (and its responsibility
+  sub-packages such as `backend/internal/repository/chat/`,
+  `backend/internal/repository/groups/`). Handlers perform transport parsing,
+  authorization delegation, service calls, and response writing. Never add SQL
+  to a handler.
 - `backend/internal/config/` is the only package that reads environment
   variables. Store construction and runtime packages must not call `os.Getenv`.
 

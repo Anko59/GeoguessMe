@@ -16,6 +16,7 @@ import (
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 )
 
@@ -56,12 +57,11 @@ func multipartUploadToGroups(t *testing.T, groupIDs []string, hideLocation bool)
 }
 
 func TestUploadPhotoToMultipleGroups(t *testing.T) {
-	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	repos := repository.NewRepository(mock)
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupA := "00000000-0000-0000-0000-000000000001"
@@ -92,12 +92,11 @@ func TestUploadPhotoToMultipleGroups(t *testing.T) {
 }
 
 func TestUploadPhotoHideLocation(t *testing.T) {
-	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	repos := repository.NewRepository(mock)
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
@@ -118,8 +117,7 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 }
 
 func TestChallengeResultsHideLocation(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	gameAPI := newGameAPI(t, mock)
 	now := time.Now().UTC()
 	groupID := "00000000-0000-0000-0000-000000000001"
@@ -183,8 +181,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 }
 
 func TestChallengeResultsAndChatRejection(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	gameAPI := newGameAPI(t, mock)
 	now := time.Now().UTC()
 	groupID := "00000000-0000-0000-0000-000000000001"
@@ -217,12 +214,11 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 // at the first full delivery, and a re-fetch after the window is always
 // denied (view-once).
 func TestChallengeMediaViewWindow(t *testing.T) {
-	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	repos := repository.NewRepository(mock)
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -245,8 +241,8 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(-time.Minute)))
-	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
-		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(RuntimeConfig.ViewWindow)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(handlerConfig().ViewWindow)))
 	if recorder := serve(t); recorder.Code != http.StatusOK {
 		t.Fatalf("never-delivered media = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -266,7 +262,7 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(now.Add(-time.Minute), now.Add(time.Hour)))
-	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
 		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(time.Hour)))
 	if recorder := serve(t); recorder.Code != http.StatusOK {
 		t.Fatalf("within-window re-fetch = %d (%s)", recorder.Code, recorder.Body.String())
@@ -274,13 +270,12 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 }
 
 func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	gameAPI := newGameAPI(t, mock)
 	photoID := "00000000-0000-0000-0000-000000000002"
-	expiresAt := time.Now().UTC().Add(RuntimeConfig.ViewWindow)
+	expiresAt := time.Now().UTC().Add(handlerConfig().ViewWindow)
 	mock.ExpectQuery("UPDATE challenge_views").
-		WithArgs(photoID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
+		WithArgs(photoID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
 		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(expiresAt))
 	request := requestWithUser(http.MethodPost, "/", "", "user-1")
 	request.SetPathValue("photoID", photoID)
@@ -291,12 +286,134 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	}
 }
 
+// guessPhotoRow builds the photo row the challenge guess path reads under a
+// row lock, in the canonical scanPhoto column order.
+func guessPhotoRow(photo *models.Photo) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "hide_location", "created_at", "expires_at", "retention_at"}).
+		AddRow(photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt)
+}
+
+// TestSubmitChallengeGuessBranches exercises every documented response of the
+// guess endpoint: coordinate validation, the membership/ownership/expiry/view
+// gates enforced by the persistence layer, and the idempotent duplicate path.
+func TestSubmitChallengeGuessBranches(t *testing.T) {
+	photoID := "00000000-0000-0000-0000-000000000002"
+	now := time.Now().UTC()
+	photo := &models.Photo{ID: photoID, UserID: "user-2", GroupID: "00000000-0000-0000-0000-000000000001", Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(2 * time.Hour), RetentionAt: now.Add(24 * time.Hour)}
+	guessRequest := func(body string) *http.Request {
+		request := requestWithUser(http.MethodPost, "/", body, "user-1")
+		request.SetPathValue("photoID", photoID)
+		return request
+	}
+
+	t.Run("invalid coordinates rejected before persistence", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":200,"long":0}`), http.StatusBadRequest)
+	})
+
+	t.Run("missing challenge is 404", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).
+			WillReturnRows(pgxmock.NewRows([]string{"id"}))
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusNotFound)
+	})
+
+	t.Run("non-member is 403", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusForbidden)
+	})
+
+	t.Run("own challenge is 403", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		ownPhoto := *photo
+		ownPhoto.UserID = "user-1"
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(&ownPhoto))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusForbidden)
+	})
+
+	t.Run("expired challenge is 410", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		expired := *photo
+		expired.ExpiresAt = now.Add(-time.Minute)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(&expired))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusGone)
+	})
+
+	t.Run("never-viewed challenge is 403", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at FROM challenge_views").
+			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusForbidden)
+	})
+
+	t.Run("open viewing window is 409", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at FROM challenge_views").
+			WithArgs(photoID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).
+				AddRow(time.Now(), now.Add(time.Hour)))
+		mock.ExpectRollback()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusConflict)
+	})
+
+	t.Run("duplicate guess returns 200 without a new broadcast", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+			WithArgs(photoID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at"}).
+				AddRow("guess-1", photoID, "user-1", photo.GroupID, 48.8, 2.3, 4000, 100, now))
+		mock.ExpectCommit()
+		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusOK)
+	})
+}
+
 func TestReactionEmojiAliasIsMapped(t *testing.T) {
 	// Pins the legacy request-field alias (PR 12 removes it): a reaction sent
 	// via the emoji field must be accepted and treated as the reaction key so
 	// old clients keep working.
-	setupHandlers(t)
-	mock := handlerMock(t)
+	mock := newMockPool(t)
 	chatAPI := newChatAPI(t, mock, nil, nil)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	messageID := "00000000-0000-0000-0000-000000000002"

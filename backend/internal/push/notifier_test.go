@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"geoguessme/internal/config"
-	"geoguessme/internal/database"
 
 	"github.com/pashagolub/pgxmock/v4"
 )
@@ -32,19 +31,16 @@ func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := database.DB
-	database.DB = mock
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		database.DB = previous
 	})
 	mock.ExpectQuery("group_notification_preferences").WithArgs("group-1", "user-1").WillReturnRows(
 		pgxmock.NewRows([]string{"id", "username"}).AddRow("user-2", "bob"),
 	)
-	targets, err := (pgStore{}).GroupTargets(context.Background(), "group-1", "user-1")
+	targets, err := (pgStore{pool: mock}).GroupTargets(context.Background(), "group-1", "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}

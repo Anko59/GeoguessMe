@@ -18,7 +18,7 @@ import (
 // unit-testable without booting the full API server. The metrics authentication
 // decision is centralized in config.Config.MetricsAuthRequired so every caller
 // applies the same rule.
-func registerSystemRoutes(mux *http.ServeMux, cfg *config.Config, metrics *middleware.Metrics, store storage.ObjectStore) {
+func registerSystemRoutes(mux *http.ServeMux, cfg *config.Config, pool database.Pool, metrics *middleware.Metrics, store storage.ObjectStore) {
 	// Test-only control endpoints: available only when APP_ENV=test so the
 	// integration suite can manipulate rate-limiter state without restarts.
 	if cfg.IsTest() {
@@ -43,7 +43,7 @@ func registerSystemRoutes(mux *http.ServeMux, cfg *config.Config, metrics *middl
 		writePlain(w, http.StatusOK, "ok\n")
 	})
 	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
-		if err := ready(r.Context(), store); err != nil {
+		if err := ready(r.Context(), pool, store); err != nil {
 			writePlain(w, http.StatusServiceUnavailable, "not ready\n")
 			return
 		}
@@ -60,11 +60,11 @@ func registerSystemRoutes(mux *http.ServeMux, cfg *config.Config, metrics *middl
 // ready reports whether every runtime dependency can serve traffic. It backs
 // the /health/ready endpoint and is kept separate from process lifecycle so it
 // can be exercised directly in tests.
-func ready(ctx context.Context, store storage.ObjectStore) error {
-	if database.DB == nil {
+func ready(ctx context.Context, pool database.Pool, store storage.ObjectStore) error {
+	if pool == nil {
 		return fmt.Errorf("database unavailable")
 	}
-	if err := database.DB.Ping(ctx); err != nil {
+	if err := pool.Ping(ctx); err != nil {
 		return err
 	}
 	return store.Health(ctx)

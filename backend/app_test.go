@@ -44,8 +44,8 @@ func newCompositionPool(t *testing.T) pgxmock.PgxPoolIface {
 // mutable state, each answers from its own repository, and each builds its own
 // working route table.
 func TestAppInstancesAreIndependent(t *testing.T) {
-	cfgA := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}}
-	cfgB := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}}
+	cfgA := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}, JWTSecret: "composition-secret-A-that-is-longer-than-32-bytes"}
+	cfgB := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}, JWTSecret: "composition-secret-B-that-is-longer-than-32-bytes"}
 	storeA, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +79,8 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		"mailer": appA.Mailer == appB.Mailer, "push": appA.Push == appB.Push,
 		"hub": appA.Hub == appB.Hub, "logger": appA.Logger == appB.Logger,
 		"metrics": appA.Metrics == appB.Metrics, "groups": appA.Groups == appB.Groups,
-		"chat": appA.Chat == appB.Chat,
+		"chat": appA.Chat == appB.Chat, "auth": appA.Auth == appB.Auth,
+		"authapi": appA.AuthAPI == appB.AuthAPI,
 	} {
 		if shared {
 			t.Fatalf("composition instances share the %s dependency", name)

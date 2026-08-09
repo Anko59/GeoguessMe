@@ -287,25 +287,6 @@ func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]Gue
 	return guesses, rows.Err()
 }
 
-// UserGuessedPhotoIDs returns the ids of every challenge in a group the user
-// has guessed, oldest first.
-func (r *Repository) UserGuessedPhotoIDs(ctx context.Context, groupID, userID string) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT photo_id FROM guesses WHERE group_id = $1 AND user_id = $2 ORDER BY created_at`, groupID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"

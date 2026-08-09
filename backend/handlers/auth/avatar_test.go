@@ -1,8 +1,9 @@
-package handlers
+package auth
 
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -13,29 +14,32 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"geoguessme/internal/models"
-	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
 	"github.com/pashagolub/pgxmock/v4"
 )
 
-func setupAvatarStore(t *testing.T) *storage.LocalStore {
+func newAvatarAPI(t *testing.T, mock pgxmock.PgxPoolIface, store storage.ObjectStore) *AuthAPI {
+	t.Helper()
+	api := newAuthAPI(t, mock, store)
+	return api
+}
+
+func avatarStore(t *testing.T) *storage.LocalStore {
 	t.Helper()
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
 	return store
 }
 
 func TestUploadAvatarSuccess(t *testing.T) {
-	setupHandlers(t)
-	store := setupAvatarStore(t)
-	mock := handlerMock(t)
+	store := avatarStore(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, store)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
@@ -43,11 +47,10 @@ func TestUploadAvatarSuccess(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(updated))
 	request := avatarUploadRequest(t, mustDecodeBase64(onePixelPNG))
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	// Verify the object was stored.
 	reader, err := store.Get(context.Background(), avatarStorageKey("user-1"))
 	if err != nil {
 		t.Fatal(err)
@@ -60,11 +63,10 @@ func TestUploadAvatarSuccess(t *testing.T) {
 }
 
 func TestUploadAvatarRejectsNonImage(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
+	api := newAvatarAPI(t, newAuthMockPool(t), avatarStore(t))
 	request := avatarUploadRequest(t, []byte("not an image"))
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("non-image upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -74,12 +76,11 @@ func TestUploadAvatarRejectsNonImage(t *testing.T) {
 }
 
 func TestUploadAvatarRejectsOversizedMultipartWithHelpfulMessage(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
-	RuntimeConfig.AvatarMaxBytes = 2 * 1024 * 1024
+	api := newAvatarAPI(t, newAuthMockPool(t), avatarStore(t))
+	api.cfg.AvatarMaxBytes = 2 * 1024 * 1024
 	request := avatarUploadRequest(t, bytes.Repeat([]byte{'x'}, 4*1024*1024))
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("oversized upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -89,12 +90,11 @@ func TestUploadAvatarRejectsOversizedMultipartWithHelpfulMessage(t *testing.T) {
 }
 
 func TestUploadAvatarRejectsMalformedMultipartWithHelpfulMessage(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
+	api := newAvatarAPI(t, newAuthMockPool(t), avatarStore(t))
 	request := requestWithUser(http.MethodPost, "/", "not multipart data", "user-1")
 	request.Header.Set("Content-Type", "multipart/form-data; boundary=missing")
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("malformed upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -104,8 +104,7 @@ func TestUploadAvatarRejectsMalformedMultipartWithHelpfulMessage(t *testing.T) {
 }
 
 func TestUploadAvatarRejectsMissingPhoto(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
+	api := newAvatarAPI(t, newAuthMockPool(t), avatarStore(t))
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if err := writer.WriteField("not_photo", "ignored"); err != nil {
@@ -119,16 +118,16 @@ func TestUploadAvatarRejectsMissingPhoto(t *testing.T) {
 	request.ContentLength = int64(body.Len())
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("missing photo status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
 
 func TestUploadAvatarRejectsWrongMethod(t *testing.T) {
-	setupHandlers(t)
+	api := newAvatarAPI(t, newAuthMockPool(t), nil)
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
+	api.UploadAvatar(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method check status = %d", recorder.Code)
 	}
@@ -137,19 +136,18 @@ func TestUploadAvatarRejectsWrongMethod(t *testing.T) {
 const avatarTestUserID = "11111111-1111-1111-1111-111111111111"
 
 func TestServeUserAvatarSuccess(t *testing.T) {
-	setupHandlers(t)
-	store := setupAvatarStore(t)
-	// Store a small JPEG as if a custom avatar was uploaded.
+	store := avatarStore(t)
 	if err := store.Put(context.Background(), avatarStorageKey(avatarTestUserID), bytes.NewReader([]byte{0xff, 0xd8, 0xff, 0xe0}), 4, "image/jpeg"); err != nil {
 		t.Fatal(err)
 	}
-	mock := handlerMock(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, store)
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
 	recorder := httptest.NewRecorder()
 	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
 	request.SetPathValue("userID", avatarTestUserID)
-	ServeUserAvatar(recorder, request)
+	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("serve status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -162,98 +160,93 @@ func TestServeUserAvatarSuccess(t *testing.T) {
 }
 
 func TestServeUserAvatarDefaultUser(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
-	mock := handlerMock(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, avatarStore(t))
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "avatar.png"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
 	recorder := httptest.NewRecorder()
 	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
 	request.SetPathValue("userID", avatarTestUserID)
-	ServeUserAvatar(recorder, request)
+	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("default avatar status = %d", recorder.Code)
 	}
 }
 
 func TestServeUserAvatarUnknownUser(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
-	mock := handlerMock(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, avatarStore(t))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnError(errors.New("no rows"))
 	recorder := httptest.NewRecorder()
 	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
 	request.SetPathValue("userID", avatarTestUserID)
-	ServeUserAvatar(recorder, request)
+	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("unknown user status = %d", recorder.Code)
 	}
 }
 
 func TestServeUserAvatarMissingObject(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
-	mock := handlerMock(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, avatarStore(t))
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
 	recorder := httptest.NewRecorder()
 	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
 	request.SetPathValue("userID", avatarTestUserID)
-	ServeUserAvatar(recorder, request)
+	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("missing object status = %d", recorder.Code)
 	}
 }
 
 func TestUploadAvatarStorageUnavailable(t *testing.T) {
-	setupHandlers(t)
-	MediaStore = nil
+	api := newAuthAPI(t, newAuthMockPool(t), nil)
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, requestWithUser(http.MethodPost, "/", "", "user-1"))
+	api.UploadAvatar(recorder, requestWithUser(http.MethodPost, "/", "", "user-1"))
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("nil store status = %d", recorder.Code)
 	}
 	recorder = httptest.NewRecorder()
-	ServeUserAvatar(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
+	api.ServeUserAvatar(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("nil store serve status = %d", recorder.Code)
 	}
 }
 
 func TestUploadAvatarDBErrorRollsBackStorage(t *testing.T) {
-	setupHandlers(t)
-	store := setupAvatarStore(t)
-	mock := handlerMock(t)
+	store := avatarStore(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, store)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
 	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnError(errors.New("db error"))
 	request := avatarUploadRequest(t, mustDecodeBase64(onePixelPNG))
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, request)
+	api.UploadAvatar(recorder, request)
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("db error status = %d", recorder.Code)
 	}
-	// Object should have been cleaned up.
 	if _, err := store.Get(context.Background(), avatarStorageKey("user-1")); err == nil {
 		t.Fatal("object should have been deleted after db error")
 	}
 }
 
 func TestUploadAvatarDBErrorRestoresPreviousCustomAvatar(t *testing.T) {
-	setupHandlers(t)
-	store := setupAvatarStore(t)
+	store := avatarStore(t)
 	key := avatarStorageKey("user-1")
 	previous := []byte("previous-avatar")
 	if err := store.Put(context.Background(), key, bytes.NewReader(previous), int64(len(previous)), "image/jpeg"); err != nil {
 		t.Fatal(err)
 	}
-	mock := handlerMock(t)
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, store)
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
 	mock.ExpectExec("UPDATE users SET avatar").WithArgs("custom", "user-1").WillReturnError(errors.New("db error"))
 
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, avatarUploadRequest(t, mustDecodeBase64(onePixelPNG)))
+	api.UploadAvatar(recorder, avatarUploadRequest(t, mustDecodeBase64(onePixelPNG)))
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("db error status = %d", recorder.Code)
 	}
@@ -297,15 +290,11 @@ func largeAvatarJPEG(t *testing.T, minBytes int) []byte {
 }
 
 func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
-	setupHandlers(t)
-	_ = setupAvatarStore(t)
-	// A high-resolution phone photo is larger than the shared 10 MiB media cap.
-	// The avatar-specific limit must accept it and normalize it down to a small
-	// thumbnail without changing challenge upload limits.
+	mock := newAuthMockPool(t)
+	api := newAvatarAPI(t, mock, avatarStore(t))
 	photo := largeAvatarJPEG(t, 10<<20)
-	RuntimeConfig.AvatarMaxBytes = int64(len(photo)) + 1<<20
-	RuntimeConfig.UploadMaxPixels = 25_000_000
-	mock := handlerMock(t)
+	api.cfg.AvatarMaxBytes = int64(len(photo)) + 1<<20
+	api.cfg.UploadMaxPixels = 25_000_000
 	current := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	updated := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "custom"}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(current))
@@ -313,7 +302,7 @@ func TestUploadAvatarAcceptsLargePhoto(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnRows(handlerUserRows(updated))
 
 	recorder := httptest.NewRecorder()
-	UploadAvatar(recorder, avatarUploadRequest(t, photo))
+	api.UploadAvatar(recorder, avatarUploadRequest(t, photo))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("large photo upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -339,145 +328,14 @@ func avatarUploadRequest(t *testing.T, payload []byte) *http.Request {
 	return request
 }
 
-func groupPhotoUploadRequest(t *testing.T, groupID string, payload []byte) *http.Request {
-	t.Helper()
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("group_id", groupID); err != nil {
-		t.Fatal(err)
-	}
-	part, err := writer.CreateFormFile("photo", "group.png")
+// onePixelPNG and mustDecodeBase64 mirror the shared test media helpers in the
+// handlers package; the auth sub-package cannot import the parent test files.
+const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg=="
+
+func mustDecodeBase64(value string) []byte {
+	decoded, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	if _, err := part.Write(payload); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	request := requestWithUser(http.MethodPost, "/", "", "user-1")
-	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
-	request.Header.Set("Content-Type", writer.FormDataContentType())
-	return request
-}
-
-func TestGroupNotificationSettings(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
-	gameAPI := newGameAPI(t, mock)
-	groupID := "00000000-0000-0000-0000-000000000001"
-	member := func() {
-		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	}
-	member()
-	mock.ExpectQuery("SELECT COALESCE").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"enabled"}).AddRow(true))
-	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
-	member()
-	mock.ExpectExec("INSERT INTO group_notification_preferences").WithArgs(groupID, "user-1", false).
-		WillReturnResult(pgxmock.NewResult("INSERT", 1))
-	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodPut, "/?group_id="+groupID, `{"enabled":false}`, "user-1"), http.StatusOK)
-	member()
-	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodDelete, "/?group_id="+groupID, "", "user-1"), http.StatusMethodNotAllowed)
-}
-
-func TestUploadAndServeGroupPhoto(t *testing.T) {
-	setupHandlers(t)
-	store := setupAvatarStore(t)
-	mock := handlerMock(t)
-	repos := repository.NewRepository(mock)
-	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
-	groupID := "00000000-0000-0000-0000-000000000001"
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT storage_key FROM group_photos").WithArgs(groupID).
-		WillReturnRows(pgxmock.NewRows([]string{"storage_key"}))
-	mock.ExpectExec("INSERT INTO group_photos").
-		WithArgs(groupID, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
-		WillReturnResult(pgxmock.NewResult("INSERT", 1))
-	mock.ExpectCommit()
-	requireStatus(t, gameAPI.GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusOK)
-
-	const key = "groups/group-1/photo/current"
-	if err := store.Put(context.Background(), key, bytes.NewReader([]byte("photo")), 5, "image/png"); err != nil {
-		t.Fatal(err)
-	}
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").WithArgs(groupID).
-		WillReturnRows(pgxmock.NewRows([]string{"group_id", "storage_key", "mime_type", "byte_size", "created_at"}).
-			AddRow(groupID, key, "image/png", 5, time.Now()))
-	recorder := httptest.NewRecorder()
-	gameAPI.GroupPhoto(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"))
-	if recorder.Code != http.StatusOK || recorder.Body.String() != "photo" ||
-		recorder.Header().Get("Cache-Control") != "private, no-store" {
-		t.Fatalf("group photo response = %d %q, cache %q", recorder.Code, recorder.Body.String(), recorder.Header().Get("Cache-Control"))
-	}
-	requireStatus(t, gameAPI.GroupPhoto, requestWithUser(http.MethodDelete, "/", "", "user-1"), http.StatusMethodNotAllowed)
-}
-
-func TestReactionAndGroupSettingFailures(t *testing.T) {
-	setupHandlers(t)
-	messageID := "00000000-0000-0000-0000-000000000002"
-	groupID := "00000000-0000-0000-0000-000000000001"
-	reactionRequest := func(method, reaction string) *http.Request {
-		request := requestWithUser(method, "/", `{"reaction":"`+reaction+`"}`, "user-1")
-		request.SetPathValue("messageID", messageID)
-		return request
-	}
-	mock := handlerMock(t)
-	chatAPI := newChatAPI(t, mock, nil, nil)
-	gameAPI := newGameAPI(t, mock)
-	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
-	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
-
-	columns := []string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).
-		WillReturnRows(pgxmock.NewRows(columns))
-	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusNotFound)
-
-	messageRows := func(kind string) *pgxmock.Rows {
-		return pgxmock.NewRows(columns).
-			AddRow(messageID, groupID, "user-2", "bob", "", kind, nil, nil, nil, nil, "hello", time.Now())
-	}
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
-	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
-	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
-
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
-	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)
-
-	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusForbidden)
-}
-
-func TestGroupPhotoAvailabilityFailures(t *testing.T) {
-	setupHandlers(t)
-	groupID := "00000000-0000-0000-0000-000000000001"
-	nilStoreGame := NewGameAPI(nil, nil, nil, nil, handlerConfig(), nil, nil, time.Now)
-	requireStatus(t, nilStoreGame.GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusServiceUnavailable)
-	requireStatus(t, nilStoreGame.GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusServiceUnavailable)
-
-	store, err := storage.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	mock := handlerMock(t)
-	repos := repository.NewRepository(mock)
-	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").WithArgs(groupID).
-		WillReturnError(errors.New("database unavailable"))
-	requireStatus(t, gameAPI.GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusNotFound)
+	return decoded
 }

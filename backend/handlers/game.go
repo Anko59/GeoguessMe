@@ -71,7 +71,7 @@ func NewGameAPI(
 // forbidden. The behavior is preserved and now centralized in one place.
 func (a *GameAPI) requireMember(w http.ResponseWriter, r *http.Request, groupID, userID string) bool {
 	if err := a.groups.RequireMember(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		WriteError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		return false
 	}
 	return true
@@ -81,16 +81,16 @@ func (a *GameAPI) requireMember(w http.ResponseWriter, r *http.Request, groupID,
 // broadcasts the resolved challenge message over the realtime hub.
 func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	photoID := r.PathValue("photoID")
-	if err := validateID(photoID, "photo_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+	if err := ValidateID(photoID, "photo_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
 	var req GuessRequest
-	if !decodeJSON(w, r, &req) {
+	if !DecodeJSON(w, r, &req) {
 		return
 	}
 	now := a.clock()
@@ -98,19 +98,19 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, groups.ErrForbidden):
-			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
+			WriteError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
 		case errors.Is(err, groups.ErrOwnPhoto):
-			writeError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
+			WriteError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
 		case errors.Is(err, groups.ErrNotFound):
-			writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+			WriteError(w, http.StatusNotFound, "not_found", "Challenge not found")
 		case errors.Is(err, groups.ErrChallengeExpired):
-			writeError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
+			WriteError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
 		case errors.Is(err, groups.ErrViewNotFinished):
-			writeError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+			WriteError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
 		case errors.Is(err, groups.ErrInvalidCoordinate):
-			writeError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
+			WriteError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
 		}
 		return
 	}
@@ -127,14 +127,14 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 			a.hub.BroadcastUpdate(*message)
 		}
 	}
-	writeJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now})
+	WriteJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now})
 }
 
 // GetChallengeResults returns the leaderboard of a challenge, hiding other
 // players' exact points while a hidden-location challenge is still masked.
 func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	photoID := r.PathValue("photoID")
@@ -143,21 +143,21 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	photo, allowed, err := a.groups.CanViewResults(r.Context(), photoID, viewerID, now)
 	if err != nil {
 		if errors.Is(err, groups.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Challenge not found")
+			WriteError(w, http.StatusNotFound, "not_found", "Challenge not found")
 		} else if errors.Is(err, groups.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden", "Results are not available")
+			WriteError(w, http.StatusForbidden, "forbidden", "Results are not available")
 		} else {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		}
 		return
 	}
 	if !allowed {
-		writeError(w, http.StatusForbidden, "results_not_available", "Results are not available yet")
+		WriteError(w, http.StatusForbidden, "results_not_available", "Results are not available yet")
 		return
 	}
 	guesses, err := a.groups.GuessesForPhoto(r.Context(), photoID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
 	}
 	// A poster who hid the location keeps the exact spot private from guessers
@@ -199,7 +199,7 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		response["media_url"] = mediaURL(photo, true)
 		response["media_type"] = photo.MIMEType
 	}
-	writeJSON(w, http.StatusOK, response)
+	WriteJSON(w, http.StatusOK, response)
 }
 
 // resultsGuess is the results payload for a single guess. Lat, long, and
