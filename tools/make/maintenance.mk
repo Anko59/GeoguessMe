@@ -3,6 +3,9 @@
 # the root Makefile.
 
 ##@ Maintenance
+maintenance-report: ## Print an agent-readable snapshot of structural maintenance pressure.
+	tools/quality/debt/report.sh
+
 cache-status: ## Report project-only Docker images, build cache, volumes, and artifacts (read-only).
 	bash tools/quality/cache-status.sh
 

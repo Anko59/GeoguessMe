@@ -23,16 +23,16 @@ include tools/make/openapi-contract.mk
 
 .PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-self-test tools-clean \
 	dev up down restart status logs logs-backend logs-frontend \
-	format format-check fmt fmt-check lint lint-go lint-frontend lint-css lint-docs \
+	format format-check fmt fmt-check lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \
-	test-unit test-backend test-frontend test-race test-backend-race test-structure-regression \
+	test-unit test-backend test-frontend test-race test-backend-race test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression \
 	test-migration-fixture-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
-	audit deps-go-security-update deps-npm-security-update \
+	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
 	build build-backend build-frontend build-images clean-build \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
@@ -41,5 +41,5 @@ include tools/make/openapi-contract.mk
 	hosted-config hosted-contract-test cloudflared-access-ssh terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
 	vapid-keys \
 	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci \
-	cache-status prune-report prune disk-cleanup-report disk-cleanup build-cache-prune artifacts-clean clean reset-dev \
+	maintenance-report cache-status prune-report prune disk-cleanup-report disk-cleanup build-cache-prune artifacts-clean clean reset-dev \
 	openapi-generate openapi-check
