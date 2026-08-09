@@ -38,8 +38,11 @@ const formatConsoleArgs = (args: unknown[]): string =>
 
 const isReactDevWarning = (args: unknown[]): boolean => {
     const first = args[0];
-    const text = typeof first === 'string' ? first : JSON.stringify(first);
-    return REACT_DEV_WARNING_MARKERS.some((marker) => text.includes(marker));
+    // React's diagnostics use a string format argument. Treat every other
+    // value as ordinary application logging: JSON serialization is neither
+    // total (BigInt/cycles throw) nor guaranteed to return a string.
+    if (typeof first !== 'string') return false;
+    return REACT_DEV_WARNING_MARKERS.some((marker) => first.includes(marker));
 };
 
 const installConsoleGate = (): void => {

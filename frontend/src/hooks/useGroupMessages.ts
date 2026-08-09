@@ -41,14 +41,17 @@ export interface UseGroupMessagesResult {
  * older-page REST fetch, and exposes the stable public API to the chat UI.
  */
 export function useGroupMessages(groupId: string | undefined, userID?: string): UseGroupMessagesResult {
-    const cacheIdentity = groupId && userID ? `${userID}:${groupId}` : '';
+    // Keep group and viewer as independent identity components. In particular,
+    // groups must remain distinct while authentication is still resolving and
+    // userID is temporarily absent.
+    const cacheIdentity = JSON.stringify([userID ?? null, groupId ?? null]);
     const [state, dispatch] = useReducer(chatStreamReducer, cacheIdentity, (identity) =>
         initialChatStreamState(identity, userID, readCachedMessages(userID, groupId)),
     );
     const wsRef = useRef<WebSocket | null>(null);
     const messagesRef = useRef<Message[]>([]);
     const stoppedRef = useRef(true);
-    const loadingOlderRef = useRef(false);
+    const loadingOlderRef = useRef<{ identity: string } | null>(null);
     const controllerRef = useRef<ChatSocketController | null>(null);
 
     // Reset the whole stream when the cache identity changes. The dispatch
@@ -57,6 +60,7 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     // and no state is adjusted during render. The reducer no-ops when the
     // identity is unchanged, so an unrelated re-render resets nothing.
     useLayoutEffect(() => {
+        loadingOlderRef.current = null;
         dispatch({
             type: 'reset',
             identity: cacheIdentity,
@@ -97,11 +101,12 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     // request was in flight, the reducer drops it, so a stale page can never
     // update a newer group or session.
     const loadOlder = useCallback(async (): Promise<void> => {
-        if (!groupId || stoppedRef.current || loadingOlderRef.current) return;
+        if (!groupId || stoppedRef.current || loadingOlderRef.current?.identity === cacheIdentity) return;
         const oldest = messagesRef.current[0];
         if (!oldest) return;
         const identity = cacheIdentity;
-        loadingOlderRef.current = true;
+        const request = { identity };
+        loadingOlderRef.current = request;
         dispatch({ type: 'load_older_start', identity });
         try {
             const response = await api.get<MessagesPage | Message[]>('/group/messages', {
@@ -117,7 +122,8 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 message: getAPIErrorMessage(requestError, 'Unable to load older messages'),
             });
         } finally {
-            loadingOlderRef.current = false;
+            // A stale request must not clear the guard owned by a newer group.
+            if (loadingOlderRef.current === request) loadingOlderRef.current = null;
         }
     }, [cacheIdentity, groupId]);
 
