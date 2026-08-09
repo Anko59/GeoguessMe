@@ -20,6 +20,7 @@ cleanup() {
     if [ -n "$TEMP_DIR" ]; then
         rm -rf "$TEMP_DIR" 2>/dev/null || true
     fi
+    rm -f "${MAKEFILE_AGG:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -202,7 +203,12 @@ fi
 echo ""
 echo "=== artifacts-clean regression tests ==="
 
-MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)/Makefile"
+# Targets moved into responsibility fragments by PR 14; search the aggregate
+# of the root Makefile and every fragment.
+MAKEFILE_AGG=$(mktemp)
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+cat "$REPO_ROOT"/Makefile "$REPO_ROOT"/Makefile.*.mk >"$MAKEFILE_AGG"
+MAKEFILE="$MAKEFILE_AGG"
 
 # ── Artifacts-clean Test A1: Target exists and is documented ─────────────────
 echo "--- Artifacts-clean A1: Target existence ---"

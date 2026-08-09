@@ -67,8 +67,11 @@ if ! grep -q 'GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile' "$SCRIPT"; then
     FAIL=$((FAIL + 1))
     project_fail=1
 fi
-MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)/Makefile"
-if ! grep -A 1 '^test-e2e-pr:' "$MAKEFILE" |
+# Targets moved into responsibility fragments by PR 14; search the root
+# Makefile and every fragment.
+MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)"
+MAKEFILES=("$MAKEFILE/Makefile" "$MAKEFILE"/Makefile.*.mk)
+if ! grep -A 1 '^test-e2e-pr:' "${MAKEFILES[@]}" |
     grep -q 'GEOGUESSME_E2E_PROJECTS=desktop'; then
     echo "FAIL: project-selection - PR target does not select Chromium desktop"
     FAIL=$((FAIL + 1))
