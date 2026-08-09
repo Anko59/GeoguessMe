@@ -6,7 +6,6 @@ import {
     type ChatConnectionStatus,
     type ChatSocketController,
 } from '../chat/chatSocketController';
-import { lastStableCursor } from '../chat/messageLog';
 import { chatStreamReducer, initialChatStreamState } from '../chat/chatStream';
 import type { Message, MessagesPage } from '../types';
 import { readCachedMessages, saveCachedMessages } from '../utils/pwaSessionCache';
@@ -50,6 +49,7 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     );
     const wsRef = useRef<WebSocket | null>(null);
     const messagesRef = useRef<Message[]>([]);
+    const stableCursorRef = useRef<string>('');
     const stoppedRef = useRef(true);
     const loadingOlderRef = useRef<{ identity: string } | null>(null);
     const controllerRef = useRef<ChatSocketController | null>(null);
@@ -60,6 +60,7 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     // and no state is adjusted during render. The reducer no-ops when the
     // identity is unchanged, so an unrelated re-render resets nothing.
     useLayoutEffect(() => {
+        stableCursorRef.current = '';
         loadingOlderRef.current = null;
         dispatch({
             type: 'reset',
@@ -154,12 +155,17 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 });
                 const payload = response.data;
                 const items = Array.isArray(payload) ? payload : payload.items;
+                // Snapshot the page's stable_cursor so a later reconnect can
+                // anchor its catch-up strictly after the newest fetched
+                // message. The legacy after_id message-id bridge is gone; the
+                // opaque cursor contract is the only catch-up mechanism.
+                if (!Array.isArray(payload)) stableCursorRef.current = payload.stable_cursor ?? '';
                 return {
                     items: items ?? [],
                     nextCursor: !Array.isArray(payload) ? (payload.next_cursor ?? undefined) : undefined,
                 };
             },
-            getLastStableCursor: () => lastStableCursor(messagesRef.current),
+            getLastStableCursor: () => stableCursorRef.current,
             onPhaseChange: (phase) => {
                 if (phase === 'stopped') return;
                 dispatch({ type: 'status', identity, status: phase });

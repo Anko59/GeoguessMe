@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PAGE_SIZE } from '../chat/chatSocketController';
 import type { Message } from '../types';
 import { saveCachedMessages } from '../utils/pwaSessionCache';
 import { useGroupMessages } from './useGroupMessages';
@@ -209,9 +210,12 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('ignores stale messages from a superseded reconnect generation', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
-        // First generation catch-up returns a; the renewed generation returns c.
+        // First generation catch-up returns a (with its stable_cursor anchor);
+        // the renewed generation returns c.
         mocks.get
-            .mockResolvedValueOnce({ data: { items: [message('a', '2026-01-01T00:00:00Z')] } })
+            .mockResolvedValueOnce({
+                data: { items: [message('a', '2026-01-01T00:00:00Z')], stable_cursor: 'cursor-a' },
+            })
             .mockResolvedValueOnce({ data: { items: [message('c', '2026-01-03T00:00:00Z')] } });
 
         const { result } = renderHook(() => useGroupMessages('group-1'));
@@ -239,14 +243,14 @@ describe('useGroupMessages reconnect sequence', () => {
             renewed.fireOpen();
         });
 
-        // The renewed catch-up snapshots the last stable cursor (a) before the
-        // reconnect, so it fetches only messages after that cursor.
+        // The renewed catch-up snapshots the last stable cursor (cursor-a)
+        // before the reconnect, so it fetches only messages after that cursor.
         await waitFor(() => expect(ids(result.current.messages)).toEqual(['a', 'c']));
         expect(mocks.get).toHaveBeenNthCalledWith(
             2,
             '/group/messages',
             expect.objectContaining({
-                params: expect.objectContaining({ group_id: 'group-1', after_id: 'a' }),
+                params: expect.objectContaining({ group_id: 'group-1', cursor: 'cursor-a' }),
             }),
         );
     });
@@ -325,7 +329,12 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('resets state and reconnects when the group changes, ignoring stale events', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
-        mocks.get.mockResolvedValue({ data: { items: [] } });
+        mocks.get
+            .mockResolvedValueOnce({
+                data: { items: [message('a', '2026-01-01T00:00:00Z')], stable_cursor: 'cursor-a' },
+            })
+            .mockResolvedValueOnce({ data: { items: [], stable_cursor: null } })
+            .mockResolvedValueOnce({ data: { items: [] } });
 
         const { result, rerender } = renderHook(({ gid }: { gid: string }) => useGroupMessages(gid, 'user-1'), {
             initialProps: { gid: 'group-1' },
@@ -355,6 +364,18 @@ describe('useGroupMessages reconnect sequence', () => {
         // The renewed socket works normally.
         await act(async () => renewed.fireOpen());
         await waitFor(() => expect(result.current.connectionStatus).toBe('connected'));
+
+        // Group 2's empty anchor page clears group 1's cursor. A later group 2
+        // reconnect must start from group 2's own empty anchor rather than
+        // skipping messages behind the foreign cursor.
+        act(() => renewed.fireClose());
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(3), { timeout: 5000 });
+        const groupTwoReconnect = MockWebSocket.instances[2];
+        await act(async () => groupTwoReconnect.fireOpen());
+        await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
+        expect(mocks.get).toHaveBeenNthCalledWith(3, '/group/messages', {
+            params: { group_id: 'group-2', limit: PAGE_SIZE },
+        });
     });
 
     it('keeps groups isolated while the viewer id is unavailable', async () => {

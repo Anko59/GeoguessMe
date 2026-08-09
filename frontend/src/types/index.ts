@@ -33,15 +33,15 @@ export type PushSubscriptionRequest = components['schemas']['PushSubscriptionReq
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 
 /** A reaction aggregate as rendered by the client. The deprecated `emoji`
- *  compatibility alias is deliberately omitted (the client never reads it;
- *  PR 12 removes it from the contract), and `usernames` is treated as
- *  optional defensively. Everything else comes from the generated wire type. */
-export type Reaction = Omit<components['schemas']['MessageReaction'], 'emoji' | 'usernames'> & {
+ *  alias was removed by the compatibility-removal PR, so the wire type only
+ *  carries `reaction`. `usernames` is treated as optional defensively.
+ *  Everything else comes from the generated wire type. */
+export type Reaction = Omit<components['schemas']['MessageReaction'], 'usernames'> & {
     usernames?: string[];
 };
 
-/** WebSocket reaction mutation metadata without the deprecated `emoji` alias. */
-export type ReactionUpdate = Omit<components['schemas']['MessageReactionUpdate'], 'emoji'>;
+/** WebSocket reaction mutation metadata from the generated contract. */
+export type ReactionUpdate = components['schemas']['MessageReactionUpdate'];
 
 /** A chat message with the reaction fields narrowed to the client's view
  *  model. All other wire fields, including `content` being optional, come

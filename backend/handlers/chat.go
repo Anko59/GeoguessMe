@@ -72,6 +72,10 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
+	if _, present := r.URL.Query()["after_id"]; present {
+		WriteError(w, http.StatusBadRequest, "unsupported_parameter", "after_id is no longer supported; use cursor")
+		return
+	}
 
 	if !a.requireMember(w, r, groupID, userID) {
 		return
@@ -102,25 +106,15 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		if page.Items == nil {
 			page.Items = []models.Message{}
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
+		WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor, "stable_cursor": page.StableCursor})
 		return
 	}
 
-	// Stable cursor takes precedence; the legacy after_id message id is
-	// resolved onto the same opaque cursor so reconnect callers that only know
-	// the last message id keep working. A raw id must never reach the cursor
-	// decoder, which expects an opaque base64 value.
-	cursor := r.URL.Query().Get("cursor")
-	if cursor == "" {
-		resolved, err := a.messages.CursorAfterMessage(r.Context(), r.URL.Query().Get("after_id"))
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
-			return
-		}
-		cursor = resolved
-	}
-
-	page, err := a.messages.GetGroupMessagesPageForViewer(r.Context(), groupID, cursor, limit, userID)
+	// The cursor parameter is the only forward-positioning mechanism: it is an
+	// opaque base64 value (a raw message id must never reach the cursor
+	// decoder). Reconnect catch-up sends the stable_cursor snapshot of the last
+	// page; an empty cursor selects the most recent page.
+	page, err := a.messages.GetGroupMessagesPageForViewer(r.Context(), groupID, r.URL.Query().Get("cursor"), limit, userID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 		return
@@ -128,7 +122,7 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	if page.Items == nil {
 		page.Items = []models.Message{}
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor})
+	WriteJSON(w, http.StatusOK, map[string]any{"items": page.Items, "next_cursor": page.NextCursor, "stable_cursor": page.StableCursor})
 }
 
 const maxChatMediaTextLength = 1000
@@ -257,7 +251,10 @@ func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 }
 
 // allowedReaction reports whether a reaction key is one of the supported
-// reactions. It is a pure lookup (no package-level mutable state).
+// reactions. It is a pure lookup (no package-level mutable state). The six
+// legacy emoji values remain valid reaction keys so existing reaction rows
+// keep rendering; the deprecated emoji request/response field alias was
+// removed by the compatibility-removal PR, only the reaction key is accepted.
 func allowedReaction(reaction string) bool {
 	switch reaction {
 	case "like", "love", "laugh", "wow", "sad", "spot-on", "lost", "mind-blown", "wrong-way", "vacation":
@@ -272,7 +269,6 @@ func allowedReaction(reaction string) bool {
 
 type messageReactionRequest struct {
 	Reaction string `json:"reaction"`
-	Emoji    string `json:"emoji"`
 }
 
 // SetMessageReaction adds a reaction, while DELETE removes the same user's
@@ -293,9 +289,6 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Reaction = strings.TrimSpace(req.Reaction)
-	if req.Reaction == "" {
-		req.Reaction = strings.TrimSpace(req.Emoji)
-	}
 	if !allowedReaction(req.Reaction) {
 		WriteError(w, http.StatusBadRequest, "invalid_reaction", "Choose a supported reaction")
 		return
@@ -348,7 +341,6 @@ func (a *ChatAPI) SetMessageReaction(w http.ResponseWriter, r *http.Request) {
 		broadcast.ReactionUpdate = &models.ReactionUpdate{
 			UserID:   userID,
 			Reaction: req.Reaction,
-			Emoji:    req.Reaction,
 			Active:   r.Method == http.MethodPut,
 		}
 		a.hub.BroadcastUpdate(broadcast)

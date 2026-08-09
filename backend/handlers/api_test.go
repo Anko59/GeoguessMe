@@ -195,6 +195,24 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 }
 
+func TestMessagesRejectLegacyAfterID(t *testing.T) {
+	// Silently treating an old reconnect cursor as a latest-page request can
+	// skip an arbitrarily large gap. Reject it so callers must migrate to the
+	// opaque cursor contract and can never mistake a partial page for catch-up.
+	mock := newMockPool(t)
+	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
+	groupID := "00000000-0000-0000-0000-000000000001"
+	recorder := httptest.NewRecorder()
+	chatAPI.GetGroupMessages(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID+"&after_id=message-1", "", "user-1"))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	const expected = `{"error":{"code":"unsupported_parameter","message":"after_id is no longer supported; use cursor"}}` + "\n"
+	if recorder.Body.String() != expected {
+		t.Fatalf("body = %q, want %q", recorder.Body.String(), expected)
+	}
+}
+
 func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {
 	mock := newMockPool(t)
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)

@@ -119,12 +119,11 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 // the handler can answer 403 instead of 400.
 var errNotGroupMember = errors.New("not a group member")
 
-// challengeGroupIDs resolves the target groups for an upload: repeated
-// group_ids form fields (comma-separated values accepted) with a fallback to
-// the legacy single group_id field. The list is validated, deduplicated, and
-// every group must be one the user belongs to (through the canonical
-// membership gate). The legacy singular group_id input stays supported until
-// the compatibility removal PR.
+// challengeGroupIDs resolves the target groups for an upload from the repeated
+// group_ids form fields (comma-separated values accepted). The list is
+// validated, deduplicated, and every group must be one the user belongs to
+// (through the canonical membership gate). The legacy singular group_id input
+// was removed by the compatibility-removal PR; callers must use group_ids.
 func (a *GameAPI) challengeGroupIDs(r *http.Request, userID string) ([]string, error) {
 	var ids []string
 	for _, value := range r.Form["group_ids"] {
@@ -135,12 +134,7 @@ func (a *GameAPI) challengeGroupIDs(r *http.Request, userID string) ([]string, e
 		}
 	}
 	if len(ids) == 0 {
-		if single := strings.TrimSpace(r.FormValue("group_id")); single != "" {
-			ids = append(ids, single)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, errors.New("group_id is required")
+		return nil, errors.New("group_ids is required")
 	}
 	seen := make(map[string]bool, len(ids))
 	unique := make([]string, 0, len(ids))

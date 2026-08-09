@@ -306,7 +306,7 @@ describe('reconnect and generation invalidation', () => {
         const h = harness({
             getLastStableCursor: vi.fn(() => 'cursor-a'),
             fetchPage: vi.fn(async (query: ChatSocketFetchQuery) =>
-                query.after_id ? { items: [message('c', '2026-01-03T00:00:00Z')] } : { items: [] },
+                query.cursor ? { items: [message('c', '2026-01-03T00:00:00Z')] } : { items: [] },
             ),
         });
         h.controller.start();
@@ -329,7 +329,7 @@ describe('reconnect and generation invalidation', () => {
         await flush();
         // The renewed catch-up anchors after the pre-reconnect snapshot and is
         // not a first sync (no cache prune, no hasMore update).
-        expect(h.fetchPage).toHaveBeenCalledWith({ after_id: 'cursor-a', limit: PAGE_SIZE });
+        expect(h.fetchPage).toHaveBeenCalledWith({ cursor: 'cursor-a', limit: PAGE_SIZE });
         expect(h.firstPages).toHaveLength(1);
         expect(deliveredIds(h.delivered)).toEqual(['c']);
     });

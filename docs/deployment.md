@@ -43,6 +43,33 @@ Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
 be validated on dev, followed by a 24-hour soak and an isolated production
 backup restore, before the first production promotion to `main`.
 
+## Compatibility-removal rollout
+
+The application compatibility PR removes the pre-GA inputs — the messages
+`after_id` parameter, the reaction `emoji` request/response alias, and the
+singular challenge `group_id` form field — but deliberately leaves the legacy
+reaction database column and synchronization objects in place. Hosted deploys
+run every pending migration before replacing the backend, so bundling the
+cleanup migration with that application revision would remove rollback schema
+compatibility while the previous revision is still serving.
+
+1. Deploy the new application revision (reads/writes only the new fields: the
+   opaque `cursor`/`stable_cursor` contract, `reaction`, and repeated
+   `group_ids`). The database stays backward compatible during this window, so
+   the previous revision can still serve or roll back.
+2. Complete the normal deployment and soak, then confirm the previous revision
+   is no longer running and is outside the rollback window.
+3. Land a separate cleanup-migration PR that drops the legacy reaction column,
+   trigger, function, and constraints. Its deployment applies the forward-only
+   migration before restarting the already-compatible application revision.
+
+**Rollback:** before step 3, reverting to the previous image is safe because the
+schema is still backward compatible. After step 3 the migration is forward-only
+by repository rule: do not attempt to re-add the emoji column; restore the
+pre-migration backup instead (see `deployment/README.md`). Rehearse both
+sequences with `make migration-test`, `make restart-rehearsal`, and
+`make backup-rehearsal` before the live rollout.
+
 ## See also
 
 - [deployment/README.md](../deployment/README.md) — rehearsal evidence table,

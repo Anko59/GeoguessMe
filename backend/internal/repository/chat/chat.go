@@ -44,9 +44,16 @@ func NewRepository(pool database.Pool) *Repository {
 }
 
 // MessagesPage is the cursor-paginated result of GetGroupMessagesPage.
+//
+// StableCursor is the opaque cursor positioned strictly after the last message
+// of the page (empty for an empty page). Clients snapshot it before a chat
+// reconnect and send it back as the cursor parameter so catch-up resumes
+// exactly where the previous page ended; it replaces the legacy after_id
+// message-id bridge removed by the compatibility-removal PR.
 type MessagesPage struct {
-	Items      []models.Message `json:"items"`
-	NextCursor string           `json:"next_cursor"`
+	Items        []models.Message `json:"items"`
+	NextCursor   string           `json:"next_cursor"`
+	StableCursor string           `json:"stable_cursor"`
 }
 
 // NewTextMessage ensures the explicit timestamp is always initialized by

@@ -57,13 +57,6 @@ export function mergeMessages(current: Message[], incoming: Message[], viewerID?
     return [...byId.values()].sort(compareMessages);
 }
 
-// lastStableCursor snapshots the newest message id of a sorted log. The
-// reconnect sequence uses it as the strict-after anchor for catch-up so
-// nothing created during a disconnect is ever skipped.
-export function lastStableCursor(messages: Message[]): string {
-    return messages.length > 0 ? messages[messages.length - 1].id : '';
-}
-
 /**
  * pruneBeforeAnchor drops every cached message strictly older than the anchor,
  * which is the oldest message of the first server-fetched page. A local cache

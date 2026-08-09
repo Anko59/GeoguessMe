@@ -64,6 +64,10 @@ func (r *Repository) SaveMessage(ctx context.Context, msg *models.Message) error
 // strictly after that cursor in ascending order; next_cursor is set when more
 // pages remain and empty otherwise. Ordering always follows the stable tuple
 // (created_at, id) so reconnect catch-up cannot skip or duplicate a message.
+//
+// StableCursor is populated for every non-empty page and points strictly after
+// the last message of that page, so a client can snapshot it and resume
+// catch-up losslessly after a reconnect.
 func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int) (MessagesPage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
@@ -81,7 +85,12 @@ func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor s
 		}
 		// Fetch newest-first but expose the page in chronological order.
 		reverseMessages(messages)
-		return MessagesPage{Items: messages}, nil
+		page := MessagesPage{Items: messages}
+		if len(messages) > 0 {
+			last := messages[len(messages)-1]
+			page.StableCursor = encodeMessageCursor(last.CreatedAt, last.ID)
+		}
+		return page, nil
 	}
 
 	createdAt, id, err := decodeMessageCursor(cursor)
@@ -103,6 +112,10 @@ func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor s
 		last := messages[limit-1]
 		page.Items = messages[:limit]
 		page.NextCursor = encodeMessageCursor(last.CreatedAt, last.ID)
+	}
+	if len(page.Items) > 0 {
+		last := page.Items[len(page.Items)-1]
+		page.StableCursor = encodeMessageCursor(last.CreatedAt, last.ID)
 	}
 	return page, nil
 }
@@ -148,40 +161,6 @@ func (r *Repository) GetGroupMessagesPageForViewer(ctx context.Context, groupID,
 		return page, err
 	}
 	return r.EnrichMessagesPageForViewer(ctx, page, viewerID)
-}
-
-// CursorAfterMessage resolves a legacy message id into the opaque cursor that
-// positions pagination immediately after it. An empty or unknown message id
-// yields an empty cursor so the caller falls back to the latest page instead
-// of failing the whole request. It is the compatibility bridge for the legacy
-// after_id parameter, which PR 12 removes.
-func (r *Repository) CursorAfterMessage(ctx context.Context, messageID string) (string, error) {
-	if messageID == "" {
-		return "", nil
-	}
-	var createdAt time.Time
-	err := r.pool.QueryRow(ctx, `SELECT created_at FROM messages WHERE id = $1`, messageID).Scan(&createdAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", err
-	}
-	return encodeMessageCursor(createdAt, messageID), nil
-}
-
-// GetGroupMessagesContext remains as a thin cursor wrapper for any caller that
-// still passes a legacy message id. New callers should use the page API.
-func (r *Repository) GetGroupMessagesContext(ctx context.Context, groupID, afterID string) ([]models.Message, error) {
-	cursor, err := r.CursorAfterMessage(ctx, afterID)
-	if err != nil {
-		return nil, err
-	}
-	page, err := r.GetGroupMessagesPage(ctx, groupID, cursor, 500)
-	if err != nil {
-		return nil, err
-	}
-	return page.Items, nil
 }
 
 func encodeMessageCursor(createdAt time.Time, id string) string {

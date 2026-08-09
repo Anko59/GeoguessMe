@@ -370,10 +370,10 @@ test.describe('Chat via WebSocket', () => {
             let releaseCatchUp!: () => void;
             await memberPage.route('**/api/v1/group/messages*', async (route) => {
                 const url = route.request().url();
-                // Only delay catch-up calls that carry an after_id (cursor).
-                // The initial load fetches without after_id and must not be
-                // delayed, or the page would stay empty forever.
-                if (url.includes('after_id=')) {
+                // Only delay catch-up calls that carry a cursor. The initial
+                // load fetches without cursor and must not be delayed, or the
+                // page would stay empty forever.
+                if (url.includes('cursor=')) {
                     await new Promise<void>((resolve) => {
                         releaseCatchUp = resolve;
                     });

@@ -137,8 +137,9 @@ requires its own review, tests, and documentation.
   owner that revokes it on replacement, eviction, or unmount. Leaked object URLs
   are regressions.
 - Cursor ordering: chat pagination uses an opaque cursor with stable ordering.
-  The legacy `after_id` parameter is a temporary compatibility path; new code
-  must not add more consumers.
+  Forward catch-up sends the `stable_cursor` of the last received page as the
+  `cursor` parameter; the legacy `after_id` parameter was removed by the
+  compatibility-removal PR and must not be reintroduced.
 - Challenge expiry: reveal timing derives from `location_reveals_at` on the wire
   contract. The UI must not hardcode durations that the API already publishes.
 - Configuration ownership: `backend/internal/config/` is the only reader of
@@ -183,20 +184,20 @@ Temporary compatibility paths are listed here with their tests, replacement, and
 removal condition. Remove an entry only when its code, schema, docs, and tests
 are gone together.
 
-| Legacy path                       | Location                                                             | Tests                                                                              | Replacement                     | Removal |
-| --------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------- | ------- |
-| `after_id` message cursor         | `backend/handlers/chat.go`, `frontend/src/hooks/useGroupMessages.ts` | `backend/internal/repository/chat/messages_db_test.go`, `useGroupMessages.test.ts` | Opaque `cursor` contract        | PR 12   |
-| Reaction `emoji` alias            | `backend/internal/models/message.go`, `backend/handlers/chat.go`     | Reaction handler and model tests                                                   | `reaction` field only           | PR 12   |
-| Single challenge `group_id` input | `backend/handlers/photo.go` (`challengeGroupIDs` fallback)           | Challenge upload handler tests                                                     | Repeated `group_ids` form field | PR 12   |
-
 The PR 7 entries for the `CleanupAuthTokens` no-op reference, the `InitSchema`
 compatibility helper, and the `database.DB` package global were removed in PR 7:
 the code, its tests, and the composition-root replacement landed together.
 
-The compatibility-removal PR (PR 12) uses a two-deployment sequence: deploy code
-that reads and writes only the new fields while the database stays backward
-compatible, confirm no old writers remain, then apply the cleanup migration. Do
-not remove entries before their rollout conditions are met.
+The application compatibility PR entries for the `after_id` message cursor, the
+reaction `emoji` request/response alias, and the singular challenge `group_id`
+form field were removed: the OpenAPI spec, generated TypeScript contract,
+handlers, models, frontend, and tests are removed together. The legacy reaction
+database column and synchronization objects remain until a separate
+cleanup-migration PR lands after the compatible application revision has
+deployed and left its rollback window. Forward catch-up uses the opaque
+`stable_cursor` anchor plus the `cursor` parameter. The staged rollout is
+documented in [deployment.md](deployment.md). No temporary application
+compatibility entries remain.
 
 ## Residual risks
 

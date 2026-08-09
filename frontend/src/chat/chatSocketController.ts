@@ -6,8 +6,8 @@ import type { Message } from '../types';
 // hook) supplies the REST page fetch and the state-mutation callbacks.
 //
 // Reconnect sequence:
-//  1. Snapshot the last stable cursor (the newest known message id) BEFORE
-//     opening the renewed socket.
+//  1. Snapshot the last stable cursor (the opaque stable_cursor of the most
+//     recent REST page) BEFORE opening the renewed socket.
 //  2. Open the renewed socket so the server starts queueing live events for
 //     this connection.
 //  3. On open, perform a cursor catch-up REST fetch (after the snapshot
@@ -56,7 +56,6 @@ export interface ChatSocketPage {
 
 /** The REST cursor query sent when paging forward after a reconnect. */
 export interface ChatSocketFetchQuery {
-    after_id?: string;
     cursor?: string;
     limit: number;
 }
@@ -135,15 +134,15 @@ export function createChatSocketController(options: ChatSocketControllerOptions)
 
     // fetchForward pages through the messages REST endpoint. An empty anchor
     // selects the latest page; a non-empty anchor resumes strictly after that
-    // message id. It follows next_cursor until drained, so reconnect catch-up
-    // is lossless even after a long disconnect.
+    // opaque cursor. It follows next_cursor until drained, so reconnect
+    // catch-up is lossless even after a long disconnect.
     const fetchForward = async (
-        anchorID: string,
+        anchorCursor: string,
         currentGeneration: number,
         onPage: (items: Message[]) => void,
     ): Promise<void> => {
         let cursor = '';
-        let anchor = anchorID;
+        let anchor = anchorCursor;
         let limit = PAGE_SIZE;
         for (;;) {
             if (stopped || currentGeneration !== generation) return;
@@ -152,7 +151,7 @@ export function createChatSocketController(options: ChatSocketControllerOptions)
                 if (cursor !== '') {
                     query.cursor = cursor;
                 } else if (anchor !== '') {
-                    query.after_id = anchor;
+                    query.cursor = anchor;
                 }
                 const result = await options.fetchPage(query);
                 if (stopped || currentGeneration !== generation) return;
