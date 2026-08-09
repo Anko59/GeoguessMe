@@ -203,11 +203,11 @@ fi
 echo ""
 echo "=== artifacts-clean regression tests ==="
 
-# Targets moved into responsibility fragments by PR 14; search the aggregate
-# of the root Makefile and every fragment.
+# Search the aggregate of the public Makefile and every responsibility
+# fragment.
 MAKEFILE_AGG=$(mktemp)
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-cat "$REPO_ROOT"/Makefile "$REPO_ROOT"/Makefile.*.mk >"$MAKEFILE_AGG"
+cat "$REPO_ROOT"/Makefile "$REPO_ROOT"/tools/make/*.mk >"$MAKEFILE_AGG"
 MAKEFILE="$MAKEFILE_AGG"
 
 # ── Artifacts-clean Test A1: Target exists and is documented ─────────────────

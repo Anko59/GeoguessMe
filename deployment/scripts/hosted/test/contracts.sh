@@ -120,9 +120,9 @@ if [ "$(env_keys "$ROOT/deployment/env/dev.env.example")" != \
     fail 'dev.env.example and production.env.example must declare the same keys'
 fi
 assert_contains "$SECRET_GENERATOR" 'RESTIC_REPOSITORY=s3:https://%s.r2.cloudflarestorage.com/geoguessme-database-backups/%s'
-# Targets moved into responsibility fragments by PR 14; the secrets-generate
-# recipe lives in a fragment, so search the root Makefile and all fragments.
-if ! cat "$ROOT"/Makefile "$ROOT"/Makefile.*.mk | grep -Fq 'generate-hosted-secret.sh |'; then
+# The secrets-generate recipe lives in a responsibility fragment, so search
+# the public Makefile and all fragments.
+if ! cat "$ROOT"/Makefile "$ROOT"/tools/make/*.mk | grep -Fq 'generate-hosted-secret.sh |'; then
     fail "$ROOT/Makefile does not contain: generate-hosted-secret.sh |"
 fi
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'

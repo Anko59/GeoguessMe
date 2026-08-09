@@ -116,10 +116,10 @@ contains "$RELEASE" 'actual_backend.*BACKEND_DIGEST' \
 
 contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
 contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"
-contains 'Makefile Makefile.*.mk' '^pre-push:.*fast deterministic gate' \
+contains 'Makefile tools/make/*.mk' '^pre-push:.*fast deterministic gate' \
     "pre-push is documented as the fast gate"
-contains 'Makefile Makefile.*.mk' '^[[:space:]]+\$\(MAKE\) preflight$' "pre-push invokes preflight"
-contains 'Makefile Makefile.*.mk' 'DOCKER_BUILD_FLAGS' "Make supports CI Docker caching"
+contains 'Makefile tools/make/*.mk' '^[[:space:]]+\$\(MAKE\) preflight$' "pre-push invokes preflight"
+contains 'Makefile tools/make/*.mk' 'DOCKER_BUILD_FLAGS' "Make supports CI Docker caching"
 
 echo
 if [ "$fail" -eq 0 ]; then

@@ -13,13 +13,13 @@
 # enforced by tools/quality/test/check-makefile-fragments-regression.sh: every
 # documented target must be declared phony and resolve.
 
-include Makefile.setup.mk
-include Makefile.quality.mk
-include Makefile.tests.mk
-include Makefile.deployment.mk
-include Makefile.maintenance.mk
-include Makefile.docs-agent-config.mk
-include Makefile.openapi-contract.mk
+include tools/make/setup.mk
+include tools/make/quality.mk
+include tools/make/tests.mk
+include tools/make/deployment.mk
+include tools/make/maintenance.mk
+include tools/make/docs-agent-config.mk
+include tools/make/openapi-contract.mk
 
 .PHONY: help bootstrap bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-self-test tools-clean \
 	dev up down restart status logs logs-backend logs-frontend \

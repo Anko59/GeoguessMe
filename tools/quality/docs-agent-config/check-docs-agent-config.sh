@@ -158,7 +158,7 @@ check_path_references() {
             case "$tok" in
                 '' | *'*'* | *"$DOLLAR_PAREN"* | *[[:space:]]*) continue ;;
             esac
-            if [[ ! "$tok" =~ ^(backend|frontend|docs|deployment|infra|tools|Makefile|README\.md|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md|LICENSE|PRIVACY\.md|\.github|\.githooks|\.agents|\.gitignore|\.markdownlint\.json|\.prettierrc|\.prettierignore|\.stylelintrc\.json|\.shellcheckrc|\.sqlfluff|\.golangci\.yml|\.sops\.yaml|\.dockerignore)(/|$) ]]; then
+            if [[ ! "$tok" =~ ^(backend|frontend|docs|deployment|infra|tools|Makefile|README\.md|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md|LICENSE|PRIVACY\.md|\.github|\.githooks|\.agents|\.gitignore|\.markdownlint\.json|\.prettierrc|\.prettierignore|\.shellcheckrc|\.sops\.yaml|\.dockerignore)(/|$) ]]; then
                 continue
             fi
             if [[ "$tok" == */ ]]; then

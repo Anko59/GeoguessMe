@@ -32,7 +32,7 @@ fail() {
     FAIL=$((FAIL + 1))
 }
 
-makefiles='Makefile Makefile.setup.mk Makefile.quality.mk Makefile.tests.mk Makefile.deployment.mk Makefile.maintenance.mk Makefile.docs-agent-config.mk Makefile.openapi-contract.mk'
+makefiles="Makefile $(sed -nE 's/^include[[:space:]]+//p' Makefile)"
 
 # 1. Every included fragment exists and is included from the root Makefile.
 while IFS= read -r frag; do
@@ -107,9 +107,9 @@ else
 fi
 
 # 7. Aggregate gate dependency ordering.
-preflight_line=$(grep -E '^preflight:' Makefile.quality.mk || true)
-quality_line=$(grep -E '^quality:' Makefile.quality.mk || true)
-verify_line=$(grep -E '^verify:' Makefile.quality.mk || true)
+preflight_line=$(grep -E '^preflight:' tools/make/quality.mk || true)
+quality_line=$(grep -E '^quality:' tools/make/quality.mk || true)
+verify_line=$(grep -E '^verify:' tools/make/quality.mk || true)
 for dep in structure-check openapi-check archcheck test-makefile-fragments-regression audit test-unit; do
     printf '%s' "$preflight_line" | grep -qE "(^|[[:space:]])$dep([[:space:]]|$)" || fail "preflight is missing dependency $dep"
 done
