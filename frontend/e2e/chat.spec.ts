@@ -150,6 +150,10 @@ test.describe('Chat via WebSocket', () => {
                 .filter({ hasText: caption })
                 .locator('img.chat-attachment');
             await expect(memberAttachment).toBeVisible();
+            // Targeted visual assertions: chat rows keep their bottom-aligned
+            // flex layout regardless of message kind.
+            await expect(scenario.owner.locator('.message-container').first()).toHaveCSS('display', 'flex');
+            await expect(scenario.owner.locator('.message-container').first()).toHaveCSS('align-items', 'flex-end');
 
             // Clicking the shared photo opens it full screen, like the
             // challenge photo on the results page; closing restores the chat.
@@ -157,6 +161,11 @@ test.describe('Chat via WebSocket', () => {
             const fullScreen = member.page.getByRole('dialog', { name: 'Shared photo full screen' });
             await expect(fullScreen).toBeVisible();
             await expect(fullScreen.locator('img')).toHaveAttribute('src', /^blob:/);
+            // Targeted visual assertions: the shared full-screen dialog keeps
+            // its fixed, top-of-stack, dark presentation across surfaces.
+            await expect(fullScreen).toHaveCSS('position', 'fixed');
+            await expect(fullScreen).toHaveCSS('z-index', '2100');
+            await expect(fullScreen).toHaveCSS('background-color', 'rgba(5, 7, 18, 0.98)');
             await member.page.getByRole('button', { name: 'Close full-screen photo' }).click();
             await expect(fullScreen).not.toBeVisible();
         } finally {
