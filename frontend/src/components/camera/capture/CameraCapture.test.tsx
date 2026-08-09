@@ -77,6 +77,19 @@ describe('Camera capture', () => {
         expect(play).toHaveBeenCalled();
     });
 
+    it('clears the capture flash after the flash duration', async () => {
+        stubUserMedia();
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        expect(document.querySelector('.camera-flash')).toBeInTheDocument();
+        // The flash is declarative state driven by one owned 300ms timer; wait
+        // for the observable state transition instead of asserting timing.
+        await waitFor(() => expect(document.querySelector('.camera-flash')).not.toBeInTheDocument());
+    });
+
     it('adds an editable text banner to a captured camera photo before upload', async () => {
         stubUserMedia();
         stubGeolocation();
