@@ -68,7 +68,7 @@ func TestPasswordResetRevokesSessions(t *testing.T) {
 	resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": email}, "", nil)
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 
-	token := tokenFromMailpit(t, email, "/reset-password")
+	token := tokenFromMailpit(t, "Reset your GeoGuessMe password", "/reset-password")
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/password/reset",
 		map[string]string{"token": token, "password": "BrandNewPassword123"}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "reset: %s", data)
