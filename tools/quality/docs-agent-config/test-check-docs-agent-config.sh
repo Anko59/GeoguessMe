@@ -119,6 +119,28 @@ scenario_broken_link() {
     assert_fail_with "$dir" "broken link in docs/beta.md: missing.md" "broken link is reported"
 }
 
+scenario_broken_reference_link() {
+    local dir=$TMP_ROOT/broken-reference-link
+    make_fixture "$dir"
+    cat >"$dir/docs/beta.md" <<'EOF'
+# Beta
+
+Missing [reference target][missing].
+
+[missing]: missing.md
+EOF
+    init_fixture_git "$dir"
+    assert_fail_with "$dir" "broken link in docs/beta.md: missing.md" "broken reference-style link is reported"
+}
+
+scenario_undefined_reference_link() {
+    local dir=$TMP_ROOT/undefined-reference-link
+    make_fixture "$dir"
+    printf '# Beta\n\nMissing [reference definition][missing].\n' >"$dir/docs/beta.md"
+    init_fixture_git "$dir"
+    assert_fail_with "$dir" "undefined reference link in docs/beta.md: missing" "undefined reference-style link is reported"
+}
+
 scenario_doc_not_in_index() {
     local dir=$TMP_ROOT/not-indexed
     make_fixture "$dir"
@@ -179,6 +201,8 @@ scenario_runbook_without_status() {
 
 scenario_valid_tree
 scenario_broken_link
+scenario_broken_reference_link
+scenario_undefined_reference_link
 scenario_doc_not_in_index
 scenario_bad_path_reference
 scenario_missing_skill_frontmatter
