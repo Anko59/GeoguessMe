@@ -21,7 +21,11 @@ contains() {
     local file=$1
     local pattern=$2
     local description=$3
-    if grep -Eq "$pattern" "$file"; then
+    # The file argument may be a glob over the root Makefile and its
+    # fragments (targets moved into fragments by PR 14), so it is
+    # intentionally word-split.
+    # shellcheck disable=SC2086 # intentional Makefile glob word-splitting
+    if grep -Eq "$pattern" $file; then
         ok "$description"
     else
         bad "$description"
@@ -112,10 +116,10 @@ contains "$RELEASE" 'actual_backend.*BACKEND_DIGEST' \
 
 contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
 contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"
-contains Makefile '^pre-push:.*fast deterministic gate' \
+contains 'Makefile Makefile.*.mk' '^pre-push:.*fast deterministic gate' \
     "pre-push is documented as the fast gate"
-contains Makefile '^[[:space:]]+\$\(MAKE\) preflight$' "pre-push invokes preflight"
-contains Makefile 'DOCKER_BUILD_FLAGS' "Make supports CI Docker caching"
+contains 'Makefile Makefile.*.mk' '^[[:space:]]+\$\(MAKE\) preflight$' "pre-push invokes preflight"
+contains 'Makefile Makefile.*.mk' 'DOCKER_BUILD_FLAGS' "Make supports CI Docker caching"
 
 echo
 if [ "$fail" -eq 0 ]; then

@@ -101,7 +101,8 @@ else
 fi
 
 # -- Makefile targets point to the script -------------------------------------
-if grep -q "migration-concurrency.sh" Makefile; then
+# Targets moved into responsibility fragments by PR 14; grep across them.
+if grep -q "migration-concurrency.sh" Makefile Makefile.*.mk; then
     pass "Makefile migration-test references migration-concurrency.sh"
 else
     fail "Makefile migration-test does not reference migration-concurrency.sh"
