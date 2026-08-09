@@ -13,6 +13,7 @@ import (
 
 	"geoguessme/internal/chat"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
 	"github.com/pashagolub/pgxmock/v4"
@@ -60,8 +61,9 @@ func TestUploadPhotoToMultipleGroups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
 	mock := handlerMock(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupA := "00000000-0000-0000-0000-000000000001"
 	groupB := "00000000-0000-0000-0000-000000000002"
 	for _, groupID := range []string{groupA, groupB} {
@@ -80,7 +82,7 @@ func TestUploadPhotoToMultipleGroups(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(insertArgs()...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
+	gameAPI.UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupA, groupB}, false))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("multi-group upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -95,8 +97,9 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
 	mock := handlerMock(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectBegin()
@@ -108,7 +111,7 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 	mock.ExpectExec("INSERT INTO photos").WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadPhoto(nil)(recorder, multipartUploadToGroups(t, []string{groupID}, true))
+	gameAPI.UploadPhoto(recorder, multipartUploadToGroups(t, []string{groupID}, true))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("hide-location upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -117,6 +120,7 @@ func TestUploadPhotoHideLocation(t *testing.T) {
 func TestChallengeResultsHideLocation(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
 	now := time.Now().UTC()
 	groupID := "00000000-0000-0000-0000-000000000001"
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, LifecycleStatus: "ready", HideLocation: true, CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
@@ -129,7 +133,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := requestWithUser(http.MethodGet, "/", "", viewerID)
 		request.SetPathValue("photoID", photo.ID)
-		GetChallengeResults(recorder, request)
+		gameAPI.GetChallengeResults(recorder, request)
 		return recorder
 	}
 	expectResultsQueries := func(viewerID string) {
@@ -181,6 +185,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 func TestChallengeResultsAndChatRejection(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
 	now := time.Now().UTC()
 	groupID := "00000000-0000-0000-0000-000000000001"
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
@@ -190,12 +195,11 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	resultsRequest.SetPathValue("photoID", photo.ID)
-	GetChallengeResults(recorder, resultsRequest)
+	gameAPI.GetChallengeResults(recorder, resultsRequest)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("results status = %d", recorder.Code)
 	}
 
-	RuntimeConfig.AllowedOrigins = []string{"http://allowed.test"}
 	hub := chat.NewHub(nil, nil)
 	defer hub.Stop()
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), hub)
@@ -218,7 +222,9 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
+	mock := handlerMock(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-2", GroupID: "00000000-0000-0000-0000-000000000001", StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	if err := store.Put(context.Background(), photo.StorageKey, bytes.NewReader([]byte("data")), 4, photo.MIMEType); err != nil {
@@ -229,10 +235,9 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := requestWithUser(http.MethodGet, "/", "", "user-1")
 		request.SetPathValue("photoID", photo.ID)
-		ServeChallengeMedia(recorder, request)
+		gameAPI.ServeChallengeMedia(recorder, request)
 		return recorder
 	}
-	mock := handlerMock(t)
 
 	// A player who never received the media can still fetch it after the
 	// original accept window, as long as the challenge is still live.
@@ -271,6 +276,7 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
 	photoID := "00000000-0000-0000-0000-000000000002"
 	expiresAt := time.Now().UTC().Add(RuntimeConfig.ViewWindow)
 	mock.ExpectQuery("UPDATE challenge_views").
@@ -279,7 +285,7 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	request := requestWithUser(http.MethodPost, "/", "", "user-1")
 	request.SetPathValue("photoID", photoID)
 	recorder := httptest.NewRecorder()
-	ConfirmChallengeMediaDelivered(recorder, request)
+	gameAPI.ConfirmChallengeMediaDelivered(recorder, request)
 	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) {
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
 	}

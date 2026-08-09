@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
 	"github.com/pashagolub/pgxmock/v4"
@@ -364,6 +365,7 @@ func groupPhotoUploadRequest(t *testing.T, groupID string, payload []byte) *http
 func TestGroupNotificationSettings(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	member := func() {
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
@@ -372,19 +374,21 @@ func TestGroupNotificationSettings(t *testing.T) {
 	member()
 	mock.ExpectQuery("SELECT COALESCE").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"enabled"}).AddRow(true))
-	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
+	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
 	member()
 	mock.ExpectExec("INSERT INTO group_notification_preferences").WithArgs(groupID, "user-1", false).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
-	requireStatus(t, GroupNotifications, requestWithUser(http.MethodPut, "/?group_id="+groupID, `{"enabled":false}`, "user-1"), http.StatusOK)
+	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodPut, "/?group_id="+groupID, `{"enabled":false}`, "user-1"), http.StatusOK)
 	member()
-	requireStatus(t, GroupNotifications, requestWithUser(http.MethodDelete, "/?group_id="+groupID, "", "user-1"), http.StatusMethodNotAllowed)
+	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodDelete, "/?group_id="+groupID, "", "user-1"), http.StatusMethodNotAllowed)
 }
 
 func TestUploadAndServeGroupPhoto(t *testing.T) {
 	setupHandlers(t)
 	store := setupAvatarStore(t)
 	mock := handlerMock(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
@@ -395,7 +399,7 @@ func TestUploadAndServeGroupPhoto(t *testing.T) {
 		WithArgs(groupID, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
-	requireStatus(t, GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusOK)
+	requireStatus(t, gameAPI.GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusOK)
 
 	const key = "groups/group-1/photo/current"
 	if err := store.Put(context.Background(), key, bytes.NewReader([]byte("photo")), 5, "image/png"); err != nil {
@@ -407,12 +411,12 @@ func TestUploadAndServeGroupPhoto(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"group_id", "storage_key", "mime_type", "byte_size", "created_at"}).
 			AddRow(groupID, key, "image/png", 5, time.Now()))
 	recorder := httptest.NewRecorder()
-	GroupPhoto(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"))
+	gameAPI.GroupPhoto(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"))
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "photo" ||
 		recorder.Header().Get("Cache-Control") != "private, no-store" {
 		t.Fatalf("group photo response = %d %q, cache %q", recorder.Code, recorder.Body.String(), recorder.Header().Get("Cache-Control"))
 	}
-	requireStatus(t, GroupPhoto, requestWithUser(http.MethodDelete, "/", "", "user-1"), http.StatusMethodNotAllowed)
+	requireStatus(t, gameAPI.GroupPhoto, requestWithUser(http.MethodDelete, "/", "", "user-1"), http.StatusMethodNotAllowed)
 }
 
 func TestReactionAndGroupSettingFailures(t *testing.T) {
@@ -426,6 +430,7 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	}
 	mock := handlerMock(t)
 	chatAPI := newChatAPI(t, mock, nil, nil)
+	gameAPI := newGameAPI(t, mock)
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
 
@@ -450,27 +455,29 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)
 
-	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusForbidden)
+	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusForbidden)
 }
 
 func TestGroupPhotoAvailabilityFailures(t *testing.T) {
 	setupHandlers(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
-	requireStatus(t, GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusServiceUnavailable)
-	requireStatus(t, GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusServiceUnavailable)
+	nilStoreGame := NewGameAPI(nil, nil, nil, nil, handlerConfig(), nil, nil, time.Now)
+	requireStatus(t, nilStoreGame.GroupPhoto, groupPhotoUploadRequest(t, groupID, mustDecodeBase64(onePixelPNG)), http.StatusServiceUnavailable)
+	requireStatus(t, nilStoreGame.GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusServiceUnavailable)
 
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
 	mock := handlerMock(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT group_id, storage_key, mime_type").WithArgs(groupID).
 		WillReturnError(errors.New("database unavailable"))
-	requireStatus(t, GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusNotFound)
+	requireStatus(t, gameAPI.GroupPhoto, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusNotFound)
 }

@@ -174,7 +174,7 @@ func TestCompletedDeletionJobAllowsNewActiveJob(t *testing.T) {
 	require.NoError(t, err)
 
 	// Enqueuing a new active job for the same key must succeed.
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "manual", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "manual", []string{key}))
 
 	require.Equal(t, 1, activeJobCount(t, db, key), "a new active job is allowed after completion")
 	var completedCount int
@@ -266,7 +266,7 @@ func TestDeletionWorkerRetryOnFailure(t *testing.T) {
 	key := "retry-fail/" + unique("k")
 	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
 
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "manual", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "manual", []string{key}))
 
 	del := &controlledDeleter{}
 	del.setFail(key, errors.New("transient storage error"))
@@ -307,7 +307,7 @@ func TestDeletionWorkerRetryAfterRecovery(t *testing.T) {
 	key := "retry-recover/" + unique("k")
 	t.Cleanup(func() { deleteDeletionJobs(t, db, key) })
 
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "manual", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "manual", []string{key}))
 
 	del := &controlledDeleter{}
 	del.setFail(key, errors.New("transient storage error"))
@@ -458,8 +458,8 @@ func TestEnqueueMediaDeletionSurvivor(t *testing.T) {
 
 	// Enqueue the same key twice from different sources (simulates concurrent
 	// account deletion and retention sweep both enqueuing the same object).
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "account", []string{key}))
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "retention", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "account", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "retention", []string{key}))
 
 	// Exactly one active job must survive; the second is a silent no-op.
 	require.Equal(t, 1, activeJobCount(t, db, key),
@@ -483,7 +483,7 @@ func TestEnqueueMediaDeletionSurvivor(t *testing.T) {
 		`UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP WHERE id = $1`, jobID)
 	require.NoError(t, err)
 
-	require.NoError(t, repository.EnqueueMediaDeletion(ctx, "retention", []string{key}))
+	require.NoError(t, repository.NewRepository(db).EnqueueMediaDeletion(ctx, "retention", []string{key}))
 	require.Equal(t, 1, activeJobCount(t, db, key),
 		"new active job allowed after prior job completed")
 }

@@ -22,12 +22,14 @@ import (
 // main; main builds an App with NewApp and runs it.
 //
 // PR 4 migrated one read-only slice (GET /api/v1/user/groups) onto injected
-// dependencies and PR 5 migrated the chat slice (messages, reactions, chat
-// media, WebSocket tickets) onto the ChatAPI. The remaining handlers still
-// read the legacy package globals (handlers.RuntimeConfig, handlers.MediaStore,
-// handlers.Push, database.DB); each later migration replaces one more global
-// with a field here. The authentication service is also still a package-global
-// seam (auth.Init*) and is intentionally not a field yet; PR 7 migrates it.
+// dependencies, PR 5 migrated the chat slice (messages, reactions, chat media,
+// WebSocket tickets) onto the ChatAPI, and PR 6 migrated the gameplay slice
+// (groups, challenges, guesses, media delivery, leaderboard) onto the GameAPI.
+// The remaining handlers still read the legacy package globals
+// (handlers.RuntimeConfig, handlers.MediaStore, handlers.Push, database.DB);
+// each later migration replaces one more global with a field here. The
+// authentication service is also still a package-global seam (auth.Init*) and
+// is intentionally not a field yet; PR 7 migrates it.
 type App struct {
 	// Config is the validated startup configuration.
 	Config *config.Config
@@ -43,13 +45,12 @@ type App struct {
 	// Push fans Web Push notifications to subscribers.
 	Push *push.Service
 	// Hub is the realtime chat hub. The chat handlers reach it through the
-	// ChatAPI; the challenge and guess handlers receive it as an explicit
-	// constructor parameter until their slices are migrated.
+	// ChatAPI; the gameplay handlers reach it through the GameAPI.
 	Hub *chat.Hub
 	// Logger is the JSON process logger.
 	Logger *slog.Logger
 	// Clock is the injectable time source (time.Now in production); the chat
-	// migration consumes it for deterministic tests.
+	// and gameplay migrations consume it for deterministic tests.
 	Clock func() time.Time
 	// Metrics records request counters and the storage-cleanup backlog.
 	Metrics *middleware.Metrics
@@ -60,6 +61,9 @@ type App struct {
 	// Chat is the chat handler slice migrated onto injected dependencies
 	// (PR 5): messages, reactions, chat media, and WebSocket tickets.
 	Chat *handlers.ChatAPI
+	// Game is the gameplay handler slice migrated onto injected dependencies
+	// (PR 6): groups, challenges, guesses, media delivery, and leaderboard.
+	Game *handlers.GameAPI
 }
 
 // NewApp constructs an application instance from explicit dependencies. Each
@@ -89,7 +93,8 @@ func NewApp(
 		Clock:   clock,
 		Metrics: &middleware.Metrics{},
 		Groups:  handlers.NewGroupAPI(repos),
-		Chat:    handlers.NewChatAPI(repos.Chat, store, cfg, hub, clock),
+		Chat:    handlers.NewChatAPI(repos.Chat, store, cfg, hub, clock, repos),
+		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 	}
 }
 
@@ -118,33 +123,33 @@ func (a *App) routes() http.Handler {
 
 	mux.Handle("/api/v1/user/groups", protected(a.Groups.GetUserGroups))
 	mux.Handle("/api/v1/user/profile/{userID}", protected(handlers.GetPublicProfile))
-	mux.Handle("/api/v1/group/create", protected(handlers.CreateGroup))
-	mux.Handle("/api/v1/group/join", protected(handlers.JoinGroup))
-	mux.Handle("/api/v1/group/details", protected(handlers.GetGroupDetails))
-	mux.Handle("/api/v1/group/members", protected(handlers.GetGroupMembers))
-	mux.Handle("/api/v1/group/leaderboard", protected(handlers.GetLeaderboard))
-	mux.Handle("/api/v1/group/photo", protected(handlers.GroupPhoto))
-	mux.Handle("/api/v1/group/notifications", protected(handlers.GroupNotifications))
+	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
+	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
+	mux.Handle("/api/v1/group/details", protected(a.Game.GetGroupDetails))
+	mux.Handle("/api/v1/group/members", protected(a.Game.GetGroupMembers))
+	mux.Handle("/api/v1/group/leaderboard", protected(a.Game.GetLeaderboard))
+	mux.Handle("/api/v1/group/photo", protected(a.Game.GroupPhoto))
+	mux.Handle("/api/v1/group/notifications", protected(a.Game.GroupNotifications))
 	mux.Handle("/api/v1/group/messages", protected(a.Chat.GetGroupMessages))
 	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(a.Chat.SetMessageReaction))
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))
-	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto(a.Hub)))
+	mux.Handle("/api/v1/photo/upload", protected(a.Game.UploadPhoto))
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)
 	pushHTTP := push.NewHTTP(a.Push)
 	mux.Handle("/api/v1/push/subscribe", protected(pushHTTP.Subscribe))
 	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
 	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
-	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(handlers.AcceptChallenge))
-	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(handlers.ConfirmChallengeMediaDelivered))
-	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess(a.Hub, a.Repos.Chat)))
-	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
-	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
+	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(a.Game.AcceptChallenge))
+	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(a.Game.ConfirmChallengeMediaDelivered))
+	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(a.Game.SubmitChallengeGuess))
+	mux.Handle("/api/v1/challenges/{photoID}/results", protected(a.Game.GetChallengeResults))
+	mux.Handle("/api/v1/challenges/{photoID}/media", protected(a.Game.ServeChallengeMedia))
 	mux.Handle("/api/v1/users/{userID}/avatar", protected(handlers.ServeUserAvatar))
 	// Link-preview endpoint for group invites: unauthenticated, returns HTML
 	// with Open Graph meta tags for messengers and redirects browsers.
-	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)
+	mux.HandleFunc("GET /invite/{code}", a.Game.HandleInvitePreview)
 
 	registerSystemRoutes(mux, a.Config, a.Metrics, a.Store)
 

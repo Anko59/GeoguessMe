@@ -16,7 +16,6 @@ import (
 	"geoguessme/internal/config"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
-	"geoguessme/internal/repository"
 	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/storage"
 
@@ -28,19 +27,22 @@ import (
 // and response writing. Persistence and WebSocket-ticket handling live in
 // internal/repository/chat; the object store, hub, and clock are injected.
 // ChatAPI replaced the package-level chat handlers and the HubInstance,
-// MediaStore, and RuntimeConfig globals they read.
+// MediaStore, and RuntimeConfig globals they read. PR 6 additionally injects
+// the durable media-deletion seam used by upload compensation.
 type ChatAPI struct {
 	messages *chatrepo.Repository
 	store    storage.ObjectStore
 	cfg      *config.Config
 	hub      *chatHub.Hub
 	now      func() time.Time
+	media    DeletionEnqueuer
 }
 
 // NewChatAPI constructs the chat transport with its explicit dependencies.
-// now is the injectable clock (time.Now in production).
-func NewChatAPI(messages *chatrepo.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time) *ChatAPI {
-	return &ChatAPI{messages: messages, store: store, cfg: cfg, hub: hub, now: now}
+// now is the injectable clock (time.Now in production) and media is the
+// durable deletion-job seam for upload compensation.
+func NewChatAPI(messages *chatrepo.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time, media DeletionEnqueuer) *ChatAPI {
+	return &ChatAPI{messages: messages, store: store, cfg: cfg, hub: hub, now: now, media: media}
 }
 
 func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +182,7 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 	message := &models.Message{ID: uuid.NewString(), GroupID: groupID, UserID: userID, Kind: "media", ReplyToID: replyToID, Content: content, CreatedAt: now}
 	if err := a.messages.CreateChatMediaMessage(r.Context(), message, asset); err != nil {
 		if deleteErr := a.store.Delete(r.Context(), asset.StorageKey); deleteErr != nil {
-			if queueErr := repository.EnqueueMediaDeletion(r.Context(), "manual", []string{asset.StorageKey}); queueErr != nil {
+			if queueErr := a.media.EnqueueMediaDeletion(r.Context(), "manual", []string{asset.StorageKey}); queueErr != nil {
 				slog.Error("failed to persist chat media upload compensation", "storage_key", asset.StorageKey, "delete_error", deleteErr, "enqueue_error", queueErr)
 			}
 		}

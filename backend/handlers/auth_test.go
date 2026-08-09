@@ -8,6 +8,7 @@ import (
 	"geoguessme/internal/chat"
 	"geoguessme/internal/email"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository"
 	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/storage"
 	"net/http"
@@ -271,6 +272,7 @@ func TestProfileReadErrorAndMethodBranches(t *testing.T) {
 func TestGroupAndReadHandlers(t *testing.T) {
 	setupHandlers(t)
 	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
 	now := time.Now().UTC()
 	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
 	ownerRequest := func(method, target, body string) *http.Request {
@@ -283,7 +285,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	mock.ExpectExec("INSERT INTO group_members").WithArgs(pgxmock.AnyArg(), "user-1", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	CreateGroup(recorder, ownerRequest(http.MethodPost, "/", `{"name":"Created"}`))
+	gameAPI.CreateGroup(recorder, ownerRequest(http.MethodPost, "/", `{"name":"Created"}`))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("create group status = %d", recorder.Code)
 	}
@@ -292,7 +294,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectExec("INSERT INTO group_members").WithArgs(group.ID, "user-1", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder = httptest.NewRecorder()
-	JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"code":"abc123"}`))
+	gameAPI.JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"code":"abc123"}`))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("join group status = %d", recorder.Code)
 	}
@@ -300,7 +302,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE id").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	recorder = httptest.NewRecorder()
-	GetGroupDetails(recorder, ownerRequest(http.MethodGet, "/?id="+group.ID, ""))
+	gameAPI.GetGroupDetails(recorder, ownerRequest(http.MethodGet, "/?id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("group details status = %d", recorder.Code)
 	}
@@ -308,7 +310,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar"}).AddRow("user-1", "alice", "avatar.png"))
 	recorder = httptest.NewRecorder()
-	GetGroupMembers(recorder, ownerRequest(http.MethodGet, "/?id="+group.ID, ""))
+	gameAPI.GetGroupMembers(recorder, ownerRequest(http.MethodGet, "/?id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("members status = %d", recorder.Code)
 	}
@@ -318,7 +320,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).WithArgs(group.ID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder = httptest.NewRecorder()
-	GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
+	gameAPI.GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("leaderboard status = %d", recorder.Code)
 	}
@@ -384,7 +386,17 @@ func mustTestStore(t *testing.T) storage.ObjectStore {
 // read: MediaStore, RuntimeConfig, and HubInstance.
 func newChatAPI(t *testing.T, mock pgxmock.PgxPoolIface, store storage.ObjectStore, hub *chat.Hub) *ChatAPI {
 	t.Helper()
-	return NewChatAPI(chatrepo.NewRepository(mock), store, handlerConfig(), hub, time.Now)
+	return NewChatAPI(chatrepo.NewRepository(mock), store, handlerConfig(), hub, time.Now, repository.NewRepository(mock))
+}
+
+// newGameAPI builds the migrated gameplay transport on the caller's mock pool
+// (the same pool serves membership checks and gameplay persistence), with a
+// temp-dir store and the test configuration. It replaces the package globals
+// the old gameplay handlers read: MediaStore, RuntimeConfig, and Push.
+func newGameAPI(t *testing.T, mock pgxmock.PgxPoolIface) *GameAPI {
+	t.Helper()
+	repos := repository.NewRepository(mock)
+	return NewGameAPI(repos.Groups, repos.Chat, repos, mustTestStore(t), handlerConfig(), nil, nil, time.Now)
 }
 
 func requireStatus(t *testing.T, handler http.HandlerFunc, request *http.Request, status int) {
@@ -401,17 +413,18 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 	groupsAPI := NewGroupAPI(stubGroupReader{})
 	mock := handlerMock(t)
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
+	gameAPI := newGameAPI(t, mock)
 	tests := []struct {
 		name string
 		hand http.HandlerFunc
 	}{
 		{"signup", Signup}, {"login", Login}, {"refresh", Refresh}, {"logout", Logout},
 		{"request verification", RequestVerification}, {"verify email", VerifyEmail}, {"forgot password", ForgotPassword},
-		{"reset password", ResetPassword}, {"change password", ChangePassword}, {"delete account", DeleteAccount}, {"create group", CreateGroup},
-		{"join group", JoinGroup}, {"leaderboard", GetLeaderboard}, {"ticket", chatAPI.CreateWebSocketTicket},
-		{"guess", SubmitChallengeGuess(nil, nil)}, {"results", GetChallengeResults}, {"messages", chatAPI.GetGroupMessages},
-		{"group details", GetGroupDetails}, {"group members", GetGroupMembers}, {"user groups", groupsAPI.GetUserGroups},
-		{"upload", UploadPhoto(nil)}, {"accept", AcceptChallenge}, {"media", ServeChallengeMedia},
+		{"reset password", ResetPassword}, {"change password", ChangePassword}, {"delete account", DeleteAccount}, {"create group", gameAPI.CreateGroup},
+		{"join group", gameAPI.JoinGroup}, {"leaderboard", gameAPI.GetLeaderboard}, {"ticket", chatAPI.CreateWebSocketTicket},
+		{"guess", gameAPI.SubmitChallengeGuess}, {"results", gameAPI.GetChallengeResults}, {"messages", chatAPI.GetGroupMessages},
+		{"group details", gameAPI.GetGroupDetails}, {"group members", gameAPI.GetGroupMembers}, {"user groups", groupsAPI.GetUserGroups},
+		{"upload", gameAPI.UploadPhoto}, {"accept", gameAPI.AcceptChallenge}, {"media", gameAPI.ServeChallengeMedia},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -437,28 +450,34 @@ func TestAuthValidationAndUnauthenticatedBranches(t *testing.T) {
 	hubAPI := newChatAPI(t, mock, mustTestStore(t), chat.NewHub(nil, nil))
 	requireStatus(t, hubAPI.HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusUnauthorized)
 
+	gameAPI := newGameAPI(t, mock)
 	requireStatus(t, nilHubAPI.CreateWebSocketTicket, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, GetLeaderboard, requestWithUser(http.MethodGet, "/?group_id=group-1&period=year", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.GetLeaderboard, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.GetLeaderboard, requestWithUser(http.MethodGet, "/?group_id=group-1&period=year", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, nilHubAPI.GetGroupMessages, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
-	requireStatus(t, SubmitChallengeGuess(nil, nil), requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.SubmitChallengeGuess, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("").WillReturnError(pgx.ErrNoRows)
-	requireStatus(t, GetChallengeResults, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusNotFound)
-	requireStatus(t, AcceptChallenge, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
-	requireStatus(t, ServeChallengeMedia, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusServiceUnavailable)
+	requireStatus(t, gameAPI.GetChallengeResults, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusNotFound)
+	requireStatus(t, gameAPI.AcceptChallenge, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
+	repos := repository.NewRepository(mock)
+	nilStoreGame := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
+	requireStatus(t, nilStoreGame.ServeChallengeMedia, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusServiceUnavailable)
 }
 
 func TestGroupAndUploadValidation(t *testing.T) {
 	setupHandlers(t)
-	requireStatus(t, CreateGroup, requestWithUser(http.MethodPost, "/", `{"name":""}`, "user-1"), http.StatusBadRequest)
-	requireStatus(t, JoinGroup, requestWithUser(http.MethodPost, "/", `{"code":"bad"}`, "user-1"), http.StatusBadRequest)
-	requireStatus(t, UploadPhoto(nil), requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusServiceUnavailable)
+	mock := handlerMock(t)
+	gameAPI := newGameAPI(t, mock)
+	requireStatus(t, gameAPI.CreateGroup, requestWithUser(http.MethodPost, "/", `{"name":""}`, "user-1"), http.StatusBadRequest)
+	requireStatus(t, gameAPI.JoinGroup, requestWithUser(http.MethodPost, "/", `{"code":"bad"}`, "user-1"), http.StatusBadRequest)
+	repos := repository.NewRepository(mock)
+	nilStoreGame := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
+	requireStatus(t, nilStoreGame.UploadPhoto, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusServiceUnavailable)
 
-	MediaStore = &validationStore{}
-	requireStatus(t, UploadPhoto(nil), requestWithUser(http.MethodPost, "/", "not-multipart", "user-1"), http.StatusBadRequest)
-	MediaStore = nil
+	validationGame := NewGameAPI(repos.Groups, repos.Chat, repos, &validationStore{}, handlerConfig(), nil, nil, time.Now)
+	requireStatus(t, validationGame.UploadPhoto, requestWithUser(http.MethodPost, "/", "not-multipart", "user-1"), http.StatusBadRequest)
 	if err := validateID("", "id"); err == nil {
 		t.Fatal("empty identifier accepted")
 	}
