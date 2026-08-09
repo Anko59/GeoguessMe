@@ -21,11 +21,7 @@ export function bustAvatarCache(userID: string): void {
 function fetchAvatar(userID: string): Promise<string> {
     return api
         .get(`/users/${userID}/avatar`, { responseType: 'blob' })
-        .then((res) => {
-            const objectURL = URL.createObjectURL(res.data as Blob);
-            store.set(userID, objectURL);
-            return objectURL;
-        })
+        .then((res) => URL.createObjectURL(res.data as Blob))
         .catch(() => fallbackAvatarPath);
 }
 
@@ -52,7 +48,7 @@ export function useAvatarUrl(userID: string, avatar?: string): string | undefine
         store
             .getOrFetch(userID, () => fetchAvatar(userID))
             .then((result) => {
-                if (!cancelled) {
+                if (!cancelled && result) {
                     setUrl(result);
                 }
             });
