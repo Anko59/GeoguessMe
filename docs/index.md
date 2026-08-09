@@ -47,6 +47,27 @@ and submit one server-timed guess.
 - [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
   record, corrected safeguards, and release checklist
 
+## Canonical documentation owners
+
+Each subject has exactly one canonical owner document; every other page routes
+to it instead of restating it:
+
+| Subject                               | Canonical owner                                                |
+| ------------------------------------- | -------------------------------------------------------------- |
+| Deployment, upgrades, rollback        | [deployment](deployment.md)                                    |
+| Environment variables and defaults    | [configuration](configuration.md)                              |
+| Health, metrics, backups, incidents   | [operations](operations.md)                                    |
+| Gates, test strategy, local/CI parity | [testing](testing.md)                                          |
+| API conventions, errors, rate limits  | [api](api.md) (machine contract: [openapi.yaml](openapi.yaml)) |
+| Package map and agent guidance        | [agent-engineering](agent-engineering.md)                      |
+| Local development workflow            | [local-development](local-development.md)                      |
+| Troubleshooting                       | [troubleshooting](troubleshooting.md)                          |
+| Hosted deployment checklist           | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)    |
+
+Pages that used to duplicate a canonical subject route to it instead. Historical
+incident records live under `docs/runbooks/` and declare `status: archival`;
+they are never linked from agent instructions.
+
 ## Repository
 
 See [README.md](../README.md) for the project overview,

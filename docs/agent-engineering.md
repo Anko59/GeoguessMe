@@ -54,7 +54,7 @@ Start with these canonical entry points, then drill into the map below.
 | E2E suite           | `frontend/e2e/`                                                          | Playwright scenarios keyed to user journeys                                                                                                                                   |
 | Compose/deploy      | `deployment/`                                                            | Compose files, Caddy, Docker images, deploy scripts                                                                                                                           |
 | Hosted infra        | `infra/terraform/`, `infra/cloud-init/`                                  | Terraform and cloud-init for the hosted deployment                                                                                                                            |
-| Quality gates       | `tools/quality/`                                                         | structure-check, hooks, regression tests                                                                                                                                      |
+| Quality gates       | `tools/quality/`                                                         | structure-check, durable architecture checker (`tools/quality/archcheck`), hooks, regression tests                                                                            |
 
 ### Dependency direction and ownership
 
@@ -71,8 +71,10 @@ Start with these canonical entry points, then drill into the map below.
   migration. Only `backend/internal/config/` reads environment variables. The
   single allowlisted exception is the pre-existing rate-limiter singleton in
   `backend/internal/middleware/rate_limit.go` (mutex-protected process-global
-  rate-limiting state; test hooks gated to `APP_ENV=test`); it is recorded here
-  and will be formalized in PR 14's architecture-checker allowlist.
+  rate-limiting state; test hooks gated to `APP_ENV=test`). It is the only entry
+  in the explicit allowlist `tools/quality/archcheck/mutable-globals.allowlist`,
+  enforced by the durable architecture checker (`make archcheck`,
+  `make test-archcheck-regression`).
 - Frontend data flows down: pages compose components, components use hooks, and
   hooks call `api.ts`. Wire shapes live in `frontend/src/types/`; view models
   and local UI state are separate from wire types.
@@ -85,6 +87,7 @@ Start with these canonical entry points, then drill into the map below.
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | API contract or endpoint change | `docs/openapi.yaml`, `docs/openapi/`, `backend/handlers/`, `backend/internal/models/`, `frontend/src/api.ts`, `frontend/src/types/` | Handler tests, `hosted-contract-test`                       | `make lint-openapi`, `make openapi-generate`, `make openapi-check`, `make preflight` |
 | Backend behavior change         | `backend/handlers/`, `backend/internal/*/`                                                                                          | Package unit tests, `backend/integration_test/`             | `make test-backend`, `make test-race`, `make test-integration`                       |
+| Backend composition change      | `backend/app.go`, `backend/main.go`, `backend/handlers/`, `backend/internal/*/`                                                     | Composition tests, archcheck fixtures                       | `make archcheck`, `make test-archcheck-regression`, `make preflight`, `make verify`  |
 | Database migration              | `backend/internal/database/migrations/` (new file only), `backend/internal/repository/`                                             | Migration fixtures, repository DB tests                     | `make lint-sql`, `make verify`                                                       |
 | Chat behavior                   | `frontend/src/components/chat/`, `frontend/src/hooks/useGroupMessages.ts`, `backend/handlers/chat.go`, `backend/internal/chat/`     | `Chat.test.tsx`, `useGroupMessages.test.ts`, `chat.spec.ts` | `make test-frontend`, `make test-e2e`                                                |
 | Camera behavior                 | `frontend/src/components/camera/`                                                                                                   | Camera lifecycle and capture tests                          | `make test-frontend`, `video-challenge` E2E                                          |
@@ -121,6 +124,12 @@ linters, Playwright, or migration tools directly on the host.
 - Complete gates: `make preflight` is the fast local and pull-request gate;
   `make verify` is the complete release gate. Install and verify hooks with
   `make hooks-install` and `make hooks-check`.
+- Architecture rules: `make archcheck` runs the durable backend architecture
+  checker (no production package-level mutable application dependencies, no SQL
+  in HTTP handlers, no environment reads outside `backend/internal/config`). It
+  is wired into `make preflight` and `make quality`; contract currentness and
+  agent/documentation reference validity are enforced by `make openapi-check`
+  and `make lint-docs` in the same gates.
 
 ## Cross-cutting invariants
 
@@ -242,3 +251,28 @@ entries remain.
   `status: primary`; archival runbooks are never linked from agent instructions.
 
 Run its regression suite with `make test-docs-agent-config`.
+
+## Architecture checker
+
+`tools/quality/archcheck` (Go, stdlib only) enforces the durable backend
+architecture rules; run it with `make archcheck` and exercise it with
+`make test-archcheck-regression`:
+
+- **No production package-level mutable application dependencies**
+  (`mutable-globals`): `var _` assertions, `embed.FS` values, `errors.New` /
+  `fmt.Errorf` sentinels, basic and byte-string literals, and non-pointer
+  composite-literal tables are exempt by construction; everything else must be
+  listed in `tools/quality/archcheck/mutable-globals.allowlist` (the
+  rate-limiter singleton is the only entry).
+- **No SQL in HTTP handlers** (`sql-in-handlers`): `backend/handlers/` must not
+  import `database/sql` or `pgx`, and must not contain SQL command string
+  literals.
+- **No direct environment reads outside configuration** (`env-read`): only
+  `backend/internal/config/` may call `os.Getenv`, `os.LookupEnv`, or
+  `syscall.Getenv`.
+
+The checker deliberately does not duplicate the OpenAPI drift gate
+(`make openapi-check`) or the docs/agent-config checker (`make lint-docs`);
+`make preflight` and `make quality` run all three together. Its regression suite
+(the clean real repository plus dirty fixtures) lives in
+`tools/quality/archcheck/main_test.go`.
