@@ -25,19 +25,39 @@ type event struct {
 }
 
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan event
-	register   chan *Client
-	unregister chan *Client
-	stop       chan struct{}
-	stopped    chan struct{}
-	persist    PersistFunc
-	notify     NotifyFunc
-	once       sync.Once
+	clients        map[*Client]bool
+	broadcast      chan event
+	register       chan *Client
+	unregister     chan *Client
+	stop           chan struct{}
+	stopped        chan struct{}
+	persist        PersistFunc
+	notify         NotifyFunc
+	persistTimeout time.Duration
+	once           sync.Once
 }
 
+// defaultPersistTimeout bounds a single persistence call. The hub Run loop is
+// single-threaded, so an unbounded persist could stall every broadcast; the
+// deadline makes a hung database call fail instead of wedging the hub (the
+// context is honored by the pgx-backed SaveMessage path).
+const defaultPersistTimeout = 5 * time.Second
+
+// NewHub builds a hub that bounds every persistence call with the default
+// five-second deadline.
 func NewHub(persist PersistFunc, notify NotifyFunc) *Hub {
-	return &Hub{broadcast: make(chan event, 128), register: make(chan *Client), unregister: make(chan *Client), clients: make(map[*Client]bool), stop: make(chan struct{}), stopped: make(chan struct{}), persist: persist, notify: notify}
+	return NewHubWithTimeout(persist, notify, defaultPersistTimeout)
+}
+
+// NewHubWithTimeout builds a hub with an explicit persistence deadline. It is
+// the constructor tests use to exercise the bounded-persist invariant with a
+// tiny timeout instead of waiting five seconds. A non-positive timeout falls
+// back to the default so a hub can never be accidentally unbounded.
+func NewHubWithTimeout(persist PersistFunc, notify NotifyFunc, persistTimeout time.Duration) *Hub {
+	if persistTimeout <= 0 {
+		persistTimeout = defaultPersistTimeout
+	}
+	return &Hub{broadcast: make(chan event, 128), register: make(chan *Client), unregister: make(chan *Client), clients: make(map[*Client]bool), stop: make(chan struct{}), stopped: make(chan struct{}), persist: persist, notify: notify, persistTimeout: persistTimeout}
 }
 
 func (h *Hub) Run() {
@@ -63,7 +83,14 @@ func (h *Hub) Run() {
 				message.Kind = "text"
 			}
 			if !incoming.alreadyPersisted && h.persist != nil {
-				if err := h.persist(context.Background(), &message); err != nil {
+				// Bound the persistence call so a hung database cannot stall the
+				// single-threaded hub. The deadline is honored by the pgx-backed
+				// save; on expiry the error path below drops the message and the
+				// loop keeps serving every other broadcast.
+				ctx, cancel := context.WithTimeout(context.Background(), h.persistTimeout)
+				err := h.persist(ctx, &message)
+				cancel()
+				if err != nil {
 					if incoming.sender != nil {
 						sendSystem(incoming.sender, "message_not_saved", "Message could not be sent")
 					}

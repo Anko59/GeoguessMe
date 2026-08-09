@@ -424,14 +424,15 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 		request.SetPathValue("messageID", messageID)
 		return request
 	}
-	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
-	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
-
 	mock := handlerMock(t)
+	chatAPI := newChatAPI(t, mock, nil, nil)
+	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
+	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
+
 	columns := []string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).
 		WillReturnRows(pgxmock.NewRows(columns))
-	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusNotFound)
+	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusNotFound)
 
 	messageRows := func(kind string) *pgxmock.Rows {
 		return pgxmock.NewRows(columns).
@@ -440,14 +441,14 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
-	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
+	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
 
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)
+	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusForbidden)
 
 	requireStatus(t, GroupNotifications, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").

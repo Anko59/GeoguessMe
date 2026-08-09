@@ -22,11 +22,13 @@ Start with these canonical entry points, then drill into the map below.
 
 | Area                | Location                                                                 | Responsibility                                                                                                  |
 | ------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Backend entry       | `backend/main.go`                                                        | Process lifecycle: config, pool, workers, server, shutdown (composition root)                                   |
+| Backend entry       | `backend/main.go`                                                        | Process lifecycle: config, pool, workers, server, shutdown                                                      |
+| Backend composition | `backend/app.go`                                                         | Dependency composition root: the `App` type holds every injected runtime dependency and owns route registration |
 | Backend routing     | `backend/routes.go`                                                      | Route table and middleware wiring                                                                               |
-| HTTP transport      | `backend/handlers/`                                                      | Request parsing, authorization delegation, response mapping                                                     |
+| HTTP transport      | `backend/handlers/`                                                      | Request parsing, authorization delegation, response mapping (migrated slices: `GroupAPI`, `ChatAPI`)            |
 | Authentication      | `backend/internal/auth/`                                                 | Token issuance/validation, sessions, authorization checks                                                       |
 | Realtime chat       | `backend/internal/chat/`                                                 | WebSocket hub, clients, message dispatch                                                                        |
+| Chat persistence    | `backend/internal/repository/chat/`                                      | Messages, reactions, chat media, WebSocket tickets (injected pool)                                              |
 | Configuration       | `backend/internal/config/`                                               | Sole environment-variable reader; validated settings                                                            |
 | Database            | `backend/internal/database/`                                             | Pool access and forward-only SQL migrations                                                                     |
 | Ranking math        | `backend/internal/elo/`                                                  | Elo updates for guesses                                                                                         |
@@ -56,12 +58,13 @@ Start with these canonical entry points, then drill into the map below.
 
 ### Dependency direction and ownership
 
-- The backend composition root is `backend/main.go`. It validates configuration,
-  creates the pool, starts workers, and owns process lifecycle. `routes.go`
-  registers handlers. Handlers delegate persistence to
-  `backend/internal/repository/` and business rules to the owning internal
-  package. Never add SQL to a handler and never read an environment variable
-  outside `backend/internal/config/`.
+- The backend dependency composition root is `backend/app.go`: the `App` struct
+  holds every injected dependency and registers routes. `main.go` validates
+  configuration, creates the pool, starts workers, and owns process lifecycle.
+  Handlers delegate persistence to `backend/internal/repository/` (and its
+  responsibility sub-packages such as `backend/internal/repository/chat/`) and
+  business rules to the owning internal package. Never add SQL to a handler and
+  never read an environment variable outside `backend/internal/config/`.
 - Mutable package globals are banned going forward. The `database.DB` global and
   direct `os.Getenv` calls still present are tracked migration debt; do not add
   new ones. See the [compatibility ledger](#compatibility-ledger).
@@ -78,7 +81,7 @@ Start with these canonical entry points, then drill into the map below.
 | API contract or endpoint change | `docs/openapi.yaml`, `docs/openapi/`, `backend/handlers/`, `backend/internal/models/`, `frontend/src/api.ts`, `frontend/src/types/` | Handler tests, `hosted-contract-test`                       | `make lint-openapi`, `make openapi-generate`, `make openapi-check`, `make preflight` |
 | Backend behavior change         | `backend/handlers/`, `backend/internal/*/`                                                                                          | Package unit tests, `backend/integration_test/`             | `make test-backend`, `make test-race`, `make test-integration`                       |
 | Database migration              | `backend/internal/database/migrations/` (new file only), `backend/internal/repository/`                                             | Migration fixtures, repository DB tests                     | `make lint-sql`, `make verify`                                                       |
-| Chat behavior                   | `frontend/src/components/chat/`, `frontend/src/hooks/useGroupMessages.ts`, `backend/handlers/messages.go`, `backend/internal/chat/` | `Chat.test.tsx`, `useGroupMessages.test.ts`, `chat.spec.ts` | `make test-frontend`, `make test-e2e`                                                |
+| Chat behavior                   | `frontend/src/components/chat/`, `frontend/src/hooks/useGroupMessages.ts`, `backend/handlers/chat.go`, `backend/internal/chat/`     | `Chat.test.tsx`, `useGroupMessages.test.ts`, `chat.spec.ts` | `make test-frontend`, `make test-e2e`                                                |
 | Camera behavior                 | `frontend/src/components/camera/`                                                                                                   | Camera lifecycle and capture tests                          | `make test-frontend`, `video-challenge` E2E                                          |
 | Game flow                       | `frontend/src/components/game/`, `backend/handlers/game.go`                                                                         | `Game.test.tsx`, `challenge.spec.ts`                        | `make test-frontend`, `make test-e2e`                                                |
 | Configuration change            | `backend/internal/config/`, `backend/main.go`                                                                                       | Config validation tests                                     | `make preflight`, `make verify` (startup behavior)                                   |
@@ -154,14 +157,14 @@ Temporary compatibility paths are listed here with their tests, replacement, and
 removal condition. Remove an entry only when its code, schema, docs, and tests
 are gone together.
 
-| Legacy path                         | Location                                                                 | Tests                                                                         | Replacement                        | Removal |
-| ----------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------- | ------- |
-| `after_id` message cursor           | `backend/handlers/messages.go`, `frontend/src/hooks/useGroupMessages.ts` | `backend/internal/repository/messages_db_test.go`, `useGroupMessages.test.ts` | Opaque `cursor` contract           | PR 12   |
-| Reaction `emoji` alias              | `backend/internal/models/message.go`, `backend/handlers/messages.go`     | Reaction handler and model tests                                              | `reaction` field only              | PR 12   |
-| Single challenge `group_id` input   | `backend/handlers/photo.go` (`challengeGroupIDs` fallback)               | Challenge upload handler tests                                                | Repeated `group_ids` form field    | PR 12   |
-| `CleanupAuthTokens` no-op reference | `backend/main.go`                                                        | Cleanup worker tests                                                          | Explicit cleanup worker dependency | PR 7    |
-| `InitSchema` compatibility helper   | `backend/internal/database/db.go`                                        | Database tests                                                                | `geoguessme migrate up`            | PR 7    |
-| `database.DB` package global        | `backend/internal/database/`, `backend/routes.go`, `backend/main.go`     | Handler and integration tests                                                 | Composition root injection         | PR 7    |
+| Legacy path                         | Location                                                             | Tests                                                                              | Replacement                        | Removal |
+| ----------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- | ------- |
+| `after_id` message cursor           | `backend/handlers/chat.go`, `frontend/src/hooks/useGroupMessages.ts` | `backend/internal/repository/chat/messages_db_test.go`, `useGroupMessages.test.ts` | Opaque `cursor` contract           | PR 12   |
+| Reaction `emoji` alias              | `backend/internal/models/message.go`, `backend/handlers/chat.go`     | Reaction handler and model tests                                                   | `reaction` field only              | PR 12   |
+| Single challenge `group_id` input   | `backend/handlers/photo.go` (`challengeGroupIDs` fallback)           | Challenge upload handler tests                                                     | Repeated `group_ids` form field    | PR 12   |
+| `CleanupAuthTokens` no-op reference | `backend/main.go`                                                    | Cleanup worker tests                                                               | Explicit cleanup worker dependency | PR 7    |
+| `InitSchema` compatibility helper   | `backend/internal/database/db.go`                                    | Database tests                                                                     | `geoguessme migrate up`            | PR 7    |
+| `database.DB` package global        | `backend/internal/database/`, `backend/routes.go`, `backend/main.go` | Handler and integration tests                                                      | Composition root injection         | PR 7    |
 
 The compatibility-removal PR (PR 12) uses a two-deployment sequence: deploy code
 that reads and writes only the new fields while the database stays backward

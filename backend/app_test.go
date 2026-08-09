@@ -79,6 +79,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		"mailer": appA.Mailer == appB.Mailer, "push": appA.Push == appB.Push,
 		"hub": appA.Hub == appB.Hub, "logger": appA.Logger == appB.Logger,
 		"metrics": appA.Metrics == appB.Metrics, "groups": appA.Groups == appB.Groups,
+		"chat": appA.Chat == appB.Chat,
 	} {
 		if shared {
 			t.Fatalf("composition instances share the %s dependency", name)
