@@ -73,32 +73,62 @@ normalize_path() {
     printf '%s' "${out[*]}"
 }
 
+check_link_target() {
+    local file=$1 target=$2 base_dir resolved
+    target=${target#<}
+    target=${target%>}
+    target=${target//[[:space:]]/}
+    target=${target//\"/}
+    target=${target//\'/}
+    is_external_target "$target" && return
+    target=${target%%#*}
+    [ -n "$target" ] || return
+    case "$target" in
+        *'*'* | *"$DOLLAR_PAREN"*) return ;;
+    esac
+    base_dir=$(dirname "$file")
+    resolved=$(normalize_path "$base_dir/$target")
+    case "$resolved" in
+        __above__)
+            violation "link in $file escapes the repository root: $target"
+            ;;
+        */node_modules/* | */dist/* | */coverage/*) ;;
+        *)
+            [ -e "$resolved" ] || violation "broken link in $file: $target"
+            ;;
+    esac
+}
+
 check_markdown_links() {
-    local file target base_dir resolved
+    local file target definition id usage label reference
     local -a links=()
+    local -a definitions=()
+    local -a usages=()
+    local -A references=()
     while IFS= read -r -d '' file; do
         mapfile -t links < <(grep -oE '\[[^]]*\]\([^)]*\)' "$file" | sed -nE 's/^.*\]\(([^)]*)\).*/\1/p' || true)
         for target in "${links[@]}"; do
-            target=${target//[[:space:]]/}
-            target=${target//\"/}
-            target=${target//\'/}
-            is_external_target "$target" && continue
-            target=${target%%#*}
-            [ -n "$target" ] || continue
-            case "$target" in
-                *'*'* | *"$DOLLAR_PAREN"*) continue ;;
-            esac
-            base_dir=$(dirname "$file")
-            resolved=$(normalize_path "$base_dir/$target")
-            case "$resolved" in
-                __above__)
-                    violation "link in $file escapes the repository root: $target"
-                    ;;
-                */node_modules/* | */dist/* | */coverage/*) ;;
-                *)
-                    [ -e "$resolved" ] || violation "broken link in $file: $target"
-                    ;;
-            esac
+            check_link_target "$file" "$target"
+        done
+
+        # Reference-style Markdown links keep their targets in definitions:
+        # [label][reference] ... [reference]: target.md
+        references=()
+        mapfile -t definitions < <(grep -E '^[[:space:]]{0,3}\[[^]]+\]:[[:space:]]*[^[:space:]]+' "$file" || true)
+        for definition in "${definitions[@]}"; do
+            id=$(printf '%s\n' "$definition" | sed -nE 's/^[[:space:]]{0,3}\[([^]]+)\]:.*/\1/p' | tr '[:upper:]' '[:lower:]')
+            target=$(printf '%s\n' "$definition" | sed -nE 's/^[[:space:]]{0,3}\[[^]]+\]:[[:space:]]*(<[^>]+>|[^[:space:]]+).*/\1/p')
+            references["$id"]=$target
+            check_link_target "$file" "$target"
+        done
+        mapfile -t usages < <(grep -oE '\[[^]]+\]\[[^]]*\]' "$file" || true)
+        for usage in "${usages[@]}"; do
+            label=$(printf '%s\n' "$usage" | sed -nE 's/^\[([^]]+)\]\[[^]]*\]$/\1/p')
+            reference=$(printf '%s\n' "$usage" | sed -nE 's/^\[[^]]+\]\[([^]]*)\]$/\1/p')
+            [ -n "$reference" ] || reference=$label
+            reference=$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')
+            [ -n "${references[$reference]+x}" ] ||
+                violation "undefined reference link in $file: $reference"
         done
     done < <(git ls-files -z '*.md')
 }

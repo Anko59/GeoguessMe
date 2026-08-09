@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +19,7 @@ type Config struct {
 	PublicURL   string
 
 	// StorageDriver selects the object store. "local" uses the filesystem via
-	// UploadDir; any other value (including empty) uses S3-compatible storage.
+	// UploadDir; "s3" or the absent-value default uses S3-compatible storage.
 	StorageDriver string
 
 	DatabaseURL      string
@@ -96,192 +95,6 @@ const (
 // enough for an HTTP header.
 const minMetricsTokenBytes = 32
 
-// loader accumulates every parse failure so a single startup attempt reports
-// all malformed variables instead of stopping at the first one.
-type loader struct {
-	problems []string
-}
-
-func (l *loader) fail(key, kind, value string) {
-	l.problems = append(l.problems, fmt.Sprintf("%s must be a %s (got %q)", key, kind, value))
-}
-
-// stringValue returns the environment value when the variable is present and
-// non-empty. An empty assignment is treated as unset so optional features can
-// be disabled by leaving the variable blank.
-func (l *loader) stringValue(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok && value != "" {
-		return value
-	}
-	return fallback
-}
-
-// intValue, int64Value, uint64Value, boolValue, and durationValue return the
-// parsed environment value, falling back to the default only when the variable
-// is ABSENT. A variable that is present but malformed records a load error so
-// startup fails with a clear message instead of silently substituting a
-// default.
-func (l *loader) intValue(key string, fallback int) int {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		l.fail(key, "valid integer", value)
-		return fallback
-	}
-	return parsed
-}
-
-func (l *loader) int64Value(key string, fallback int64) int64 {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		l.fail(key, "valid integer", value)
-		return fallback
-	}
-	return parsed
-}
-
-func (l *loader) uint64Value(key string, fallback uint64) uint64 {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	parsed, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		l.fail(key, "valid non-negative integer", value)
-		return fallback
-	}
-	return parsed
-}
-
-func (l *loader) boolValue(key string, fallback bool) bool {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		l.fail(key, "boolean", value)
-		return fallback
-	}
-	return parsed
-}
-
-func (l *loader) durationValue(key string, fallback time.Duration) time.Duration {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		l.fail(key, "valid duration", value)
-		return fallback
-	}
-	return parsed
-}
-
-// urlValue verifies a configured absolute http(s) URL at load time so a
-// malformed PUBLIC_URL or S3_ENDPOINT fails startup together with every other
-// parse error instead of being discovered serially.
-func (l *loader) urlValue(key, value string) {
-	parsed, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		l.fail(key, "valid http(s) URL", value)
-	}
-}
-
-// cidrList parses TRUSTED_PROXY_CIDRS and rejects entries that are not valid
-// CIDR prefixes. An empty or unset variable means no trusted proxies.
-func (l *loader) cidrList(key string) []string {
-	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return nil
-	}
-	parts := splitList(raw)
-	for _, part := range parts {
-		if _, err := netip.ParsePrefix(part); err != nil {
-			l.fail(key, "CIDR", part)
-		}
-	}
-	return parts
-}
-
-// Load reads and strictly parses every configuration variable. Defaults apply
-// only to ABSENT variables; a variable that is present but malformed produces
-// an aggregated error naming every offending variable so an operator can fix
-// the whole configuration in one startup attempt.
-func Load() (*Config, error) {
-	l := &loader{}
-	cfg := &Config{
-		Environment:      normalizeEnvironment(l.stringValue("APP_ENV", EnvDevelopment)),
-		Port:             l.stringValue("PORT", "8080"),
-		PublicURL:        l.stringValue("PUBLIC_URL", "http://localhost:5173"),
-		StorageDriver:    l.stringValue("STORAGE_DRIVER", ""),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		DatabaseMinConns: int32(l.intValue("DB_MIN_CONNS", 2)),
-		DatabaseMaxConns: int32(l.intValue("DB_MAX_CONNS", 10)),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:   l.durationValue("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  l.durationValue("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		VerificationTTL:  l.durationValue("VERIFICATION_TOKEN_TTL", 24*time.Hour),
-		ResetTTL:         l.durationValue("RESET_TOKEN_TTL", time.Hour),
-		PasswordHashCost: l.intValue("BCRYPT_COST", 12),
-
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPPort:        l.intValue("SMTP_PORT", 1025),
-		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:        l.stringValue("SMTP_FROM", "no-reply@localhost"),
-		SMTPTLS:         l.stringValue("SMTP_TLS", SMTPOff),
-		SMTPDialTimeout: l.durationValue("SMTP_DIAL_TIMEOUT", 10*time.Second),
-		SMTPTimeout:     l.durationValue("SMTP_TIMEOUT", 30*time.Second),
-
-		S3Endpoint:     l.stringValue("S3_ENDPOINT", "http://localhost:9000"),
-		S3Region:       l.stringValue("S3_REGION", "us-east-1"),
-		S3Bucket:       l.stringValue("S3_BUCKET", "geoguessme-media"),
-		S3AccessKey:    l.stringValue("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:    l.stringValue("S3_SECRET_KEY", "minioadmin"),
-		S3UsePathStyle: l.boolValue("S3_USE_PATH_STYLE", true),
-
-		AllowedOrigins:    splitList(l.stringValue("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")),
-		TrustedProxyCIDRs: l.cidrList("TRUSTED_PROXY_CIDRS"),
-
-		UploadMaxBytes:  l.int64Value("UPLOAD_MAX_BYTES", 10*1024*1024),
-		AvatarMaxBytes:  l.int64Value("AVATAR_MAX_BYTES", 25*1024*1024),
-		UploadMaxPixels: l.uint64Value("UPLOAD_MAX_PIXELS", 25_000_000),
-		ChallengeTTL:    l.durationValue("CHALLENGE_TTL", 24*time.Hour),
-		LocationHide:    l.durationValue("LOCATION_HIDE_DURATION", 48*time.Hour),
-		ViewWindow:      l.durationValue("PHOTO_VIEW_WINDOW", 10*time.Second),
-		PhotoRetention:  l.durationValue("PHOTO_RETENTION", 30*24*time.Hour),
-		UploadDir:       l.stringValue("UPLOAD_DIR", "./uploads"),
-
-		RateLimitRequests: l.intValue("RATE_LIMIT_REQUESTS", 10),
-		RateLimitWindow:   l.durationValue("RATE_LIMIT_WINDOW", time.Minute),
-		LogLevel:          l.stringValue("LOG_LEVEL", "info"),
-		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
-
-		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
-	}
-
-	// URL syntax is verified at load time so malformed values surface together
-	// with every other parse error. CIDRs are already validated by cidrList.
-	l.urlValue("PUBLIC_URL", cfg.PublicURL)
-	l.urlValue("S3_ENDPOINT", cfg.S3Endpoint)
-
-	if len(l.problems) > 0 {
-		return cfg, errors.New(strings.Join(l.problems, "; "))
-	}
-	return cfg, nil
-}
-
 // Validate applies strict checks to every environment. Production enforces
 // additional security constraints on top of the base rules.
 func (c *Config) Validate() error {
@@ -291,6 +104,11 @@ func (c *Config) Validate() error {
 	case EnvDevelopment, EnvProduction, EnvTest:
 	default:
 		problems = append(problems, "APP_ENV must be one of development, production, test")
+	}
+	switch strings.ToLower(c.StorageDriver) {
+	case "", "s3", "local":
+	default:
+		problems = append(problems, "STORAGE_DRIVER must be one of s3, local")
 	}
 	if port, err := strconv.Atoi(strings.TrimSpace(c.Port)); err != nil || port < 1 || port > 65535 {
 		problems = append(problems, "PORT must be an integer between 1 and 65535")
@@ -446,22 +264,6 @@ func isVapidSubject(value string) bool {
 		return parsed.Host != ""
 	default:
 		return false
-	}
-}
-
-// LoadValidated combines strict parsing and semantic validation into a single
-// startup check. When both stages find problems they are reported together so
-// one startup attempt surfaces every configuration error.
-func LoadValidated() (*Config, error) {
-	cfg, parseErr := Load()
-	validateErr := cfg.Validate()
-	switch {
-	case parseErr != nil && validateErr != nil:
-		return cfg, fmt.Errorf("%v; %v", parseErr, validateErr)
-	case parseErr != nil:
-		return cfg, parseErr
-	default:
-		return cfg, validateErr
 	}
 }
 
