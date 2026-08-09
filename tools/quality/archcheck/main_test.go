@@ -55,18 +55,35 @@ func TestRealRepositoryClean(t *testing.T) {
 	}
 }
 
-// Mutable global: a package-level var holding a make() value is not exempt and
-// not allowlisted, so it must be flagged.
+// Mutable globals include both make() values and composite literals. Maps,
+// slices, arrays, and structs all remain writable at package scope even when
+// they are initialized as table-like literals.
 func TestMutableGlobalDetected(t *testing.T) {
 	root := writeFixture(t, map[string]string{
-		"backend/internal/foo/evil.go": "package foo\n\nvar store = make(map[string]int)\n",
+		"backend/internal/foo/evil.go": strings.Join([]string{
+			"package foo",
+			"var made = make(map[string]int)",
+			"var mapped = map[string]int{\"a\": 1}",
+			"var sliced = []string{\"a\"}",
+			"var arrayed = [...]int{1}",
+			"var structured = struct{ value int }{value: 1}",
+		}, "\n") + "\n",
 	})
 	vs := violationsByRule(checkRepo(root), "mutable-global")
-	if len(vs) != 1 {
-		t.Fatalf("expected 1 mutable-global violation, got %d: %v", len(vs), vs)
+	if len(vs) != 5 {
+		t.Fatalf("expected 5 mutable-global violations, got %d: %v", len(vs), vs)
 	}
-	if !strings.Contains(vs[0].path, "backend/internal/foo/evil.go") || !strings.Contains(vs[0].msg, "store") {
-		t.Fatalf("violation does not name the variable and file: %s", vs[0])
+	for _, name := range []string{"made", "mapped", "sliced", "arrayed", "structured"} {
+		found := false
+		for _, violation := range vs {
+			if strings.Contains(violation.msg, name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("violations do not name %s: %v", name, vs)
+		}
 	}
 }
 
@@ -88,8 +105,8 @@ func TestMutableGlobalAllowlistHonored(t *testing.T) {
 	}
 }
 
-// Sentinel errors, read-only tables, byte-string constants, compile-time
-// assertions, and embed.FS values are exempt by construction.
+// Sentinel errors, byte-string values, compile-time assertions, and embed.FS
+// values are exempt by construction.
 func TestExemptPatternsPass(t *testing.T) {
 	root := writeFixture(t, map[string]string{
 		"backend/internal/repository/things/errors.go": strings.Join([]string{
@@ -98,8 +115,6 @@ func TestExemptPatternsPass(t *testing.T) {
 			"import \"errors\"",
 			"",
 			"var ErrNotFound = errors.New(\"not found\")",
-			"var table = []string{\"a\", \"b\"}",
-			"var rank = [...]int{1, 2, 3}",
 			"var info = []byte(\"Content-Encoding: aes128gcm\\x00\")",
 			"var _ interface{} = nil",
 			"var manifest embed.FS",

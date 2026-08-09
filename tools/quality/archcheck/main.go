@@ -9,8 +9,9 @@
 //  1. mutable-globals — no production package-level mutable application
 //     dependencies. Exempt by construction: `var _` compile-time assertions,
 //     embed.FS values, `errors.New`/`fmt.Errorf` sentinel errors, basic
-//     literals, byte-string literals, and non-pointer composite literals
-//     (read-only tables). Everything else must be listed in
+//     literals and byte-string literals. Composite values remain mutable even
+//     when their elements look table-like, so intentional package tables must
+//     be listed in
 //     tools/quality/archcheck/mutable-globals.allowlist. The only entry today
 //     is the mutex-protected rate-limiter singleton.
 //  2. sql-in-handlers — HTTP handlers under backend/handlers/ must not import
@@ -203,7 +204,7 @@ func exemptVar(name string, typ ast.Expr, val ast.Expr) bool {
 	case *ast.BasicLit:
 		return true
 	case *ast.CompositeLit:
-		return true // value (non-pointer) composite literal: read-only table
+		return false
 	}
 	return false
 }

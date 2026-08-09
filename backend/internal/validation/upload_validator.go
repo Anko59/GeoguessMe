@@ -19,7 +19,7 @@ type FileType struct {
 	MagicBytes [][]byte
 }
 
-var AllowedImageTypes = []FileType{
+var allowedImageTypes = []FileType{
 	{
 		Extension: ".jpg",
 		MimeType:  "image/jpeg",
@@ -78,7 +78,7 @@ func ValidateUploadedFile(file multipart.File, header *multipart.FileHeader) err
 
 	// Validate file type by magic bytes
 	isValid := false
-	for _, fileType := range AllowedImageTypes {
+	for _, fileType := range allowedImageTypes {
 		for _, magic := range fileType.MagicBytes {
 			if len(buffer) >= len(magic) && bytes.Equal(buffer[:len(magic)], magic) {
 				isValid = true
@@ -100,7 +100,7 @@ func ValidateUploadedFile(file multipart.File, header *multipart.FileHeader) err
 // GetSafeExtension returns a safe file extension
 func GetSafeExtension(filename string) string {
 	ext := strings.ToLower(filename)
-	for _, fileType := range AllowedImageTypes {
+	for _, fileType := range allowedImageTypes {
 		if strings.HasSuffix(ext, fileType.Extension) {
 			return fileType.Extension
 		}
