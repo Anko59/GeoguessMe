@@ -34,12 +34,8 @@ func main() {
 		printVapidKeys()
 		return
 	}
-	cfg, err := config.Load()
+	cfg, err := config.LoadValidated()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
-		os.Exit(1)
-	}
-	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		os.Exit(1)
 	}

@@ -75,6 +75,44 @@ func TestLoadTreatsEmptyStringVariablesAsUnset(t *testing.T) {
 	}
 }
 
+func TestLoadPreservesExplicitEmptyDefaultedStrings(t *testing.T) {
+	t.Setenv("S3_ACCESS_KEY", "")
+	t.Setenv("S3_SECRET_KEY", "")
+	t.Setenv("ALLOWED_ORIGINS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("empty strings are semantic rather than parse errors, got %v", err)
+	}
+	if cfg.S3AccessKey != "" || cfg.S3SecretKey != "" {
+		t.Fatalf("explicit empty credentials were replaced by defaults: %q / %q", cfg.S3AccessKey, cfg.S3SecretKey)
+	}
+	if len(cfg.AllowedOrigins) != 0 {
+		t.Fatalf("explicit empty origins were replaced by defaults: %v", cfg.AllowedOrigins)
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("explicit empty required settings must fail semantic validation")
+	}
+}
+
+func TestLoadRejectsOutOfRangeDatabaseConnectionCounts(t *testing.T) {
+	t.Setenv("DB_MIN_CONNS", "4294967297")
+	t.Setenv("DB_MAX_CONNS", "9223372036854775807")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "DB_MIN_CONNS") || !strings.Contains(err.Error(), "DB_MAX_CONNS") {
+		t.Fatalf("out-of-range database counts must fail before int32 conversion, got %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownStorageDriver(t *testing.T) {
+	cfg := validConfig()
+	cfg.StorageDriver = "locla"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "STORAGE_DRIVER") {
+		t.Fatalf("unknown storage driver must be rejected, got %v", err)
+	}
+}
+
 func TestLoadParsesStorageDriver(t *testing.T) {
 	t.Setenv("STORAGE_DRIVER", "local")
 	cfg, err := Load()
@@ -99,6 +137,8 @@ func TestLoadValidatedCombinesParseAndValidationErrors(t *testing.T) {
 		t.Fatal("LoadValidated must return an aggregated error")
 	} else if !strings.Contains(err.Error(), "PORT") {
 		t.Errorf("LoadValidated error must include the parse failure, got %v", err)
+	} else if !strings.Contains(err.Error(), "DB_MAX_CONNS") {
+		t.Errorf("LoadValidated error must include semantic failures, got %v", err)
 	}
 
 	// With parse errors fixed, semantic validation still applies.
