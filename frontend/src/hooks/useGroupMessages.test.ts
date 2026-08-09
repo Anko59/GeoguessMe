@@ -322,4 +322,70 @@ describe('useGroupMessages reconnect sequence', () => {
         expect(ids(result.current.messages)).toEqual(['oldest', ...page.map((m) => m.id)]);
         expect(result.current.hasMoreOlder).toBe(false);
     });
+
+    it('resets state and reconnects when the group changes, ignoring stale events', async () => {
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValue({ data: { items: [] } });
+
+        const { result, rerender } = renderHook(({ gid }: { gid: string }) => useGroupMessages(gid, 'user-1'), {
+            initialProps: { gid: 'group-1' },
+        });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const first = MockWebSocket.instances[0];
+        await act(async () => first.fireOpen());
+        await waitFor(() => expect(result.current.connectionStatus).toBe('connected'));
+
+        // Switching groups resets the stream and opens a fresh connection for
+        // the new group.
+        rerender({ gid: 'group-2' });
+        expect(ids(result.current.messages)).toEqual([]);
+        expect(result.current.connectionStatus).toBe('connecting');
+        expect(first.close).toHaveBeenCalled();
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+        const renewed = MockWebSocket.instances[1];
+        expect(mocks.post).toHaveBeenLastCalledWith('/ws/ticket', undefined, {
+            params: { group_id: 'group-2' },
+        });
+
+        // A stale live event from the old group's socket cannot surface in the
+        // new group.
+        act(() => first.fireMessage(message('stale', '2026-01-01T00:00:00Z')));
+        expect(ids(result.current.messages)).toEqual([]);
+
+        // The renewed socket works normally.
+        await act(async () => renewed.fireOpen());
+        await waitFor(() => expect(result.current.connectionStatus).toBe('connected'));
+    });
+
+    it('drops a stale loadOlder response after the group changes', async () => {
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        let releaseOlder!: (value: unknown) => void;
+        mocks.get
+            .mockResolvedValueOnce({ data: { items: [message('b', '2026-01-02T00:00:00Z')] } }) // group-1 sync
+            .mockImplementationOnce(() => new Promise((resolve) => (releaseOlder = resolve))); // loadOlder hangs
+
+        const { result, rerender } = renderHook(({ gid }: { gid: string }) => useGroupMessages(gid, 'user-1'), {
+            initialProps: { gid: 'group-1' },
+        });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.fireOpen());
+        await waitFor(() => expect(ids(result.current.messages)).toEqual(['b']));
+
+        // Start an older-page fetch and switch groups while it is in flight.
+        let pending: Promise<void>;
+        act(() => {
+            pending = result.current.loadOlder();
+        });
+        await waitFor(() => expect(result.current.loadingOlder).toBe(true));
+        rerender({ gid: 'group-2' });
+
+        // Releasing the stale response must not merge into the new group.
+        await act(async () => {
+            releaseOlder({ data: { items: [message('stale', '2026-01-01T00:00:00Z')] } });
+            await pending;
+        });
+        expect(ids(result.current.messages)).toEqual([]);
+        expect(result.current.loadingOlder).toBe(false);
+    });
 });
