@@ -34,6 +34,7 @@ Migrations are stored in `backend/internal/database/migrations/`:
 011_custom_reactions.sql
 012_media_delivery_window.sql
 013_challenge_hide_location.sql
+014_retire_legacy_reaction_emoji.sql
 ```
 
 New migrations:
@@ -143,6 +144,20 @@ Repository insertion uses
 `ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, so a
 duplicate active obligation is an idempotent success while genuine database
 errors still fail.
+
+## Migration 014: Retire the legacy reaction column
+
+Migration 011 temporarily kept `message_reactions.emoji` synchronized with the
+canonical `reaction` column so an older application image remained usable during
+deployment and rollback. Migration 014 is the separately staged, forward-only
+cleanup after the reaction-only application revision was deployed and the
+previous revision left the rollback window.
+
+It removes the synchronization trigger and function, the two compatibility
+constraints, and the `emoji` column. Reaction rows and the canonical `reaction`
+primary key remain intact. After this migration, application rollback must use
+the pre-migration database backup; re-adding compatibility columns is not a
+supported downgrade.
 
 ## Status command
 

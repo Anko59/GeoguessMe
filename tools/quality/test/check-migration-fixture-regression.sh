@@ -84,6 +84,9 @@ for label in \
     "group_id backfilled from photo" \
     "kind default" \
     "schema_migrations entries after concurrent run" \
+    "legacy message_reactions.emoji column removed" \
+    "legacy reaction synchronization trigger removed" \
+    "reaction-only writes remain valid after compatibility cleanup" \
     "duplicate survivor" \
     "ON CONFLICT DO NOTHING"; do
     if grep -q "$label" "$SCRIPT"; then

@@ -208,6 +208,19 @@ for tbl in challenge_views refresh_sessions email_verification_tokens password_r
         "t" "table $tbl exists"
 done
 
+# --- migration 014: legacy reaction compatibility objects removed
+assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='message_reactions' AND column_name='emoji'")" \
+    "0" "legacy message_reactions.emoji column removed"
+assert_eq "$(psql_query "SELECT count(*) FROM pg_trigger WHERE tgname='sync_message_reaction_columns' AND NOT tgisinternal")" \
+    "0" "legacy reaction synchronization trigger removed"
+assert_eq "$(psql_query "SELECT count(*) FROM pg_proc WHERE proname='sync_message_reaction_columns'")" \
+    "0" "legacy reaction synchronization function removed"
+assert_eq "$(psql_query "SELECT count(*) FROM pg_constraint WHERE conname IN ('message_reactions_legacy_emoji_key', 'message_reactions_reaction_matches_emoji')")" \
+    "0" "legacy reaction constraints removed"
+psql_exec "INSERT INTO message_reactions(message_id, user_id, reaction) VALUES ('msg-001', 'legacy-001', 'like')"
+assert_eq "$(psql_query "SELECT reaction FROM message_reactions WHERE message_id='msg-001' AND user_id='legacy-001'")" \
+    "like" "reaction-only writes remain valid after compatibility cleanup"
+
 # --- migration 002: auth_version index, media_deletion_jobs table
 assert_eq "$(psql_query "SELECT count(*) FROM pg_indexes WHERE indexname='users_auth_version_idx'")" \
     "1" "users_auth_version_idx exists"

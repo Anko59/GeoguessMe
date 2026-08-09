@@ -59,9 +59,10 @@ compatibility while the previous revision is still serving.
    the previous revision can still serve or roll back.
 2. Complete the normal deployment and soak, then confirm the previous revision
    is no longer running and is outside the rollback window.
-3. Land a separate cleanup-migration PR that drops the legacy reaction column,
-   trigger, function, and constraints. Its deployment applies the forward-only
-   migration before restarting the already-compatible application revision.
+3. Migration 014, delivered in a separate cleanup PR after the compatible
+   application deployment succeeded, drops the legacy reaction column, trigger,
+   function, and constraints. Its deployment applies the forward-only migration
+   before restarting the already-compatible application revision.
 
 **Rollback:** before step 3, reverting to the previous image is safe because the
 schema is still backward compatible. After step 3 the migration is forward-only
