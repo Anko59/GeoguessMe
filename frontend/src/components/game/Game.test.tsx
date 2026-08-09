@@ -358,14 +358,82 @@ describe('Game', () => {
             />,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'View challenge photo full screen' }));
-        expect(screen.getByRole('dialog', { name: 'Challenge photo full screen' })).toBeInTheDocument();
-        expect(screen.getByAltText('Challenge location full screen')).toHaveAttribute(
-            'src',
-            'https://example.test/result.jpg',
-        );
+        // The results photo opens in the shared full-screen dialog (same
+        // component as chat attachments and avatars) and closes on Escape.
+        fireEvent.click(await screen.findByRole('button', { name: 'View Challenge location full screen' }));
+        const dialog = screen.getByRole('dialog', { name: 'Challenge location full screen' });
+        expect(dialog.querySelector('img')).toHaveAttribute('src', 'https://example.test/result.jpg');
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: 'Challenge photo full screen' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: 'Challenge location full screen' })).not.toBeInTheDocument();
+    });
+
+    it('revokes the challenge media object URL on unmount', async () => {
+        const createSpy = vi.spyOn(URL, 'createObjectURL');
+        const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+        mocks.get
+            .mockRejectedValueOnce(new Error('results not ready'))
+            .mockResolvedValueOnce({ data: new Blob(['data'], { type: 'image/jpeg' }) });
+        mocks.post
+            .mockResolvedValueOnce({
+                data: {
+                    media_url: '/api/v1/challenges/photo-9/media',
+                    media_type: 'image/jpeg',
+                    accepted_at: new Date(Date.now() - 5000).toISOString(),
+                    view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    server_time: new Date().toISOString(),
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    server_time: new Date().toISOString(),
+                },
+            });
+        const view = withGame(
+            <Game gameMessage={message({ photo_id: 'photo-9', kind: 'challenge' })} onClose={vi.fn()} />,
+        );
+        await screen.findByAltText('Challenge location');
+
+        const created = (createSpy.mock.results[0]?.value as string) ?? '';
+        expect(created.startsWith('blob:')).toBe(true);
+        view.unmount();
+        expect(revokeSpy).toHaveBeenCalledTimes(1);
+        expect(revokeSpy).toHaveBeenCalledWith(created);
+    });
+
+    it('revokes the results media object URL when the game closes', async () => {
+        const createSpy = vi.spyOn(URL, 'createObjectURL');
+        const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+        mocks.get
+            .mockResolvedValueOnce({
+                data: {
+                    photo_id: 'photo-10',
+                    group_id: 'group-1',
+                    actual_lat: 48,
+                    actual_long: 2,
+                    media_available: true,
+                    media_url: '/api/v1/challenges/photo-10/media',
+                    media_type: 'image/jpeg',
+                    guesses: [],
+                    server_time: new Date().toISOString(),
+                },
+            })
+            .mockResolvedValueOnce({ data: new Blob(['data'], { type: 'image/jpeg' }) });
+        const onClose = vi.fn();
+        withGame(
+            <Game
+                gameMessage={message({ user_id: 'user-1', photo_id: 'photo-10', kind: 'challenge' })}
+                onClose={onClose}
+            />,
+        );
+        await screen.findByRole('button', { name: 'View Challenge location full screen' });
+
+        const created = (createSpy.mock.results[0]?.value as string) ?? '';
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        expect(onClose).toHaveBeenCalled();
+        // The media URL is revoked exactly once when the state transition drops it.
+        expect(revokeSpy).toHaveBeenCalledTimes(1);
+        expect(revokeSpy).toHaveBeenCalledWith(created);
     });
 
     it('renders recorded video challenges with playback controls', async () => {
