@@ -48,6 +48,7 @@ describe('gameReducer', () => {
             const state = reduce(initialGameState, { type: 'loading', photoId: 'photo-1' });
             const next = reduce(state, {
                 type: 'media-ready',
+                photoId: 'photo-1',
                 mediaUrl: 'blob:viewing',
                 mediaType: 'image/jpeg',
                 deadline: 5000,
@@ -65,15 +66,23 @@ describe('gameReducer', () => {
 
         it('media-unavailable moves accepting to guessing when the window already elapsed', () => {
             const state = reduce(initialGameState, { type: 'loading', photoId: 'photo-1' });
-            const next = reduce(state, { type: 'media-unavailable', deadline: 1000, serverOffset: 5 });
+            const next = reduce(state, {
+                type: 'media-unavailable',
+                photoId: 'photo-1',
+                deadline: 1000,
+                serverOffset: 5,
+            });
             expect(next).toEqual({ status: 'guessing', photoId: 'photo-1', deadline: 1000, serverOffset: 5 });
         });
 
         it('failure actions move accepting to error with the message', () => {
             const cases: Array<[GameAction, string]> = [
-                [{ type: 'accept-failed', message: 'gone' }, 'gone'],
-                [{ type: 'media-failed', message: 'window could not be started' }, 'window could not be started'],
-                [{ type: 'results-failed', message: 'not available' }, 'not available'],
+                [{ type: 'accept-failed', photoId: 'photo-1', message: 'gone' }, 'gone'],
+                [
+                    { type: 'media-failed', photoId: 'photo-1', message: 'window could not be started' },
+                    'window could not be started',
+                ],
+                [{ type: 'results-failed', photoId: 'photo-1', message: 'not available' }, 'not available'],
             ];
             for (const [action, message] of cases) {
                 const state = reduce(initialGameState, { type: 'loading', photoId: 'photo-1' });
@@ -88,7 +97,7 @@ describe('gameReducer', () => {
 
         it('results-ready moves accepting to results', () => {
             const state = reduce(initialGameState, { type: 'loading', photoId: 'photo-1' });
-            const next = reduce(state, { type: 'results-ready', serverOffset: 7, results });
+            const next = reduce(state, { type: 'results-ready', photoId: 'photo-1', serverOffset: 7, results });
             expect(next).toEqual({ status: 'results', photoId: 'photo-1', serverOffset: 7, results });
         });
 
@@ -98,7 +107,7 @@ describe('gameReducer', () => {
                 score: 4920,
             });
             expect(accepting.feedback).toBeDefined();
-            const next = reduce(accepting, { type: 'results-ready', serverOffset: 7, results });
+            const next = reduce(accepting, { type: 'results-ready', photoId: 'photo-1', serverOffset: 7, results });
             expect(next.feedback).toEqual(accepting.feedback);
         });
 
@@ -208,9 +217,12 @@ describe('gameReducer', () => {
         it('returns the same state object for every illegal (status, action) pair', () => {
             const cases: Array<[GameState, GameAction]> = [
                 // Phase-only actions fired from the wrong phase.
-                [at('viewing'), { type: 'media-ready', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 }],
-                [at('viewing'), { type: 'media-unavailable', deadline: 1000, serverOffset: 0 }],
-                [at('viewing'), { type: 'results-ready', serverOffset: 0, results }],
+                [
+                    at('viewing'),
+                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                ],
+                [at('viewing'), { type: 'media-unavailable', photoId: 'photo-1', deadline: 1000, serverOffset: 0 }],
+                [at('viewing'), { type: 'results-ready', photoId: 'photo-1', serverOffset: 0, results }],
                 [at('accepting'), { type: 'view-expired' }],
                 [at('waiting'), { type: 'view-expired' }],
                 [at('guessing'), { type: 'guess-now' }],
@@ -218,7 +230,10 @@ describe('gameReducer', () => {
                 [at('submitting'), { type: 'guess-start' }],
                 [at('submitting'), { type: 'select-location', lat: 1, long: 2 }],
                 [at('results'), { type: 'guess-start' }],
-                [at('error'), { type: 'media-ready', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 }],
+                [
+                    at('error'),
+                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                ],
                 // A guess cannot start without a map pin.
                 [at('guessing', { photoId: 'photo-1' }), { type: 'guess-start' }],
                 // A guess failure outside the submitting phase is ignored.
@@ -227,13 +242,27 @@ describe('gameReducer', () => {
                 [at('viewing'), { type: 'close' }],
                 [at('idle'), { type: 'close' }],
                 // Phase-only actions are rejected from idle.
-                [at('idle'), { type: 'media-ready', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 }],
+                [
+                    at('idle'),
+                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                ],
                 [at('idle'), { type: 'select-location', lat: 1, long: 2 }],
                 [at('idle'), { type: 'view-expired' }],
             ];
             for (const [state, action] of cases) {
                 expect(reduce(state, action), JSON.stringify({ state, action })).toBe(state);
             }
+        });
+
+        it('rejects completions belonging to a different challenge', () => {
+            const accepting = at('accepting', { photoId: 'photo-2' });
+            const stale = reduce(accepting, {
+                type: 'results-ready',
+                photoId: 'photo-1',
+                serverOffset: 0,
+                results,
+            });
+            expect(stale).toBe(accepting);
         });
     });
 });

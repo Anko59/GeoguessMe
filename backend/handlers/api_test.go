@@ -195,20 +195,22 @@ func TestGroupAndReadHandlers(t *testing.T) {
 	}
 }
 
-func TestMessagesIgnoreLegacyAfterID(t *testing.T) {
-	// The legacy after_id query parameter was removed (PR 12): a request that
-	// carries after_id without a cursor is served from the latest page. The
-	// parameter is no longer honored as a positioning mechanism, so no
-	// message-id resolution query may run — the only expected query is the
-	// latest-page fetch. An unexpected CursorAfterMessage resolution would
-	// fail the mock.
+func TestMessagesRejectLegacyAfterID(t *testing.T) {
+	// Silently treating an old reconnect cursor as a latest-page request can
+	// skip an arbitrarily large gap. Reject it so callers must migrate to the
+	// opaque cursor contract and can never mistake a partial page for catch-up.
 	mock := newMockPool(t)
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	groupID := "00000000-0000-0000-0000-000000000001"
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(groupID, 500).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}))
-	requireStatus(t, chatAPI.GetGroupMessages, requestWithUser(http.MethodGet, "/?group_id="+groupID+"&after_id=message-1", "", "user-1"), http.StatusOK)
+	recorder := httptest.NewRecorder()
+	chatAPI.GetGroupMessages(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID+"&after_id=message-1", "", "user-1"))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	const expected = `{"error":{"code":"unsupported_parameter","message":"after_id is no longer supported; use cursor"}}` + "\n"
+	if recorder.Body.String() != expected {
+		t.Fatalf("body = %q, want %q", recorder.Body.String(), expected)
+	}
 }
 
 func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {

@@ -36,6 +36,15 @@ describe('console output quality gate', () => {
         expect(() => console.warn(appLogMessage)).not.toThrow();
     });
 
+    it('forwards non-string console arguments without trying to serialize them', () => {
+        const circular: { self?: unknown } = {};
+        circular.self = circular;
+
+        expect(() => console.error(undefined)).not.toThrow();
+        expect(() => console.warn(1n)).not.toThrow();
+        expect(() => console.error(circular)).not.toThrow();
+    });
+
     it('stays armed in a later test after vi.restoreAllMocks()', () => {
         // earlier tests in this file run the afterEach(vi.restoreAllMocks());
         // the gate must still be active here
