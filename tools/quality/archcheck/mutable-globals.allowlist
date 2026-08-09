@@ -1,0 +1,16 @@
+# Allowlisted production package-level mutable variables in backend/.
+#
+# archcheck (tools/quality/archcheck) flags any package-level var that is not
+# an error sentinel, compile-time assertion, embed.FS value, basic/byte-string
+# literal, or non-pointer composite-literal table. Only genuinely
+# process-global-by-design values belong here; new entries require a documented
+# justification (see the mutable-globals rule in main.go).
+#
+# Format: <relative-path>:<varName>, one per line.
+#
+# The middleware rate-limiter singleton is the single allowlisted mutable
+# production global. It is a mutex-protected process-global rate-limiting
+# instance (not an application dependency); its test hooks are gated to
+# APP_ENV=test. Documented in docs/agent-engineering.md (Dependency direction
+# and ownership).
+backend/internal/middleware/rate_limit.go:limiter
