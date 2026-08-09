@@ -20,39 +20,39 @@ Start with these canonical entry points, then drill into the map below.
 
 ### Package and component map
 
-| Area                | Location                                | Responsibility                                                                                               |
-| ------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Backend entry       | `backend/main.go`                       | Process lifecycle: config, pool, workers, server, shutdown (composition root)                                |
-| Backend routing     | `backend/routes.go`                     | Route table and middleware wiring                                                                            |
-| HTTP transport      | `backend/handlers/`                     | Request parsing, authorization delegation, response mapping                                                  |
-| Authentication      | `backend/internal/auth/`                | Token issuance/validation, sessions, authorization checks                                                    |
-| Realtime chat       | `backend/internal/chat/`                | WebSocket hub, clients, message dispatch                                                                     |
-| Configuration       | `backend/internal/config/`              | Sole environment-variable reader; validated settings                                                         |
-| Database            | `backend/internal/database/`            | Pool access and forward-only SQL migrations                                                                  |
-| Ranking math        | `backend/internal/elo/`                 | Elo updates for guesses                                                                                      |
-| Email               | `backend/internal/email/`               | Mailer (verification, resets)                                                                                |
-| Scoring             | `backend/internal/game/`                | Guess scoring and timing rules                                                                               |
-| Media processing    | `backend/internal/media/`               | Image normalization and validation                                                                           |
-| HTTP middleware     | `backend/internal/middleware/`          | CORS, rate limits, security headers                                                                          |
-| Domain types        | `backend/internal/models/`              | Shared wire and domain structs                                                                               |
-| Progression         | `backend/internal/progression/`         | Rank badge tiers                                                                                             |
-| Web Push            | `backend/internal/push/`                | VAPID keys, notifier, sender                                                                                 |
-| Persistence         | `backend/internal/repository/`          | PostgreSQL queries per aggregate (users, groups, messages, photos, tickets, cleanup)                         |
-| Object storage      | `backend/internal/storage/`             | Local and S3-compatible media storage                                                                        |
-| Validation          | `backend/internal/validation/`          | Input validation helpers                                                                                     |
-| Backend integration | `backend/integration_test/`             | Live-database integration tests                                                                              |
-| Frontend pages      | `frontend/src/pages/`                   | Route-level views (account, auth, groups, home, profile)                                                     |
-| Frontend components | `frontend/src/components/`              | Feature components: camera, chat, common, game, leaderboard, map, navigation, progression, pwa, settings, ui |
-| Frontend hooks      | `frontend/src/hooks/`                   | Cross-component logic (for example `useGroupMessages`)                                                       |
-| Frontend context    | `frontend/src/context/`                 | AuthProvider and auth state                                                                                  |
-| API client          | `frontend/src/api.ts`                   | HTTP and WebSocket client, request shaping                                                                   |
-| Wire types          | `frontend/src/types/index.ts`           | Hand-written DTOs that mirror the OpenAPI contract                                                           |
-| Frontend utilities  | `frontend/src/utils/`                   | `pwaSessionCache` and similar focused helpers                                                                |
-| Push subscriptions  | `frontend/src/push/`                    | Web Push registration                                                                                        |
-| E2E suite           | `frontend/e2e/`                         | Playwright scenarios keyed to user journeys                                                                  |
-| Compose/deploy      | `deployment/`                           | Compose files, Caddy, Docker images, deploy scripts                                                          |
-| Hosted infra        | `infra/terraform/`, `infra/cloud-init/` | Terraform and cloud-init for the hosted deployment                                                           |
-| Quality gates       | `tools/quality/`                        | structure-check, hooks, regression tests                                                                     |
+| Area                | Location                                                                 | Responsibility                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Backend entry       | `backend/main.go`                                                        | Process lifecycle: config, pool, workers, server, shutdown (composition root)                                   |
+| Backend routing     | `backend/routes.go`                                                      | Route table and middleware wiring                                                                               |
+| HTTP transport      | `backend/handlers/`                                                      | Request parsing, authorization delegation, response mapping                                                     |
+| Authentication      | `backend/internal/auth/`                                                 | Token issuance/validation, sessions, authorization checks                                                       |
+| Realtime chat       | `backend/internal/chat/`                                                 | WebSocket hub, clients, message dispatch                                                                        |
+| Configuration       | `backend/internal/config/`                                               | Sole environment-variable reader; validated settings                                                            |
+| Database            | `backend/internal/database/`                                             | Pool access and forward-only SQL migrations                                                                     |
+| Ranking math        | `backend/internal/elo/`                                                  | Elo updates for guesses                                                                                         |
+| Email               | `backend/internal/email/`                                                | Mailer (verification, resets)                                                                                   |
+| Scoring             | `backend/internal/game/`                                                 | Guess scoring and timing rules                                                                                  |
+| Media processing    | `backend/internal/media/`                                                | Image normalization and validation                                                                              |
+| HTTP middleware     | `backend/internal/middleware/`                                           | CORS, rate limits, security headers                                                                             |
+| Domain types        | `backend/internal/models/`                                               | Shared wire and domain structs                                                                                  |
+| Progression         | `backend/internal/progression/`                                          | Rank badge tiers                                                                                                |
+| Web Push            | `backend/internal/push/`                                                 | VAPID keys, notifier, sender                                                                                    |
+| Persistence         | `backend/internal/repository/`                                           | PostgreSQL queries per aggregate (users, groups, messages, photos, tickets, cleanup)                            |
+| Object storage      | `backend/internal/storage/`                                              | Local and S3-compatible media storage                                                                           |
+| Validation          | `backend/internal/validation/`                                           | Input validation helpers                                                                                        |
+| Backend integration | `backend/integration_test/`                                              | Live-database integration tests                                                                                 |
+| Frontend pages      | `frontend/src/pages/`                                                    | Route-level views (account, auth, groups, home, profile)                                                        |
+| Frontend components | `frontend/src/components/`                                               | Feature components: camera, chat, common, game, leaderboard, map, navigation, progression, pwa, settings, ui    |
+| Frontend hooks      | `frontend/src/hooks/`                                                    | Cross-component logic (for example `useGroupMessages`)                                                          |
+| Frontend context    | `frontend/src/context/`                                                  | AuthProvider and auth state                                                                                     |
+| API client          | `frontend/src/api.ts`                                                    | HTTP and WebSocket client, request shaping                                                                      |
+| Wire types          | `frontend/src/types/index.ts`, `frontend/src/types/openapi.generated.ts` | Wire DTOs generated from the OpenAPI contract, re-exported under stable names; narrow client view-model aliases |
+| Frontend utilities  | `frontend/src/utils/`                                                    | `pwaSessionCache` and similar focused helpers                                                                   |
+| Push subscriptions  | `frontend/src/push/`                                                     | Web Push registration                                                                                           |
+| E2E suite           | `frontend/e2e/`                                                          | Playwright scenarios keyed to user journeys                                                                     |
+| Compose/deploy      | `deployment/`                                                            | Compose files, Caddy, Docker images, deploy scripts                                                             |
+| Hosted infra        | `infra/terraform/`, `infra/cloud-init/`                                  | Terraform and cloud-init for the hosted deployment                                                              |
+| Quality gates       | `tools/quality/`                                                         | structure-check, hooks, regression tests                                                                        |
 
 ### Dependency direction and ownership
 
@@ -73,17 +73,17 @@ Start with these canonical entry points, then drill into the map below.
 
 ## Change-impact matrix
 
-| Task                            | Primary files                                                                                                                       | Focused tests                                               | Gates                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| API contract or endpoint change | `docs/openapi.yaml`, `docs/openapi/`, `backend/handlers/`, `backend/internal/models/`, `frontend/src/api.ts`, `frontend/src/types/` | Handler tests, `hosted-contract-test`                       | `make lint-openapi`, `make preflight`                                               |
-| Backend behavior change         | `backend/handlers/`, `backend/internal/*/`                                                                                          | Package unit tests, `backend/integration_test/`             | `make test-backend`, `make test-race`, `make test-integration`                      |
-| Database migration              | `backend/internal/database/migrations/` (new file only), `backend/internal/repository/`                                             | Migration fixtures, repository DB tests                     | `make lint-sql`, `make verify`                                                      |
-| Chat behavior                   | `frontend/src/components/chat/`, `frontend/src/hooks/useGroupMessages.ts`, `backend/handlers/messages.go`, `backend/internal/chat/` | `Chat.test.tsx`, `useGroupMessages.test.ts`, `chat.spec.ts` | `make test-frontend`, `make test-e2e`                                               |
-| Camera behavior                 | `frontend/src/components/camera/`                                                                                                   | Camera lifecycle and capture tests                          | `make test-frontend`, `video-challenge` E2E                                         |
-| Game flow                       | `frontend/src/components/game/`, `backend/handlers/game.go`                                                                         | `Game.test.tsx`, `challenge.spec.ts`                        | `make test-frontend`, `make test-e2e`                                               |
-| Configuration change            | `backend/internal/config/`, `backend/main.go`                                                                                       | Config validation tests                                     | `make preflight`, `make verify` (startup behavior)                                  |
-| Deployment change               | `deployment/`, `infra/terraform/`, `infra/cloud-init/`                                                                              | Terraform tests, rehearsal scripts                          | `make terraform-fmt-check`, `make terraform-test`, `make lint-caddy`, `make verify` |
-| Documentation change            | `docs/`                                                                                                                             | docs/agent-config checker regression tests                  | `make lint-docs`                                                                    |
+| Task                            | Primary files                                                                                                                       | Focused tests                                               | Gates                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| API contract or endpoint change | `docs/openapi.yaml`, `docs/openapi/`, `backend/handlers/`, `backend/internal/models/`, `frontend/src/api.ts`, `frontend/src/types/` | Handler tests, `hosted-contract-test`                       | `make lint-openapi`, `make openapi-generate`, `make openapi-check`, `make preflight` |
+| Backend behavior change         | `backend/handlers/`, `backend/internal/*/`                                                                                          | Package unit tests, `backend/integration_test/`             | `make test-backend`, `make test-race`, `make test-integration`                       |
+| Database migration              | `backend/internal/database/migrations/` (new file only), `backend/internal/repository/`                                             | Migration fixtures, repository DB tests                     | `make lint-sql`, `make verify`                                                       |
+| Chat behavior                   | `frontend/src/components/chat/`, `frontend/src/hooks/useGroupMessages.ts`, `backend/handlers/messages.go`, `backend/internal/chat/` | `Chat.test.tsx`, `useGroupMessages.test.ts`, `chat.spec.ts` | `make test-frontend`, `make test-e2e`                                                |
+| Camera behavior                 | `frontend/src/components/camera/`                                                                                                   | Camera lifecycle and capture tests                          | `make test-frontend`, `video-challenge` E2E                                          |
+| Game flow                       | `frontend/src/components/game/`, `backend/handlers/game.go`                                                                         | `Game.test.tsx`, `challenge.spec.ts`                        | `make test-frontend`, `make test-e2e`                                                |
+| Configuration change            | `backend/internal/config/`, `backend/main.go`                                                                                       | Config validation tests                                     | `make preflight`, `make verify` (startup behavior)                                   |
+| Deployment change               | `deployment/`, `infra/terraform/`, `infra/cloud-init/`                                                                              | Terraform tests, rehearsal scripts                          | `make terraform-fmt-check`, `make terraform-test`, `make lint-caddy`, `make verify`  |
+| Documentation change            | `docs/`                                                                                                                             | docs/agent-config checker regression tests                  | `make lint-docs`                                                                     |
 
 ## Canonical commands
 
@@ -96,7 +96,11 @@ linters, Playwright, or migration tools directly on the host.
 - Backend work: `make test-backend`, `make test-race`, `make test-integration`,
   `make lint-go`, `make build-backend`.
 - Frontend work: `make test-frontend`, `make lint-frontend`, `make type-check`,
-  `make build-frontend`, `make test-e2e`.
+  `make build-frontend`, `make test-e2e`. After any OpenAPI schema change,
+  regenerate the frontend wire types with `make openapi-generate`;
+  `make openapi-check` is the drift gate that fails when the committed contract
+  (`frontend/src/types/openapi.generated.ts`) no longer matches
+  `docs/openapi.yaml`.
 - Database work: add a forward-only migration in
   `backend/internal/database/migrations/`; `make lint-sql`; `make verify`
   includes `migration-test`.
