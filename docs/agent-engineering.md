@@ -193,6 +193,16 @@ Otherwise, record the finding in the pull request with an issue or a durable
 roadmap/compatibility-ledger reference. Do not leave a bare `TODO` or `FIXME`,
 silently discard the finding, or broaden the task without authorization.
 
+Deferred code work uses an owned marker such as `TODO(#123)`,
+`FIXME(https://github.com/OWNER/REPOSITORY/issues/123)`, or
+`HACK(docs/agent-engineering.md#compatibility-ledger)`. The lint gate rejects
+bare markers in code and configuration. `make maintenance-report` prints a
+compact, agent-readable view of owned markers and files or directories nearing
+the structural limits; the nightly workflow publishes it in the run summary. The
+frontend dead-code gate covers unused files, exports, dependencies, unlisted
+imports, and unresolved imports. Its small dependency exception list contains
+only tools invoked externally by Dockerized Make recipes.
+
 ## Change-impact manifest
 
 Run `make impact BASE=origin/dev` before selecting focused validation. The

@@ -2,6 +2,9 @@
 # the root Makefile. Aggregate gates in tools/make/quality.mk select from these.
 
 ##@ Tests
+test-debt-markers-regression: ## Exercise owned and unowned maintenance-marker fixtures.
+	tools/quality/debt/check-markers-test.sh
+
 test-unit: test-backend test-frontend ## Run backend and frontend unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.

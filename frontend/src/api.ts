@@ -10,7 +10,7 @@ export const setAccessToken = (token: string | null): void => {
 
 export const getAccessToken = (): string | null => accessToken;
 
-export const api = axios.create({
+const api = axios.create({
     baseURL: '/api/v1',
     withCredentials: true,
 });
@@ -48,7 +48,7 @@ export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     return refreshPromise;
 };
 
-export const refreshAccessToken = async (): Promise<string | null> => {
+const refreshAccessToken = async (): Promise<string | null> => {
     const response = await refreshAuthSession();
     return response?.access_token ?? null;
 };

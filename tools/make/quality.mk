@@ -32,6 +32,12 @@ lint-go: ## Run strict Go analyzers.
 lint-frontend: ## Run ESLint with zero warnings.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint -- --max-warnings=0
 
+lint-dead-code: ## Reject unused frontend files, exports, and dependencies.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint:dead-code
+
+lint-debt-markers: ## Require durable ownership for deferred code work.
+	tools/quality/debt/check-markers.sh
+
 lint-css: ## Run Stylelint.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/frontend/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
 
@@ -57,7 +63,7 @@ lint-openapi: ## Validate the split OpenAPI contract with Redocly.
 check-e2e-style: ## Reject synchronization and selector patterns that hide flakiness.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c '! find frontend/e2e -type f -name "*.ts" -print0 | xargs -0 -r grep -nE "waitForTimeout|networkidle|\.last\(\)|nth-child|\.nth\("'
 
-lint: structure-check format-check lint-go lint-frontend lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style ## Run every strict lint gate.
+lint: structure-check format-check lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style ## Run every strict lint gate.
 
 structure-check: ## Enforce tracked-file and directory structure limits.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
@@ -77,13 +83,16 @@ deps-go-security-update: ## Update vulnerable Go security modules and normalize 
 deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only
 
+deps-npm-lock: ## Refresh the frontend lockfile after an intentional manifest edit.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache install --package-lock-only --ignore-scripts
+
 ARCHCHECK := $(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/tools/quality/archcheck && go run .'
 
 archcheck: ## Run the durable architecture rules (mutable globals, SQL in handlers, env reads) via tools/quality/archcheck.
 	$(ARCHCHECK)
 
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck test-makefile-fragments-regression test-structure-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -91,7 +100,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test ## Run the complete release gate.
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api';
 
-export const LOCATION_OPTIONS: PositionOptions = {
+const LOCATION_OPTIONS: PositionOptions = {
     enableHighAccuracy: false,
     timeout: 10_000,
     maximumAge: 60_000,
