@@ -17,6 +17,8 @@ and submit one server-timed guess.
 
 - [Architecture](architecture.md) — system components, trust boundaries, request
   flows
+- [Agent engineering guide](agent-engineering.md) — package map, change-impact
+  matrix, canonical commands, invariants, and compatibility ledger for AI agents
 - [Local development](local-development.md) — prerequisites, `make dev`, hot
   reload
 - [Configuration](configuration.md) — every environment variable, defaults,

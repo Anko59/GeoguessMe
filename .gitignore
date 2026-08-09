@@ -64,3 +64,6 @@ infra/terraform/*.tfplan
 # Pi tooling session state
 .pi/
 .pi-subagents/
+
+# Refactor baseline metric reports (generated, never committed)
+.refactor-baseline/
