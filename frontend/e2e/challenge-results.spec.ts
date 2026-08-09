@@ -160,6 +160,11 @@ test.describe('Challenge result authorization', () => {
             await expect(ownerChallenge).toContainText('Challenge sent');
             await ownerChallenge.click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
+            // Targeted visual assertions: the results surface keeps its card
+            // layout on the surface token (stable across desktop/mobile).
+            await expect(uploader.locator('.result-view')).toHaveCSS('display', 'flex');
+            await expect(uploader.locator('.result-view')).toHaveCSS('flex-direction', 'column');
+            await expect(uploader.locator('.result-view')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
             // Verify protected fields via API with token.
             const path = '/api/v1/challenges/' + photoId + '/results';

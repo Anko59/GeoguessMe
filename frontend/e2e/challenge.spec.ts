@@ -23,6 +23,13 @@ test.describe('Challenge flow', () => {
             const { uploader, guesser } = scenario;
             await uploader.getByRole('button', { name: 'Camera' }).click();
             await expect(uploader.locator('.capture-button')).toBeVisible();
+            // Targeted visual assertions: the camera capture control keeps its
+            // circular glass shape.
+            await expect(uploader.locator('.capture-button')).toHaveCSS('border-radius', '50%');
+            await expect(uploader.locator('.capture-button')).toHaveCSS(
+                'background-color',
+                'rgba(255, 255, 255, 0.22)',
+            );
             await expectUserCameraOrientation(uploader);
             // The filming screen keeps only the camera actions: lenses and
             // reverse. The options entry lives on the retake/send preview.
