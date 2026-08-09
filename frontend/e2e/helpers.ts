@@ -203,9 +203,9 @@ export async function installDeterministicGeolocation(context: BrowserContext): 
  * text email. The application sends plain-text (not HTML) messages, so the
  * body is in the `Text` field and the URL is the entire body content.
  */
-export async function getMailpitLink(email: string, pathFragment: string): Promise<string> {
+export async function getMailpitLink(subject: string, pathFragment: string): Promise<string> {
     const mailpitHost = process.env.MAILPIT_BASE_URL || 'http://localhost:8025';
-    const query = encodeURIComponent(`to:${email}`);
+    const query = encodeURIComponent(`subject:"${subject}"`);
 
     let link: string | null = null;
     await expect
