@@ -1,5 +1,5 @@
 # Test targets: unit, regression, integration, E2E, and coverage. Fragment of
-# the root Makefile. Aggregate gates in Makefile.quality.mk select from these.
+# the root Makefile. Aggregate gates in tools/make/quality.mk select from these.
 
 ##@ Tests
 test-unit: test-backend test-frontend ## Run backend and frontend unit tests.
