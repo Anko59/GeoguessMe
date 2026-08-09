@@ -57,6 +57,7 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
     // and no state is adjusted during render. The reducer no-ops when the
     // identity is unchanged, so an unrelated re-render resets nothing.
     useLayoutEffect(() => {
+        stableCursorRef.current = '';
         dispatch({
             type: 'reset',
             identity: cacheIdentity,
@@ -152,9 +153,7 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 // anchor its catch-up strictly after the newest fetched
                 // message. The legacy after_id message-id bridge is gone; the
                 // opaque cursor contract is the only catch-up mechanism.
-                if (!Array.isArray(payload) && payload.stable_cursor) {
-                    stableCursorRef.current = payload.stable_cursor;
-                }
+                if (!Array.isArray(payload)) stableCursorRef.current = payload.stable_cursor ?? '';
                 return {
                     items: items ?? [],
                     nextCursor: !Array.isArray(payload) ? (payload.next_cursor ?? undefined) : undefined,

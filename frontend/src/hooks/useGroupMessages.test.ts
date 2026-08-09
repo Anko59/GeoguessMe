@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PAGE_SIZE } from '../chat/chatSocketController';
 import type { Message } from '../types';
 import { saveCachedMessages } from '../utils/pwaSessionCache';
 import { useGroupMessages } from './useGroupMessages';
@@ -328,7 +329,12 @@ describe('useGroupMessages reconnect sequence', () => {
 
     it('resets state and reconnects when the group changes, ignoring stale events', async () => {
         mocks.post.mockResolvedValue({ data: { ticket: 't' } });
-        mocks.get.mockResolvedValue({ data: { items: [] } });
+        mocks.get
+            .mockResolvedValueOnce({
+                data: { items: [message('a', '2026-01-01T00:00:00Z')], stable_cursor: 'cursor-a' },
+            })
+            .mockResolvedValueOnce({ data: { items: [], stable_cursor: null } })
+            .mockResolvedValueOnce({ data: { items: [] } });
 
         const { result, rerender } = renderHook(({ gid }: { gid: string }) => useGroupMessages(gid, 'user-1'), {
             initialProps: { gid: 'group-1' },
@@ -358,6 +364,18 @@ describe('useGroupMessages reconnect sequence', () => {
         // The renewed socket works normally.
         await act(async () => renewed.fireOpen());
         await waitFor(() => expect(result.current.connectionStatus).toBe('connected'));
+
+        // Group 2's empty anchor page clears group 1's cursor. A later group 2
+        // reconnect must start from group 2's own empty anchor rather than
+        // skipping messages behind the foreign cursor.
+        act(() => renewed.fireClose());
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(3), { timeout: 5000 });
+        const groupTwoReconnect = MockWebSocket.instances[2];
+        await act(async () => groupTwoReconnect.fireOpen());
+        await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
+        expect(mocks.get).toHaveBeenNthCalledWith(3, '/group/messages', {
+            params: { group_id: 'group-2', limit: PAGE_SIZE },
+        });
     });
 
     it('drops a stale loadOlder response after the group changes', async () => {

@@ -72,6 +72,10 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
+	if _, present := r.URL.Query()["after_id"]; present {
+		WriteError(w, http.StatusBadRequest, "unsupported_parameter", "after_id is no longer supported; use cursor")
+		return
+	}
 
 	if !a.requireMember(w, r, groupID, userID) {
 		return

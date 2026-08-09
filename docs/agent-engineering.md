@@ -188,14 +188,16 @@ The PR 7 entries for the `CleanupAuthTokens` no-op reference, the `InitSchema`
 compatibility helper, and the `database.DB` package global were removed in PR 7:
 the code, its tests, and the composition-root replacement landed together.
 
-The PR 12 entries for the `after_id` message cursor, the reaction `emoji`
-request/response alias, and the singular challenge `group_id` form field were
-removed: the OpenAPI spec, generated TypeScript contract, handlers, models,
-frontend, tests, and the legacy reaction emoji database column/migration are all
-gone together. Forward catch-up now uses the opaque `stable_cursor` anchor plus
-the `cursor` parameter. The rollout follows the two-deployment sequence
-(documented in [deployment.md](deployment.md)). No temporary compatibility
-entries remain.
+The application compatibility PR entries for the `after_id` message cursor, the
+reaction `emoji` request/response alias, and the singular challenge `group_id`
+form field were removed: the OpenAPI spec, generated TypeScript contract,
+handlers, models, frontend, and tests are removed together. The legacy reaction
+database column and synchronization objects remain until a separate
+cleanup-migration PR lands after the compatible application revision has
+deployed and left its rollback window. Forward catch-up uses the opaque
+`stable_cursor` anchor plus the `cursor` parameter. The staged rollout is
+documented in [deployment.md](deployment.md). No temporary application
+compatibility entries remain.
 
 ## Residual risks
 
