@@ -63,8 +63,18 @@ type Config struct {
 
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
-	LogLevel          string
-	MetricsToken      string
+
+	// RateLimitPolicies are the per-route multi-bucket rate-limit policies.
+	// Each bucket is expressed as "type:limit/window" where type is one of
+	// route, global, trustedIP, identity, user. RateLimitFailClosed names the
+	// policies that reject requests when the shared bucket store is exhausted
+	// (the expensive unauthenticated routes). RateLimitStoreCap bounds the
+	// shared in-process bucket store.
+	RateLimitPolicies   []RateLimitPolicy
+	RateLimitFailClosed []string
+	RateLimitStoreCap   int
+	LogLevel            string
+	MetricsToken        string
 
 	// VAPID keys (base64url) enable Web Push. A complete keypair and contact
 	// subject are required when push is enabled. Production may leave all three
@@ -72,6 +82,20 @@ type Config struct {
 	VapidPublicKey  string
 	VapidPrivateKey string
 	VapidSubject    string
+}
+
+// RateLimitBucket is one fixed-window counter of a rate-limit policy.
+// Type is one of route, global, trustedIP, identity, user.
+type RateLimitBucket struct {
+	Type   string
+	Limit  int
+	Window time.Duration
+}
+
+// RateLimitPolicy is a named set of rate-limit buckets.
+type RateLimitPolicy struct {
+	Name    string
+	Buckets []RateLimitBucket
 }
 
 // SMTP modes.
@@ -173,6 +197,42 @@ func (c *Config) Validate() error {
 	}
 	if c.RateLimitRequests <= 0 || c.RateLimitWindow <= 0 {
 		problems = append(problems, "rate limit values must be positive")
+	}
+	if c.RateLimitStoreCap < 1 {
+		problems = append(problems, "RATE_LIMIT_STORE_CAP must be at least 1")
+	}
+	if len(c.RateLimitPolicies) == 0 {
+		problems = append(problems, "at least one rate limit policy is required")
+	}
+	knownPolicies := make(map[string]bool, len(c.RateLimitPolicies))
+	for _, p := range c.RateLimitPolicies {
+		if p.Name == "" {
+			problems = append(problems, "rate limit policy name must not be empty")
+			continue
+		}
+		if knownPolicies[p.Name] {
+			problems = append(problems, fmt.Sprintf("duplicate rate limit policy %q", p.Name))
+		}
+		knownPolicies[p.Name] = true
+		if len(p.Buckets) == 0 {
+			problems = append(problems, fmt.Sprintf("rate limit policy %q has no buckets", p.Name))
+		}
+		for _, b := range p.Buckets {
+			if b.Limit <= 0 {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q bucket %q must have a positive limit", p.Name, b.Type))
+			}
+			if b.Window <= 0 {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q bucket %q must have a positive window", p.Name, b.Type))
+			}
+			if !isRateLimitBucketType(b.Type) {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q has unknown bucket type %q", p.Name, b.Type))
+			}
+		}
+	}
+	for _, name := range c.RateLimitFailClosed {
+		if !knownPolicies[name] {
+			problems = append(problems, fmt.Sprintf("rate limit fail-closed policy %q is not a known policy", name))
+		}
 	}
 	if c.SMTPDialTimeout <= 0 || c.SMTPTimeout <= 0 {
 		problems = append(problems, "SMTP timeouts must be positive")
@@ -285,6 +345,18 @@ func splitList(value string) []string {
 		}
 	}
 	return result
+}
+
+// isRateLimitBucketType reports whether t is a supported rate-limit bucket
+// type. The middleware package owns the canonical BucketType constants; this
+// helper keeps the strict loader self-contained without importing middleware.
+func isRateLimitBucketType(t string) bool {
+	switch t {
+	case "route", "global", "trustedIP", "identity", "user":
+		return true
+	default:
+		return false
+	}
 }
 
 func contains(values []string, wanted string) bool {

@@ -13,11 +13,13 @@ import (
 	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/email"
+	"geoguessme/internal/middleware"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
 	"github.com/pashagolub/pgxmock/v4"
+	"github.com/stretchr/testify/require"
 )
 
 // newCompositionPool returns an isolated mock pool for one composition-test
@@ -43,6 +45,36 @@ func newCompositionPool(t *testing.T) pgxmock.PgxPoolIface {
 // application instances: two Apps built on different dependencies share no
 // mutable state, each answers from its own repository, and each builds its own
 // working route table.
+func TestBuildRateLimitPolicies(t *testing.T) {
+	// Hand-built configurations without explicit policies fall back to the
+	// mandated defaults so the route table keeps its per-route limits.
+	fallback := buildRateLimitPolicies(&config.Config{})
+	require.Len(t, fallback, len(middleware.DefaultPolicies()))
+	names := make(map[string]bool, len(fallback))
+	for _, p := range fallback {
+		names[p.Name] = true
+	}
+	for _, wanted := range []string{"login", "signup", "email", "reset", "push", "default"} {
+		require.True(t, names[wanted], "fallback must include policy %q", wanted)
+	}
+
+	// Explicit configuration converts buckets and applies fail-closed names.
+	cfg := &config.Config{
+		RateLimitPolicies: []config.RateLimitPolicy{
+			{Name: "login", Buckets: []config.RateLimitBucket{{Type: "identity", Limit: 7, Window: time.Minute}}},
+			{Name: "default", Buckets: []config.RateLimitBucket{{Type: "trustedIP", Limit: 9, Window: time.Minute}}},
+		},
+		RateLimitFailClosed: []string{"login"},
+	}
+	policies := buildRateLimitPolicies(cfg)
+	require.Len(t, policies, 2)
+	require.Equal(t, "login", policies[0].Name)
+	require.True(t, policies[0].FailClosed)
+	require.Equal(t, middleware.BucketIdentity, policies[0].Buckets[0].Type)
+	require.Equal(t, 7, policies[0].Buckets[0].Limit)
+	require.False(t, policies[1].FailClosed)
+}
+
 func TestAppInstancesAreIndependent(t *testing.T) {
 	cfgA := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}, JWTSecret: "composition-secret-A-that-is-longer-than-32-bytes"}
 	cfgB := &config.Config{Environment: config.EnvTest, AllowedOrigins: []string{"http://localhost:8080"}, JWTSecret: "composition-secret-B-that-is-longer-than-32-bytes"}

@@ -19,6 +19,7 @@ var allConfigVariables = []string{
 	"UPLOAD_MAX_BYTES", "AVATAR_MAX_BYTES", "UPLOAD_MAX_PIXELS",
 	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
 	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
+	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
 	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT",
 }
 
@@ -141,6 +142,36 @@ func validConfig() *Config {
 		PhotoRetention:    30 * 24 * time.Hour,
 		RateLimitRequests: 10,
 		RateLimitWindow:   time.Minute,
+		RateLimitPolicies: []RateLimitPolicy{
+			{Name: "login", Buckets: []RateLimitBucket{
+				{Type: "identity", Limit: 10, Window: time.Minute},
+				{Type: "trustedIP", Limit: 30, Window: time.Minute},
+				{Type: "global", Limit: 300, Window: time.Minute},
+			}},
+			{Name: "signup", Buckets: []RateLimitBucket{
+				{Type: "identity", Limit: 3, Window: time.Hour},
+				{Type: "trustedIP", Limit: 5, Window: time.Hour},
+				{Type: "global", Limit: 60, Window: time.Minute},
+			}},
+			{Name: "email", Buckets: []RateLimitBucket{
+				{Type: "identity", Limit: 3, Window: time.Hour},
+				{Type: "trustedIP", Limit: 5, Window: time.Hour},
+				{Type: "global", Limit: 30, Window: time.Minute},
+			}},
+			{Name: "reset", Buckets: []RateLimitBucket{
+				{Type: "trustedIP", Limit: 10, Window: time.Hour},
+			}},
+			{Name: "push", Buckets: []RateLimitBucket{
+				{Type: "user", Limit: 10, Window: time.Hour},
+				{Type: "trustedIP", Limit: 20, Window: time.Hour},
+			}},
+			{Name: "default", Buckets: []RateLimitBucket{
+				{Type: "identity", Limit: 10, Window: time.Minute},
+				{Type: "trustedIP", Limit: 60, Window: time.Minute},
+			}},
+		},
+		RateLimitFailClosed: []string{"login", "signup", "email", "reset"},
+		RateLimitStoreCap:   50_000,
 	}
 }
 
@@ -161,6 +192,11 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 		"retention below challenge":  func(c *Config) { c.PhotoRetention = c.ChallengeTTL / 2 },
 		"unknown smtp tls":           func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = "ssl" },
 		"zero rate window":           func(c *Config) { c.RateLimitWindow = 0 },
+		"zero rate store cap":        func(c *Config) { c.RateLimitStoreCap = 0 },
+		"zero policy limit":          func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Limit = 0 },
+		"zero policy window":         func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Window = 0 },
+		"unknown bucket type":        func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Type = "host" },
+		"fail-closed unknown policy": func(c *Config) { c.RateLimitFailClosed = []string{"admin"} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
