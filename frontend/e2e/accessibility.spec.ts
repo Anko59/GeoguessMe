@@ -129,7 +129,7 @@ test.describe('Keyboard navigation', () => {
         try {
             const { page } = ctx;
             await page.goto('/group/join');
-            await expect(page.locator('form.join-form')).toBeVisible({ timeout: 10000 });
+            await expect(page.locator('.join-form')).toBeVisible({ timeout: 10000 });
 
             // Back link is first Tab target, then mode toggle buttons
             const backLink = page.locator('.back-btn-page');
@@ -142,8 +142,12 @@ test.describe('Keyboard navigation', () => {
             const createToggle = page.getByRole('button', { name: /^create group$/i });
             await expect(createToggle).toBeFocused();
 
+            // Switching to the create mode exposes the name field and submit
+            // button as the next Tab targets.
+            await createToggle.click();
             await page.keyboard.press('Tab');
-            await expect(page.locator('input[placeholder*="code" i]')).toBeFocused();
+            const nameInput = page.getByPlaceholder('Group Name');
+            await expect(nameInput).toBeFocused();
 
             await page.keyboard.press('Tab');
             const submitBtn = page.locator('form.join-form button[type="submit"]');
@@ -307,7 +311,7 @@ test.describe('Authenticated page Axe checks', () => {
         try {
             const { page } = ctx;
             await page.goto('/group/join');
-            await expect(page.getByPlaceholder(/code/i)).toBeVisible({ timeout: 10000 });
+            await expect(page.locator('.join-form')).toBeVisible({ timeout: 10000 });
             await expectAccessible(page);
         } finally {
             await ctx.context.close();

@@ -169,6 +169,7 @@ export default function GroupJoin() {
                                 className="btn btn-accent"
                                 disabled={joining}
                                 onClick={() => void joinGroup()}
+                                data-testid="join-btn"
                             >
                                 {joining ? 'Joining…' : 'Join Group'}
                             </button>

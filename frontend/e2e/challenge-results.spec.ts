@@ -1,8 +1,10 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 import {
+    createInviteFromSettings,
     installDeterministicCamera,
     installDeterministicGeolocation,
+    joinGroupViaInvite,
     newAuthContext,
     uniqueGroup,
     uniqueUsername,
@@ -73,14 +75,10 @@ async function createResultScenario(browser: Browser, contextOptions: BrowserCon
     const groupId = uploader.url().split('/group/')[1];
 
     await uploader.getByRole('button', { name: 'Open group settings' }).click();
-    const settings = uploader.getByRole('dialog');
-    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-    await settings.getByRole('button', { name: 'Close settings' }).click();
+    const inviteUrl = await createInviteFromSettings(uploader);
+    await uploader.getByRole('button', { name: 'Close settings' }).click();
 
-    await guesser.goto('/group/join');
-    await guesser.getByPlaceholder('6-character code').fill(groupCode);
-    await guesser.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-    await guesser.waitForURL(/\/group\//);
+    await joinGroupViaInvite(guesser, inviteUrl, groupId);
 
     await uploader.goto('/group/' + groupId);
     await guesser.goto('/group/' + groupId);
@@ -284,16 +282,12 @@ test.describe('Challenge result authorization', () => {
             const groupId = uploader.url().split('/group/')[1];
 
             await uploader.getByRole('button', { name: 'Open group settings' }).click();
-            const settings = uploader.getByRole('dialog');
-            const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-            await settings.getByRole('button', { name: 'Close settings' }).click();
+            const inviteUrl = await createInviteFromSettings(uploader);
+            await uploader.getByRole('button', { name: 'Close settings' }).click();
 
             // Both guesser and third join.
             for (const p of [guesser, thirdPage]) {
-                await p.goto('/group/join');
-                await p.getByPlaceholder('6-character code').fill(groupCode);
-                await p.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-                await p.waitForURL(/\/group\//);
+                await joinGroupViaInvite(p, inviteUrl, groupId);
                 await p.goto('/group/' + groupId);
                 await expectConnected(p);
             }

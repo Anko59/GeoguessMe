@@ -255,6 +255,7 @@ export default function SettingsModal({
                         className="btn btn-secondary"
                         onClick={createInvite}
                         disabled={creatingInvite}
+                        data-testid="create-invite-btn"
                     >
                         {creatingInvite ? 'Creating…' : 'Create invite link'}
                     </button>
@@ -274,6 +275,7 @@ export default function SettingsModal({
                                 readOnly
                                 className="invite-input"
                                 aria-label="Invite link"
+                                data-testid="invite-url"
                             />
                             <button onClick={copyInvite} className="copy-btn">
                                 {copied ? (
