@@ -8,6 +8,7 @@
 #   3. An exception expiring in the past is rejected.
 #   4. An exception expiring more than 30 days out is rejected.
 #   5. An unapproved exception (approved: false) is rejected.
+#   6. An image/digest mismatch is rejected.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
@@ -107,6 +108,16 @@ cat >"$TMP/unapproved.yaml" <<EOF
   expires: $VALID_EXPIRY
 EOF
 
+cat >"$TMP/digest-mismatch.yaml" <<EOF
+- id: CVE-2026-00006
+  image: $IMAGE
+  digest: sha256:$(printf 'b%.0s' {1..64})
+  owner: platform@geoguessme.dev
+  reachable: regression fixture rationale
+  approved: true
+  expires: $VALID_EXPIRY
+EOF
+
 # ── Test 1: valid record validates and emits its ignorefile entry ───────────
 echo "--- Test 1: valid record validates and emits ---"
 if run_validator "$TMP/valid.yaml"; then
@@ -191,6 +202,20 @@ if printf '%s\n' "$out" | grep -q 'not approved'; then
     pass "reports not-approved"
 else
     fail "not-approved error message absent"
+fi
+
+# ── Test 6: image reference and digest field must agree ────────────────────
+echo "--- Test 6: image/digest mismatch ---"
+if run_validator "$TMP/digest-mismatch.yaml"; then
+    fail "image/digest mismatch accepted"
+else
+    pass "image/digest mismatch rejected"
+fi
+out=$(validator_output "$TMP/digest-mismatch.yaml") || true
+if printf '%s\n' "$out" | grep -q 'image digest does not match'; then
+    pass "reports image/digest mismatch"
+else
+    fail "image/digest mismatch error message absent"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

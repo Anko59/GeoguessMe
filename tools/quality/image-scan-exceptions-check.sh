@@ -99,7 +99,7 @@ record_count=0
 # ignorefile lines to OUT when running in emit mode.
 validate_record() {
     local id=$1 image=$2 digest=$3 owner=$4 reachable=$5 approved=$6 expires=$7
-    local msg=""
+    local msg="" image_digest=""
 
     record_count=$((record_count + 1))
 
@@ -121,6 +121,20 @@ validate_record() {
         echo "ERROR: exception '$id' has malformed digest: $digest (expected sha256:<64 hex>)" >&2
         fail=1
     }
+
+    case "$image" in
+        *@sha256:*)
+            image_digest="sha256:${image##*@sha256:}"
+            [ "$image_digest" = "$digest" ] || {
+                echo "ERROR: exception '$id' image digest does not match digest field" >&2
+                fail=1
+            }
+            ;;
+        *)
+            echo "ERROR: exception '$id' image is not digest-pinned: $image" >&2
+            fail=1
+            ;;
+    esac
 
     [ "$approved" = "true" ] || {
         echo "ERROR: exception '$id' is not approved (approved must be true)" >&2

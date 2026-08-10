@@ -25,9 +25,12 @@ The target scans the following images (see `AUDIT_IMAGES` in
     - otherwise a warning is printed and application images are skipped.
 
 Override the image list with `AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`.
-Images are always referenced by pinned digest, never by a floating tag. Locally
-built images are exported with `docker save` and scanned from a tarball;
-registry images are scanned directly by reference.
+Images are always referenced by pinned digest, never by a floating tag. Images
+already available in the host Docker daemon are exported with `docker save` and
+scanned from a tarball. This includes private application digests pulled by the
+authenticated publication and promotion workflows, so registry credentials never
+enter the Trivy container. Other registry images are scanned directly by their
+digest-pinned reference.
 
 ## Blocking semantics
 
@@ -62,11 +65,13 @@ all of the following fields:
 - `expires` — an ISO date (`YYYY-MM-DD`) that is today or later and at most 30
   days after the exception is recorded.
 
-The validator fails the gate on any missing field, a malformed digest,
-`approved` other than `true`, an unknown key, or an expired or over-30-day
-expiry. In `--emit` mode it writes the per-image Trivy ignorefile (used by the
-scan passes) containing only the exceptions that match the scanned reference or
-its name plus digest.
+The validator fails the gate on any missing field, a malformed or unpinned image
+digest, disagreement between the image reference and digest field, `approved`
+other than `true`, an unknown key, or an expired or over-30-day expiry. In
+`--emit` mode it writes the per-image Trivy ignorefile (used only by the
+blocking pass) containing only the exceptions that match the scanned reference
+or its name plus digest. The JSON report remains complete and includes excepted
+findings.
 
 Rules:
 
