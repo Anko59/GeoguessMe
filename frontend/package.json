@@ -13,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "0.10.35",
+    "@mediapipe/tasks-vision": "1.0.1",
     "axios": "^1.19.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.8",
