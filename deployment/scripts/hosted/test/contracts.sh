@@ -248,4 +248,47 @@ if grep -En 'set -x|printenv|env[[:space:]]*$' "$ROOT"/deployment/scripts/hosted
     fail 'operator scripts contain a secret-dumping primitive'
 fi
 
+# The runtime hash check compares the installed root-owned host definitions
+# (bin scripts, config compose files) against the deployed revision and must
+# fail when any installed file was modified out-of-band.
+VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
+hash_root=$(mktemp -d)
+trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
+# REVISION in deployment metadata is a 40-character git commit SHA.
+revision=$(printf 'b%.0s' $(seq 1 40))
+mkdir -p "$hash_root/app/releases/$revision/deployment/scripts/hosted" \
+    "$hash_root/app/bin" "$hash_root/app/config" \
+    "$hash_root/state/releases/dev"
+printf 'REVISION=%s\n' "$revision" >"$hash_root/state/releases/dev/current.env"
+for script in common deploy forced-command backup restore-rehearsal health-check alert; do
+    cp "$ROOT/deployment/scripts/hosted/$script.sh" \
+        "$hash_root/app/releases/$revision/deployment/scripts/hosted/$script.sh"
+    cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
+done
+cp "$ROOT/deployment/compose.production.yaml" \
+    "$hash_root/app/releases/$revision/deployment/compose.production.yaml"
+cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.production.yaml"
+cp "$ROOT/deployment/compose.hosted.yaml" \
+    "$hash_root/app/releases/$revision/deployment/compose.hosted.yaml"
+cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
+run_verify() {
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+        GEOGUESSME_STATE_ROOT="$hash_root/state" \
+        GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+        GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+        "$VERIFY" dev
+}
+if ! run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check rejected matching host definitions'
+fi
+printf '\n# tampered out-of-band\n' >>"$hash_root/app/config/compose.production.yaml"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a tampered host definition'
+fi
+if GEOGUESSME_APP_ROOT="$hash_root/app" GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$VERIFY" >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a missing environment'
+fi
+
 printf 'hosted deployment contracts passed\n'

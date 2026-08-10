@@ -155,6 +155,20 @@ cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-t
 	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
 
+deployment-hash-check: ## Verify installed host runtime definitions match the deployed revision (via Access SSH).
+	@test -n "$(ENVIRONMENT)" || { echo 'ENVIRONMENT=dev|production is required'; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
+	@test -n "$${DEPLOY_SSH_PRIVATE_KEY:-}" || { echo 'DEPLOY_SSH_PRIVATE_KEY is required' >&2; exit 2; }
+	@test -n "$${DEPLOY_SSH_KNOWN_HOSTS:-}" || { echo 'DEPLOY_SSH_KNOWN_HOSTS is required' >&2; exit 2; }
+	@install -d -m 0700 "$${HOME}/.ssh" && \
+	printf '%s\n' "$$DEPLOY_SSH_PRIVATE_KEY" >"$${HOME}/.ssh/deploy" && \
+	printf '%s\n' "$$DEPLOY_SSH_KNOWN_HOSTS" >"$${HOME}/.ssh/known_hosts" && \
+	chmod 0600 "$${HOME}/.ssh/deploy" "$${HOME}/.ssh/known_hosts" && \
+	ssh -i "$${HOME}/.ssh/deploy" -o IdentitiesOnly=yes \
+		-o ProxyCommand='$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname %h' \
+		deploy@deploy.geoguessme.com "verify $(ENVIRONMENT)"
+
 terraform-fmt: ## Format infrastructure code in the pinned Terraform container.
 	$(TERRAFORM) fmt -recursive
 
