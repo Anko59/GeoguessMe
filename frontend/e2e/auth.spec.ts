@@ -165,7 +165,7 @@ test.describe('Duplicate registration', () => {
         await expect(page).toHaveURL(/\/signup/);
     });
 
-    test('signup with taken email shows conflict error', async ({ page }) => {
+    test('signup with a duplicate pending email succeeds (no enumeration)', async ({ page }) => {
         const creds = await signupViaUI(page);
 
         // Logout
@@ -176,7 +176,11 @@ test.describe('Duplicate registration', () => {
 
         await resetRateLimiter(page);
 
-        // Try signing up with the same email, different username
+        // F-09: an unverified address is only a pending contact claim, not an
+        // identity, and signup must not reveal whether an address is already
+        // registered. The same unverified email with a different username is
+        // therefore accepted (multiple pending claims may share an address
+        // until one of them verifies it).
         await page.goto('/signup');
         await page.waitForSelector('#signup-username', { state: 'visible' });
         await page.fill('#signup-username', uniqueUsername());
@@ -184,8 +188,8 @@ test.describe('Duplicate registration', () => {
         await page.fill('#signup-password', 'TestPass123');
         await page.click('button.btn-primary[type="submit"]');
 
-        await expect(page.locator('.auth-error')).toBeVisible();
-        await expect(page).toHaveURL(/\/signup/);
+        await expect(page).toHaveURL(/\/groups/);
+        await expect(page.locator('.groups-header')).toBeVisible();
     });
 });
 
