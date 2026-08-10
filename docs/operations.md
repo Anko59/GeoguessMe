@@ -23,11 +23,31 @@ curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 
 OpenMetrics (Prometheus) format at `/metrics`:
 
-| Metric                               | Type    | Description                  |
-| ------------------------------------ | ------- | ---------------------------- |
-| `geoguessme_http_requests_total`     | Counter | Total HTTP requests          |
-| `geoguessme_http_errors_total`       | Counter | HTTP 5xx responses           |
-| `geoguessme_storage_cleanup_backlog` | Gauge   | Pending object-deletion jobs |
+| Metric                                | Type      | Description                                                      |
+| ------------------------------------- | --------- | ---------------------------------------------------------------- |
+| `geoguessme_http_requests_total`      | Counter   | Total HTTP requests                                              |
+| `geoguessme_http_errors_total`        | Counter   | HTTP 5xx responses                                               |
+| `geoguessme_storage_cleanup_backlog`  | Gauge     | Pending object-deletion jobs                                     |
+| `geoguessme_limiter_rejections_total` | Counter   | Rate-limit 429 rejections (all policies, and per `policy` label) |
+| `push_queue_depth`                    | Gauge     | Web Push jobs waiting in the fan-out queue                       |
+| `push_drops_total`                    | Counter   | Notifications dropped because the push queue was full            |
+| `push_delivery_duration_seconds`      | Histogram | Web Push delivery latency (buckets to 5s, the per-send deadline) |
+| `push_delivery_failures_total`        | Counter   | Failed Web Push deliveries (including timeout expiries)          |
+| `push_subscriptions_total`            | Gauge     | Total stored push subscriptions (refreshed once a minute)        |
+
+### Operational thresholds
+
+Alert when any of the following conditions hold; each maps to a deliverable Web
+Push behaviour that is otherwise silent:
+
+| Signal                                | Threshold                                                                   | Meaning                                                                                                |
+| ------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `push_drops_total`                    | any increase over a 5-minute window while the queue is at depth             | Queue saturation: `PUSH_QUEUE_DEPTH` (256) is too small for the fan-out rate or a push host is wedged. |
+| `push_queue_depth`                    | sustained > 80% of `PUSH_QUEUE_DEPTH` for 5 minutes                         | Delivery is backing up; investigate slow hosts before notifications start dropping.                    |
+| `push_delivery_failures_total`        | failure rate > 10% of `push_delivery_duration_seconds_count` over 5 minutes | Push services are rejecting or timing out; check the allowlist, credentials, and host health.          |
+| `push_delivery_duration_seconds`      | p95 > 2s over 5 minutes                                                     | Sends approaching the 5s deadline; a provider is degrading.                                            |
+| `push_subscriptions_total`            | drop of > 20% within 24 hours                                               | Mass unsubscription or a broken `last_used_at`/cleanup path deleting live subscriptions.               |
+| `geoguessme_limiter_rejections_total` | sustained > 100/min over 5 minutes for a single `policy` label              | Coordinated brute force or misconfigured clients hammering one route.                                  |
 
 The `/metrics` endpoint is unprotected in `development` and `test`. In
 `production` (and any environment other than `development` or `test`) it

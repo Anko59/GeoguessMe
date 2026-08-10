@@ -24,6 +24,12 @@ func (l *loader) fail(key, kind, value string) {
 // stringValue applies its fallback only when a variable is absent. An explicit
 // empty assignment remains empty so validation can reject required settings
 // rather than silently substituting development credentials or endpoints.
+// defaultPushEndpointAllowlist covers the canonical notification-delivery
+// hosts of the four major push providers: Google FCM, Mozilla Push, Apple Web
+// Push, and Windows. Operators may override it, but an explicit empty value is
+// rejected in production when push is enabled.
+const defaultPushEndpointAllowlist = "fcm.googleapis.com,push.services.mozilla.com,web-push.apple.com,wns.windows.com"
+
 func (l *loader) stringValue(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -233,6 +239,15 @@ func Load() (*Config, error) {
 		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
 		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
 		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+
+		PushEndpointAllowlist: splitList(l.stringValue("PUSH_ENDPOINT_ALLOWLIST", defaultPushEndpointAllowlist)),
+
+		PushMaxSubscriptionsPerUser: l.intValue("PUSH_MAX_SUBSCRIPTIONS_PER_USER", 5),
+		PushSubscriptionExpiry:      l.durationValue("PUSH_SUBSCRIPTION_EXPIRY", 90*24*time.Hour),
+		PushDeliveryWorkers:         l.intValue("PUSH_DELIVERY_WORKERS", 4),
+		PushDeliveryPerHost:         l.intValue("PUSH_DELIVERY_PER_HOST", 2),
+		PushDeliveryTimeout:         l.durationValue("PUSH_DELIVERY_TIMEOUT", 5*time.Second),
+		PushQueueDepth:              l.intValue("PUSH_QUEUE_DEPTH", 256),
 	}
 
 	l.urlValue("PUBLIC_URL", cfg.PublicURL)

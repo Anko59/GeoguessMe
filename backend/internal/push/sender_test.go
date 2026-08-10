@@ -51,7 +51,7 @@ func TestSenderSuccessAndHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sender := NewSender(keys, "mailto:ops@example.com", server.Client())
+	sender := NewSender(keys, "mailto:ops@example.com", nil, server.Client())
 	sub := mustReceiverSubscription(t, server.URL+"/push/abc")
 	if err := sender.Send(context.Background(), sub, []byte(`{"title":"hi"}`)); err != nil {
 		t.Fatalf("send: %v", err)
@@ -96,7 +96,7 @@ func TestSenderStatusClassification(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			server, _ := statusServer(t, c.status)
-			sender := NewSender(keys, "mailto:ops@example.com", server.Client())
+			sender := NewSender(keys, "mailto:ops@example.com", nil, server.Client())
 			sub := mustReceiverSubscription(t, server.URL+"/push/abc")
 			err := sender.Send(context.Background(), sub, []byte(`{}`))
 			if c.gone && !errors.Is(err, ErrSubscriptionGone) {
@@ -112,7 +112,7 @@ func TestSenderStatusClassification(t *testing.T) {
 func TestSenderRejectsInvalidSubscription(t *testing.T) {
 	server, _ := statusServer(t, http.StatusCreated)
 	keys, _ := GenerateKeyPair()
-	sender := NewSender(keys, "mailto:ops@example.com", server.Client())
+	sender := NewSender(keys, "mailto:ops@example.com", nil, server.Client())
 	bad := &Subscription{Endpoint: server.URL + "/push/abc", P256DH: "not-a-real-key", Auth: b64(make([]byte, 16))}
 	if err := sender.Send(context.Background(), bad, []byte(`{}`)); !errors.Is(err, ErrSubscriptionGone) {
 		t.Fatalf("expected gone error for bad p256dh, got %v", err)
@@ -121,7 +121,7 @@ func TestSenderRejectsInvalidSubscription(t *testing.T) {
 
 func TestSenderRejectsBadEndpointScheme(t *testing.T) {
 	keys, _ := GenerateKeyPair()
-	sender := NewSender(keys, "mailto:ops@example.com", nil)
+	sender := NewSender(keys, "mailto:ops@example.com", nil, nil)
 	sub := mustReceiverSubscription(t, "ftp://example.test/push")
 	if err := sender.Send(context.Background(), sub, []byte(`{}`)); err == nil {
 		t.Fatal("expected error for ftp endpoint")

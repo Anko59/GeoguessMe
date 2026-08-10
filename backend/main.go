@@ -96,7 +96,7 @@ func main() {
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	pushSvc := configurePush(cfg, logger, pool)
-	pushSvc.Start(workerCtx, 2)
+	pushSvc.Start(workerCtx, cfg.PushDeliveryWorkers)
 
 	// The realtime hub is constructed by the composition root with its
 	// persistence and push callbacks injected: message persistence goes
@@ -132,7 +132,7 @@ func main() {
 	go hub.Run()
 
 	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
-	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog}).Run(workerCtx)
+	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog, PushSubscriptionExpiry: cfg.PushSubscriptionExpiry}).Run(workerCtx)
 
 	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
@@ -189,7 +189,7 @@ func configurePush(cfg *config.Config, logger *slog.Logger, pool database.Pool) 
 		subject = "mailto:dev@geoguessme.invalid"
 		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
 	}
-	sender := push.NewSender(keyPair, subject, nil)
+	sender := push.NewSender(keyPair, subject, push.NewEndpointGuard(cfg.PushEndpointAllowlist, cfg.Environment != config.EnvProduction), nil)
 	return push.NewService(push.Deps{Store: push.NewStore(pool), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
 }
 

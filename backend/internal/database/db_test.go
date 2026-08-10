@@ -12,7 +12,7 @@ import (
 
 func TestMigrationDiscoveryAndDisconnectedDatabase(t *testing.T) {
 	all, err := migrations()
-	if err != nil || len(all) != 15 || all[0].Version != 1 || all[1].Version != 2 || all[2].Version != 3 || all[3].Version != 4 || all[4].Version != 5 || all[5].Version != 6 || all[6].Version != 7 || all[7].Version != 8 || all[8].Version != 9 || all[9].Version != 10 || all[10].Version != 11 || all[11].Version != 12 || all[12].Version != 13 || all[13].Version != 14 || all[14].Version != 15 {
+	if err != nil || len(all) != 16 || all[0].Version != 1 || all[1].Version != 2 || all[2].Version != 3 || all[3].Version != 4 || all[4].Version != 5 || all[5].Version != 6 || all[6].Version != 7 || all[7].Version != 8 || all[8].Version != 9 || all[9].Version != 10 || all[10].Version != 11 || all[11].Version != 12 || all[12].Version != 13 || all[13].Version != 14 || all[14].Version != 15 || all[15].Version != 16 {
 		t.Fatalf("migrations = %+v, %v", all, err)
 	}
 	if _, err := Connect(""); err == nil {
@@ -63,7 +63,7 @@ func TestMigrateUpSkipsAppliedMigrations(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").WillReturnResult(pgxmock.NewResult("CREATE", 0))
 	mock.ExpectExec("SELECT pg_advisory_lock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 	mock.ExpectQuery("SELECT version FROM schema_migrations").WillReturnRows(
-		pgxmock.NewRows([]string{"version"}).AddRow(1).AddRow(2).AddRow(3).AddRow(4).AddRow(5).AddRow(6).AddRow(7).AddRow(8).AddRow(9).AddRow(10).AddRow(11).AddRow(12).AddRow(13).AddRow(14).AddRow(15),
+		pgxmock.NewRows([]string{"version"}).AddRow(1).AddRow(2).AddRow(3).AddRow(4).AddRow(5).AddRow(6).AddRow(7).AddRow(8).AddRow(9).AddRow(10).AddRow(11).AddRow(12).AddRow(13).AddRow(14).AddRow(15).AddRow(16),
 	)
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
@@ -157,6 +157,10 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("ALTER TABLE websocket_tickets ADD COLUMN IF NOT EXISTS auth_version(?s:.*DELETE FROM websocket_tickets)").WillReturnResult(pgxmock.NewResult("ALTER", 0))
 	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(15, "websocket_ticket_auth_version").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec("CREATE INDEX IF NOT EXISTS push_subscriptions_used_at_idx").WillReturnResult(pgxmock.NewResult("CREATE", 0))
+	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(16, "push_subscription_expiry_index").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 

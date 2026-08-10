@@ -4,9 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"geoguessme/internal/config"
@@ -31,14 +36,19 @@ type Deps struct {
 // triggering request is never blocked by slow or unreachable push services.
 // It implements the handlers.PushNotifier interface structurally.
 type Service struct {
-	store    Store
-	deliver  Deliverer
-	keys     *KeyPair
-	cfg      *config.Config
-	logger   *slog.Logger
-	jobs     chan fanoutJob
-	wg       sync.WaitGroup
-	stopOnce sync.Once
+	store      Store
+	deliver    Deliverer
+	keys       *KeyPair
+	cfg        *config.Config
+	guard      *EndpointGuard
+	logger     *slog.Logger
+	jobs       chan fanoutJob
+	wg         sync.WaitGroup
+	stopOnce   sync.Once
+	stopCh     chan struct{}
+	metrics    *serviceMetrics
+	hostSems   map[string]chan struct{}
+	hostSemsMu sync.Mutex
 }
 
 type fanoutJob struct {
@@ -53,46 +63,174 @@ func NewService(deps Deps) *Service {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
-	return &Service{
-		store:   deps.Store,
-		deliver: deps.Deliver,
-		keys:    deps.Keys,
-		cfg:     deps.Config,
-		logger:  deps.Logger,
-		jobs:    make(chan fanoutJob, 256),
+	svc := &Service{
+		store:    deps.Store,
+		deliver:  deps.Deliver,
+		keys:     deps.Keys,
+		cfg:      deps.Config,
+		logger:   deps.Logger,
+		jobs:     make(chan fanoutJob, queueDepthFromConfig(deps.Config)),
+		stopCh:   make(chan struct{}),
+		metrics:  newServiceMetrics(),
+		hostSems: make(map[string]chan struct{}),
 	}
+	if deps.Config != nil {
+		svc.guard = NewEndpointGuard(deps.Config.PushEndpointAllowlist, deps.Config.Environment != config.EnvProduction)
+	}
+	return svc
 }
 
 // Keys returns the active VAPID keypair, or nil when push is disabled.
 func (s *Service) Keys() *KeyPair { return s.keys }
 
-// Start launches background delivery workers. Workers stop when ctx is cancelled
-// and the pending job queue is drained.
+// Start launches background delivery workers and the subscription-count
+// refresh loop. Workers stop when ctx is cancelled and the pending job queue
+// is drained. The explicit workers argument is honored when positive; a
+// non-positive value falls back to the configured PUSH_DELIVERY_WORKERS.
 func (s *Service) Start(ctx context.Context, workers int) {
 	if s.keys == nil {
 		return
 	}
 	if workers < 1 {
-		workers = 2
+		workers = s.deliveryWorkers()
 	}
 	for range workers {
 		s.wg.Add(1)
 		go s.worker(ctx)
 	}
+	s.wg.Add(1)
+	go s.subscriptionCountLoop(ctx)
 }
 
-// Stop closes the job queue and waits for in-flight deliveries to finish. It is
-// idempotent so callers can invoke it from both explicit shutdown code and a
-// deferred safety net. Callers should cancel the run context first so any
-// in-progress HTTP send aborts promptly instead of waiting for its timeout.
+// Stop closes the job queue and stops background workers and the metrics
+// refresh loop, waiting for in-flight deliveries to finish. It is idempotent
+// so callers can invoke it from both explicit shutdown code and a deferred
+// safety net. Callers should cancel the run context first so any in-progress
+// HTTP send aborts promptly instead of waiting for its timeout.
 func (s *Service) Stop() {
-	s.stopOnce.Do(func() { close(s.jobs) })
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+		close(s.jobs)
+	})
 	s.wg.Wait()
+}
+
+// --- configuration-backed delivery bounds ---------------------------------
+
+func queueDepthFromConfig(cfg *config.Config) int {
+	if cfg != nil && cfg.PushQueueDepth > 0 {
+		return cfg.PushQueueDepth
+	}
+	return 256
+}
+
+// MaxSubscriptionsPerUser returns the configured per-user subscription cap; the
+// subscribe handler uses it for its friendly pre-check while the transactional
+// cap inside the store remains authoritative.
+func (s *Service) MaxSubscriptionsPerUser() int {
+	if s.cfg != nil && s.cfg.PushMaxSubscriptionsPerUser > 0 {
+		return s.cfg.PushMaxSubscriptionsPerUser
+	}
+	return 5
+}
+
+func (s *Service) deliveryWorkers() int {
+	if s.cfg != nil && s.cfg.PushDeliveryWorkers > 0 {
+		return s.cfg.PushDeliveryWorkers
+	}
+	return 4
+}
+
+func (s *Service) deliveryPerHost() int {
+	if s.cfg != nil && s.cfg.PushDeliveryPerHost > 0 {
+		return s.cfg.PushDeliveryPerHost
+	}
+	return 2
+}
+
+func (s *Service) deliveryTimeout() time.Duration {
+	if s.cfg != nil && s.cfg.PushDeliveryTimeout > 0 {
+		return s.cfg.PushDeliveryTimeout
+	}
+	return 5 * time.Second
+}
+
+// hostSem returns the per-host concurrency gate for one push-service host,
+// creating it on first use. The gate capacity is PUSH_DELIVERY_PER_HOST.
+func (s *Service) hostSem(host string) chan struct{} {
+	s.hostSemsMu.Lock()
+	defer s.hostSemsMu.Unlock()
+	sem, ok := s.hostSems[host]
+	if !ok {
+		perHost := s.deliveryPerHost()
+		if perHost < 1 {
+			perHost = 2
+		}
+		sem = make(chan struct{}, perHost)
+		s.hostSems[host] = sem
+	}
+	return sem
+}
+
+// endpointHost extracts the host portion of a push endpoint for per-host
+// concurrency gating. An unparseable endpoint yields an empty host, which skips
+// the gate; the sender's allowlist validation rejects such endpoints anyway.
+func endpointHost(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Host
+}
+
+// --- subscription-count gauge ---------------------------------------------
+
+// subscriptionCountRefreshInterval bounds the rate of COUNT queries backing the
+// push_subscriptions_total gauge. One minute is far below the churn of a
+// subscription table and costs a single cheap count on a single replica.
+const subscriptionCountRefreshInterval = time.Minute
+
+func (s *Service) subscriptionCountLoop(ctx context.Context) {
+	defer s.wg.Done()
+	s.refreshSubscriptionCount(ctx)
+	ticker := time.NewTicker(subscriptionCountRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.stopCh:
+			return
+		case <-ticker.C:
+			s.refreshSubscriptionCount(ctx)
+		}
+	}
+}
+
+func (s *Service) refreshSubscriptionCount(ctx context.Context) {
+	count, err := s.store.CountAllSubscriptions(ctx)
+	if err != nil {
+		s.logger.Warn("push subscription count refresh failed", "error", err)
+		return
+	}
+	s.metrics.subscriptions.Store(count)
+}
+
+// --- metrics surface ------------------------------------------------------
+
+// MetricsText renders the push delivery metrics as Prometheus text. The
+// composition root wires it into the /metrics endpoint through the middleware
+// metrics handler's extra renderer.
+func (s *Service) MetricsText() string {
+	var builder strings.Builder
+	s.metrics.render(&builder)
+	return builder.String()
 }
 
 func (s *Service) worker(ctx context.Context) {
 	defer s.wg.Done()
 	for job := range s.jobs {
+		s.metrics.queueDepth.Add(-1)
 		s.deliverJob(ctx, job)
 	}
 }
@@ -100,9 +238,11 @@ func (s *Service) worker(ctx context.Context) {
 func (s *Service) enqueue(job fanoutJob) {
 	select {
 	case s.jobs <- job:
+		s.metrics.queueDepth.Add(1)
 	default:
 		// A full queue means push delivery is backed up; drop rather than
 		// block or grow memory unbounded. Notifications are best-effort.
+		s.metrics.drops.Add(1)
 		s.logger.Warn("push queue full, dropping notification", "reason", job.reason, "recipients", len(job.userIDs))
 	}
 }
@@ -121,9 +261,27 @@ func (s *Service) deliverJob(ctx context.Context, job fanoutJob) {
 }
 
 func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []byte) {
-	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	host := endpointHost(sub.Endpoint)
+	// Cap concurrent sends to one push-service host (PUSH_DELIVERY_PER_HOST)
+	// across the global worker pool. Waiting on the slot honours ctx so a
+	// shutdown aborts promptly instead of piling up blocked sends.
+	if host != "" {
+		sem := s.hostSem(host)
+		select {
+		case sem <- struct{}{}:
+			defer func() { <-sem }()
+		case <-ctx.Done():
+			return
+		}
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
 	defer cancel()
-	if err := s.deliver.Send(sendCtx, sub, payload); err != nil {
+	started := time.Now()
+	err := s.deliver.Send(sendCtx, sub, payload)
+	s.metrics.deliveries.Add(1)
+	s.metrics.observeDuration(time.Since(started).Seconds())
+	if err != nil {
+		s.metrics.deliveryFailures.Add(1)
 		if errors.Is(err, ErrSubscriptionGone) {
 			if delErr := s.store.DeleteByID(ctx, sub.ID); delErr != nil {
 				s.logger.Error("failed to remove invalid push subscription", "subscription_id", sub.ID, "error", delErr)
@@ -133,6 +291,13 @@ func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []b
 			return
 		}
 		s.logger.Warn("push delivery failed", "subscription_id", sub.ID, "error", err)
+		return
+	}
+	// A successful delivery refreshes last_used_at so the expiry cleanup never
+	// drops an actively used subscription. A missing row is tolerated: a
+	// concurrent cleanup may have removed it between send and touch.
+	if touchErr := s.store.TouchSubscription(ctx, sub.ID); touchErr != nil {
+		s.logger.Warn("push subscription touch failed", "subscription_id", sub.ID, "error", touchErr)
 	}
 }
 
@@ -230,4 +395,61 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit-1]) + "…"
+}
+
+// --- metrics surface ------------------------------------------------------
+
+// serviceMetrics is the Prometheus text surface of the push fan-out service
+// (F-08). Counters and gauges are updated by the notifier without locks and
+// rendered on demand by Service.MetricsText; the middleware /metrics endpoint
+// appends the rendered block after the HTTP metrics.
+type serviceMetrics struct {
+	queueDepth       atomic.Int64
+	drops            atomic.Uint64
+	deliveries       atomic.Uint64
+	deliveryFailures atomic.Uint64
+	subscriptions    atomic.Int64
+	duration         latencyHistogram
+}
+
+// latencyHistogram records delivery durations in fixed Prometheus-compatible
+// buckets (le semantics). Bucket boundaries are in seconds and chosen around
+// the 5s send deadline so queue saturation and slow providers surface in the
+// tail.
+type latencyHistogram struct {
+	buckets []float64 // upper bounds, seconds (inclusive)
+	counts  [8]atomic.Uint64
+	sumMs   atomic.Int64
+	count   atomic.Uint64
+}
+
+var deliveryHistogramBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
+
+func newServiceMetrics() *serviceMetrics {
+	return &serviceMetrics{duration: latencyHistogram{buckets: deliveryHistogramBuckets}}
+}
+
+func (m *serviceMetrics) observeDuration(seconds float64) {
+	ms := int64(seconds * 1000)
+	m.duration.sumMs.Add(ms)
+	m.duration.count.Add(1)
+	for i, bound := range m.duration.buckets {
+		if seconds <= bound {
+			m.duration.counts[i].Add(1)
+		}
+	}
+	m.duration.counts[len(m.duration.buckets)].Add(1) // +Inf bucket
+}
+
+func (m *serviceMetrics) render(w io.Writer) {
+	fmt.Fprintf(w, "push_queue_depth %d\n", m.queueDepth.Load())
+	fmt.Fprintf(w, "push_drops_total %d\n", m.drops.Load())
+	fmt.Fprintf(w, "push_delivery_failures_total %d\n", m.deliveryFailures.Load())
+	fmt.Fprintf(w, "push_subscriptions_total %d\n", m.subscriptions.Load())
+	fmt.Fprintf(w, "push_delivery_duration_seconds_count %d\n", m.duration.count.Load())
+	fmt.Fprintf(w, "push_delivery_duration_seconds_sum %s\n", strconv.FormatFloat(float64(m.duration.sumMs.Load())/1000, 'f', 3, 64))
+	for i, bound := range m.duration.buckets {
+		fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=%q} %d\n", strconv.FormatFloat(bound, 'f', -1, 64), m.duration.counts[i].Load())
+	}
+	fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=\"+Inf\"} %d\n", m.duration.counts[len(m.duration.buckets)].Load())
 }

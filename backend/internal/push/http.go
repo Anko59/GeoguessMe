@@ -54,7 +54,7 @@ func (h *HTTP) Subscribe(w http.ResponseWriter, r *http.Request) {
 		writePushError(w, http.StatusBadRequest, "invalid_subscription", "endpoint is required")
 		return
 	}
-	if err := validateEndpoint(endpoint); err != nil {
+	if err := validateEndpoint(endpoint, h.svc.guard); err != nil {
 		writePushError(w, http.StatusBadRequest, "invalid_subscription", err.Error())
 		return
 	}
@@ -71,11 +71,51 @@ func (h *HTTP) Subscribe(w http.ResponseWriter, r *http.Request) {
 		Auth:      auth,
 		UserAgent: r.UserAgent(),
 	}
-	if err := h.svc.store.Upsert(r.Context(), sub); err != nil {
+	// Enforce the per-user subscription cap (PUSH_MAX_SUBSCRIPTIONS_PER_USER).
+	// Re-subscribing an existing endpoint is a refresh and never counts; a new
+	// endpoint beyond the cap is rejected with a clear 409. The transactional
+	// cap inside the store remains authoritative against races.
+	maxPerUser := h.svc.MaxSubscriptionsPerUser()
+	count, err := h.svc.store.CountSubscriptionsByUser(r.Context(), sub.UserID)
+	if err != nil {
+		writePushError(w, http.StatusInternalServerError, "internal_error", "Unable to verify subscription limit")
+		return
+	}
+	if count >= maxPerUser {
+		exists, err := h.subscriptionExists(r, sub.UserID, endpoint)
+		if err != nil {
+			writePushError(w, http.StatusInternalServerError, "internal_error", "Unable to verify subscription limit")
+			return
+		}
+		if !exists {
+			writePushError(w, http.StatusConflict, "subscription_limit", "Subscription limit reached")
+			return
+		}
+	}
+	if err := h.svc.store.Upsert(r.Context(), sub, maxPerUser); err != nil {
+		if errors.Is(err, ErrSubscriptionLimit) {
+			writePushError(w, http.StatusConflict, "subscription_limit", "Subscription limit reached")
+			return
+		}
 		writePushError(w, http.StatusInternalServerError, "internal_error", "Unable to store subscription")
 		return
 	}
 	writePushJSON(w, http.StatusCreated, map[string]any{"id": sub.ID})
+}
+
+// subscriptionExists reports whether the user already holds a subscription with
+// the given endpoint (a refresh of an existing endpoint bypasses the cap).
+func (h *HTTP) subscriptionExists(r *http.Request, userID, endpoint string) (bool, error) {
+	subs, err := h.svc.store.ListForUser(r.Context(), userID)
+	if err != nil {
+		return false, err
+	}
+	for i := range subs {
+		if subs[i].Endpoint == endpoint {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Unsubscribe removes a single subscription by endpoint for the user.
@@ -129,7 +169,13 @@ func (h *HTTP) VapidPublicKey(w http.ResponseWriter, r *http.Request) {
 	writePushJSON(w, http.StatusOK, map[string]string{"public_key": keys.PublicKeyBase64URL()})
 }
 
-func validateEndpoint(endpoint string) error {
+// validateEndpoint checks a subscription endpoint before it is stored. When a
+// guard is configured it enforces the provider allowlist and HTTPS; without a
+// guard (test services without config) only the legacy scheme check applies.
+func validateEndpoint(endpoint string, guard *EndpointGuard) error {
+	if guard != nil {
+		return guard.ValidateEndpoint(endpoint)
+	}
 	parsed, err := url.Parse(endpoint)
 	if err != nil || parsed.Host == "" {
 		return errors.New("endpoint must be an absolute URL")

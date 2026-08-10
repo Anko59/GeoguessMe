@@ -20,7 +20,9 @@ var allConfigVariables = []string{
 	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
 	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
 	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
-	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT",
+	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "PUSH_ENDPOINT_ALLOWLIST",
+	"PUSH_MAX_SUBSCRIPTIONS_PER_USER", "PUSH_SUBSCRIPTION_EXPIRY",
+	"PUSH_DELIVERY_WORKERS", "PUSH_DELIVERY_PER_HOST", "PUSH_DELIVERY_TIMEOUT", "PUSH_QUEUE_DEPTH",
 }
 
 func unsetAllConfigVariables() {
@@ -56,6 +58,19 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Errorf("Expected 2 default AllowedOrigins, got %d", len(cfg.AllowedOrigins))
 	}
+	if len(cfg.PushEndpointAllowlist) != 4 || cfg.PushEndpointAllowlist[0] != "fcm.googleapis.com" {
+		t.Errorf("Expected 4 default PushEndpointAllowlist entries starting with fcm.googleapis.com, got %v", cfg.PushEndpointAllowlist)
+	}
+	if cfg.PushMaxSubscriptionsPerUser != 5 {
+		t.Errorf("Expected default PushMaxSubscriptionsPerUser 5, got %d", cfg.PushMaxSubscriptionsPerUser)
+	}
+	if cfg.PushSubscriptionExpiry != 90*24*time.Hour {
+		t.Errorf("Expected default PushSubscriptionExpiry 90d, got %v", cfg.PushSubscriptionExpiry)
+	}
+	if cfg.PushDeliveryWorkers != 4 || cfg.PushDeliveryPerHost != 2 || cfg.PushDeliveryTimeout != 5*time.Second || cfg.PushQueueDepth != 256 {
+		t.Errorf("unexpected default push delivery bounds: workers=%d perHost=%d timeout=%v queue=%d",
+			cfg.PushDeliveryWorkers, cfg.PushDeliveryPerHost, cfg.PushDeliveryTimeout, cfg.PushQueueDepth)
+	}
 	if cfg.StorageDriver != "" {
 		t.Errorf("Expected default StorageDriver empty (S3), got %q", cfg.StorageDriver)
 	}
@@ -69,6 +84,8 @@ func TestLoadEnvOverrides(t *testing.T) {
 	os.Setenv("RATE_LIMIT_REQUESTS", "100")
 	os.Setenv("RATE_LIMIT_WINDOW", "1h")
 	os.Setenv("UPLOAD_DIR", "/tmp/uploads")
+	os.Setenv("PUSH_MAX_SUBSCRIPTIONS_PER_USER", "8")
+	os.Setenv("PUSH_DELIVERY_TIMEOUT", "3s")
 
 	defer func() {
 		os.Unsetenv("PORT")
@@ -78,6 +95,8 @@ func TestLoadEnvOverrides(t *testing.T) {
 		os.Unsetenv("RATE_LIMIT_REQUESTS")
 		os.Unsetenv("RATE_LIMIT_WINDOW")
 		os.Unsetenv("UPLOAD_DIR")
+		os.Unsetenv("PUSH_MAX_SUBSCRIPTIONS_PER_USER")
+		os.Unsetenv("PUSH_DELIVERY_TIMEOUT")
 	}()
 
 	cfg, err := Load()
@@ -105,6 +124,12 @@ func TestLoadEnvOverrides(t *testing.T) {
 	}
 	if cfg.UploadDir != "/tmp/uploads" {
 		t.Errorf("Expected UploadDir /tmp/uploads, got %s", cfg.UploadDir)
+	}
+	if cfg.PushMaxSubscriptionsPerUser != 8 {
+		t.Errorf("Expected PushMaxSubscriptionsPerUser 8, got %d", cfg.PushMaxSubscriptionsPerUser)
+	}
+	if cfg.PushDeliveryTimeout != 3*time.Second {
+		t.Errorf("Expected PushDeliveryTimeout 3s, got %v", cfg.PushDeliveryTimeout)
 	}
 }
 
@@ -172,6 +197,13 @@ func validConfig() *Config {
 		},
 		RateLimitFailClosed: []string{"login", "signup", "email", "reset"},
 		RateLimitStoreCap:   50_000,
+
+		PushMaxSubscriptionsPerUser: 5,
+		PushSubscriptionExpiry:      90 * 24 * time.Hour,
+		PushDeliveryWorkers:         4,
+		PushDeliveryPerHost:         2,
+		PushDeliveryTimeout:         5 * time.Second,
+		PushQueueDepth:              256,
 	}
 }
 
@@ -193,6 +225,12 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 		"unknown smtp tls":           func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = "ssl" },
 		"zero rate window":           func(c *Config) { c.RateLimitWindow = 0 },
 		"zero rate store cap":        func(c *Config) { c.RateLimitStoreCap = 0 },
+		"zero push sub cap":          func(c *Config) { c.PushMaxSubscriptionsPerUser = 0 },
+		"zero push expiry":           func(c *Config) { c.PushSubscriptionExpiry = 0 },
+		"zero push workers":          func(c *Config) { c.PushDeliveryWorkers = 0 },
+		"zero push per-host":         func(c *Config) { c.PushDeliveryPerHost = 0 },
+		"zero push timeout":          func(c *Config) { c.PushDeliveryTimeout = 0 },
+		"zero push queue depth":      func(c *Config) { c.PushQueueDepth = 0 },
 		"zero policy limit":          func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Limit = 0 },
 		"zero policy window":         func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Window = 0 },
 		"unknown bucket type":        func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Type = "host" },
@@ -237,6 +275,7 @@ func TestValidateProductionEnforcesSMTPAndStorage(t *testing.T) {
 	c.VapidPublicKey = "example-public-key"
 	c.VapidPrivateKey = "example-private-key"
 	c.VapidSubject = "mailto:ops@example.com"
+	c.PushEndpointAllowlist = []string{"fcm.googleapis.com"}
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected valid production config, got %v", err)
 	}
@@ -324,6 +363,7 @@ func TestValidateProductionRequiresStrongMetricsToken(t *testing.T) {
 	base.VapidPublicKey = "example-public-key"
 	base.VapidPrivateKey = "example-private-key"
 	base.VapidSubject = "mailto:ops@example.com"
+	base.PushEndpointAllowlist = []string{"fcm.googleapis.com"}
 	if err := base.Validate(); err != nil {
 		t.Fatalf("expected valid production config with 32-byte token, got %v", err)
 	}
@@ -368,8 +408,39 @@ func TestValidateVapidRules(t *testing.T) {
 		t.Fatalf("expected malformed VAPID subject rejection, got %v", err)
 	}
 	prod.VapidSubject = "https://example.test/contact"
+	prod.PushEndpointAllowlist = []string{"fcm.googleapis.com", "wns.windows.com"}
 	if err := prod.Validate(); err != nil {
 		t.Fatalf("expected valid production config, got %v", err)
+	}
+}
+
+func TestValidateProductionRejectsEmptyPushAllowlist(t *testing.T) {
+	c := validConfig()
+	c.Environment = EnvProduction
+	c.PublicURL = "https://app.example.test"
+	c.SMTPTLS = SMTPStartTLS
+	c.SMTPHost = "smtp.example"
+	c.SMTPFrom = "no-reply@example.test"
+	c.S3Endpoint = "https://s3.example"
+	c.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
+	c.VapidPublicKey = "example-public-key"
+	c.VapidPrivateKey = "example-private-key"
+	c.VapidSubject = "mailto:ops@example.com"
+	// Push enabled with an empty allowlist must reject production startup.
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "PUSH_ENDPOINT_ALLOWLIST") {
+		t.Fatalf("expected empty push allowlist rejection, got %v", err)
+	}
+	c.PushEndpointAllowlist = []string{"fcm.googleapis.com"}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected valid production config with allowlist, got %v", err)
+	}
+}
+
+func TestValidateRejectsMalformedPushAllowlist(t *testing.T) {
+	c := validConfig()
+	c.PushEndpointAllowlist = []string{"https://fcm.googleapis.com", "", "bad host"}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "allowlist domain") {
+		t.Fatalf("expected malformed allowlist rejection, got %v", err)
 	}
 }
 

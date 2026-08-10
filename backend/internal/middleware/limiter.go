@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"log/slog"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -242,6 +243,18 @@ func RejectionsByPolicy() map[string]int64 {
 		out[policy] = count
 	}
 	return out
+}
+
+// sortedRejectionPolicies returns the known rejection policy names in sorted
+// order so the /metrics renderer emits stable, deterministic lines.
+func sortedRejectionPolicies() []string {
+	counts := RejectionsByPolicy()
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // StoreSize returns the number of live rate-limit counters. It exists for
