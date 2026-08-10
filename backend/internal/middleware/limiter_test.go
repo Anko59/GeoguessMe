@@ -207,6 +207,7 @@ func TestRateLimitStoreTTLEviction(t *testing.T) {
 func TestRateLimitFailClosedOnCapacity(t *testing.T) {
 	ResetRateLimiter()
 	defer ResetRateLimiter()
+	SetStoreCapacity(4)
 
 	do := testIdentityHandler(t, loginPolicy())
 
@@ -217,11 +218,11 @@ func TestRateLimitFailClosedOnCapacity(t *testing.T) {
 	limiterStore.mu.Lock()
 	now := limiterStore.clock()
 	filled := 0
-	for len(limiterStore.buckets) < maxRateLimitBuckets {
+	for len(limiterStore.buckets) < limiterStore.capacity {
 		limiterStore.buckets[fmt.Sprintf("seed:%d", filled)] = &counter{count: 0, resetAt: now.Add(time.Hour)}
 		filled++
 	}
-	require.Equal(t, maxRateLimitBuckets, len(limiterStore.buckets))
+	require.Equal(t, 4, len(limiterStore.buckets))
 	limiterStore.mu.Unlock()
 
 	// Existing keys keep working.
@@ -237,7 +238,7 @@ func TestRateLimitFailClosedOnCapacity(t *testing.T) {
 	require.Contains(t, RejectionsByPolicy(), "login")
 }
 
-func TestRateLimitRetryAfterMinimumAcrossBuckets(t *testing.T) {
+func TestRateLimitRetryAfterWaitsForEveryFullBucket(t *testing.T) {
 	ResetRateLimiter()
 	defer ResetRateLimiter()
 
@@ -255,10 +256,12 @@ func TestRateLimitRetryAfterMinimumAcrossBuckets(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		require.Equal(t, http.StatusOK, do(fmt.Sprintf("b%d", i), "1.2.3.4").Code)
 	}
-	// Both are now exhausted for alice; the shorter IP window (60s) governs.
+	// Both are now exhausted for alice. The hour-long identity bucket governs:
+	// retrying after only the shorter IP window would still be rejected.
 	rr := do("alice", "1.2.3.4")
 	require.Equal(t, http.StatusTooManyRequests, rr.Code)
-	require.Equal(t, "60", rr.Header().Get("Retry-After"))
+	require.Equal(t, "3600", rr.Header().Get("Retry-After"))
+	require.Equal(t, int64(1), Rejections(), "one rejected request must increment metrics once")
 }
 
 func bucketLimit(p Policy, t BucketType) int {
@@ -383,6 +386,25 @@ func TestPolicyMiddlewareIdentityOverride(t *testing.T) {
 	require.Equal(t, http.StatusOK, do("user-1"))
 	require.Equal(t, http.StatusTooManyRequests, do("user-1"))
 	require.Equal(t, http.StatusOK, do("user-2"))
+}
+
+func TestPolicyMiddlewareRouteBucketUsesMatchedPattern(t *testing.T) {
+	ResetRateLimiter()
+	defer ResetRateLimiter()
+
+	p := Policy{Name: "routes", Buckets: []BucketSpec{{Type: BucketRoute, Limit: 1, Window: time.Minute}}}
+	mux := http.NewServeMux()
+	mux.Handle("GET /one", PolicyMiddleware(p, PolicyOptions{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+	mux.Handle("GET /two", PolicyMiddleware(p, PolicyOptions{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+
+	do := func(path string) int {
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		return rr.Code
+	}
+	require.Equal(t, http.StatusOK, do("/one"))
+	require.Equal(t, http.StatusTooManyRequests, do("/one"))
+	require.Equal(t, http.StatusOK, do("/two"), "distinct route patterns need independent buckets")
 }
 
 func TestExtractIdentityExported(t *testing.T) {

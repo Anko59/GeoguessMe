@@ -217,7 +217,12 @@ func (c *Config) Validate() error {
 		if len(p.Buckets) == 0 {
 			problems = append(problems, fmt.Sprintf("rate limit policy %q has no buckets", p.Name))
 		}
+		knownBucketTypes := make(map[string]bool, len(p.Buckets))
 		for _, b := range p.Buckets {
+			if knownBucketTypes[b.Type] {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q has duplicate bucket type %q", p.Name, b.Type))
+			}
+			knownBucketTypes[b.Type] = true
 			if b.Limit <= 0 {
 				problems = append(problems, fmt.Sprintf("rate limit policy %q bucket %q must have a positive limit", p.Name, b.Type))
 			}

@@ -196,6 +196,9 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 		"zero policy limit":          func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Limit = 0 },
 		"zero policy window":         func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Window = 0 },
 		"unknown bucket type":        func(c *Config) { c.RateLimitPolicies[0].Buckets[0].Type = "host" },
+		"duplicate bucket type": func(c *Config) {
+			c.RateLimitPolicies[0].Buckets = append(c.RateLimitPolicies[0].Buckets, c.RateLimitPolicies[0].Buckets[0])
+		},
 		"fail-closed unknown policy": func(c *Config) { c.RateLimitFailClosed = []string{"admin"} },
 	}
 	for name, mutate := range cases {

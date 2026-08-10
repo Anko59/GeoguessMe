@@ -72,6 +72,7 @@ type bucketStore struct {
 	start            time.Time
 	rejected         int64
 	rejectedByPolicy map[string]int64
+	capacity         int
 }
 
 // limiterStore is the process-wide bucket store used by every middleware
@@ -83,6 +84,7 @@ func newBucketStore() *bucketStore {
 		buckets:          make(map[string]*counter),
 		clock:            time.Now,
 		rejectedByPolicy: make(map[string]int64),
+		capacity:         maxRateLimitBuckets,
 	}
 	go s.sweepLoop()
 	return s
@@ -156,7 +158,7 @@ func (s *bucketStore) allow(p Policy, keys map[BucketType]string) (allowed bool,
 		c *counter
 	}
 	var pending []admitted
-	var earliest time.Duration
+	var waitFor time.Duration
 	for _, spec := range p.Buckets {
 		key := keys[spec.Type]
 		if key == "" || spec.Limit <= 0 || spec.Window <= 0 {
@@ -169,9 +171,9 @@ func (s *bucketStore) allow(p Policy, keys map[BucketType]string) (allowed bool,
 			if ok {
 				delete(s.buckets, fullKey)
 			}
-			if len(s.buckets) >= maxRateLimitBuckets {
+			if len(s.buckets) >= s.capacity {
 				s.sweepLocked(now)
-				if len(s.buckets) >= maxRateLimitBuckets {
+				if len(s.buckets) >= s.capacity {
 					if p.FailClosed {
 						s.countRejectionLocked(p.Name)
 						slog.Default().Warn("rate limit capacity exhausted; rejecting request",
@@ -185,17 +187,17 @@ func (s *bucketStore) allow(p Policy, keys map[BucketType]string) (allowed bool,
 			s.buckets[fullKey] = c
 		}
 		if c.count >= spec.Limit {
-			s.countRejectionLocked(p.Name)
 			ra := retryAfterDuration(now, c.resetAt)
-			if earliest == 0 || ra < earliest {
-				earliest = ra
+			if ra > waitFor {
+				waitFor = ra
 			}
 			continue
 		}
 		pending = append(pending, admitted{c: c})
 	}
-	if earliest > 0 {
-		return false, earliest
+	if waitFor > 0 {
+		s.countRejectionLocked(p.Name)
+		return false, waitFor
 	}
 	// Phase 2: every bucket has capacity, so the request is admitted and
 	// consumes one unit from each.
@@ -248,4 +250,20 @@ func StoreSize() int {
 	limiterStore.mu.Lock()
 	defer limiterStore.mu.Unlock()
 	return len(limiterStore.buckets)
+}
+
+// SetStoreCapacity applies the validated process-wide bucket bound. It is
+// called by the composition root before serving requests. Existing counters
+// above a newly lowered bound are evicted by soonest expiry so the configured
+// cap is effective immediately.
+func SetStoreCapacity(capacity int) {
+	if capacity <= 0 {
+		capacity = maxRateLimitBuckets
+	}
+	limiterStore.mu.Lock()
+	defer limiterStore.mu.Unlock()
+	limiterStore.capacity = capacity
+	for len(limiterStore.buckets) > limiterStore.capacity {
+		limiterStore.evictExpiringLocked()
+	}
 }

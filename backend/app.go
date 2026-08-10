@@ -136,6 +136,7 @@ func buildRateLimitPolicies(cfg *config.Config) []middleware.Policy {
 
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
+	middleware.SetStoreCapacity(a.Config.RateLimitStoreCap)
 
 	// Per-route rate-limit policies (F-04). Each policy is a set of
 	// simultaneous buckets (route/global/trusted-IP/identity/user) with the
@@ -171,9 +172,8 @@ func (a *App) routes() http.Handler {
 	// first: the user bucket (and the identity fallback) then see the
 	// authenticated user for protected routes.
 	limited := func(name string, handler http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			limit(name)(handler).ServeHTTP(w, r)
-		}
+		limitedHandler := limit(name)(handler)
+		return limitedHandler.ServeHTTP
 	}
 	protected := func(handler http.HandlerFunc) http.Handler {
 		return a.AuthAPI.AuthMiddleware(handler)

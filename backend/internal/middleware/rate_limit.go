@@ -178,6 +178,9 @@ func PolicyMiddleware(p Policy, opts PolicyOptions) func(http.Handler) http.Hand
 		identity = opts.Identity
 	}
 	ex := keyExtractors{
+		route: func(r *http.Request) string {
+			return r.Method + " " + r.Pattern
+		},
 		trustedIP: func(r *http.Request) string { return clientKey(r, opts.TrustedCIDRs) },
 		identity:  identity,
 		user:      opts.User,
@@ -255,6 +258,7 @@ func ResetRateLimiter() {
 	limiterStore.offset = 0
 	limiterStore.rejected = 0
 	limiterStore.rejectedByPolicy = make(map[string]int64)
+	limiterStore.capacity = maxRateLimitBuckets
 }
 
 // AdvanceTestClock moves the rate-limiter clock forward by d. When the test
