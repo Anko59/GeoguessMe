@@ -39,6 +39,7 @@ const authResponse: AuthResponse = {
 beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     routeRef.current = '/';
     window.history.pushState({}, '', '/');
     apiMocks.get.mockReset();
@@ -216,7 +217,29 @@ describe('App shell — protected routes with authentication', () => {
         routeRef.current = '/group/join';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('6-character code')).toBeInTheDocument();
+        // No pending invite token: the join flow shows the missing-invite state.
+        expect(await screen.findByText('No invite link found')).toBeInTheDocument();
+    });
+
+    it('captures an invite fragment to sessionStorage and strips it from the URL', async () => {
+        apiMocks.post.mockReset();
+        apiMocks.get.mockReset();
+        apiMocks.post.mockImplementation((url: string) => {
+            if (url === '/auth/refresh') return Promise.resolve({ data: authResponse });
+            if (url === '/group/invites/preview') {
+                return Promise.resolve({ data: { group_name: 'Friends', member_count: 3 } });
+            }
+            return Promise.reject(new Error('unexpected POST ' + url));
+        });
+        apiMocks.get.mockResolvedValue({ data: [] });
+        routeRef.current = '/group/join#invite=invitetoken1';
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        // GroupJoin previews the invite token it read from sessionStorage.
+        expect(await screen.findByText('Join Friends?')).toBeInTheDocument();
+        expect(sessionStorage.getItem('pending_invite_token')).toBe('invitetoken1');
+        // The fragment is stripped from the address bar; the token stays in sessionStorage.
+        expect(window.location.hash).toBe('');
     });
 
     it('renders settings at /settings', async () => {

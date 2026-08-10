@@ -37,6 +37,20 @@ func scanGroup(row interface{ Scan(...any) error }) (*models.Group, error) {
 	return &group, nil
 }
 
+// scanGroupInvite scans a group_invites row in the canonical column order of
+// the group_invites table. It is the single owner of invite row scanning.
+func scanGroupInvite(row interface{ Scan(...any) error }) (*models.GroupInvite, error) {
+	var invite models.GroupInvite
+	err := row.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.TokenHash, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &invite, nil
+}
+
 // scanGroupPhoto scans a group_photos row in the canonical column order of the
 // group_photos table.
 func scanGroupPhoto(row interface{ Scan(...any) error }) (*models.GroupPhoto, error) {

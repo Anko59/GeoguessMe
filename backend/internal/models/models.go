@@ -19,8 +19,21 @@ type User struct {
 type Group struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
-	Code      string    `json:"code"` // Join code
+	Code      string    `json:"-"` // Legacy join code: retained in the database, never on the wire (F-06)
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// GroupInvite is a revocable, expiring bearer invite token stored only as a
+// SHA-256 hash. The raw token and invite URL are returned exactly once at
+// creation; list responses and every other wire shape omit them entirely.
+type GroupInvite struct {
+	ID            string     `json:"id"`
+	GroupID       string     `json:"group_id"`
+	CreatorUserID string     `json:"creator_user_id"`
+	TokenHash     string     `json:"-"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	RevokedAt     *time.Time `json:"revoked"`
 }
 
 type GroupPhoto struct {

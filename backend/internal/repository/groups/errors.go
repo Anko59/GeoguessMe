@@ -18,4 +18,12 @@ var (
 	// RequireMember. Every gameplay handler maps it to 403 forbidden; one
 	// sentinel keeps the membership rule centralized.
 	ErrNotMember = errors.New("not a group member")
+
+	// ErrTooManyGroupInvites is returned when a group already holds its
+	// maximum number of active invites.
+	ErrTooManyGroupInvites = errors.New("too many active group invites")
+
+	// ErrTooManyUserInvites is returned when a user has already created the
+	// maximum number of invites today.
+	ErrTooManyUserInvites = errors.New("too many invites created today")
 )

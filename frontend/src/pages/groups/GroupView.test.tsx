@@ -115,7 +115,7 @@ beforeEach(() => {
         error: '',
     });
     mocks.get.mockResolvedValue({
-        data: { id: 'group-1', name: 'Test Group', code: 'ABC123', created_at: '2026-01-01T00:00:00Z' },
+        data: { id: 'group-1', name: 'Test Group', created_at: '2026-01-01T00:00:00Z' },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (Element.prototype as any).scrollIntoView = vi.fn();

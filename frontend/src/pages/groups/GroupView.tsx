@@ -96,10 +96,8 @@ export default function GroupView() {
             <SettingsModal
                 isOpen={settingsOpen}
                 onClose={() => setSettingsOpen(false)}
-                groupCode={group?.code ?? ''}
                 groupName={group?.name ?? ''}
                 groupId={id}
-                currentUserName={user?.username ?? ''}
                 onGroupPhotoUpdated={() => {
                     bustGroupPhotoCache(id);
                     setGroupPhotoRefreshKey((key) => key + 1);

@@ -14,10 +14,12 @@ export default function Signup() {
     const navigate = useNavigate();
     const location = useLocation();
     const { login } = useAuth();
-    const returnTo =
-        typeof location.state?.from === 'string' && /^\/group\/join(?:\?code=|$)/.test(location.state.from)
-            ? location.state.from
-            : '/groups';
+    const rawFrom = typeof location.state?.from === 'string' ? location.state.from : '';
+    // Strip any query string or fragment: the invite token never travels in a
+    // URL query. GroupJoin reads it from sessionStorage after signup, so only a
+    // bare /group/join is a valid post-auth target.
+    const fromPath = rawFrom.split('?')[0].split('#')[0];
+    const returnTo = fromPath === '/group/join' ? '/group/join' : '/groups';
 
     const handleSubmit = async (event: React.FormEvent): Promise<void> => {
         event.preventDefault();

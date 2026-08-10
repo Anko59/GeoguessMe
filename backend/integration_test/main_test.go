@@ -120,21 +120,29 @@ func signup(t *testing.T, username, email, password string) tokenPair {
 	return tokenPair{access: result.AccessToken, refresh: refresh, userID: result.User.ID}
 }
 
-func createGroup(t *testing.T, bearer string, name string) (id, code string) {
+func createGroup(t *testing.T, bearer string, name string) (id, inviteToken string) {
 	t.Helper()
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/create", map[string]string{"name": name}, bearer, nil)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode, "create group %d: %s", resp.StatusCode, data)
 	var result struct {
-		ID   string `json:"id"`
-		Code string `json:"code"`
+		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(data, &result))
-	return result.ID, result.Code
+	require.NotEmpty(t, result.ID, "create group returned no id")
+	// Issue an invite so callers can join through the new token contract.
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/invites", map[string]string{"group_id": result.ID}, bearer, nil)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "create invite %d: %s", resp.StatusCode, data)
+	var invite struct {
+		Token string `json:"token"`
+	}
+	require.NoError(t, json.Unmarshal(data, &invite))
+	require.NotEmpty(t, invite.Token, "create invite returned no token")
+	return result.ID, invite.Token
 }
 
-func joinGroup(t *testing.T, bearer, code string) {
+func joinGroup(t *testing.T, bearer, inviteToken string) {
 	t.Helper()
-	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/join", map[string]string{"code": code}, bearer, nil)
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/join", map[string]string{"invite_token": inviteToken}, bearer, nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "join group %d: %s", resp.StatusCode, data)
 }
 

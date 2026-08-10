@@ -5,14 +5,13 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
-	"html"
 	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
 
+	"geoguessme/internal/auth"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository/groups"
@@ -26,6 +25,10 @@ type CreateGroupRequest struct {
 	Name string `json:"name"`
 }
 type JoinGroupRequest struct {
+	InviteToken string `json:"invite_token"`
+	// Code is the legacy typed group code (F-06). It is accepted by the
+	// decoder only so the handler can reject it with a dedicated 410 instead
+	// of a generic body-validation error; typed-code joins are disabled.
 	Code string `json:"code"`
 }
 
@@ -95,19 +98,36 @@ func (a *GameAPI) JoinGroup(w http.ResponseWriter, r *http.Request) {
 	if !DecodeJSON(w, r, &req) {
 		return
 	}
-	req.Code = strings.ToUpper(strings.TrimSpace(req.Code))
-	if err := validation.ValidateGroupCode(req.Code); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid_group_code", err.Error())
+	if strings.TrimSpace(req.Code) != "" {
+		// Legacy typed group codes were removed (F-06); the only accepted
+		// join credential is a bearer invite token.
+		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
+		return
+	}
+	token := strings.TrimSpace(req.InviteToken)
+	if token == "" {
+		// No bearer invite token: the join credential is absent. Legacy
+		// typed-group-code joins were removed (F-06).
+		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	group, err := a.groups.ByCode(r.Context(), req.Code)
+	invite, err := a.groups.InviteByTokenHash(r.Context(), auth.HashToken(token))
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
+		return
+	}
+	if invite == nil || invite.RevokedAt != nil || !invite.ExpiresAt.After(a.clock()) {
+		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
+		return
+	}
+	group, err := a.groups.ByID(r.Context(), invite.GroupID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
 	if group == nil {
-		WriteError(w, http.StatusNotFound, "group_not_found", "Group not found")
+		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
 		return
 	}
 	if isMember, err := a.groups.IsMember(r.Context(), group.ID, userID); err != nil {
@@ -394,63 +414,4 @@ func (a *GameAPI) serveGroupPhoto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, object)
-}
-
-// invitePageTemplate is a minimal HTML shell with Open Graph meta tags so
-// messengers render a rich preview when someone shares an invite link. It also
-// includes a meta refresh that redirects the browser to the join page.
-const invitePageTemplate = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta property="og:title" content="%s">
-<meta property="og:description" content="%s">
-<meta property="og:image" content="%s/logo.png">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="GeoGuessMe">
-<meta http-equiv="refresh" content="0;url=%s">
-<title>%s</title>
-</head>
-<body></body>
-</html>`
-
-// HandleInvitePreview renders Open Graph link preview metadata for group
-// invite links. Messengers and social platforms request the URL to produce a
-// rich card; browsers are redirected to the actual join page via meta refresh.
-// The route is unauthenticated so previews work even when the recipient is not
-// logged in.
-func (a *GameAPI) HandleInvitePreview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		MethodNotAllowed(w)
-		return
-	}
-	code := strings.ToUpper(strings.TrimSpace(r.PathValue("code")))
-	if code == "" {
-		WriteError(w, http.StatusBadRequest, "missing_code", "Group code is required")
-		return
-	}
-	group, err := a.groups.ByCode(r.Context(), code)
-	if err != nil || group == nil {
-		WriteError(w, http.StatusNotFound, "group_not_found", "Group not found")
-		return
-	}
-	inviterName := r.URL.Query().Get("from")
-	if inviterName != "" {
-		inviterName = html.EscapeString(inviterName)
-	}
-	groupName := html.EscapeString(group.Name)
-	title := fmt.Sprintf("Join %s on GeoGuessMe", groupName)
-	description := fmt.Sprintf("%s invites you to join the group %s on GeoGuessMe!", inviterName, groupName)
-	if inviterName == "" {
-		description = fmt.Sprintf("Join the group %s on GeoGuessMe!", groupName)
-	}
-	publicURL := ""
-	if a.cfg != nil {
-		publicURL = strings.TrimRight(a.cfg.PublicURL, "/")
-	}
-	redirectURL := fmt.Sprintf("%s/group/join?code=%s", publicURL, code)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write([]byte(fmt.Sprintf(invitePageTemplate, html.EscapeString(title), html.EscapeString(description), publicURL, redirectURL, html.EscapeString(title))))
 }

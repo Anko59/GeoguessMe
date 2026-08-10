@@ -29,6 +29,11 @@ export type ChallengeMediaDelivered = components['schemas']['ChallengeMediaDeliv
 export type GuessResult = components['schemas']['GuessResponse'];
 export type MessagesPage = components['schemas']['MessagesPage'];
 export type PushSubscriptionRequest = components['schemas']['PushSubscriptionRequest'];
+export type InviteCreateRequest = components['schemas']['InviteCreateRequest'];
+export type InviteCreateResponse = components['schemas']['InviteCreateResponse'];
+export type InvitePreviewRequest = components['schemas']['InvitePreviewRequest'];
+export type InvitePreview = components['schemas']['InvitePreview'];
+export type InviteListItem = components['schemas']['InviteListItem'];
 
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 
