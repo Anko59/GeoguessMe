@@ -38,7 +38,7 @@ func TestProcessRejectsUnsupportedCodec(t *testing.T) {
 	store := &fakeObjectStore{objects: map[string][]byte{"quarantine/job-1": []byte("raw video bytes")}}
 	jobs := &fakeJobStore{}
 	runner := &scriptedRunner{responses: []runResponse{
-		{stdout: []byte(`{"streams":[{"codec_type":"video","codec_name":"vp9","width":1280,"height":720,"duration":"10.0","avg_frame_rate":"30/1"}],"format":{"duration":"10.0"}}`)},
+		{stdout: []byte(`{"streams":[{"codec_type":"video","codec_name":"av1","width":1280,"height":720,"duration":"10.0","avg_frame_rate":"30/1"}],"format":{"duration":"10.0"}}`)},
 	}}
 	worker := newTestWorker(jobs, store, runner, &fakeBroadcaster{}, &fakeNotifier{})
 

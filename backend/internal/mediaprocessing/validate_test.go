@@ -195,10 +195,26 @@ func TestValidateRejectsTooHighFPS(t *testing.T) {
 }
 
 func TestValidateRejectsUnsupportedVideoCodecs(t *testing.T) {
-	for _, codec := range []string{"vp9", "av1", "hevc", "vp8"} {
+	for _, codec := range []string{"av1", "hevc"} {
 		probe := probeJSON([]fixtureStream{videoStream(codec, 1280, 720, "10", "30")}, "10")
 		_, err := mustValidate(t, probe, tempInput(t, 16), 0)
 		assertCode(t, err, ErrorUnsupportedCodec)
+	}
+}
+
+// TestValidateAcceptsBrowserWebMVideoCodecs proves the product's own browser
+// recordings (WebM/VP8 or VP9, per the frontend MediaRecorder preference) are
+// accepted inputs and are transcoded to canonical H.264 downstream.
+func TestValidateAcceptsBrowserWebMVideoCodecs(t *testing.T) {
+	for _, codec := range []string{"vp8", "vp9"} {
+		probe := probeJSON([]fixtureStream{videoStream(codec, 1280, 720, "10", "30")}, "10")
+		spec, err := mustValidate(t, probe, tempInput(t, 16), 0)
+		if err != nil {
+			t.Fatalf("webm video codec %q rejected: %v", codec, err)
+		}
+		if spec.VideoCodec != codec {
+			t.Errorf("video codec = %q, want %q", spec.VideoCodec, codec)
+		}
 	}
 }
 

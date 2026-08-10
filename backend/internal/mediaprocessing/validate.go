@@ -53,9 +53,13 @@ const (
 )
 
 // allowedVideoCodecs is the input video codec allowlist. Browser MediaRecorder
-// emits H.264/AVC for MP4 output; every other codec (VP8/VP9/AV1/HEVC/...)
-// is rejected with unsupported_codec before any transcode work happens.
-var allowedVideoCodecs = map[string]bool{"h264": true}
+// emits H.264/AVC for MP4 output and VP8/VP9+Opus for WebM output; Chromium
+// and Firefox record WebM by default (Playwright's bundled Chromium cannot
+// encode H.264 at all), so VP8/VP9 are first-class inputs. Every allowlisted
+// input is transcoded to canonical H.264, so rejecting them would break the
+// product's own recordings while adding no security value. AV1/HEVC and other
+// codecs stay rejected with unsupported_codec before any transcode work.
+var allowedVideoCodecs = map[string]bool{"h264": true, "vp8": true, "vp9": true}
 
 // allowedAudioCodecs is the input audio codec allowlist for the at-most-one
 // audio stream. AAC is emitted by MP4 recorders; MP3 and Opus are accepted

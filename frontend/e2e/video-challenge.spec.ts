@@ -4,6 +4,10 @@ import { closeScenario, createScenario } from './challengeScenario';
 
 test.describe('Video challenge flow', () => {
     test('records a playable video, uploads it, and serves it for playback', async ({ browser, contextOptions }) => {
+        // Async media processing (claim -> ffprobe validate -> ffmpeg transcode
+        // -> canonical write -> record+broadcast) plus the 60s ready wait must
+        // fit inside the test budget; the suite default is 30s.
+        test.setTimeout(120000);
         const scenario = await createScenario(browser, contextOptions);
         try {
             const { uploader, guesser } = scenario;
