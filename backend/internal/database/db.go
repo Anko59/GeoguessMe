@@ -69,7 +69,7 @@ func ConnectWithLimits(dbURL string, minConns, maxConns int32) (Pool, error) {
 	return pool, nil
 }
 
-//go:embed migrations/*.sql
+//go:embed migrations
 var migrationFS embed.FS
 
 type Migration struct {
@@ -78,26 +78,34 @@ type Migration struct {
 	SQL     string
 }
 
+// migrations discovers every committed migration under migrations/, including
+// nested year subdirectories, so the directory stays within the repository's
+// 14-direct-children structure limit while remaining forward-only.  Version
+// and name are derived from the file name alone, so relocating a file never
+// changes the schema_migrations identity of an applied migration.
 func migrations() ([]Migration, error) {
-	entries, err := fs.ReadDir(migrationFS, "migrations")
-	if err != nil {
-		return nil, err
-	}
 	var result []Migration
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
+	err := fs.WalkDir(migrationFS, "migrations", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".sql") {
+			return nil
 		}
 		var version int
 		var name string
-		if _, err := fmt.Sscanf(entry.Name(), "%d_%s", &version, &name); err != nil {
-			return nil, fmt.Errorf("invalid migration filename %q: %w", entry.Name(), err)
+		if _, err := fmt.Sscanf(d.Name(), "%d_%s", &version, &name); err != nil {
+			return fmt.Errorf("invalid migration filename %q: %w", d.Name(), err)
 		}
-		contents, err := fs.ReadFile(migrationFS, "migrations/"+entry.Name())
+		contents, err := fs.ReadFile(migrationFS, path)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		result = append(result, Migration{Version: version, Name: strings.TrimSuffix(name, ".sql"), SQL: string(contents)})
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Version < result[j].Version })
 	return result, nil

@@ -203,6 +203,29 @@ func (r *Repository) RevokeAllRefreshSessions(ctx context.Context, userID string
 	return err
 }
 
+// RevokeAllCredentials atomically invalidates every credential for a user:
+// bumps the auth version (invalidating outstanding access tokens), revokes
+// every refresh session, and deletes outstanding WebSocket tickets. It backs
+// explicit "logout all" so a global revocation can never leave a partial
+// revocation behind.
+func (r *Repository) RevokeAllCredentials(ctx context.Context, userID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `UPDATE users SET auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM websocket_tickets WHERE user_id = $1`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // InsertOneTimeToken stores a fresh email-verification or password-reset
 // token, replacing any unused token of the same kind for the user.
 func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, expiresAt time.Time) error {
@@ -249,27 +272,36 @@ func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash strin
 // ResetPasswordTransaction consumes a reset token, updates the password hash,
 // bumps the auth version (invalidating outstanding access tokens), and revokes
 // every refresh session — all atomically.
-func (r *Repository) ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash string) error {
+// ResetPasswordTransaction consumes a one-time reset token and installs a new
+// password, returning the owning user so callers can close that user's live
+// sockets. Token consumption, password update, auth-version bump, session
+// revocation, and WebSocket-ticket revocation happen atomically.
+func (r *Repository) ResetPasswordTransaction(ctx context.Context, tokenHash, passwordHash string) (string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var userID string
 	err = tx.QueryRow(ctx, `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id`, tokenHash).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrTokenInvalid
+		return "", ErrTokenInvalid
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, userID); err != nil {
-		return err
+		return "", err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
-		return err
+		return "", err
 	}
-	return tx.Commit(ctx)
+	// F-03: outstanding WebSocket tickets are revoked atomically with the reset
+	// so a ticket minted before the reset can never open a live socket.
+	if _, err := tx.Exec(ctx, `DELETE FROM websocket_tickets WHERE user_id = $1`, userID); err != nil {
+		return "", err
+	}
+	return userID, tx.Commit(ctx)
 }
 
 // ErrTokenInvalid is returned when a one-time token is absent, expired, or
@@ -307,6 +339,11 @@ func (r *Repository) ChangePassword(ctx context.Context, userID, passwordHash st
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
+		return err
+	}
+	// F-03: outstanding WebSocket tickets are revoked atomically with the
+	// password change so a stale ticket can never open a live socket.
+	if _, err := tx.Exec(ctx, `DELETE FROM websocket_tickets WHERE user_id = $1`, userID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

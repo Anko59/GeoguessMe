@@ -218,7 +218,8 @@ func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectExec("INSERT INTO websocket_tickets").WithArgs(pgxmock.AnyArg(), "user-1", groupID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT auth_version FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(0))
+	mock.ExpectExec("INSERT INTO websocket_tickets").WithArgs(pgxmock.AnyArg(), "user-1", groupID, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
 	chatAPI.CreateWebSocketTicket(recorder, requestWithUser(http.MethodPost, "/?group_id="+groupID, "", "user-1"))
 	if recorder.Code != http.StatusCreated {

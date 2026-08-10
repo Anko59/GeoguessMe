@@ -123,22 +123,50 @@ func (a *AuthAPI) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout revokes the presented session (or every session when ?all=1) and
-// clears the cookie.
+// clears the cookie. Fail-closed: a server-side revocation error surfaces as
+// 500 with the cookie cleared, and a 204 is only ever returned when no
+// server-side revocation error occurred.
 func (a *AuthAPI) Logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		handlers.MethodNotAllowed(w)
 		return
 	}
-	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
-		hash := authsvc.HashToken(cookie.Value)
-		if r.URL.Query().Get("all") == "1" {
-			if userID, _ := a.repos.UserIDByRefreshHash(r.Context(), hash); userID != "" {
-				_ = a.repos.RevokeAllRefreshSessions(r.Context(), userID)
-				_ = a.repos.BumpAuthVersion(r.Context(), userID)
-			}
-		} else {
-			_ = a.repos.RevokeRefreshSessionByHash(r.Context(), hash)
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil || cookie.Value == "" {
+		// Nothing to revoke; clearing the cookie is a truthful no-op.
+		a.clearRefreshCookie(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	hash := authsvc.HashToken(cookie.Value)
+	if r.URL.Query().Get("all") == "1" {
+		userID, err := a.repos.UserIDByRefreshHash(r.Context(), hash)
+		if err != nil {
+			slog.Error("logout-all user lookup failed", "error", err)
+			a.clearRefreshCookie(w)
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to sign out")
+			return
 		}
+		if userID != "" {
+			if err := a.repos.RevokeAllCredentials(r.Context(), userID); err != nil {
+				slog.Error("logout-all revocation failed", "error", err, "user_id", userID)
+				a.clearRefreshCookie(w)
+				handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to sign out")
+				return
+			}
+			// Close every live socket: they were minted under an auth version
+			// the revocation just invalidated.
+			a.kickDisconnectUser(userID)
+		}
+		a.clearRefreshCookie(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := a.repos.RevokeRefreshSessionByHash(r.Context(), hash); err != nil {
+		slog.Error("logout revocation failed", "error", err)
+		a.clearRefreshCookie(w)
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to sign out")
+		return
 	}
 	a.clearRefreshCookie(w)
 	w.WriteHeader(http.StatusNoContent)
@@ -224,10 +252,14 @@ func (a *AuthAPI) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	// Consume-token + password update + auth-version bump + session revocation
 	// happen atomically; a token can only be used once even on partial failure.
-	if err := a.repos.ResetPasswordTransaction(r.Context(), authsvc.HashToken(req.Token), string(hash)); err != nil {
+	userID, err := a.repos.ResetPasswordTransaction(r.Context(), authsvc.HashToken(req.Token), string(hash))
+	if err != nil {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_token", "Reset token is invalid or expired")
 		return
 	}
+	// Close every live socket: the reset bumped the auth version and revoked
+	// every session, so sockets minted under the old version must close.
+	a.kickDisconnectUser(userID)
 	handlers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Password reset"})
 }
 
@@ -254,6 +286,8 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
 		return
 	}
+	// The account no longer exists; close every socket it had open.
+	a.kickDisconnectUser(userID)
 	a.clearRefreshCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }

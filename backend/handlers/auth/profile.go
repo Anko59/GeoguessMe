@@ -209,6 +209,9 @@ func (a *AuthAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to change password")
 		return
 	}
+	// The change bumped the auth version and revoked every session; sockets
+	// opened under the old version must close.
+	a.kickDisconnectUser(userID)
 	a.clearRefreshCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
