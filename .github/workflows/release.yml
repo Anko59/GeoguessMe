@@ -246,5 +246,5 @@ jobs:
           chmod 0600 ~/.ssh/deploy ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
-            deploy@deploy.geoguessme.com \
+            deploy@deploy-prod.geoguessme.com \
             "deploy $BACKEND $WEB $GITHUB_SHA"

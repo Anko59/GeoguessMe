@@ -19,6 +19,9 @@ run "hosted_plan" {
     admin_ssh_public_key         = "ssh-ed25519 AAAAoperator operator"
     dev_ci_ssh_public_key        = "ssh-ed25519 AAAAdevelopment development"
     production_ci_ssh_public_key = "ssh-ed25519 AAAAproduction production"
+    dev_health_token_id          = "mock-dev-health-token-id"
+    dev_deploy_token_id          = "mock-dev-deploy-token-id"
+    prod_deploy_token_id         = "mock-prod-deploy-token-id"
   }
 
   assert {
@@ -27,6 +30,50 @@ run "hosted_plan" {
       hcloud_server.app.location == "nbg1" && hcloud_server.app.backups
     )
     error_message = "The shared host must remain the backed-up CX23 in Nuremberg."
+  }
+
+  assert {
+    condition = (
+      cloudflare_zone_setting.always_use_https.setting_id == "always_use_https" &&
+      cloudflare_zone_setting.always_use_https.value == "on"
+    )
+    error_message = "Always Use HTTPS must be enforced at the edge."
+  }
+
+  assert {
+    condition = (
+      cloudflare_zone_setting.min_tls_version.setting_id == "min_tls_version" &&
+      cloudflare_zone_setting.min_tls_version.value == "1.2"
+    )
+    error_message = "Minimum TLS version must be 1.2."
+  }
+
+  assert {
+    condition = (
+      cloudflare_zone_setting.security_header.value.strict_transport_security.enabled &&
+      cloudflare_zone_setting.security_header.value.strict_transport_security.max_age == 86400 &&
+      !cloudflare_zone_setting.security_header.value.strict_transport_security.preload
+    )
+    error_message = "HSTS must be enabled at max-age=86400 without preload during the initial rollout."
+  }
+
+  assert {
+    condition = (
+      cloudflare_email_routing_settings.main.zone_id == var.cloudflare_zone_id &&
+      cloudflare_email_routing_rule.dmarc.matchers[0].value == "dmarc@geoguessme.com" &&
+      cloudflare_email_routing_rule.dmarc.actions[0].value[0] == var.operator_email
+    )
+    error_message = "Email routing must forward DMARC reports from dmarc@geoguessme.com to the operator mailbox."
+  }
+
+  assert {
+    condition = (
+      cloudflare_dns_record.spf.name == "@" &&
+      cloudflare_dns_record.spf.type == "TXT" &&
+      strcontains(cloudflare_dns_record.spf.content, "_spf.mx.cloudflare.net") &&
+      strcontains(cloudflare_dns_record.spf.content, "brevo")
+    )
+    error_message = "A single combined SPF record must authorize Brevo and Cloudflare email routing."
   }
 
   assert {
@@ -63,17 +110,34 @@ run "hosted_plan" {
 
   assert {
     condition = (
-      cloudflare_zero_trust_access_application.dev.domain == "dev.geoguessme.com"
+      cloudflare_zero_trust_access_application.dev_health.domain == "dev.geoguessme.com"
     )
     error_message = "Access must protect the development hostname."
   }
 
   assert {
     condition = (
-      cloudflare_zero_trust_access_application.deployment.domain == "deploy.geoguessme.com" &&
-      length(cloudflare_zero_trust_access_application.deployment.policies) == 2
+      cloudflare_zero_trust_access_application.dev_deployment.domain == "deploy.geoguessme.com" &&
+      length(cloudflare_zero_trust_access_application.dev_deployment.policies) == 2
     )
-    error_message = "Deployment Access must allow both the owner and the CI service token."
+    error_message = "Dev deployment Access must allow both the owner and the dev deployment service token."
+  }
+
+  assert {
+    condition = (
+      cloudflare_zero_trust_access_application.prod_deployment.domain == "deploy-prod.geoguessme.com" &&
+      length(cloudflare_zero_trust_access_application.prod_deployment.policies) == 2
+    )
+    error_message = "Production deployment Access must allow both the owner and the production deployment service token."
+  }
+
+  assert {
+    condition = (
+      length([for p in cloudflare_zero_trust_access_application.dev_health.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.dev_health_token_id]) > 0]) == 1 &&
+      length([for p in cloudflare_zero_trust_access_application.dev_deployment.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.dev_deploy_token_id]) > 0]) == 1 &&
+      length([for p in cloudflare_zero_trust_access_application.prod_deployment.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.prod_deploy_token_id]) > 0]) == 1
+    )
+    error_message = "Each Access application must reference its own externally created service-token ID."
   }
 
   assert {

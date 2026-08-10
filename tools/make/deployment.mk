@@ -171,13 +171,18 @@ terraform-validate: ## Initialize without remote state and validate Terraform.
 terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
 	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
 
-terraform-plan: terraform-init ## Create a reviewed infrastructure plan.
-	$(TERRAFORM) plan -out=geoguessme.tfplan
+terraform-plan: terraform-init ## Create a reviewed plan in a mode-0700 directory.
+	@mkdir -p -m 0700 infra/terraform/.tfplan
+	$(TERRAFORM) plan -out=.tfplan/geoguessme.tfplan
+	@chmod 0600 infra/terraform/.tfplan/geoguessme.tfplan
+	@echo 'Plan written to infra/terraform/.tfplan/geoguessme.tfplan (mode 0600).'
 
 terraform-apply: ## Apply the exact reviewed plan; requires CONFIRM=apply.
 	@test "$(CONFIRM)" = apply || { echo 'Refusing without CONFIRM=apply'; exit 2; }
-	@test -f infra/terraform/geoguessme.tfplan || { echo 'run make terraform-plan first'; exit 2; }
-	$(TERRAFORM) apply geoguessme.tfplan
+	@test -f infra/terraform/.tfplan/geoguessme.tfplan || { echo 'run make terraform-plan first'; exit 2; }
+	$(TERRAFORM) apply .tfplan/geoguessme.tfplan
+	@rm -f infra/terraform/.tfplan/geoguessme.tfplan
+	@echo 'Plan applied and removed.'
 
 vapid-keys: ## Print a fresh Web Push keypair for VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go run . vapid-keys'

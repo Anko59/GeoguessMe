@@ -48,6 +48,12 @@ and submit one server-timed guess.
   guidance, VAPID key generation
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
+- [Cloudflare Access service-token runbook](runbooks/access-tokens.md) — three
+  isolated service tokens, GitHub secrets, rotation
+- [HSTS rollout runbook](runbooks/hsts-rollout.md) — staged HSTS max-age
+  increase after seven green days
+- [DMARC rollout runbook](runbooks/dmarc-rollout.md) — p=none to reject,
+  advancing only while aligned mail passes
 - [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
   record, corrected safeguards, and release checklist
 

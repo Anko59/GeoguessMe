@@ -2,8 +2,21 @@ cloudflare_account_id         = "replace-me"
 cloudflare_zone_id            = "replace-me"
 admin_ssh_public_key          = "ssh-ed25519 replace-me operator"
 dev_ci_ssh_public_key         = "ssh-ed25519 replace-me github-dev"
-production_ci_ssh_public_key = "ssh-ed25519 replace-me github-production"
+production_ci_ssh_public_key  = "ssh-ed25519 replace-me github-production"
+# Access service-token IDs (non-secret) for the three isolated Access
+# applications. Create each token outside Terraform and pipe its secret into the
+# matching GitHub environment secret (see docs/runbooks/access-tokens.md);
+# Terraform never holds or outputs the client secrets.
+dev_health_token_id  = "replace-me-dev-health-client-id"
+dev_deploy_token_id  = "replace-me-dev-deploy-client-id"
+prod_deploy_token_id = "replace-me-prod-deploy-client-id"
+# Operator mailbox that receives DMARC reports via Cloudflare Email Routing.
+operator_email = "replace-me@example.com"
+# Single combined SPF TXT value: Brevo include plus Cloudflare Email Routing
+# forwarding. Do not also add a v=spf1 TXT under brevo_dns_records.
+spf_record = "v=spf1 include:spf.brevo.com include:_spf.mx.cloudflare.net ~all"
 brevo_dns_records = {
-  # Fill the exact SPF/DKIM values shown by Brevo before the production plan.
+  # Fill the exact DKIM values shown by Brevo before the production plan.
+  # Do NOT add an SPF record here; publish the single SPF via spf_record.
   # brevo_dkim = { name = "mail._domainkey", type = "TXT", content = "..." }
 }
