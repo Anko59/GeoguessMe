@@ -171,6 +171,10 @@
     font-size: 0.82rem;
 }
 
+.account-verification .verification-pending-title {
+    color: var(--brand-blue-accessible);
+}
+
 .account-danger {
     background: var(--danger-soft);
     border-color: #f7c9c5;

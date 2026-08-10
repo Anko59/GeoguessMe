@@ -55,15 +55,18 @@ export default function Signup() {
                         required
                         autoComplete="username"
                     />
-                    <label htmlFor="signup-email">Email</label>
+                    <label htmlFor="signup-email">Recovery email (optional)</label>
                     <input
                         id="signup-email"
                         type="email"
-                        placeholder="Email"
+                        placeholder="Email — verify to enable account recovery"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
                         autoComplete="email"
                     />
+                    <p className="auth-hint">
+                        Email is a recovery/contact channel, not an identity — an optional address you can verify later.
+                    </p>
                     <label htmlFor="signup-password">Password</label>
                     <input
                         id="signup-password"

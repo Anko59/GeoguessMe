@@ -13,8 +13,8 @@ import (
 )
 
 func userRows(user *models.User) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at"}).
-		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt)
+	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
+		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail)
 }
 
 func TestUserQueriesAndSessionLifecycle(t *testing.T) {
@@ -130,7 +130,8 @@ func TestProfileAndPasswordUpdates(t *testing.T) {
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice-new", Email: "alice-new@example.test", Password: "hash", Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
-	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Email, user.Email, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET pending_email").WithArgs(user.Email, user.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
 	updated, err := repo.UpdateProfile(context.Background(), user.ID, user.Username, user.Email, user.Avatar)
 	if err != nil || updated == nil || updated.Avatar != user.Avatar {
@@ -150,7 +151,7 @@ func TestProfileAndPasswordUpdates(t *testing.T) {
 func TestProfileAndPasswordUpdateFailures(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "alice@example.test", "alice@example.test", "avatar.png", "user-1").WillReturnError(errors.New("profile write failed"))
+	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "avatar.png", "user-1").WillReturnError(errors.New("profile write failed"))
 	if _, err := repo.UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err == nil {
 		t.Fatal("UpdateProfile succeeded after write failure")
 	}
@@ -158,7 +159,8 @@ func TestProfileAndPasswordUpdateFailures(t *testing.T) {
 	if err := repo.ChangePassword(context.Background(), "user-1", "hash"); err == nil {
 		t.Fatal("ChangePassword succeeded after transaction failure")
 	}
-	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "alice@example.test", "alice@example.test", "avatar.png", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "avatar.png", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET pending_email").WithArgs("alice@example.test", "alice@example.test", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
 	if updated, err := repo.UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err != nil || updated != nil {
 		t.Fatalf("UpdateProfile missing user = %+v, %v", updated, err)

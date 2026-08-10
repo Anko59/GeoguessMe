@@ -58,7 +58,9 @@ describe('Signup Page', () => {
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
-        fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'new@example.com' } });
+        fireEvent.change(screen.getByPlaceholderText('Email — verify to enable account recovery'), {
+            target: { value: 'new@example.com' },
+        });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
 

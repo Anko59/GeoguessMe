@@ -54,13 +54,11 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusConflict, "username_taken", "Username is already in use")
 		return
 	}
-	if other, lookupErr := a.repos.GetUserByEmail(r.Context(), req.Email); lookupErr != nil {
-		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to update profile")
-		return
-	} else if other != nil && other.ID != userID {
-		handlers.WriteError(w, http.StatusConflict, "email_taken", "Email is already in use")
-		return
-	}
+	// A submitted email becomes a pending claim, not a replacement verified
+	// address: the verified recovery address stays active until the new claim
+	// is promoted by a successful verification. Pending claims never collide
+	// with other accounts (verified-email uniqueness is enforced atomically at
+	// promotion), so no email availability check is performed here.
 	updated, err := a.repos.UpdateProfile(r.Context(), userID, req.Username, req.Email, req.Avatar)
 	if err != nil || updated == nil {
 		handlers.WriteError(w, http.StatusConflict, "profile_update_failed", "Unable to update profile")

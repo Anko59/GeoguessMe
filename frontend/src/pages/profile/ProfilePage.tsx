@@ -107,7 +107,9 @@ export default function ProfilePage() {
                     <div>
                         <p className="profile-eyebrow">Adventurer card</p>
                         <h1 id="profile-title">{profile.username}</h1>
-                        {isOwnProfile && 'email' in profile && <p className="profile-email">{profile.email}</p>}
+                        {isOwnProfile && 'email' in profile && profile.email_verified_at && profile.email && (
+                            <p className="profile-email">{profile.email}</p>
+                        )}
                         <p className="profile-rank-name">
                             <RankBadge rank={rank} />
                             {rank.name}

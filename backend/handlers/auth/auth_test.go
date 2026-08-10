@@ -95,8 +95,8 @@ func requestWithUser(method, target, body, userID string) *http.Request {
 }
 
 func handlerUserRows(user *models.User) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at"}).
-		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt)
+	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
+		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail)
 }
 
 func TestSignup(t *testing.T) {
@@ -199,10 +199,12 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 		t.Fatalf("request verification status = %d", recorder.Code)
 	}
 
-	// VerifyEmail consumes the token and marks the account verified.
+	// VerifyEmail consumes the token and promotes the pending email claim.
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
-	mock.ExpectExec("UPDATE users SET email_verified_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow("alice@example.test", "alice@example.test"))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test", user.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectExec("UPDATE users SET email =").WithArgs("alice@example.test", "alice@example.test", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
 	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
@@ -237,7 +239,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 }
 
 func userColumnsForQuery() []string {
-	return []string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at"}
+	return []string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}
 }
 
 func TestDeleteAccountSuccess(t *testing.T) {

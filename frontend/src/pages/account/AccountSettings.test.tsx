@@ -20,7 +20,7 @@ vi.mock('../../api', () => ({
 const user: User = {
     id: 'user-1',
     username: 'alice',
-    email: 'alice@example.test',
+    pending_email: 'alice@example.test',
     avatar: 'avatar.png',
     email_verified_at: null,
 };
@@ -171,7 +171,16 @@ describe('AccountSettings', () => {
     });
 
     it('hides verification action for an already verified account', () => {
-        const verifiedAuth = { ...authValue, user: { ...user, email_verified_at: '2026-01-01T00:00:00Z' } };
+        const verifiedAuth = {
+            ...authValue,
+            user: {
+                id: 'user-1',
+                username: 'alice',
+                email: 'alice@example.test',
+                avatar: 'avatar.png',
+                email_verified_at: '2026-01-01T00:00:00Z',
+            },
+        };
         render(
             <AuthContext.Provider value={verifiedAuth}>
                 <MemoryRouter>
@@ -179,8 +188,50 @@ describe('AccountSettings', () => {
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.getByText('Email verified')).toBeInTheDocument();
+        expect(screen.getByText('Verified recovery email')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Resend verification email' })).not.toBeInTheDocument();
+    });
+
+    it('shows the pending verification claim for an unverified account', () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        expect(screen.getByText('No verified email')).toBeInTheDocument();
+        expect(screen.getByText('Pending verification')).toBeInTheDocument();
+        expect(screen.getByText(/Verification was requested for alice@example\.test/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Resend verification email' })).toBeInTheDocument();
+    });
+
+    it('requests verification and keeps the verified address active after an email change', async () => {
+        const verified = {
+            id: 'user-1',
+            username: 'alice',
+            email: 'alice@example.test',
+            avatar: 'avatar.png',
+            email_verified_at: '2026-01-01T00:00:00Z',
+        };
+        mocks.patch.mockResolvedValueOnce({ data: { ...verified, pending_email: 'new@example.test' } });
+        mocks.post.mockResolvedValueOnce({ data: { message: 'Verification sent' } });
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: verified }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.change(screen.getByLabelText('Recovery email'), { target: { value: 'new@example.test' } });
+        fireEvent.change(screen.getByLabelText('Current password to save profile changes'), {
+            target: { value: 'Password123' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/auth/verify/request'));
+        expect(await screen.findByRole('status')).toHaveTextContent(
+            'Verification sent to new@example.test. Your verified email (alice@example.test) stays active until the new address is verified.',
+        );
     });
 
     it('renders safely while the account object is unavailable', () => {
@@ -191,7 +242,7 @@ describe('AccountSettings', () => {
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.getByText('Email not verified')).toBeInTheDocument();
+        expect(screen.getByText('No verified email')).toBeInTheDocument();
     });
 
     it('shows verification and deletion flows', async () => {

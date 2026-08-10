@@ -19,7 +19,13 @@ function messageKey(userID: string, groupID: string): string {
 function isUser(value: unknown): value is User {
     if (!value || typeof value !== 'object') return false;
     const user = value as Partial<User>;
-    return typeof user.id === 'string' && typeof user.username === 'string' && typeof user.email === 'string';
+    // Email is a verified recovery/contact channel: an unverified account has
+    // no email key at all, so a cached session must not be rejected for that.
+    return (
+        typeof user.id === 'string' &&
+        typeof user.username === 'string' &&
+        (user.email === undefined || user.email === null || typeof user.email === 'string')
+    );
 }
 
 function isMessage(value: unknown, groupID: string): value is Message {

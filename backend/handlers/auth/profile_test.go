@@ -43,7 +43,7 @@ func TestGetPublicProfile(t *testing.T) {
 	requireStatus(t, api.GetPublicProfile, requestWithUser(http.MethodPost, "/", "", viewer.ID), http.StatusMethodNotAllowed)
 
 	// Unknown target player.
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at"}))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}))
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, target.ID), http.StatusNotFound)
 
 	// Players without a shared group cannot view each other's profile.
@@ -94,8 +94,11 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 	updated := &models.User{ID: user.ID, Username: "alice-new", Email: "alice-new@example.test", Password: string(hash), Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(updated.Username).WillReturnRows(handlerUserRows(updated))
-	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs(updated.Email).WillReturnRows(handlerUserRows(updated))
-	mock.ExpectExec("UPDATE users SET username").WithArgs(updated.Username, updated.Email, updated.Email, updated.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	// The submitted email becomes a pending claim, not a replacement verified
+	// address: no email-availability lookup runs and no verified address is
+	// touched. Two UPDATEs follow (username/avatar, then pending claim).
+	mock.ExpectExec("UPDATE users SET username").WithArgs(updated.Username, updated.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET pending_email").WithArgs(updated.Email, updated.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
 	recorder := httptest.NewRecorder()
 	api.UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice-new","email":"alice-new@example.test","avatar":"avatar2.png","current_password":"Password123"}`, user.ID))
@@ -155,5 +158,46 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	api.GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"average_score":2533.33`) || !strings.Contains(recorder.Body.String(), `"global_average_rank":{"rank":7,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"elo":0`) {
 		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+}
+
+// TestEmailChangeKeepsVerifiedAddress proves changing the email records a
+// pending claim while the current verified recovery address stays active: the
+// response keeps the verified email and its verification state and adds the
+// replacement as pending_email. No SQL path may clear email_verified_at.
+func TestEmailChangeKeepsVerifiedAddress(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	verified := now.Add(-24 * time.Hour)
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", EmailVerifiedAt: &verified, Password: string(hash), Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+	afterUpdate := &models.User{ID: user.ID, Username: "alice", Email: "alice@example.test", EmailVerifiedAt: &verified, PendingEmail: "new@example.test", Password: string(hash), Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+
+	// The same username lookup returns the user itself (not a collision), so
+	// the profile update proceeds without any email-availability check.
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(user.Username).WillReturnRows(handlerUserRows(user))
+	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users SET pending_email").WithArgs("new@example.test", "new@example.test", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(afterUpdate))
+
+	recorder := httptest.NewRecorder()
+	api.UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"new@example.test","avatar":"avatar.png","current_password":"Password123"}`, user.ID))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("email change status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"email":"alice@example.test"`) {
+		t.Fatalf("verified email was not preserved: %s", body)
+	}
+	if !strings.Contains(body, `"pending_email":"new@example.test"`) {
+		t.Fatalf("replacement claim missing from response: %s", body)
+	}
+	if !strings.Contains(body, "email_verified_at") {
+		t.Fatalf("verification state missing from response: %s", body)
 	}
 }

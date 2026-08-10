@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -14,13 +15,20 @@ import (
 )
 
 const (
-	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at"
+	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at, pending_email"
 )
 
-// CreateUser inserts a new account.
+// CreateUser inserts a new account. The submitted address is stored as a
+// pending contact claim (pending_email); the verified email column stays NULL
+// until the claim is verified, so an unverified address never acts as an
+// authorization identity nor occupies the verified-email uniqueness index.
 func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
-	query := `INSERT INTO users (id, username, email, email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`
-	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, user.Email, strings.ToLower(strings.TrimSpace(user.Email)), user.Password, user.Avatar, user.CreatedAt)
+	pending := user.PendingEmail
+	if pending == "" {
+		pending = user.Email
+	}
+	query := `INSERT INTO users (id, username, email, email_normalized, pending_email, pending_email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, NULL, NULL, $3, $4, $5, $6, $7, $7)`
+	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pending, strings.ToLower(strings.TrimSpace(pending)), user.Password, user.Avatar, user.CreatedAt)
 	return err
 }
 
@@ -114,12 +122,19 @@ type rowScanner interface{ Scan(dest ...any) error }
 func scanUser(row rowScanner) (*models.User, error) {
 	var user models.User
 	var verified *time.Time
-	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt)
+	var email, pendingEmail sql.NullString
+	err := row.Scan(&user.ID, &user.Username, &email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt, &pendingEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if email.Valid {
+		user.Email = email.String
+	}
+	if pendingEmail.Valid {
+		user.PendingEmail = pendingEmail.String
 	}
 	user.EmailVerifiedAt = verified
 	return &user, nil
@@ -246,9 +261,13 @@ func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, 
 	return tx.Commit(ctx)
 }
 
-// VerifyEmailTransaction consumes a verification token and marks the account
-// verified in a single transaction so a crash cannot consume the token without
-// updating the account.
+// VerifyEmailTransaction consumes a verification token and promotes the
+// account's pending email claim in a single transaction so a crash cannot
+// consume the token without updating the account. The token is still
+// user-bound (not bound to the claimed address); the current pending claim is
+// what gets promoted. A verified account without a pending claim is a
+// successful no-op: the token is consumed and committed so verification stays
+// idempotent for already-verified accounts.
 func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -263,7 +282,10 @@ func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash strin
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID); err != nil {
+	if err := promotePendingEmailOn(ctx, tx, userID); err != nil {
+		if errors.Is(err, ErrNothingToPromote) {
+			return tx.Commit(ctx)
+		}
 		return err
 	}
 	return tx.Commit(ctx)
@@ -317,11 +339,16 @@ func (r *Repository) SetUserAvatar(ctx context.Context, userID, avatar string) e
 	return err
 }
 
-// UpdateProfile changes the public account fields. Changing the email address
-// clears verification so the new address must be verified independently.
+// UpdateProfile changes the public account fields. A submitted email becomes a
+// pending contact claim instead of replacing the verified address: the current
+// verified email (and its verification state) stays active until the pending
+// claim is promoted by a successful verification. Submitting the already
+// verified address is a no-op for the email columns.
 func (r *Repository) UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
-	_, err := r.pool.Exec(ctx, `UPDATE users SET username = $1, email = $2, email_normalized = $3, avatar = $4, email_verified_at = CASE WHEN email_normalized <> $3 THEN NULL ELSE email_verified_at END, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND deleted_at IS NULL`, username, email, strings.ToLower(strings.TrimSpace(email)), avatar, userID)
-	if err != nil {
+	if _, err := r.pool.Exec(ctx, `UPDATE users SET username = $1, avatar = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL`, username, avatar, userID); err != nil {
+		return nil, err
+	}
+	if _, err := r.pool.Exec(ctx, `UPDATE users SET pending_email = $1, pending_email_normalized = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL AND email_normalized IS DISTINCT FROM $2`, email, strings.ToLower(strings.TrimSpace(email)), userID); err != nil {
 		return nil, err
 	}
 	return r.GetUserByID(ctx, userID)
