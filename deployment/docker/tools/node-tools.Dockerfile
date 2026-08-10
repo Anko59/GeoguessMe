@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# Node 22.14.0 bookworm-slim (linux/amd64 digest: 745403dc46b5ab4c998502b07a12cbf020cf2c30645427a68ec0718f02d647de)
-FROM node:22.14.0-bookworm-slim@sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b
+# Node 22.23.2 bookworm-slim (linux/amd64 digest: d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436)
+FROM node:22.23.2-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
 
 # hadolint ignore=DL3008
 RUN apt-get update \

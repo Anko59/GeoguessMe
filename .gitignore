@@ -67,3 +67,6 @@ infra/terraform/*.tfplan
 
 # Refactor baseline metric reports (generated, never committed)
 .refactor-baseline/
+
+# Image security scan reports and SBOMs (generated, never committed)
+security/image-reports/

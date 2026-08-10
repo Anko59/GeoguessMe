@@ -29,11 +29,11 @@ include tools/make/openapi-contract.mk
 	test-unit test-backend test-frontend test-race test-backend-race test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression \
-	test-migration-fixture-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
+	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
 	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
-	build build-backend build-frontend build-images clean-build \
+	build build-backend build-frontend build-images clean-build audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \

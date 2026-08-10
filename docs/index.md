@@ -39,6 +39,8 @@ and submit one server-timed guess.
 - [Database migrations](database-migrations.md) — rules, execution, recovery
 - [Security and privacy](security-and-privacy.md) — model, data inventory,
   operator obligations
+- [Image security scanning](security-scanning.md) — `make audit-images`,
+  blocking semantics, exception policy, pin refresh
 - [Troubleshooting](troubleshooting.md) — frequent issues and solutions
 - [PWA and Web Push](pwa-and-push.md) — installable app, push notifications, iOS
   guidance, VAPID key generation

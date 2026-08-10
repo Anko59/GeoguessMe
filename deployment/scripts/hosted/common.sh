@@ -13,11 +13,11 @@ readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
 readonly SECRET_ROOT="${GEOGUESSME_SECRET_ROOT:-/etc/geoguessme}"
 # shellcheck disable=SC2034
 readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
-readonly RESTIC_IMAGE='restic/restic:0.18.0@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120'
+readonly RESTIC_IMAGE='restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510'
 # shellcheck disable=SC2034
-readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.5.3@sha256:f1946d0f30fc8e3777b02f2201e02efdba9fe38f4918162f937052fac98e083f'
+readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
 # shellcheck disable=SC2034
-readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.10.2@sha256:42514a95c2758596864ee0f2cbf463f140e905a04c127c940e1eec558415466c'
+readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2

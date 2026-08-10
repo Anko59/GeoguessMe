@@ -45,7 +45,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
-    image: geoguessme/node-tools:22.14.0
+    image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
@@ -59,7 +59,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
-    image: geoguessme/node-tools:22.14.0
+    image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
@@ -137,18 +137,18 @@ services:
     volumes:
       - ./:/workspace
 
-  # Caddy 2.10-alpine (linux/amd64 digest: 4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d)
+  # Caddy 2.11.4-alpine (linux/amd64 digest: 5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648)
   caddy:
     <<: *host-tools
-    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     entrypoint: []
     volumes:
       - *workspace
 
-  # cloudflared 2026.7.2 (multi-arch digest); used as an SSH ProxyCommand.
+  # cloudflared 2026.7.3 (multi-arch digest); used as an SSH ProxyCommand.
   cloudflared:
     <<: *host-tools
-    image: cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d
+    image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
@@ -172,7 +172,7 @@ services:
 
   sops:
     <<: *host-tools
-    image: ghcr.io/getsops/sops:v3.10.2@sha256:42514a95c2758596864ee0f2cbf463f140e905a04c127c940e1eec558415466c
+    image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
     entrypoint: []
     volumes:
       - ./:/workspace
@@ -208,6 +208,21 @@ services:
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
+
+  # Trivy 0.73.0 (multi-arch index digest); final-image vulnerability scanner
+  # for `make audit-images`. Images are exported by the host with `docker save`
+  # and scanned from tarballs (--input), so this service never needs the Docker
+  # socket. The trivy DB and reports live under the gitignored
+  # security/image-reports/ directory.
+  trivy:
+    <<: *host-tools
+    image: aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
+    entrypoint: []
+    environment:
+      TRIVY_CACHE_DIR: /tmp/trivy-cache
+    volumes:
+      - ./:/workspace
+      - ./security/image-reports/.trivy-cache:/tmp/trivy-cache
 
 volumes:
   go-mod-cache:
