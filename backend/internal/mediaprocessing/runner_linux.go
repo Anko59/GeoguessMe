@@ -89,6 +89,16 @@ func HandleRlimitHelperInvocation() bool {
 // tool, so the child inherits the CPU-time, address-space, and process
 // ceilings from its first instruction.
 func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, int, error) {
+	// execve (used by the trampoline) does not search PATH, so resolve the
+	// tool to an absolute path up front; a bare name would fail with ENOENT
+	// inside syscall.Exec and abort every ffprobe/ffmpeg invocation. A failed
+	// lookup leaves the bare name in place so the trampoline still surfaces a
+	// 127 exit (TestRlimitHelperMissingTool).
+	if !strings.Contains(name, "/") {
+		if resolved, err := exec.LookPath(name); err == nil {
+			name = resolved
+		}
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return nil, 0, fmt.Errorf("mediaprocessing: resolve self: %w", err)

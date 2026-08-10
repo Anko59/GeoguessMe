@@ -2,7 +2,10 @@ package mediaprocessing
 
 import (
 	"context"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,7 +21,7 @@ func TestTranscodeArgVectorWithAudio(t *testing.T) {
 		"-c:v", "libx264",
 		"-pix_fmt", "yuv420p",
 		"-preset", "fast",
-		"-movflags", "+fast-start",
+		"-movflags", "+faststart",
 		"-metadata", "title=",
 		"-map_metadata", "-1",
 		"-map_chapters", "-1",
@@ -42,7 +45,7 @@ func TestTranscodeArgVectorWithoutAudio(t *testing.T) {
 			t.Fatalf("audio arg sequence %v present without audio stream: %v", seq, args)
 		}
 	}
-	for _, required := range []string{"-c:v", "libx264", "yuv420p", "+fast-start", "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1", "/dst/out.mp4"} {
+	for _, required := range []string{"-c:v", "libx264", "yuv420p", "+faststart", "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1", "/dst/out.mp4"} {
 		found := false
 		for _, a := range args {
 			if a == required {
@@ -118,4 +121,62 @@ func TestTranscodeNilRunnerUsesDefault(t *testing.T) {
 		t.Fatal("expected an error from the default runner against a missing ffmpeg")
 	}
 	assertCode(t, err, ErrorTranscodeFailed)
+}
+
+// TestTranscodeWithRealFFmpeg runs the exact canonical transcode command
+// against the real ffmpeg when one is installed. It is the regression guard
+// for ffmpeg flag-name compatibility: the pinned alpine ffmpeg 8.1.2-r0 build
+// rejects "-movflags +fast-start" (and "fast_start") with a movflags parse
+// error, which previously made every transcode fail and the video E2E test
+// time out. The test skips when ffmpeg/ffprobe are unavailable or cannot
+// produce a VP8 fixture, but fails whenever a valid fixture cannot be
+// transcoded to the canonical output.
+func TestTranscodeWithRealFFmpeg(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.webm")
+	dst := filepath.Join(dir, "out.mp4")
+
+	// Generate a tiny VP8 WebM with audio. Skip if this ffmpeg cannot encode
+	// VP8 (environment-specific), but fail the transcode if a valid fixture
+	// cannot be converted to the canonical output.
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", "testsrc=size=160x90:rate=15",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+		"-t", "1", "-c:v", "libvpx", "-b:v", "50k", "-c:a", "libvorbis", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Skipf("cannot generate VP8 fixture with this ffmpeg: %v: %s", err, out)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := Transcode(ctx, src, dst, true, nil); err != nil {
+		t.Fatalf("Transcode with real ffmpeg failed: %v", err)
+	}
+
+	// Verify canonical output: H.264 yuv420p video + AAC audio.
+	probeV := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
+		"-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", dst)
+	vout, err := probeV.Output()
+	if err != nil {
+		t.Fatalf("ffprobe video failed: %v", err)
+	}
+	if got := strings.TrimSpace(string(vout)); got != "h264,yuv420p" {
+		t.Fatalf("video codec/pix_fmt = %q, want h264,yuv420p", got)
+	}
+	probeA := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
+		"-select_streams", "a:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", dst)
+	aout, err := probeA.Output()
+	if err != nil {
+		t.Fatalf("ffprobe audio failed: %v", err)
+	}
+	if got := strings.TrimSpace(string(aout)); got != "aac" {
+		t.Fatalf("audio codec = %q, want aac", got)
+	}
 }

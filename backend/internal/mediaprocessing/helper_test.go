@@ -56,3 +56,18 @@ func TestRlimitHelperMissingTool(t *testing.T) {
 		t.Errorf("exit code = %d, want 127 (trampoline exec failure)", exitCode)
 	}
 }
+
+// TestRlimitHelperResolvesBareNameViaPath proves that a bare tool name (no
+// slash) is resolved through PATH before the trampoline re-exec: execve does
+// not search PATH, so an unresolved bare name would make every ffprobe/ffmpeg
+// invocation fail with ENOENT (the F-10 E2E symptom).
+func TestRlimitHelperResolvesBareNameViaPath(t *testing.T) {
+	runner := OSCommandRunner{}
+	stdout, exitCode, err := runner.Run(context.Background(), "sh", "-c", "echo path-resolved")
+	if err != nil || exitCode != 0 {
+		t.Fatalf("bare-name trampoline failed: exit=%d err=%v stdout=%s", exitCode, err, stdout)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "path-resolved" {
+		t.Errorf("stdout = %q, want path-resolved", got)
+	}
+}
