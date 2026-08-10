@@ -43,7 +43,7 @@ type incomingMessage struct {
 }
 
 func (c *Client) readPump() {
-	defer func() { c.hub.unregister <- c; _ = c.conn.Close() }()
+	defer func() { c.hub.unregisterClient(c); _ = c.conn.Close() }()
 	c.conn.SetReadLimit(maxMessageSize)
 	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { return c.conn.SetReadDeadline(time.Now().Add(pongWait)) })

@@ -155,7 +155,7 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(14, "retire_legacy_reaction_emoji").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	mock.ExpectBegin()
-	mock.ExpectExec("ALTER TABLE websocket_tickets ADD COLUMN IF NOT EXISTS auth_version").WillReturnResult(pgxmock.NewResult("ALTER", 0))
+	mock.ExpectExec("ALTER TABLE websocket_tickets ADD COLUMN IF NOT EXISTS auth_version(?s:.*DELETE FROM websocket_tickets)").WillReturnResult(pgxmock.NewResult("ALTER", 0))
 	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(15, "websocket_ticket_auth_version").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))

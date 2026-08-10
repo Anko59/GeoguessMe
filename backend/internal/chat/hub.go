@@ -45,6 +45,11 @@ type userGroupPair struct {
 	groupID string
 }
 
+type revalidationResult struct {
+	client *Client
+	valid  bool
+}
+
 type Hub struct {
 	clients             map[*Client]bool
 	clientsByUser       map[string]map[*Client]bool
@@ -54,6 +59,8 @@ type Hub struct {
 	disconnectUser      chan string
 	disconnectUserGroup chan userGroupPair
 	revalidateNow       chan struct{}
+	revalidationResults chan revalidationResult
+	revalidationDone    chan struct{}
 	stop                chan struct{}
 	stopped             chan struct{}
 	persist             PersistFunc
@@ -100,6 +107,8 @@ func NewHubWithTimeout(persist PersistFunc, notify NotifyFunc, persistTimeout ti
 		disconnectUser:      make(chan string, 64),
 		disconnectUserGroup: make(chan userGroupPair, 64),
 		revalidateNow:       make(chan struct{}, 1),
+		revalidationResults: make(chan revalidationResult, 128),
+		revalidationDone:    make(chan struct{}, 1),
 		clients:             make(map[*Client]bool),
 		clientsByUser:       make(map[string]map[*Client]bool),
 		stop:                make(chan struct{}),
@@ -115,6 +124,15 @@ func (h *Hub) Run() {
 	defer close(h.stopped)
 	revalidateTicker := time.NewTicker(h.revalidateInterval)
 	defer revalidateTicker.Stop()
+	revalidationRunning := false
+	revalidationPending := false
+	requestRevalidation := func() {
+		if revalidationRunning {
+			revalidationPending = true
+			return
+		}
+		revalidationRunning = h.startRevalidation()
+	}
 	for {
 		select {
 		case client := <-h.register:
@@ -130,9 +148,19 @@ func (h *Hub) Run() {
 		case pair := <-h.disconnectUserGroup:
 			h.disconnectSockets(pair.userID, pair.groupID)
 		case <-h.revalidateNow:
-			h.revalidateAll()
+			requestRevalidation()
 		case <-revalidateTicker.C:
-			h.revalidateAll()
+			requestRevalidation()
+		case result := <-h.revalidationResults:
+			if !result.valid {
+				h.remove(result.client)
+			}
+		case <-h.revalidationDone:
+			revalidationRunning = false
+			if revalidationPending {
+				revalidationPending = false
+				requestRevalidation()
+			}
 		case incoming := <-h.broadcast:
 			message := incoming.message
 			if message.ID == "" {
@@ -189,8 +217,7 @@ func (h *Hub) Run() {
 }
 
 // remove deletes a client from every index and signals its write pump to
-// stop. It runs on the single-threaded Run loop (or is called by
-// revalidateAll from the same loop), so no locking is needed; the clients-map
+// stop. It runs on the single-threaded Run loop, so no locking is needed; the clients-map
 // membership check makes double removal a no-op. The send channel is never
 // closed: writePump terminates via the done channel instead, so a concurrent
 // sendSystem call from a readPump goroutine can never panic on a closed
@@ -241,25 +268,64 @@ func (h *Hub) disconnectSockets(userID, groupID string) {
 	}
 }
 
-// revalidateAll re-checks every live socket against the configured
-// revalidator, closing any that no longer qualify. It is the periodic
-// defense-in-depth against out-of-band database changes that never pass
-// through a revocation handler.
-func (h *Hub) revalidateAll() {
-	if h.Revalidate == nil {
-		return
+const revalidationWorkers = 8
+
+// startRevalidation snapshots the current clients and validates them away
+// from the hub event loop. Repository checks may take seconds; running them on
+// the loop would stall broadcasts and explicit revocation disconnects. A
+// bounded worker set avoids turning a large room into an unbounded goroutine
+// burst. Results return to Run, which remains the sole owner of client state.
+func (h *Hub) startRevalidation() bool {
+	if h.Revalidate == nil || len(h.clients) == 0 {
+		return false
 	}
+	clients := make([]*Client, 0, len(h.clients))
 	for client := range h.clients {
-		if !h.Revalidate(client.userID, client.groupID) {
-			h.remove(client)
+		clients = append(clients, client)
+	}
+	go h.revalidateSnapshot(clients)
+	return true
+}
+
+func (h *Hub) revalidateSnapshot(clients []*Client) {
+	jobs := make(chan *Client)
+	var workers sync.WaitGroup
+	workerCount := min(revalidationWorkers, len(clients))
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for client := range jobs {
+				result := revalidationResult{client: client, valid: h.revalidateClient(client)}
+				select {
+				case h.revalidationResults <- result:
+				case <-h.stop:
+					return
+				}
+			}
+		}()
+	}
+	for _, client := range clients {
+		select {
+		case jobs <- client:
+		case <-h.stop:
+			close(jobs)
+			workers.Wait()
+			return
 		}
+	}
+	close(jobs)
+	workers.Wait()
+	select {
+	case h.revalidationDone <- struct{}{}:
+	case <-h.stop:
 	}
 }
 
 // RevalidateNow requests an immediate revalidation sweep. It is exposed for
 // tests (and any future caller that needs out-of-band revalidation without
-// waiting for the periodic tick); the sweep itself always runs on the
-// single-threaded Run loop so client state is never touched concurrently.
+// waiting for the periodic tick). Repository checks run on bounded workers;
+// their results are applied by the single-threaded Run loop.
 func (h *Hub) RevalidateNow() {
 	select {
 	case h.revalidateNow <- struct{}{}:
@@ -275,6 +341,15 @@ func (h *Hub) revalidateClient(client *Client) bool {
 		return true
 	}
 	return h.Revalidate(client.userID, client.groupID)
+}
+
+// unregisterClient prevents a read pump from blocking forever when it exits
+// after the hub has already stopped consuming unregister requests.
+func (h *Hub) unregisterClient(client *Client) {
+	select {
+	case h.unregister <- client:
+	case <-h.stop:
+	}
 }
 
 func (h *Hub) Broadcast(message models.Message) { h.broadcast <- event{message: message, notify: true} }

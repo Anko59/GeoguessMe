@@ -78,6 +78,55 @@ func TestHubRevalidationClosesInvalidSockets(t *testing.T) {
 	waitSendOpen(t, valid, "valid socket was closed by revalidation")
 }
 
+func TestHubRevalidationDoesNotBlockDisconnects(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	hub := NewHub(nil, nil)
+	hub.Revalidate = func(userID, groupID string) bool {
+		if userID == "slow" {
+			close(started)
+			<-release
+		}
+		return true
+	}
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+
+	slow := &Client{userID: "slow", groupID: "group-a", send: make(chan models.Message, 1), done: make(chan struct{})}
+	revoked := &Client{userID: "revoked", groupID: "group-a", send: make(chan models.Message, 1), done: make(chan struct{})}
+	hub.register <- slow
+	hub.register <- revoked
+	hub.RevalidateNow()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("slow revalidation did not start")
+	}
+
+	// The hub must continue handling explicit revocations while a repository
+	// check is blocked. The old synchronous sweep deadlocked here until release.
+	hub.DisconnectUser("revoked")
+	waitSendClosed(t, revoked, "disconnect stalled behind socket revalidation")
+	close(release)
+}
+
+func TestUnregisterClientReturnsAfterHubStops(t *testing.T) {
+	hub := NewHub(nil, nil)
+	go hub.Run()
+	hub.Stop()
+
+	returned := make(chan struct{})
+	go func() {
+		hub.unregisterClient(&Client{})
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("unregister blocked after the hub stopped")
+	}
+}
+
 func TestClientRevalidationCachesWithinTTLAndRechecksAfter(t *testing.T) {
 	hub := NewHub(nil, nil)
 	var calls int
