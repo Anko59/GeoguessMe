@@ -48,8 +48,21 @@ test.describe('Video challenge flow', () => {
             );
             await uploader.getByRole('button', { name: /Send/ }).click();
             const uploadResponse = await uploadResponsePromise;
-            expect(uploadResponse.status()).toBe(201);
-            const uploaded = (await uploadResponse.json()) as { id: string };
+            // F-10: videos are quarantined and processed asynchronously, so the
+            // upload returns a 202 processing job instead of a 201 record.
+            expect(uploadResponse.status()).toBe(202);
+            const job = (await uploadResponse.json()) as { id: string; kind: 'challenge' | 'chat'; status: string };
+            expect(job.kind).toBe('challenge');
+            expect(['queued', 'processing']).toContain(job.status);
+
+            // The worker validates, transcodes, writes the canonical object,
+            // creates the challenge record, and broadcasts it to the group.
+            // The guesser feed revealing the challenge is the deterministic
+            // ready signal (transcode is bounded to 60s server-side), and the
+            // accept + media flow below proves the canonical video is served.
+            const challengeButton = guesser.locator('button.photo-challenge[data-photo-id]').first();
+            await expect(challengeButton).toBeVisible({ timeout: 60000 });
+            const uploaded = { id: (await challengeButton.getAttribute('data-photo-id')) ?? '' };
 
             const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
             const acceptResponsePromise = guesser.waitForResponse(
