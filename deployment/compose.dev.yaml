@@ -57,6 +57,7 @@ services:
       SMTP_PORT: "1025"
       SMTP_FROM: no-reply@localhost
       SMTP_TLS: "off"
+      MEDIA_PROCESSING_WORKER: "true"
     depends_on:
       db: { condition: service_healthy }
       minio: { condition: service_healthy }

@@ -512,6 +512,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/media-processing/{jobID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the owner-only status of an asynchronous media-processing job. */
+        get: operations['getMediaProcessingJob'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/challenges/{photoID}/accept': {
         parameters: {
             query?: never;
@@ -941,6 +958,25 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             server_time: string;
+        };
+        /** @description Owner-only status of an asynchronous video-processing job. Storage keys and upload metadata are never serialized. */
+        MediaProcessingJob: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: 'challenge' | 'chat';
+            /** @enum {string} */
+            status: 'queued' | 'processing' | 'ready' | 'failed';
+            /** Format: date-time */
+            queued_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            /** @description Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned. */
+            result?: components['schemas']['ChallengeCreated'] | components['schemas']['Message'];
+            /** @description Stable, non-sensitive failure code (for example invalid_video or transcode_failed); present only when the job failed. */
+            error_code?: string;
         };
         ChallengeAccepted: {
             /** Format: uuid */
@@ -1909,6 +1945,15 @@ export interface operations {
                     'application/json': components['schemas']['Message'];
                 };
             };
+            /** @description Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['MediaProcessingJob'];
+                };
+            };
             400: components['responses']['ErrorResponse'];
             403: components['responses']['ErrorResponse'];
         };
@@ -1968,8 +2013,41 @@ export interface operations {
                     'application/json': components['schemas']['ChallengeCreated'];
                 };
             };
+            /** @description Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['MediaProcessingJob'];
+                };
+            };
             400: components['responses']['ErrorResponse'];
             403: components['responses']['ErrorResponse'];
+        };
+    };
+    getMediaProcessingJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Job status; the result is present when ready, the error_code only when failed. Storage keys and upload metadata are never exposed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['MediaProcessingJob'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
         };
     };
     acceptChallenge: {

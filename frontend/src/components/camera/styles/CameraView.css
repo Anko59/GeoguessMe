@@ -249,3 +249,21 @@
     font-weight: 700;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
 }
+
+.video-processing-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
+.video-processing-indicator .spinner {
+    width: 1.1rem;
+    height: 1.1rem;
+    border-width: 0.15rem;
+}

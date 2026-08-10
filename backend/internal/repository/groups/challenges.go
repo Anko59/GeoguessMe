@@ -14,6 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// execer is satisfied by both the connection pool and a transaction, so the
+// photo insert loop can run against either. It is the seam that lets the
+// media-processing worker insert challenge photos and complete the job in one
+// transaction.
+type execer interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
 // CreatePhotos inserts every photo atomically so a multi-group upload either
 // lands in all selected groups or in none.
 func (r *Repository) CreatePhotos(ctx context.Context, photos []*models.Photo) error {
@@ -22,12 +30,22 @@ func (r *Repository) CreatePhotos(ctx context.Context, photos []*models.Photo) e
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := r.CreatePhotosTx(ctx, tx, photos); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// CreatePhotosTx inserts every photo using the supplied transaction. It is the
+// tx-scoped variant used by the media-processing worker so the per-group
+// challenge rows and the job completion commit atomically.
+func (r *Repository) CreatePhotosTx(ctx context.Context, tx execer, photos []*models.Photo) error {
 	for _, photo := range photos {
 		if _, err := tx.Exec(ctx, `INSERT INTO photos (id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, photo.ID, photo.UserID, photo.GroupID, photo.URL, photo.StorageKey, photo.MIMEType, photo.ByteSize, photo.Lat, photo.Long, photo.LifecycleStatus, photo.HideLocation, photo.CreatedAt, photo.ExpiresAt, photo.RetentionAt); err != nil {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // Photo returns a photo by id, or nil when it does not exist.

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"geoguessme/internal/mediaprocessing"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -91,6 +93,16 @@ func (r CleanupRunner) Run(ctx context.Context) {
 	}
 }
 
+// staleProcessingInterval is how long a claimed media-processing job may stay
+// in the processing state before the cleanup runner assumes its worker died
+// and returns it to the queue.
+const staleProcessingInterval = 5 * time.Minute
+
+// abandonedProcessingInterval is how long a media-processing job may stay
+// incomplete before the cleanup runner deletes its raw quarantine object and
+// fails it. Quarantined uploads are purged after one hour (F-10 criterion).
+const abandonedProcessingInterval = time.Hour
+
 func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 	if err := r.Repos.CleanupAuthTokens(ctx); err != nil {
 		logger.Warn("auth token cleanup failed", "error", err)
@@ -106,6 +118,22 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 			logger.Warn("push subscription expiry failed", "error", err)
 		}
 	}
+	// Media-processing jobs: release jobs whose worker died, fail quarantined
+	// uploads abandoned for over an hour, then drop finished jobs past their
+	// 24-hour retention window.
+	if count, err := r.Repos.RequeueStaleProcessingJobs(ctx, staleProcessingInterval); err != nil {
+		logger.Warn("media processing requeue failed", "error", err)
+	} else if count > 0 {
+		logger.Info("released stale media processing jobs", "count", count)
+	}
+	if err := r.sweepAbandonedProcessing(ctx, logger); err != nil {
+		logger.Warn("abandoned quarantine sweep failed", "error", err)
+	}
+	if count, err := r.Repos.PurgeExpiredProcessingJobs(ctx); err != nil {
+		logger.Warn("expired media processing job purge failed", "error", err)
+	} else if count > 0 {
+		logger.Info("purged expired media processing jobs", "count", count)
+	}
 	r.drainDeletionQueue(ctx, logger)
 	if r.Backlog != nil {
 		if count, err := r.Repos.CountDeletionBacklog(ctx); err != nil {
@@ -114,6 +142,36 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 			r.Backlog(count)
 		}
 	}
+}
+
+// sweepAbandonedProcessing deletes the raw quarantine objects of media
+// processing jobs that never reached ready within the abandoned interval and
+// marks those jobs failed with a stable, owner-facing code. An object that
+// refuses immediate deletion becomes a durable deletion job so no raw bytes
+// are ever orphaned.
+func (r CleanupRunner) sweepAbandonedProcessing(ctx context.Context, logger *slog.Logger) error {
+	items, err := r.Repos.AbandonedQuarantine(ctx, abandonedProcessingInterval)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, item := range items {
+		if err := r.Store.Delete(ctx, item.QuarantineKey); err != nil {
+			if enqueueErr := r.Repos.EnqueueMediaDeletion(ctx, "media-processing-abandoned", []string{item.QuarantineKey}); enqueueErr != nil {
+				logger.Error("persisting abandoned quarantine deletion failed", "job_id", item.JobID, "storage_key", item.QuarantineKey, "error", enqueueErr)
+				if firstErr == nil {
+					firstErr = enqueueErr
+				}
+			}
+		}
+		if err := r.Repos.FailProcessingJob(ctx, item.JobID, mediaprocessing.ErrorTimeout); err != nil {
+			logger.Error("failing abandoned media processing job failed", "job_id", item.JobID, "error", err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
 }
 
 // RetireRetainedMedia atomically marks a retained media record removed and

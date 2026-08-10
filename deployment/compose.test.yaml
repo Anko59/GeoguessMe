@@ -95,6 +95,7 @@ services:
       RATE_LIMIT_SIGNUP: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
       RATE_LIMIT_EMAIL: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
       RATE_LIMIT_DEFAULT: "identity:10/1m,trustedIP:50000/1m"
+      MEDIA_PROCESSING_WORKER: "true"
     depends_on:
       migration: { condition: service_completed_successfully }
       toxiproxy: { condition: service_started }

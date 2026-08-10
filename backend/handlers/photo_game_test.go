@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -181,7 +182,7 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	}
 }
 
-func TestUploadRecordedVideo(t *testing.T) {
+func TestUploadRecordedVideoQueuesProcessingJob(t *testing.T) {
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -191,9 +192,9 @@ func TestUploadRecordedVideo(t *testing.T) {
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
-	mock.ExpectCommit()
+	// The video branch must not create challenge rows synchronously: the only
+	// database write is the queued processing job.
+	mock.ExpectExec("INSERT INTO media_processing_jobs").WithArgs(pgxmock.AnyArg(), "user-1", models.MediaProcessingKindChallenge, pgxmock.AnyArg(), groupID, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
 	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
 	if err != nil {
@@ -201,8 +202,28 @@ func TestUploadRecordedVideo(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 	gameAPI.UploadPhoto(recorder, request)
-	if recorder.Code != http.StatusCreated {
+	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("video upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	// The response is the queued job DTO; the raw source lives under a private
+	// quarantine key, never under a served prefix.
+	var job models.MediaProcessingJobResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != models.MediaProcessingStatusQueued || job.Kind != models.MediaProcessingKindChallenge {
+		t.Fatalf("job DTO = %+v", job)
+	}
+	if job.Result != nil || job.ErrorCode != "" {
+		t.Fatalf("queued job leaked result or error code = %+v", job)
+	}
+	raw, err := store.Get(context.Background(), storage.QuarantineKey(job.ID))
+	if err != nil {
+		t.Fatalf("quarantine object missing: %v", err)
+	}
+	defer raw.Close()
+	if got, _ := io.ReadAll(raw); !bytes.Equal(got, webm) {
+		t.Fatalf("quarantine bytes differ: got %d bytes, want %d", len(got), len(webm))
 	}
 }
 

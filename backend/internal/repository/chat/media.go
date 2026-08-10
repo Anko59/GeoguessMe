@@ -15,15 +15,26 @@ import (
 // Sender resolution and reply validation reuse the same canonical helpers as
 // text-message creation (SaveMessage), so the two paths cannot drift.
 func (r *Repository) CreateChatMediaMessage(ctx context.Context, msg *models.Message, asset *models.ChatMedia) error {
-	if msg == nil || asset == nil || msg.ID == "" || asset.ID == "" || msg.GroupID != asset.GroupID || msg.UserID != asset.UserID {
-		return errors.New("invalid chat media message")
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := r.CreateChatMediaMessageTx(ctx, tx, msg, asset); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
+// CreateChatMediaMessageTx records the attachment and its message using the
+// supplied transaction. It is the tx-scoped variant used by the
+// media-processing worker so the chat message and the job completion commit
+// atomically. On success it fills msg with the media reference, matching
+// CreateChatMediaMessage.
+func (r *Repository) CreateChatMediaMessageTx(ctx context.Context, tx pgx.Tx, msg *models.Message, asset *models.ChatMedia) error {
+	if msg == nil || asset == nil || msg.ID == "" || asset.ID == "" || msg.GroupID != asset.GroupID || msg.UserID != asset.UserID {
+		return errors.New("invalid chat media message")
+	}
 	r.resolveSenderProfile(ctx, tx, msg)
 	if err := r.validateReplyTarget(ctx, tx, msg.GroupID, msg.ReplyToID); err != nil {
 		return err
@@ -32,9 +43,6 @@ func (r *Repository) CreateChatMediaMessage(ctx context.Context, msg *models.Mes
 		return err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, media_id, reply_to_id, content, created_at) VALUES ($1,$2,$3,'media',$4,$5,$6,$7)`, msg.ID, msg.GroupID, msg.UserID, asset.ID, msg.ReplyToID, msg.Content, msg.CreatedAt); err != nil {
-		return err
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	msg.Kind = "media"

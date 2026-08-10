@@ -31,6 +31,8 @@ interface CameraViewProps {
     faceDetected: boolean;
     textBanner: TextBanner;
     uploading: boolean;
+    /** True while an uploaded video is being processed asynchronously. */
+    processingVideo: boolean;
     onStartCamera: () => void;
     onSetFileMode: () => void;
     onSwitchCamera: () => void;
@@ -76,6 +78,7 @@ export default function CameraView({
     faceDetected,
     textBanner,
     uploading,
+    processingVideo,
     onStartCamera,
     onSetFileMode,
     onSwitchCamera,
@@ -233,7 +236,14 @@ export default function CameraView({
                         {capturedPhoto && fileMode && filterPicker}
                         {showOptions && <div className="camera-options-popover">{optionsMenu}</div>}
                     </div>
-                    <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
+                    {processingVideo ? (
+                        <div className="video-processing-indicator" role="status">
+                            <div className="spinner"></div>
+                            <p>Processing video…</p>
+                        </div>
+                    ) : (
+                        <PreviewActions uploading={uploading} onRetake={onRetake} onSend={onUpload} />
+                    )}
                 </div>
             )}
         </div>

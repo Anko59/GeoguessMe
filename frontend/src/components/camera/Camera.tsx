@@ -3,6 +3,8 @@ import { isFilterableImageType } from './cameraUtils';
 import { useCameraSession } from './lifecycle/useCameraSession';
 import { useLensEffects } from './lifecycle/useLensEffects';
 import { useChallengeOptions, useChallengeUpload } from './useChallengeUpload';
+import { useMediaProcessingJob, mediaProcessingErrorMessage } from '../../hooks/useMediaProcessingJob';
+import type { MediaProcessingJob } from '../../types';
 import './Camera.css';
 import CameraView from './CameraView';
 import { capturePhotoFrame, prepareImageForFilters } from './capture/cameraImagePreparation';
@@ -20,6 +22,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const [error, setError] = useState('');
     const [fileMode, setFileMode] = useState(false);
     const [flashVisible, setFlashVisible] = useState(false);
+    const [processingJobID, setProcessingJobID] = useState<string | null>(null);
     const [textBanner, setTextBanner] = useState<TextBanner>(EMPTY_TEXT_BANNER);
     const [showFilters, setShowFilters] = useState(
         () => !window.matchMedia('(pointer: coarse), (max-width: 40rem)').matches,
@@ -250,6 +253,39 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         setFileMode,
         setError,
         setUploading,
+        setProcessingJobID,
+    });
+
+    // Poll an asynchronous video-processing job to completion. The status
+    // endpoint is owner-only and never exposes storage keys or raw upload
+    // metadata; the poll itself stops on completion, unmount, or logout.
+    // Terminal transitions are handled through the hook callbacks (fired from
+    // the async poll) rather than by an effect that sets state synchronously.
+    const handleJobReady = useCallback(() => {
+        setProcessingJobID(null);
+        onUploadComplete();
+    }, [onUploadComplete, setProcessingJobID]);
+
+    const handleJobFailed = useCallback(
+        (job: MediaProcessingJob) => {
+            setProcessingJobID(null);
+            setError(mediaProcessingErrorMessage(job.error_code));
+        },
+        [setError, setProcessingJobID],
+    );
+
+    const handleJobUnavailable = useCallback(
+        (message: string) => {
+            setProcessingJobID(null);
+            setError(message);
+        },
+        [setError, setProcessingJobID],
+    );
+
+    useMediaProcessingJob(processingJobID, {
+        onReady: handleJobReady,
+        onFailed: handleJobFailed,
+        onUnavailable: handleJobUnavailable,
     });
 
     useEffect(() => {
@@ -283,6 +319,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 faceDetected={faceDetected}
                 textBanner={textBanner}
                 uploading={uploading}
+                processingVideo={processingJobID !== null}
                 onStartCamera={() => void startCamera()}
                 onSetFileMode={() => setFileMode(true)}
                 onSwitchCamera={switchCamera}

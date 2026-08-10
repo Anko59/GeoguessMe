@@ -398,3 +398,23 @@ PushSubscriptionRequest:
       properties:
         p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
         auth: { type: string, description: "Base64url 16-byte authentication secret" }
+
+MediaProcessingJob:
+  type: object
+  required: [id, kind, status, queued_at]
+  description: Owner-only status of an asynchronous video-processing job. Storage keys and upload metadata are never serialized.
+  properties:
+    id: { type: string, format: uuid }
+    kind: { type: string, enum: [challenge, chat] }
+    status: { type: string, enum: [queued, processing, ready, failed] }
+    queued_at: { type: string, format: date-time }
+    started_at: { type: [string, "null"], format: date-time }
+    completed_at: { type: [string, "null"], format: date-time }
+    result:
+      description: Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned.
+      oneOf:
+        - { $ref: "#/ChallengeCreated" }
+        - { $ref: "#/Message" }
+    error_code:
+      type: string
+      description: Stable, non-sensitive failure code (for example invalid_video or transcode_failed); present only when the job failed.
