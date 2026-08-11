@@ -69,12 +69,11 @@ Start with these canonical entry points, then drill into the map below.
   from the composition root: the `database.DB` global, the handler runtime
   globals, and the package-level auth token state were removed in the PR 7
   migration. Only `backend/internal/config/` reads environment variables. The
-  single allowlisted exception is the pre-existing rate-limiter singleton in
-  `backend/internal/middleware/rate_limit.go` (mutex-protected process-global
-  rate-limiting state; test hooks gated to `APP_ENV=test`). It is the only entry
-  in the explicit allowlist `tools/quality/archcheck/mutable-globals.allowlist`,
-  enforced by the durable architecture checker (`make archcheck`,
-  `make test-archcheck-regression`).
+  explicit allowlist `tools/quality/archcheck/mutable-globals.allowlist`
+  contains only the mutex-protected process-wide rate-limit store and private
+  static lookup tables that Go cannot express as constants. Every entry carries
+  its ownership justification and is enforced by the durable architecture
+  checker (`make archcheck`, `make test-archcheck-regression`).
 - Frontend data flows down: pages compose components, components use hooks, and
   hooks call `api.ts`. Wire shapes live in `frontend/src/types/`; view models
   and local UI state are separate from wire types.
@@ -309,10 +308,9 @@ architecture rules; run it with `make archcheck` and exercise it with
 
 - **No production package-level mutable application dependencies**
   (`mutable-globals`): `var _` assertions, `embed.FS` values, `errors.New` /
-  `fmt.Errorf` sentinels, basic and byte-string literals, and non-pointer
-  composite-literal tables are exempt by construction; everything else must be
-  listed in `tools/quality/archcheck/mutable-globals.allowlist` (the
-  rate-limiter singleton is the only entry).
+  `fmt.Errorf` sentinels, basic literals, and byte-string literals are exempt by
+  construction; everything else must be listed with an ownership justification
+  in `tools/quality/archcheck/mutable-globals.allowlist`.
 - **No SQL in HTTP handlers** (`sql-in-handlers`): `backend/handlers/` must not
   import `database/sql` or `pgx`, and must not contain SQL command string
   literals.

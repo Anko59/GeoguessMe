@@ -9,9 +9,9 @@ import (
 	"geoguessme/handlers"
 	authsvc "geoguessme/internal/auth"
 	"geoguessme/internal/progression"
+	"geoguessme/internal/repository"
 	"geoguessme/internal/validation"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -66,8 +66,7 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	// promotion), so no email availability check is performed here.
 	updated, err := a.repos.UpdateProfile(r.Context(), userID, req.Username, req.Email, req.Avatar)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.Is(err, repository.ErrUsernameConflict) {
 			handlers.WriteError(w, http.StatusConflict, "profile_update_failed", "Unable to update profile")
 			return
 		}

@@ -18,7 +18,6 @@ import (
 	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -74,8 +73,7 @@ func (a *AuthAPI) Signup(w http.ResponseWriter, r *http.Request) {
 	user := &models.User{ID: uuid.NewString(), Username: req.Username, PendingEmail: req.Email, Password: string(hash), Avatar: a.randomAvatar(), CreatedAt: now, UpdatedAt: now}
 	if err := a.repos.CreateUser(r.Context(), user); err != nil {
 		// A concurrent signup can still lose the username race.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.Is(err, repository.ErrUsernameConflict) {
 			handlers.WriteError(w, http.StatusConflict, "signup_unavailable", "Unable to create an account with these details")
 			return
 		}

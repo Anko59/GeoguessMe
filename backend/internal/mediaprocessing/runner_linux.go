@@ -12,14 +12,14 @@ import (
 	"syscall"
 )
 
-// helperEnv marks a re-exec'd process that must apply the package rlimits and
+// helperArg marks a re-exec'd process that must apply the package rlimits and
 // then exec the real tool. OSCommandRunner.Run re-execs its own binary with
-// this marker because Go's syscall.SysProcAttr no longer carries a Setrlimit
+// this private argument because Go's syscall.SysProcAttr no longer carries a Setrlimit
 // field: the re-exec'd copy is a fresh process, so the limits it applies with
 // syscall.Setrlimit bind every child it execs (ffprobe/ffmpeg) from the
 // start. The worker's main() MUST call HandleRlimitHelperInvocation before
 // any other logic so re-exec'd copies route into the trampoline.
-const helperEnv = "GEOSSMEDIAPROCESSING_RLIMIT_HELPER"
+const helperArg = "--geoguessme-media-rlimit-helper"
 
 // Resource ceilings applied to every ffprobe/ffmpeg child on Linux. They
 // mirror the worker container's deployment bounds (cpus: 1, mem: 512m,
@@ -67,14 +67,14 @@ func applyChildRlimits() error {
 
 // HandleRlimitHelperInvocation routes a re-exec'd process into the rlimit
 // trampoline. The worker's main() must call it as its first statement: when
-// the sentinel env var is absent it returns false immediately and normal
+// the sentinel argument is absent it returns false immediately and normal
 // startup proceeds; when present it applies the package rlimits and execs the
 // real tool, never returning. Unit tests route through TestMain instead.
 func HandleRlimitHelperInvocation() bool {
-	if os.Getenv(helperEnv) != "1" {
+	if len(os.Args) < 2 || os.Args[1] != helperArg {
 		return false
 	}
-	args := os.Args[1:]
+	args := os.Args[2:]
 	if len(args) == 0 {
 		os.Exit(1)
 	}
@@ -83,13 +83,7 @@ func HandleRlimitHelperInvocation() bool {
 		os.Exit(126)
 	}
 	name := args[0]
-	env := make([]string, 0, len(os.Environ()))
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, helperEnv+"=") {
-			env = append(env, kv)
-		}
-	}
-	if err := syscall.Exec(name, append([]string{name}, args[1:]...), env); err != nil {
+	if err := syscall.Exec(name, append([]string{name}, args[1:]...), os.Environ()); err != nil {
 		fmt.Fprintf(os.Stderr, "mediaprocessing: exec %s: %v\n", name, err)
 		os.Exit(127)
 	}
@@ -115,9 +109,8 @@ func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]
 	if err != nil {
 		return nil, 0, fmt.Errorf("mediaprocessing: resolve self: %w", err)
 	}
-	cmdArgs := append([]string{name}, args...)
+	cmdArgs := append([]string{helperArg, name}, args...)
 	cmd := exec.CommandContext(ctx, self, cmdArgs...)
-	cmd.Env = append(os.Environ(), helperEnv+"=1")
 	var stdout, stderr limitedCapture
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

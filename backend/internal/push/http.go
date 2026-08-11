@@ -265,10 +265,8 @@ type latencyHistogram struct {
 	count   atomic.Uint64
 }
 
-var deliveryHistogramBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
-
 func newServiceMetrics() *serviceMetrics {
-	return &serviceMetrics{duration: latencyHistogram{buckets: deliveryHistogramBuckets}}
+	return &serviceMetrics{duration: latencyHistogram{buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}}}
 }
 
 func (m *serviceMetrics) observeDuration(seconds float64) {
