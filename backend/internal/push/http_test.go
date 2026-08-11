@@ -138,6 +138,17 @@ func TestUnsubscribeByEndpointAndAll(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete all status = %d (%s)", rec.Code, rec.Body.String())
 	}
+
+	// Malformed input must not be interpreted as an empty-body delete-all.
+	store.subsByUser["user-1"] = []Subscription{{ID: "s3", UserID: "user-1", Endpoint: "https://example/c"}}
+	rec = httptest.NewRecorder()
+	h.Unsubscribe(rec, userRequest(http.MethodDelete, "/", `{bad json`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed unsubscribe status = %d, want 400", rec.Code)
+	}
+	if got := len(store.subsByUser["user-1"]); got != 1 {
+		t.Fatalf("malformed unsubscribe removed subscriptions, remaining = %d", got)
+	}
 }
 
 func TestSubscribeDisabledWhenNoKeys(t *testing.T) {

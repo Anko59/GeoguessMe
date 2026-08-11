@@ -329,7 +329,7 @@ func TestUpsertRefreshesExistingEndpointAtCap(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT id FROM users WHERE id = \\$1 FOR UPDATE").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
 	mock.ExpectQuery("push_subscriptions WHERE user_id = \\$1 AND endpoint = \\$2").WithArgs("user-1", "https://fcm.example/a").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
-	mock.ExpectExec("INSERT INTO push_subscriptions(?s).*created_at = EXCLUDED.created_at.*last_used_at = NULL").WithArgs(
+	mock.ExpectExec("INSERT INTO push_subscriptions(?s).*ON CONFLICT \\(endpoint\\).*user_id = EXCLUDED.user_id.*created_at = EXCLUDED.created_at.*last_used_at = NULL").WithArgs(
 		pgxmock.AnyArg(), "user-1", "https://fcm.example/a", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 	).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
@@ -374,5 +374,11 @@ func TestCountAndTouchSubscriptions(t *testing.T) {
 	mock.ExpectExec("UPDATE push_subscriptions SET last_used_at").WithArgs("s1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	if err := (pgStore{pool: mock}).TouchSubscription(context.Background(), "s1"); err != nil {
 		t.Fatalf("TouchSubscription error = %v", err)
+	}
+
+	mock.ExpectExec("DELETE FROM push_subscriptions WHERE user_id = \\$1").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 2))
+	removed, err := (pgStore{pool: mock}).DeleteAll(context.Background(), "user-1")
+	if err != nil || removed != 2 {
+		t.Fatalf("DeleteAll = %d, %v; want 2, nil", removed, err)
 	}
 }

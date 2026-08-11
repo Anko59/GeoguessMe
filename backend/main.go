@@ -151,7 +151,7 @@ func main() {
 	}
 	hub.Stop()
 	// Cancel background worker contexts so in-flight cleanup and push delivery
-	// stop promptly, then drain the push queue. Stop is idempotent.
+	// stop promptly, then account for queued notifications as drops. Stop is idempotent.
 	stopWorkers()
 	pushSvc.Stop()
 }

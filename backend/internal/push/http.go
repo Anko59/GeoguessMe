@@ -130,20 +130,20 @@ func (h *HTTP) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Endpoint string `json:"endpoint"`
 	}
-	_ = decodePushJSON(w, r, &req) // body optional; endpoint may be omitted to clear all
+	if !decodePushJSON(w, r, &req) { // body optional; endpoint may be omitted to clear all
+		return
+	}
 	endpoint := strings.TrimSpace(req.Endpoint)
 	userID := handlers.GetUserIDFromContext(r)
 	if endpoint == "" {
-		// Removing every subscription for the device is a valid sign-out action.
-		subs, err := h.svc.store.ListForUser(r.Context(), userID)
+		// Removing every subscription is a valid sign-out action. Perform one
+		// database operation so partial failures can never be reported as success.
+		removed, err := h.svc.store.DeleteAll(r.Context(), userID)
 		if err != nil {
 			writePushError(w, http.StatusInternalServerError, "internal_error", "Unable to remove subscriptions")
 			return
 		}
-		for i := range subs {
-			_ = h.svc.store.Delete(r.Context(), userID, subs[i].Endpoint)
-		}
-		writePushJSON(w, http.StatusOK, map[string]any{"removed": len(subs)})
+		writePushJSON(w, http.StatusOK, map[string]any{"removed": removed})
 		return
 	}
 	if err := h.svc.store.Delete(r.Context(), userID, endpoint); err != nil {

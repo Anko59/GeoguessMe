@@ -128,6 +128,13 @@ func (f *fakeStore) Delete(_ context.Context, userID, endpoint string) error {
 	}
 	return ErrNoSubscription
 }
+func (f *fakeStore) DeleteAll(_ context.Context, userID string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	removed := int64(len(f.subsByUser[userID]))
+	delete(f.subsByUser, userID)
+	return removed, nil
+}
 func (f *fakeStore) ListForUser(_ context.Context, userID string) ([]Subscription, error) {
 	return f.subsByUser[userID], nil
 }

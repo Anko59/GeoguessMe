@@ -85,8 +85,8 @@ func NewService(deps Deps) *Service {
 func (s *Service) Keys() *KeyPair { return s.keys }
 
 // Start launches background delivery workers and the subscription-count
-// refresh loop. Workers stop when ctx is cancelled and the pending job queue
-// is drained. The explicit workers argument is honored when positive; a
+// refresh loop. Workers stop when ctx is cancelled; Stop accounts for any
+// queued best-effort jobs as drops. The explicit workers argument is honored when positive; a
 // non-positive value falls back to the configured PUSH_DELIVERY_WORKERS.
 func (s *Service) Start(ctx context.Context, workers int) {
 	if s.keys == nil {

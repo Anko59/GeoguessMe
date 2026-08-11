@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,8 +113,11 @@ func (s *Sender) Send(ctx context.Context, sub *Subscription, payload []byte) er
 	if err != nil {
 		return fmt.Errorf("push request failed: %w", err)
 	}
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
-	return classifyStatus(resp)
+	statusErr := classifyStatus(resp)
+	if closeErr := resp.Body.Close(); statusErr == nil && closeErr != nil {
+		return fmt.Errorf("close push response: %w", closeErr)
+	}
+	return statusErr
 }
 
 // classifyStatus maps push-service response codes to permanent vs. transient

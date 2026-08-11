@@ -149,12 +149,23 @@ func (g *EndpointGuard) dialContext(ctx context.Context, network, addr string) (
 	if err != nil {
 		return nil, fmt.Errorf("push dial: resolve %s: %w", host, err)
 	}
+	var lastDialErr error
 	for _, resolved := range addrs {
 		ip := resolved.IP
 		if ip == nil || ipBlocked(ip, g.allowLoopback) {
 			continue
 		}
-		return g.dial(ctx, network, net.JoinHostPort(ip.String(), port))
+		conn, dialErr := g.dial(ctx, network, net.JoinHostPort(ip.String(), port))
+		if dialErr == nil {
+			return conn, nil
+		}
+		lastDialErr = dialErr
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("push dial: connect %s: %w", host, ctx.Err())
+		}
+	}
+	if lastDialErr != nil {
+		return nil, fmt.Errorf("push dial: all allowed addresses for %s failed: %w", host, lastDialErr)
 	}
 	return nil, fmt.Errorf("push dial: no allowed address for %s", host)
 }

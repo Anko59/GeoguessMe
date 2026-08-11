@@ -36,6 +36,7 @@ type NotificationTarget struct {
 type Store interface {
 	Upsert(ctx context.Context, sub *Subscription, maxPerUser int) error
 	Delete(ctx context.Context, userID, endpoint string) error
+	DeleteAll(ctx context.Context, userID string) (int64, error)
 	ListForUser(ctx context.Context, userID string) ([]Subscription, error)
 	ListForGroupUsers(ctx context.Context, groupID string, userIDs []string) ([]Subscription, error)
 	DeleteByID(ctx context.Context, id string) error
@@ -62,10 +63,12 @@ type pgStore struct {
 func NewStore(pool database.Pool) Store { return pgStore{pool: pool} }
 
 // Upsert stores a subscription for a user, creating it or refreshing an
-// existing (user_id, endpoint) row. maxPerUser bounds how many distinct
-// endpoints one user may hold; refreshing an existing endpoint never counts
-// against the cap. The cap check and the write run inside one transaction that
-// locks the user row, so concurrent subscribes cannot slip past the limit.
+// existing endpoint. A browser endpoint is globally unique: subscribing it as
+// a different account transfers ownership so the previous account cannot keep
+// sending private notifications to that browser. maxPerUser bounds how many
+// distinct endpoints one user may hold; refreshing an endpoint already owned
+// by that user never counts against the cap. The cap check and write run inside
+// one transaction that locks the user row.
 func (s pgStore) Upsert(ctx context.Context, sub *Subscription, maxPerUser int) error {
 	if sub.ID == "" {
 		sub.ID = uuid.NewString()
@@ -98,7 +101,8 @@ func (s pgStore) Upsert(ctx context.Context, sub *Subscription, maxPerUser int) 
 	}
 	const query = `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id, endpoint) DO UPDATE SET
+		ON CONFLICT (endpoint) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
 			p256dh = EXCLUDED.p256dh,
 			auth = EXCLUDED.auth,
 			user_agent = EXCLUDED.user_agent,
@@ -153,6 +157,14 @@ func (s pgStore) Delete(ctx context.Context, userID, endpoint string) error {
 	return nil
 }
 
+func (s pgStore) DeleteAll(ctx context.Context, userID string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE user_id = $1`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("delete all push subscriptions: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (s pgStore) ListForUser(ctx context.Context, userID string) ([]Subscription, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
@@ -169,7 +181,8 @@ func (s pgStore) ListForGroupUsers(ctx context.Context, groupID string, userIDs 
 	rows, err := s.pool.Query(ctx, `SELECT ps.id, ps.user_id, ps.endpoint, ps.p256dh, ps.auth, ps.user_agent, ps.created_at
 		FROM push_subscriptions ps
 		JOIN group_members gm ON gm.user_id = ps.user_id AND gm.group_id = $1
-		WHERE ps.user_id = ANY($2)`, groupID, userIDs)
+		LEFT JOIN group_notification_preferences np ON np.group_id = gm.group_id AND np.user_id = gm.user_id
+		WHERE ps.user_id = ANY($2) AND COALESCE(np.enabled, TRUE)`, groupID, userIDs)
 	if err != nil {
 		return nil, err
 	}

@@ -198,6 +198,30 @@ func TestDialGuardPinsAllowedAddress(t *testing.T) {
 	}
 }
 
+func TestDialGuardFallsBackAcrossAllowedAddresses(t *testing.T) {
+	var dialed []string
+	dial := func(_ context.Context, _, addr string) (net.Conn, error) {
+		dialed = append(dialed, addr)
+		if len(dialed) == 1 {
+			return nil, errors.New("first address unavailable")
+		}
+		return nil, nil
+	}
+	guard := newEndpointGuard(
+		[]string{"fcm.googleapis.com"},
+		false,
+		stubResolver{"fcm.googleapis.com": {net.ParseIP("8.8.8.8"), net.ParseIP("1.1.1.1")}},
+		dial,
+	)
+	if _, err := guard.dialContext(context.Background(), "tcp", "fcm.googleapis.com:443"); err != nil {
+		t.Fatalf("second public address should recover delivery: %v", err)
+	}
+	want := []string{"8.8.8.8:443", "1.1.1.1:443"}
+	if strings.Join(dialed, ",") != strings.Join(want, ",") {
+		t.Fatalf("dial attempts = %v, want %v", dialed, want)
+	}
+}
+
 func TestDialGuardReResolvesPerDialAgainstRebinding(t *testing.T) {
 	resolver := &flippingResolver{answers: [][]net.IP{{net.ParseIP("8.8.8.8")}, {net.ParseIP("127.0.0.1")}}}
 	guard := newEndpointGuard([]string{"fcm.googleapis.com"}, false, resolver, recordDial(&[]string{}))

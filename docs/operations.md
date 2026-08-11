@@ -23,17 +23,17 @@ curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 
 OpenMetrics (Prometheus) format at `/metrics`:
 
-| Metric                                | Type      | Description                                                      |
-| ------------------------------------- | --------- | ---------------------------------------------------------------- |
-| `geoguessme_http_requests_total`      | Counter   | Total HTTP requests                                              |
-| `geoguessme_http_errors_total`        | Counter   | HTTP 5xx responses                                               |
-| `geoguessme_storage_cleanup_backlog`  | Gauge     | Pending object-deletion jobs                                     |
-| `geoguessme_limiter_rejections_total` | Counter   | Rate-limit 429 rejections (all policies, and per `policy` label) |
-| `push_queue_depth`                    | Gauge     | Web Push jobs waiting in the fan-out queue                       |
-| `push_drops_total`                    | Counter   | Notifications dropped because the push queue was full            |
-| `push_delivery_duration_seconds`      | Histogram | Web Push delivery latency (buckets to 5s, the per-send deadline) |
-| `push_delivery_failures_total`        | Counter   | Failed Web Push deliveries (including timeout expiries)          |
-| `push_subscriptions_total`            | Gauge     | Total stored push subscriptions (refreshed once a minute)        |
+| Metric                                | Type      | Description                                                       |
+| ------------------------------------- | --------- | ----------------------------------------------------------------- |
+| `geoguessme_http_requests_total`      | Counter   | Total HTTP requests                                               |
+| `geoguessme_http_errors_total`        | Counter   | HTTP 5xx responses                                                |
+| `geoguessme_storage_cleanup_backlog`  | Gauge     | Pending object-deletion jobs                                      |
+| `geoguessme_limiter_rejections_total` | Counter   | Rate-limit 429 rejections (all policies, and per `policy` label)  |
+| `push_queue_depth`                    | Gauge     | Web Push jobs waiting in the fan-out queue                        |
+| `push_drops_total`                    | Counter   | Notifications dropped because the queue was full or shutting down |
+| `push_delivery_duration_seconds`      | Histogram | Web Push delivery latency (buckets to 5s, the per-send deadline)  |
+| `push_delivery_failures_total`        | Counter   | Failed Web Push deliveries (including timeout expiries)           |
+| `push_subscriptions_total`            | Gauge     | Total stored push subscriptions (refreshed once a minute)         |
 
 ### Operational thresholds
 
