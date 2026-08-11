@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import ws from 'k6/ws';
 import { check } from 'k6';
+import crypto from 'k6/crypto';
 import { Rate, Counter } from 'k6/metrics';
 
 const websocketFailures = new Rate('websocket_delivery_failures');
@@ -22,7 +23,7 @@ export const options = {
 export function setup() {
     // Each VU gets a distinct identity so the signup policy's per-identity
     // bucket never fires on legitimate distinct clients that register once.
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const suffix = `${Date.now()}_${crypto.sha256(crypto.randomBytes(8), 'hex').slice(0, 8)}`;
     const users = [];
     for (let i = 0; i < VUS; i++) {
         const username = `load_${suffix}_${i}`;
