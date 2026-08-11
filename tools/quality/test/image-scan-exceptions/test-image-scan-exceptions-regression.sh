@@ -9,6 +9,8 @@
 #   4. An exception expiring more than 30 days out is rejected.
 #   5. An unapproved exception (approved: false) is rejected.
 #   6. An image/digest mismatch is rejected.
+#   7. Append mode preserves direct-image exceptions while adding base-image
+#      exceptions for a derived image.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
@@ -216,6 +218,20 @@ if printf '%s\n' "$out" | grep -q 'image digest does not match'; then
     pass "reports image/digest mismatch"
 else
     fail "image/digest mismatch error message absent"
+fi
+
+# ── Test 7: append base-image exceptions to a derived-image file ────────────
+echo "--- Test 7: append mode preserves existing entries ---"
+printf '%s\n' 'CVE-2026-DIRECT' >"$ignore"
+if IMAGE_SCAN_EXCEPTIONS="$TMP/valid.yaml" bash "$SCRIPT" --append "$IMAGE" "$ignore" >/dev/null 2>&1; then
+    pass "append mode exits 0"
+else
+    fail "append mode failed"
+fi
+if grep -qx 'CVE-2026-DIRECT' "$ignore" && grep -qx 'CVE-2026-00001' "$ignore"; then
+    pass "append preserves direct entry and adds base entry"
+else
+    fail "append did not preserve and extend ignorefile"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

@@ -73,6 +73,15 @@ blocking pass) containing only the exceptions that match the scanned reference
 or its name plus digest. The JSON report remains complete and includes excepted
 findings.
 
+Application images also carry the standard OCI `base.name` and `base.digest`
+labels. When an image is available in the Docker daemon, the gate validates both
+labels and appends exceptions belonging to that exact digest-pinned base image.
+This lets a reviewed upstream exception follow unchanged base layers into the
+backend or web image without creating impossible pre-build exceptions for a
+publication digest that does not exist yet. A missing half, malformed digest, or
+digest embedded in `base.name` fails closed. Application layers must not install
+or replace operating-system packages after the labelled base stage.
+
 Rules:
 
 - Only **fixed** High/Critical findings may be excepted. Unfixed findings are

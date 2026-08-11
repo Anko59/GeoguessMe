@@ -11,6 +11,8 @@ RUN npm run build
 
 # Caddy 2.11.4-alpine (immutable index digest).
 FROM caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+LABEL org.opencontainers.image.base.name="caddy:2.11.4-alpine" \
+    org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 COPY --from=build /app/frontend/dist /srv
 COPY deployment/caddy/Caddyfile /etc/caddy/Caddyfile
 RUN addgroup -S -g 1000 caddy \

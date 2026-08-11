@@ -4,9 +4,10 @@
 #
 # Usage:
 #   image-scan-exceptions-check.sh                 # validate only (fail fast)
-#   image-scan-exceptions-check.sh --emit REF OUT  # validate, then write the
-#                                                  # trivy ignorefile for image
-#                                                  # REF to OUT
+#   image-scan-exceptions-check.sh --emit REF OUT   # validate, then replace the
+#                                                   # ignorefile with REF matches
+#   image-scan-exceptions-check.sh --append REF OUT # validate, then append REF
+#                                                   # matches to the ignorefile
 #
 # The exceptions file (IMAGE_SCAN_EXCEPTIONS or
 # tools/quality/image-scan-exceptions.yaml) is a YAML list of records:
@@ -27,7 +28,7 @@ set -euo pipefail
 EXCEPTIONS_FILE="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml}"
 
 usage() {
-    echo "usage: $0 [--emit IMAGE_REF OUTFILE]" >&2
+    echo "usage: $0 [--emit|--append IMAGE_REF OUTFILE]" >&2
     exit 2
 }
 
@@ -36,9 +37,9 @@ REF=""
 OUT=""
 case "${1:-}" in
     "") ;;
-    --emit)
+    --emit | --append)
         [ $# -eq 3 ] || usage
-        MODE=emit
+        MODE=${1#--}
         REF=$2
         OUT=$3
         ;;
@@ -159,7 +160,7 @@ validate_record() {
         fail=1
     }
 
-    if [ "$MODE" = "emit" ]; then
+    if [ "$MODE" = "emit" ] || [ "$MODE" = "append" ]; then
         local ref_name=${REF%%@sha256:*}
         local ref_digest=""
         case "$REF" in
@@ -178,6 +179,8 @@ validate_record() {
 
 if [ "$MODE" = "emit" ]; then
     : >"$OUT"
+elif [ "$MODE" = "append" ]; then
+    touch "$OUT"
 fi
 
 if [ -n "$records" ]; then

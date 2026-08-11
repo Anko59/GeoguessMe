@@ -11,6 +11,8 @@ HEALTH="$ROOT/deployment/scripts/hosted/health-check.sh"
 COMPOSE="$ROOT/deployment/compose.production.yaml"
 HOSTED="$ROOT/deployment/compose.hosted.yaml"
 CADDY="$ROOT/deployment/caddy/Caddyfile"
+FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
+BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
 
 fail() {
@@ -182,6 +184,10 @@ age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMM
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
+assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
+assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b"'
 
 # Reject malformed image input before touching Docker or secrets.
 if "$DEPLOY" dev latest latest 0123456789012345678901234567890123456789 >/dev/null 2>&1; then

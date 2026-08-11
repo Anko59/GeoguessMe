@@ -50,6 +50,16 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 		mkdir -p "security/image-reports/$$safe"; \
 		bash tools/quality/image-scan-exceptions-check.sh --emit "$$img" "security/image-reports/$$safe/ignore.trivy"; \
 		if docker image inspect "$$img" >/dev/null 2>&1; then \
+			base_name=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$$img"); \
+			base_digest=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.digest" }}' "$$img"); \
+			[ "$$base_name" = '<no value>' ] && base_name=''; \
+			[ "$$base_digest" = '<no value>' ] && base_digest=''; \
+			if [ -n "$$base_name" ] || [ -n "$$base_digest" ]; then \
+				[ -n "$$base_name" ] && [ -n "$$base_digest" ] || { echo "audit-images: $$img has incomplete OCI base-image provenance" >&2; exit 1; }; \
+				case "$$base_name" in *@sha256:*) echo "audit-images: $$img base.name must not contain a digest" >&2; exit 1;; esac; \
+				printf '%s' "$$base_digest" | grep -Eq '^sha256:[0-9a-f]{64}$$' || { echo "audit-images: $$img has malformed base.digest" >&2; exit 1; }; \
+				bash tools/quality/image-scan-exceptions-check.sh --append "$$base_name@$$base_digest" "security/image-reports/$$safe/ignore.trivy"; \
+			fi; \
 			docker save "$$img" -o "security/image-reports/$$safe/image.tar"; \
 			scan_target="--input /workspace/security/image-reports/$$safe/image.tar"; \
 		else \
