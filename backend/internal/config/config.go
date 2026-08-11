@@ -82,6 +82,29 @@ type Config struct {
 	VapidPublicKey  string
 	VapidPrivateKey string
 	VapidSubject    string
+
+	// PushEndpointAllowlist lists the DNS domains push subscriptions may
+	// target. Web Push endpoints are accepted only when their host matches an
+	// allowlisted domain exactly or as a subdomain. The default covers the
+	// canonical delivery hosts of the four major push providers (Google FCM,
+	// Mozilla Push, Apple Web Push, Windows). Production refuses to start with
+	// push enabled unless this list is non-empty.
+	PushEndpointAllowlist []string
+
+	// Push lifecycle and delivery bounds (F-08). PushMaxSubscriptionsPerUser
+	// caps the active subscriptions one account may hold; PushSubscriptionExpiry
+	// is the idle window after which the cleanup worker deletes a subscription
+	// (measured from last_used_at, or created_at when it was never used).
+	// PushDeliveryWorkers bounds the global delivery concurrency, while
+	// PushDeliveryPerHost caps concurrent sends to a single push-service host;
+	// PushDeliveryTimeout is the per-send deadline and PushQueueDepth the
+	// bounded fan-out job queue.
+	PushMaxSubscriptionsPerUser int
+	PushSubscriptionExpiry      time.Duration
+	PushDeliveryWorkers         int
+	PushDeliveryPerHost         int
+	PushDeliveryTimeout         time.Duration
+	PushQueueDepth              int
 }
 
 // RateLimitBucket is one fixed-window counter of a rate-limit policy.
@@ -251,6 +274,29 @@ func (c *Config) Validate() error {
 	if c.SMTPHost != "" && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
 		problems = append(problems, "SMTP_PORT must be an integer between 1 and 65535")
 	}
+	for _, domain := range c.PushEndpointAllowlist {
+		if !validAllowlistDomain(domain) {
+			problems = append(problems, fmt.Sprintf("invalid push endpoint allowlist domain %q", domain))
+		}
+	}
+	if c.PushMaxSubscriptionsPerUser < 1 {
+		problems = append(problems, "PUSH_MAX_SUBSCRIPTIONS_PER_USER must be at least 1")
+	}
+	if c.PushSubscriptionExpiry <= 0 {
+		problems = append(problems, "PUSH_SUBSCRIPTION_EXPIRY must be positive")
+	}
+	if c.PushDeliveryWorkers < 1 {
+		problems = append(problems, "PUSH_DELIVERY_WORKERS must be at least 1")
+	}
+	if c.PushDeliveryPerHost < 1 {
+		problems = append(problems, "PUSH_DELIVERY_PER_HOST must be at least 1")
+	}
+	if c.PushDeliveryTimeout <= 0 {
+		problems = append(problems, "PUSH_DELIVERY_TIMEOUT must be positive")
+	}
+	if c.PushQueueDepth < 1 {
+		problems = append(problems, "PUSH_QUEUE_DEPTH must be at least 1")
+	}
 	// VAPID is opt-in in production and ephemeral in development/test. A partial
 	// configuration must never be interpreted as either mode.
 	hasVapidPublicKey := c.VapidPublicKey != ""
@@ -294,6 +340,9 @@ func (c *Config) Validate() error {
 		} else if len(c.MetricsToken) < minMetricsTokenBytes {
 			problems = append(problems, "METRICS_TOKEN must be at least 32 bytes in production")
 		}
+		if hasVapidKeyPair && len(c.PushEndpointAllowlist) == 0 {
+			problems = append(problems, "PUSH_ENDPOINT_ALLOWLIST is required in production when Web Push is enabled")
+		}
 	}
 
 	if len(problems) > 0 {
@@ -317,6 +366,30 @@ func (c *Config) MetricsAuthRequired() bool {
 
 // isVapidSubject reports whether value is an acceptable RFC 8292 VAPID contact:
 // a non-empty mailto address or HTTPS URL with a host.
+// validAllowlistDomain reports whether value is an acceptable DNS push-provider
+// domain: non-empty, free of schemes, paths, and whitespace, and made only of
+// DNS label characters. Matching happens later against the exact host or a
+// subdomain, so wildcards are neither needed nor accepted.
+func validAllowlistDomain(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 253 || strings.ContainsAny(value, " \t/") || strings.Contains(value, "://") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func isVapidSubject(value string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(value))
 	if err != nil {

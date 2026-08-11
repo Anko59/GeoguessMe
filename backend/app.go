@@ -93,7 +93,7 @@ func NewApp(
 		Hub:     hub,
 		Logger:  logger,
 		Clock:   clock,
-		Metrics: &middleware.Metrics{},
+		Metrics: &middleware.Metrics{ExtraMetrics: pushSvc.MetricsText},
 		Auth:    authService,
 		Groups:  handlers.NewGroupAPI(repos),
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),

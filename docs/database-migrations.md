@@ -29,7 +29,8 @@ backend/internal/database/migrations/
 ├── ...
 ├── 014_retire_legacy_reaction_emoji.sql
 └── 2026/
-    └── 015_websocket_ticket_auth_version.sql
+    ├── 015_websocket_ticket_auth_version.sql
+    └── 016_push_subscription_expiry_index.sql
 ```
 
 New migrations:

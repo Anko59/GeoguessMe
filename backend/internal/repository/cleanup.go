@@ -36,16 +36,25 @@ func (r *Repository) ExpireChallengeViews(ctx context.Context) error {
 	return err
 }
 
+// ExpirePushSubscriptions removes push subscriptions that have not been used
+// for maxAge. The idle window is measured from last_used_at (refreshed on
+// every successful delivery) or created_at when a subscription was never used.
+// The expression index from migration 016 keeps this delete cheap.
+func (r *Repository) ExpirePushSubscriptions(ctx context.Context, maxAge time.Duration) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE COALESCE(last_used_at, created_at) < $1`, time.Now().UTC().Add(-maxAge))
+	return err
+}
+
 // Deleter is the minimal storage capability the cleanup worker needs.
 type Deleter interface {
 	Delete(context.Context, string) error
 }
 
 // CleanupRunner drives token cleanup, challenge-view expiry, retention media
-// deletion, and the durable object-deletion queue. It runs once immediately on
-// start so a freshly booting worker clears any backlog before waiting on its
-// interval. Persistence is reached through the injected Repos dependency; the
-// worker never touches a package global.
+// deletion, push-subscription expiry, and the durable object-deletion queue. It
+// runs once immediately on start so a freshly booting worker clears any backlog
+// before waiting on its interval. Persistence is reached through the injected
+// Repos dependency; the worker never touches a package global.
 type CleanupRunner struct {
 	Store            Deleter
 	Repos            *Repository
@@ -53,6 +62,10 @@ type CleanupRunner struct {
 	Logger           *slog.Logger
 	Backlog          func(pending int)
 	BacklogRemaining bool
+	// PushSubscriptionExpiry is the idle window after which unused push
+	// subscriptions are deleted. A non-positive value disables the sweep so
+	// existing test constructions without the field stay unchanged.
+	PushSubscriptionExpiry time.Duration
 }
 
 func (r CleanupRunner) Run(ctx context.Context) {
@@ -87,6 +100,11 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 	}
 	if err := r.sweepRetainedMedia(ctx, logger); err != nil {
 		logger.Warn("retention media sweep failed", "error", err)
+	}
+	if r.PushSubscriptionExpiry > 0 {
+		if err := r.Repos.ExpirePushSubscriptions(ctx, r.PushSubscriptionExpiry); err != nil {
+			logger.Warn("push subscription expiry failed", "error", err)
+		}
 	}
 	r.drainDeletionQueue(ctx, logger)
 	if r.Backlog != nil {

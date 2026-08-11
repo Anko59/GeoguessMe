@@ -2,6 +2,7 @@ package push
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -82,6 +83,36 @@ func TestSubscribeRejectsUnsupportedMethod(t *testing.T) {
 	}
 }
 
+func TestSubscribeEnforcesPerUserCap(t *testing.T) {
+	store := &fakeStore{subsByUser: map[string][]Subscription{}}
+	const p256dh = "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4"
+	const auth = "BTBZMqHH6r4Tts7J_aSIgg"
+	// Five existing endpoints fill the default cap of five.
+	for i := 0; i < 5; i++ {
+		store.subsByUser["user-1"] = append(store.subsByUser["user-1"], Subscription{
+			ID: fmt.Sprintf("s%d", i), UserID: "user-1", Endpoint: fmt.Sprintf("https://fcm.googleapis.com/e%d", i),
+		})
+	}
+	h := NewHTTP(newHTTPService(store))
+
+	// A sixth distinct endpoint is rejected with a 409.
+	rec := httptest.NewRecorder()
+	h.Subscribe(rec, userRequest(http.MethodPost, "/", fmt.Sprintf(`{"endpoint":"https://fcm.googleapis.com/new","keys":{"p256dh":"%s","auth":"%s"}}`, p256dh, auth)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("sixth subscribe status = %d, want 409 (%s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "subscription_limit") {
+		t.Fatalf("expected subscription_limit error code, got %s", rec.Body.String())
+	}
+
+	// Refreshing an existing endpoint stays allowed.
+	rec = httptest.NewRecorder()
+	h.Subscribe(rec, userRequest(http.MethodPost, "/", fmt.Sprintf(`{"endpoint":"https://fcm.googleapis.com/e0","keys":{"p256dh":"%s","auth":"%s"}}`, p256dh, auth)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("refresh status = %d, want 201 (%s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUnsubscribeByEndpointAndAll(t *testing.T) {
 	store := &fakeStore{subsByUser: map[string][]Subscription{
 		"user-1": {{ID: "s1", UserID: "user-1", Endpoint: "https://example/a"}, {ID: "s2", UserID: "user-1", Endpoint: "https://example/b"}},
@@ -106,6 +137,17 @@ func TestUnsubscribeByEndpointAndAll(t *testing.T) {
 	h.Unsubscribe(rec, userRequest(http.MethodDelete, "/", ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete all status = %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// Malformed input must not be interpreted as an empty-body delete-all.
+	store.subsByUser["user-1"] = []Subscription{{ID: "s3", UserID: "user-1", Endpoint: "https://example/c"}}
+	rec = httptest.NewRecorder()
+	h.Unsubscribe(rec, userRequest(http.MethodDelete, "/", `{bad json`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed unsubscribe status = %d, want 400", rec.Code)
+	}
+	if got := len(store.subsByUser["user-1"]); got != 1 {
+		t.Fatalf("malformed unsubscribe removed subscriptions, remaining = %d", got)
 	}
 }
 
