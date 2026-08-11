@@ -40,8 +40,8 @@ type credentials struct {
 }
 
 type groupRef struct {
-	ID   string
-	Code string
+	ID          string
+	InviteToken string
 }
 
 type wsMessage struct {
