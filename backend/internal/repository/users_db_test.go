@@ -140,6 +140,7 @@ func TestProfileAndPasswordUpdates(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET password").WithArgs("new-hash", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectCommit()
 	if err := repo.ChangePassword(context.Background(), user.ID, "new-hash"); err != nil {
 		t.Fatal(err)
@@ -172,6 +173,40 @@ func TestProfileAndPasswordUpdateFailures(t *testing.T) {
 	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs("user-1").WillReturnError(errors.New("session revoke failed"))
 	if err := repo.ChangePassword(context.Background(), "user-1", "hash"); err == nil {
 		t.Fatal("ChangePassword succeeded after session revoke failure")
+	}
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET password").WithArgs("hash", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs("user-1").WillReturnError(errors.New("ticket delete failed"))
+	if err := repo.ChangePassword(context.Background(), "user-1", "hash"); err == nil {
+		t.Fatal("ChangePassword succeeded after ticket revocation failure")
+	}
+}
+
+func TestRevokeAllCredentials(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET auth_version").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 2))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 4))
+	mock.ExpectCommit()
+	if err := repo.RevokeAllCredentials(context.Background(), "user-1"); err != nil {
+		t.Fatalf("revoke all credentials: %v", err)
+	}
+}
+
+func TestRevokeAllCredentialsRollsBackOnFailure(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET auth_version").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id").WithArgs("user-1").WillReturnError(errors.New("session revoke failed"))
+	mock.ExpectRollback()
+	if err := repo.RevokeAllCredentials(context.Background(), "user-1"); err == nil {
+		t.Fatal("RevokeAllCredentials succeeded after session revoke failure")
 	}
 }
 
@@ -215,7 +250,7 @@ func TestRotateRefreshSessionAndOneTimeTokens(t *testing.T) {
 	}
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE password_reset_tokens").WithArgs("bad-token").WillReturnError(pgx.ErrNoRows)
-	if err := repo.ResetPasswordTransaction(context.Background(), "bad-token", "new-hash"); !errors.Is(err, ErrTokenInvalid) {
+	if _, err := repo.ResetPasswordTransaction(context.Background(), "bad-token", "new-hash"); !errors.Is(err, ErrTokenInvalid) {
 		t.Fatalf("invalid reset token = %v", err)
 	}
 }

@@ -88,7 +88,7 @@ migrate-status: ## Show migration status through the backend container.
 
 migration-new: ## Create a migration file after checking NAME.
 	@test -n "$(NAME)" || { echo "usage: make migration-new NAME=description"; exit 2; }
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'latest=$$(for path in backend/internal/database/migrations/*.sql; do basename "$$path"; done | sed "s/^0*\([0-9]*\)_.*/\1/" | sort -n | tail -1); next=$$(( $${latest:-0} + 1 )); file=$$(printf "backend/internal/database/migrations/%03d_%s.sql" $$next "$(NAME)"); printf -- "-- %03d %s\n" $$next "$(NAME)" > "$$file"; echo "created $$file"'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'dir=backend/internal/database/migrations/$$(date +%Y); mkdir -p "$$dir"; latest=$$(for path in backend/internal/database/migrations/*/*.sql backend/internal/database/migrations/*.sql; do basename "$$path"; done | sed "s/^0*\([0-9]*\)_.*/\1/" | sort -n | tail -1); next=$$(( $${latest:-0} + 1 )); file=$$(printf "%s/%03d_%s.sql" "$$dir" $$next "$(NAME)"); printf -- "-- %03d %s\n" $$next "$(NAME)" > "$$file"; echo "created $$file"'
 
 db-backup: ## Create a PostgreSQL backup through the tool container.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 2; }

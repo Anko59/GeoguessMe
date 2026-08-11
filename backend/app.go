@@ -98,7 +98,7 @@ func NewApp(
 		Groups:  handlers.NewGroupAPI(repos),
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
-		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService),
+		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub),
 	}
 }
 

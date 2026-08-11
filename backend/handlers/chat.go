@@ -362,13 +362,20 @@ func (a *ChatAPI) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) 
 	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
+	// Bind the ticket to the user's current auth_version so consumption rejects
+	// any ticket minted before a password change, logout-all, or revocation.
+	authVersion, err := a.messages.UserAuthVersion(r.Context(), userID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
+		return
+	}
 	token, err := auth.GenerateOpaqueToken(32)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}
 	now := a.now()
-	if err := a.messages.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), now.Add(60*time.Second)); err != nil {
+	if err := a.messages.CreateWebSocketTicket(r.Context(), uuid.NewString(), userID, groupID, auth.HashToken(token), authVersion, now.Add(60*time.Second)); err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create WebSocket ticket")
 		return
 	}

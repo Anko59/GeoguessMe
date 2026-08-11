@@ -112,6 +112,23 @@ func main() {
 			}
 		},
 	)
+	// F-03: live sockets are revalidated periodically (and again before each
+	// incoming message is accepted) against the user's current auth status and
+	// group membership, so revocation that never passes through a handler
+	// still closes stale sockets within the sweep interval. Every check is
+	// bounded so a hung database cannot wedge the single-threaded hub past the
+	// deadline: on timeout, error, or any negative answer the socket is
+	// treated as invalid and closed (fail-closed).
+	hub.Revalidate = func(userID, groupID string) bool {
+		ctx, cancel := context.WithTimeout(context.Background(), revalidateTimeout)
+		defer cancel()
+		status, err := repos.GetUserAuthStatus(ctx, userID)
+		if err != nil || !status.Active {
+			return false
+		}
+		member, err := repos.Groups.IsMember(ctx, groupID, userID)
+		return err == nil && member
+	}
 	go hub.Run()
 
 	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
@@ -138,6 +155,10 @@ func main() {
 	stopWorkers()
 	pushSvc.Stop()
 }
+
+// revalidateTimeout bounds each live-socket revalidation call so a hung
+// database cannot stall the single-threaded hub Run loop past the deadline.
+const revalidateTimeout = 3 * time.Second
 
 func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
 	if strings.EqualFold(cfg.StorageDriver, "local") {

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"geoguessme/handlers"
 	authsvc "geoguessme/internal/auth"
+	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/email"
 	"geoguessme/internal/models"
@@ -55,7 +57,36 @@ func newAuthMockPool(t *testing.T) pgxmock.PgxPoolIface {
 func newAuthAPI(t *testing.T, mock pgxmock.PgxPoolIface, store storage.ObjectStore) *AuthAPI {
 	t.Helper()
 	cfg := authConfig()
-	return NewAuthAPI(repository.NewRepository(mock), cfg, store, email.Noop{}, authsvc.NewService(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL))
+	return NewAuthAPI(repository.NewRepository(mock), cfg, store, email.Noop{}, authsvc.NewService(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL), nil)
+}
+
+// newAuthAPIWithKicker builds the auth transport with an explicit socket
+// kicker so tests can assert credential revocation closes live sockets.
+func newAuthAPIWithKicker(t *testing.T, mock pgxmock.PgxPoolIface, kicker chatHub.SocketKicker) *AuthAPI {
+	t.Helper()
+	cfg := authConfig()
+	return NewAuthAPI(repository.NewRepository(mock), cfg, nil, email.Noop{}, authsvc.NewService(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL), kicker)
+}
+
+// fakeKicker records DisconnectUser calls so tests can assert that credential
+// revocation closes live sockets. It is safe for concurrent use.
+type fakeKicker struct {
+	mu    sync.Mutex
+	users []string
+}
+
+func (f *fakeKicker) DisconnectUser(userID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.users = append(f.users, userID)
+}
+
+func (f *fakeKicker) DisconnectUserInGroup(userID, groupID string) {}
+
+func (f *fakeKicker) kickedUsers() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.users...)
 }
 
 func requestWithUser(method, target, body, userID string) *http.Request {
@@ -140,12 +171,16 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 		t.Fatalf("refresh status = %d", recorder.Code)
 	}
 
-	// Logout-all revokes every session and bumps the auth version.
+	// Logout-all atomically revokes every session, bumps the auth version, and
+	// deletes outstanding WebSocket tickets.
 	logoutRequest := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
 	logoutRequest.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 	mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
-	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET auth_version").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
 	api.Logout(recorder, logoutRequest)
 	if recorder.Code != http.StatusNoContent || recorder.Header().Get("Set-Cookie") == "" {
@@ -192,6 +227,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectQuery("UPDATE password_reset_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
 	mock.ExpectExec("UPDATE users SET password").WithArgs(pgxmock.AnyArg(), user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
 	api.ResetPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"reset-token","password":"NewPassword123"}`)))

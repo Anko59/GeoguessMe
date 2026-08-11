@@ -23,7 +23,10 @@ TOOLS_PSQL=(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml
     psql "$DB_URL" -v ON_ERROR_STOP=1)
 FIXTURE="/workspace/deployment/scripts/legacy-migration-fixture.sql"
 shopt -s nullglob
-MIGRATION_FILES=("$REPO"/backend/internal/database/migrations/*.sql)
+MIGRATION_FILES=()
+while IFS= read -r path; do
+    MIGRATION_FILES+=("$path")
+done < <(find "$REPO/backend/internal/database/migrations" -type f -name '*.sql' -print | sort)
 EXPECTED_MIGRATIONS="${#MIGRATION_FILES[@]}"
 if [ "$EXPECTED_MIGRATIONS" -eq 0 ]; then
     echo "FAIL: no committed SQL migrations found" >&2

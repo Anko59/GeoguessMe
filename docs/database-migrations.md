@@ -18,31 +18,30 @@
 
 ## File naming
 
-Migrations are stored in `backend/internal/database/migrations/`:
+Migrations are stored in `backend/internal/database/migrations/`. The flat
+`migrations/` directory holds the original forward-only batch (at most 14 files,
+matching the repository structure limit); newer migrations are added in year
+subdirectories such as `migrations/2026/`:
 
 ```text
-001_initial.sql
-002_auth_version_and_object_deletion.sql
-003_unique_active_media_deletion_job.sql
-004_push_subscriptions.sql
-005_leaderboard_lookup_index.sql
-006_message_replies.sql
-007_chat_media.sql
-008_message_reactions.sql
-009_group_settings.sql
-010_progression_lookup_index.sql
-011_custom_reactions.sql
-012_media_delivery_window.sql
-013_challenge_hide_location.sql
-014_retire_legacy_reaction_emoji.sql
+backend/internal/database/migrations/
+├── 001_initial.sql
+├── ...
+├── 014_retire_legacy_reaction_emoji.sql
+└── 2026/
+    └── 015_websocket_ticket_auth_version.sql
 ```
 
 New migrations:
 
 ```bash
 make migration-new NAME=add_thing
-# Creates the next numbered migration in backend/internal/database/migrations/
+# Creates the next numbered migration in backend/internal/database/migrations/<year>/
 ```
+
+The loader discovers `.sql` files recursively and derives each migration's
+version and name from the file name alone, so relocating a file never changes
+the `schema_migrations` identity of an applied migration.
 
 ## Migration commands
 
