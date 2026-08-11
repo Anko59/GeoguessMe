@@ -130,6 +130,43 @@ func (l *loader) cidrList(key string) []string {
 	return parts
 }
 
+// rateLimitPolicies parses a comma-separated "type:limit/window" bucket list.
+// Malformed entries are reported through the loader so startup surfaces every
+// bad variable at once instead of silently weakening a policy.
+func (l *loader) rateLimitPolicies(key, fallback string) []RateLimitBucket {
+	raw := l.stringValue(key, fallback)
+	var buckets []RateLimitBucket
+	for _, part := range splitList(raw) {
+		bucketType, limitAndWindow, ok := strings.Cut(part, ":")
+		if !ok {
+			l.fail(key, "bucket entries of the form type:limit/window", part)
+			continue
+		}
+		limitRaw, windowRaw, ok := strings.Cut(limitAndWindow, "/")
+		if !ok {
+			l.fail(key, "bucket entries of the form type:limit/window", part)
+			continue
+		}
+		limit, err := strconv.Atoi(strings.TrimSpace(limitRaw))
+		if err != nil {
+			l.fail(key, "valid integer limit", limitRaw)
+			continue
+		}
+		window, err := time.ParseDuration(strings.TrimSpace(windowRaw))
+		if err != nil {
+			l.fail(key, "valid duration window", windowRaw)
+			continue
+		}
+		bucketType = strings.TrimSpace(bucketType)
+		if !isRateLimitBucketType(bucketType) {
+			l.fail(key, "one of route, global, trustedIP, identity, user", bucketType)
+			continue
+		}
+		buckets = append(buckets, RateLimitBucket{Type: bucketType, Limit: limit, Window: window})
+	}
+	return buckets
+}
+
 // Load reads and strictly parses every configuration variable. Defaults apply
 // only to absent variables; malformed or explicitly invalid values are kept
 // visible to the validation stage and reported together by LoadValidated.
@@ -180,8 +217,18 @@ func Load() (*Config, error) {
 
 		RateLimitRequests: l.intValue("RATE_LIMIT_REQUESTS", 10),
 		RateLimitWindow:   l.durationValue("RATE_LIMIT_WINDOW", time.Minute),
-		LogLevel:          l.stringValue("LOG_LEVEL", "info"),
-		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		RateLimitPolicies: []RateLimitPolicy{
+			{Name: "login", Buckets: l.rateLimitPolicies("RATE_LIMIT_LOGIN", "identity:10/1m,trustedIP:30/1m,global:300/1m")},
+			{Name: "signup", Buckets: l.rateLimitPolicies("RATE_LIMIT_SIGNUP", "identity:3/1h,trustedIP:5/1h,global:60/1m")},
+			{Name: "email", Buckets: l.rateLimitPolicies("RATE_LIMIT_EMAIL", "identity:3/1h,trustedIP:5/1h,global:30/1m")},
+			{Name: "reset", Buckets: l.rateLimitPolicies("RATE_LIMIT_RESET", "trustedIP:10/1h")},
+			{Name: "push", Buckets: l.rateLimitPolicies("RATE_LIMIT_PUSH", "user:10/1h,trustedIP:20/1h")},
+			{Name: "default", Buckets: l.rateLimitPolicies("RATE_LIMIT_DEFAULT", "identity:10/1m,trustedIP:60/1m")},
+		},
+		RateLimitFailClosed: splitList(l.stringValue("RATE_LIMIT_FAIL_CLOSED", "login,signup,email,reset")),
+		RateLimitStoreCap:   l.intValue("RATE_LIMIT_STORE_CAP", 50_000),
+		LogLevel:            l.stringValue("LOG_LEVEL", "info"),
+		MetricsToken:        strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 
 		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
 		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),

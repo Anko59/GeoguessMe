@@ -20,9 +20,8 @@ export const options = {
 };
 
 export function setup() {
-    // Each VU gets a distinct identity so the per-identity rate limiter
-    // (RATE_LIMIT_REQUESTS=3, RATE_LIMIT_WINDOW=10s in the test stack)
-    // never fires on legitimate distinct clients that log in once.
+    // Each VU gets a distinct identity so the signup policy's per-identity
+    // bucket never fires on legitimate distinct clients that register once.
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const users = [];
     for (let i = 0; i < VUS; i++) {

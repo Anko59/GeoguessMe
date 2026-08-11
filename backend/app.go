@@ -107,24 +107,89 @@ func NewApp(
 // exactly: SecurityHeaders → CORS → RequestLog → Recover → RequestID. PR 4
 // only relocates the wiring from main into this method; the route set, the
 // JSON error envelope, and the middleware order are unchanged.
+// buildRateLimitPolicies converts the validated configuration into middleware
+// policies. Configurations that never populated the policy slice (hand-built
+// in composition tests) fall back to the mandated defaults so the route table
+// keeps its per-route limits.
+func buildRateLimitPolicies(cfg *config.Config) []middleware.Policy {
+	if len(cfg.RateLimitPolicies) == 0 {
+		return middleware.DefaultPolicies()
+	}
+	failClosed := make(map[string]bool, len(cfg.RateLimitFailClosed))
+	for _, name := range cfg.RateLimitFailClosed {
+		failClosed[name] = true
+	}
+	out := make([]middleware.Policy, 0, len(cfg.RateLimitPolicies))
+	for _, p := range cfg.RateLimitPolicies {
+		mp := middleware.Policy{Name: p.Name, FailClosed: failClosed[p.Name]}
+		for _, b := range p.Buckets {
+			mp.Buckets = append(mp.Buckets, middleware.BucketSpec{
+				Type:   middleware.BucketType(b.Type),
+				Limit:  b.Limit,
+				Window: b.Window,
+			})
+		}
+		out = append(out, mp)
+	}
+	return out
+}
+
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
-	authLimit := middleware.RateLimitByIdentity(a.Config.RateLimitRequests, a.Config.RateLimitWindow, a.Config.TrustedProxyCIDRs)
+	middleware.SetStoreCapacity(a.Config.RateLimitStoreCap)
+
+	// Per-route rate-limit policies (F-04). Each policy is a set of
+	// simultaneous buckets (route/global/trusted-IP/identity/user) with the
+	// limits mandated by the security remediation plan; the shared bounded
+	// store behind them is process-wide and enforces every policy at once.
+	// Authenticated routes limit inside the auth middleware so the user
+	// bucket (and the identity fallback) see the authenticated user.
+	policies := buildRateLimitPolicies(a.Config)
+	limits := make(map[string]func(http.Handler) http.Handler, len(policies))
+	for _, p := range policies {
+		p := p
+		limits[p.Name] = middleware.PolicyMiddleware(p, middleware.PolicyOptions{
+			TrustedCIDRs: a.Config.TrustedProxyCIDRs,
+			Identity: func(r *http.Request) string {
+				if id := middleware.ExtractIdentity(r); id != "" {
+					return id
+				}
+				return handlers.GetUserIDFromContext(r)
+			},
+			User: handlers.GetUserIDFromContext,
+		})
+	}
+	limit := func(name string) func(http.Handler) http.Handler {
+		if mw, ok := limits[name]; ok {
+			return mw
+		}
+		// Config validation guarantees every wired policy name exists; the
+		// pass-through keeps hand-built test configurations serving without
+		// silently weakening a real deployment.
+		return func(next http.Handler) http.Handler { return next }
+	}
+	// limited wraps a handler with its policy so the auth middleware runs
+	// first: the user bucket (and the identity fallback) then see the
+	// authenticated user for protected routes.
+	limited := func(name string, handler http.HandlerFunc) http.HandlerFunc {
+		limitedHandler := limit(name)(handler)
+		return limitedHandler.ServeHTTP
+	}
 	protected := func(handler http.HandlerFunc) http.Handler {
-		return http.HandlerFunc(a.AuthAPI.AuthMiddleware(handler))
+		return a.AuthAPI.AuthMiddleware(handler)
 	}
 
-	mux.Handle("/api/v1/auth/signup", authLimit(http.HandlerFunc(a.AuthAPI.Signup)))
-	mux.Handle("/api/v1/auth/login", authLimit(http.HandlerFunc(a.AuthAPI.Login)))
-	mux.Handle("/api/v1/auth/refresh", http.HandlerFunc(a.AuthAPI.Refresh))
-	mux.Handle("/api/v1/auth/logout", http.HandlerFunc(a.AuthAPI.Logout))
-	mux.Handle("/api/v1/auth/verify/request", authLimit(protected(a.AuthAPI.RequestVerification)))
-	mux.Handle("/api/v1/auth/verify", authLimit(http.HandlerFunc(a.AuthAPI.VerifyEmail)))
-	mux.Handle("/api/v1/auth/password/forgot", authLimit(http.HandlerFunc(a.AuthAPI.ForgotPassword)))
-	mux.Handle("/api/v1/auth/password/reset", authLimit(http.HandlerFunc(a.AuthAPI.ResetPassword)))
-	mux.Handle("/api/v1/auth/password/change", authLimit(protected(a.AuthAPI.ChangePassword)))
-	mux.Handle("/api/v1/auth/profile", authLimit(protected(a.AuthAPI.UpdateProfile)))
-	mux.Handle("/api/v1/auth/profile/avatar", authLimit(protected(a.AuthAPI.UploadAvatar)))
+	mux.Handle("/api/v1/auth/signup", limit("signup")(http.HandlerFunc(a.AuthAPI.Signup)))
+	mux.Handle("/api/v1/auth/login", limit("login")(http.HandlerFunc(a.AuthAPI.Login)))
+	mux.Handle("/api/v1/auth/refresh", limit("default")(http.HandlerFunc(a.AuthAPI.Refresh)))
+	mux.Handle("/api/v1/auth/logout", limit("default")(http.HandlerFunc(a.AuthAPI.Logout)))
+	mux.Handle("/api/v1/auth/verify/request", protected(limited("email", a.AuthAPI.RequestVerification)))
+	mux.Handle("/api/v1/auth/verify", limit("default")(http.HandlerFunc(a.AuthAPI.VerifyEmail)))
+	mux.Handle("/api/v1/auth/password/forgot", limit("email")(http.HandlerFunc(a.AuthAPI.ForgotPassword)))
+	mux.Handle("/api/v1/auth/password/reset", limit("reset")(http.HandlerFunc(a.AuthAPI.ResetPassword)))
+	mux.Handle("/api/v1/auth/password/change", protected(limited("default", a.AuthAPI.ChangePassword)))
+	mux.Handle("/api/v1/auth/profile", protected(limited("default", a.AuthAPI.UpdateProfile)))
+	mux.Handle("/api/v1/auth/profile/avatar", protected(limited("default", a.AuthAPI.UploadAvatar)))
 	mux.Handle("/api/v1/auth/account", protected(a.AuthAPI.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(a.Groups.GetUserGroups))
@@ -144,8 +209,8 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)
 	pushHTTP := push.NewHTTP(a.Push)
-	mux.Handle("/api/v1/push/subscribe", protected(pushHTTP.Subscribe))
-	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
+	mux.Handle("/api/v1/push/subscribe", protected(limited("push", pushHTTP.Subscribe)))
+	mux.Handle("/api/v1/push/unsubscribe", protected(limited("push", pushHTTP.Unsubscribe)))
 	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(a.Game.AcceptChallenge))
 	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(a.Game.ConfirmChallengeMediaDelivered))

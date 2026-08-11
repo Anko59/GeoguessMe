@@ -87,8 +87,14 @@ services:
       SMTP_FROM: no-reply@test.local
       SMTP_TLS: "off"
       PHOTO_VIEW_WINDOW: 1s
-      RATE_LIMIT_REQUESTS: "3"
-      RATE_LIMIT_WINDOW: 10s
+      # Rate-limit policies (F-04). Identity and global buckets keep the
+      # mandated limits; the trusted-IP buckets are relaxed because the whole
+      # suite shares one client address behind the test gateway. Reset and
+      # push stay at the mandated defaults.
+      RATE_LIMIT_LOGIN: "identity:10/1m,trustedIP:50000/1m,global:300/1m"
+      RATE_LIMIT_SIGNUP: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
+      RATE_LIMIT_EMAIL: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
+      RATE_LIMIT_DEFAULT: "identity:10/1m,trustedIP:50000/1m"
     depends_on:
       migration: { condition: service_completed_successfully }
       toxiproxy: { condition: service_started }
