@@ -35,6 +35,13 @@ func TestCreateUserStoresPendingClaim(t *testing.T) {
 	if err := repo.CreateUser(context.Background(), &models.User{ID: "user-2", Username: "bob", Email: "bob@example.test", Password: "hash", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
+
+	mock.ExpectExec("INSERT INTO users").
+		WithArgs("user-3", "carol", nil, nil, "hash", "avatar.png", now).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	if err := repo.CreateUser(context.Background(), &models.User{ID: "user-3", Username: "carol", Password: "hash", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestScanUserNullEmail verifies a NULL verified email scans to an empty
@@ -83,89 +90,9 @@ func TestGetUserByVerifiedEmailOnlyMatchesVerified(t *testing.T) {
 	}
 }
 
-// TestGetUserByPendingEmail verifies the informational pending-claim lookup.
-func TestGetUserByPendingEmail(t *testing.T) {
-	mock := newMockPool(t)
-	repo := NewRepository(mock)
-	now := time.Now().UTC()
-	user := &models.User{ID: "user-1", Username: "alice", PendingEmail: "alice@example.test", Password: "hash", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
-	mock.ExpectQuery("SELECT .*FROM users WHERE pending_email_normalized").WithArgs("alice@example.test").
-		WillReturnRows(userRows(user))
-	got, err := repo.GetUserByPendingEmail(context.Background(), "Alice@Example.test")
-	if err != nil || got == nil || got.ID != user.ID {
-		t.Fatalf("GetUserByPendingEmail = %+v, %v", got, err)
-	}
-}
-
-func promoteRows(pendingEmail, pendingNormalized string, verifiedAt *time.Time) *pgxmock.Rows {
+func promoteRows(pendingEmail, pendingNormalized string) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).
 		AddRow(pendingEmail, pendingNormalized)
-}
-
-// TestPromotePendingEmail verifies the atomic claim promotion and the conflict
-// and nothing-to-promote error paths.
-func TestPromotePendingEmail(t *testing.T) {
-	mock := newMockPool(t)
-	repo := NewRepository(mock)
-
-	t.Run("promotes when clear", func(t *testing.T) {
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-1").
-			WillReturnRows(promoteRows("alice@example.test", "alice@example.test", nil))
-		mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test", "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-		mock.ExpectExec("UPDATE users SET email =").WithArgs("alice@example.test", "alice@example.test", "user-1").
-			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-		mock.ExpectCommit()
-		if err := repo.PromotePendingEmail(context.Background(), "user-1"); err != nil {
-			t.Fatalf("promote = %v", err)
-		}
-	})
-
-	t.Run("conflicts with verified address elsewhere", func(t *testing.T) {
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-2").
-			WillReturnRows(promoteRows("taken@example.test", "taken@example.test", nil))
-		mock.ExpectQuery("SELECT EXISTS").WithArgs("taken@example.test", "user-2").
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		if err := repo.PromotePendingEmail(context.Background(), "user-2"); !errors.Is(err, ErrClaimConflict) {
-			t.Fatalf("conflict promote err = %v, want ErrClaimConflict", err)
-		}
-	})
-
-	t.Run("nothing to promote", func(t *testing.T) {
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-3").
-			WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow(nil, nil))
-		if err := repo.PromotePendingEmail(context.Background(), "user-3"); !errors.Is(err, ErrNothingToPromote) {
-			t.Fatalf("noop promote err = %v, want ErrNothingToPromote", err)
-		}
-	})
-
-	t.Run("unique violation translates to conflict", func(t *testing.T) {
-		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-4").
-			WillReturnRows(promoteRows("race@example.test", "race@example.test", nil))
-		mock.ExpectQuery("SELECT EXISTS").WithArgs("race@example.test", "user-4").
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-		mock.ExpectExec("UPDATE users SET email =").WithArgs("race@example.test", "race@example.test", "user-4").
-			WillReturnError(&pgconn.PgError{Code: "23505"})
-		if err := repo.PromotePendingEmail(context.Background(), "user-4"); !errors.Is(err, ErrClaimConflict) {
-			t.Fatalf("unique violation promote err = %v, want ErrClaimConflict", err)
-		}
-	})
-}
-
-// TestSetPendingEmailKeepsVerifiedAddress verifies a replacement claim never
-// disturbs the current verified address.
-func TestSetPendingEmailKeepsVerifiedAddress(t *testing.T) {
-	mock := newMockPool(t)
-	repo := NewRepository(mock)
-	mock.ExpectExec("UPDATE users SET pending_email").WithArgs(" New@Example.test ", "new@example.test", "user-1").
-		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	if err := repo.SetPendingEmail(context.Background(), "user-1", " New@Example.test "); err != nil {
-		t.Fatalf("SetPendingEmail = %v", err)
-	}
 }
 
 // TestVerifyEmailTransactionPromotes verifies the verification flow consumes
@@ -175,9 +102,9 @@ func TestVerifyEmailTransactionPromotes(t *testing.T) {
 	repo := NewRepository(mock)
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("token-hash").
-		WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
+		WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-1", "alice@example.test"))
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-1").
-		WillReturnRows(promoteRows("alice@example.test", "alice@example.test", nil))
+		WillReturnRows(promoteRows("alice@example.test", "alice@example.test"))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test", "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectExec("UPDATE users SET email =").WithArgs("alice@example.test", "alice@example.test", "user-1").
@@ -199,9 +126,11 @@ func TestVerifyEmailTransactionPromotes(t *testing.T) {
 	// harmless no-op rather than an error.
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("already-verified-token").
-		WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-2"))
+		WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-2", "verified@example.test"))
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-2").
 		WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow(nil, nil))
+	mock.ExpectQuery("SELECT email_normalized FROM users").WithArgs("user-2").
+		WillReturnRows(pgxmock.NewRows([]string{"email_normalized"}).AddRow("verified@example.test"))
 	mock.ExpectCommit()
 	if err := repo.VerifyEmailTransaction(context.Background(), "already-verified-token"); err != nil {
 		t.Fatalf("nothing-to-promote VerifyEmailTransaction = %v, want nil", err)
@@ -211,13 +140,38 @@ func TestVerifyEmailTransactionPromotes(t *testing.T) {
 	// is not consumed.
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("conflict-token").
-		WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-3"))
+		WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-3", "taken@example.test"))
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-3").
-		WillReturnRows(promoteRows("taken@example.test", "taken@example.test", nil))
+		WillReturnRows(promoteRows("taken@example.test", "taken@example.test"))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("taken@example.test", "user-3").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	if err := repo.VerifyEmailTransaction(context.Background(), "conflict-token"); !errors.Is(err, ErrClaimConflict) {
 		t.Fatalf("conflict VerifyEmailTransaction err = %v, want ErrClaimConflict", err)
+	}
+
+	// A concurrent promotion that wins after the pre-check is still translated
+	// to the same generic claim conflict.
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("racing-token").
+		WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-4", "race@example.test"))
+	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-4").
+		WillReturnRows(promoteRows("race@example.test", "race@example.test"))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("race@example.test", "user-4").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectExec("UPDATE users SET email =").WithArgs("race@example.test", "race@example.test", "user-4").
+		WillReturnError(&pgconn.PgError{Code: "23505"})
+	if err := repo.VerifyEmailTransaction(context.Background(), "racing-token"); !errors.Is(err, ErrClaimConflict) {
+		t.Fatalf("racing VerifyEmailTransaction err = %v, want ErrClaimConflict", err)
+	}
+
+	// A token issued for an older claim cannot promote a replacement address.
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("stale-claim-token").
+		WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-5", "old@example.test"))
+	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-5").
+		WillReturnRows(promoteRows("new@example.test", "new@example.test"))
+	if err := repo.VerifyEmailTransaction(context.Background(), "stale-claim-token"); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("changed-claim VerifyEmailTransaction err = %v, want ErrTokenInvalid", err)
 	}
 }
 

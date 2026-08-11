@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -9,6 +11,7 @@ import (
 	"geoguessme/internal/progression"
 	"geoguessme/internal/validation"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -39,9 +42,11 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_username", err.Error())
 		return
 	}
-	if err := validation.ValidateEmail(req.Email); err != nil {
-		handlers.WriteError(w, http.StatusBadRequest, "invalid_email", err.Error())
-		return
+	if req.Email != "" {
+		if err := validation.ValidateEmail(req.Email); err != nil {
+			handlers.WriteError(w, http.StatusBadRequest, "invalid_email", err.Error())
+			return
+		}
 	}
 	if !isAvailableAvatar(req.Avatar) {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_avatar", "Choose one of the available avatars")
@@ -60,7 +65,17 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	// with other accounts (verified-email uniqueness is enforced atomically at
 	// promotion), so no email availability check is performed here.
 	updated, err := a.repos.UpdateProfile(r.Context(), userID, req.Username, req.Email, req.Avatar)
-	if err != nil || updated == nil {
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			handlers.WriteError(w, http.StatusConflict, "profile_update_failed", "Unable to update profile")
+			return
+		}
+		slog.Error("profile update failed", "error", err, "user_id", userID)
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to update profile")
+		return
+	}
+	if updated == nil {
 		handlers.WriteError(w, http.StatusConflict, "profile_update_failed", "Unable to update profile")
 		return
 	}

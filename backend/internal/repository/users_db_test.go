@@ -130,12 +130,26 @@ func TestProfileAndPasswordUpdates(t *testing.T) {
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice-new", Email: "alice-new@example.test", Password: "hash", Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("UPDATE users SET pending_email").WithArgs(user.Email, user.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users").WithArgs(user.Email, user.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+	mock.ExpectCommit()
 	updated, err := repo.UpdateProfile(context.Background(), user.ID, user.Username, user.Email, user.Avatar)
 	if err != nil || updated == nil || updated.Avatar != user.Avatar {
 		t.Fatalf("UpdateProfile = %+v, %v", updated, err)
+	}
+
+	verified := time.Now().UTC()
+	withoutPending := &models.User{ID: user.ID, Username: user.Username, Email: "verified@example.test", EmailVerifiedAt: &verified, Password: "hash", Avatar: user.Avatar, CreatedAt: now, UpdatedAt: now}
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users").WithArgs("", "", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(withoutPending))
+	mock.ExpectCommit()
+	updated, err = repo.UpdateProfile(context.Background(), user.ID, user.Username, "", user.Avatar)
+	if err != nil || updated == nil || updated.Email != withoutPending.Email || updated.PendingEmail != "" {
+		t.Fatalf("UpdateProfile cancel pending = %+v, %v", updated, err)
 	}
 
 	mock.ExpectBegin()
@@ -151,6 +165,7 @@ func TestProfileAndPasswordUpdates(t *testing.T) {
 func TestProfileAndPasswordUpdateFailures(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "avatar.png", "user-1").WillReturnError(errors.New("profile write failed"))
 	if _, err := repo.UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err == nil {
 		t.Fatal("UpdateProfile succeeded after write failure")
@@ -159,9 +174,8 @@ func TestProfileAndPasswordUpdateFailures(t *testing.T) {
 	if err := repo.ChangePassword(context.Background(), "user-1", "hash"); err == nil {
 		t.Fatal("ChangePassword succeeded after transaction failure")
 	}
-	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "avatar.png", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("UPDATE users SET pending_email").WithArgs("alice@example.test", "alice@example.test", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE users SET username").WithArgs("alice", "avatar.png", "user-1").WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	if updated, err := repo.UpdateProfile(context.Background(), "user-1", "alice", "alice@example.test", "avatar.png"); err != nil || updated != nil {
 		t.Fatalf("UpdateProfile missing user = %+v, %v", updated, err)
 	}
@@ -233,17 +247,19 @@ func TestRotateRefreshSessionAndOneTimeTokens(t *testing.T) {
 		t.Fatalf("missing rotation = %+v, %v", rotated, err)
 	}
 
-	if err := repo.InsertOneTimeToken(context.Background(), "invalid", "id", "user", "hash", now); err == nil {
-		t.Fatal("invalid token table accepted")
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM email_verification_tokens").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs("token-id", "user-1", "token-hash", "alice@example.test", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if err := repo.InsertEmailVerificationToken(context.Background(), "token-id", "user-1", "token-hash", " Alice@Example.test ", now); err != nil {
+		t.Fatal(err)
 	}
-	for _, table := range []string{"email_verification_tokens", "password_reset_tokens"} {
-		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM " + table).WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 1))
-		mock.ExpectExec("INSERT INTO "+table).WithArgs("token-id", "user-1", "token-hash", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
-		mock.ExpectCommit()
-		if err := repo.InsertOneTimeToken(context.Background(), table, "token-id", "user-1", "token-hash", now); err != nil {
-			t.Fatal(err)
-		}
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM password_reset_tokens").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectExec("INSERT INTO password_reset_tokens").WithArgs("token-id", "user-1", "token-hash", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if err := repo.InsertPasswordResetToken(context.Background(), "token-id", "user-1", "token-hash", now); err != nil {
+		t.Fatal(err)
 	}
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs("bad-token").WillReturnError(pgx.ErrNoRows)

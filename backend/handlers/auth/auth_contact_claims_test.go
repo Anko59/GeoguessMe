@@ -14,48 +14,87 @@ import (
 
 	"geoguessme/internal/models"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
 )
 
-// TestSignupCollisionsAreGeneric proves account-creation collisions never
-// reveal which credential collided or whether the submitted email is already
-// registered. Both uniqueness lookups run for every attempt (timing-balanced
-// equal work), and duplicate-username and duplicate-verified-email attempts
-// return byte-identical conflict bodies.
-func TestSignupCollisionsAreGeneric(t *testing.T) {
-
+// TestSignupDoesNotRevealVerifiedEmail proves an address already verified by
+// another account remains claimable as pending at signup. Ownership is decided
+// only by verification, so account creation cannot enumerate recovery emails.
+func TestSignupDoesNotRevealVerifiedEmail(t *testing.T) {
 	now := time.Now().UTC()
 	existing := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	signupBody := `{"username":"alice","email":"alice@example.test","password":"StrongPassword123"}`
 
-	// Duplicate username: the username lookup matches, the email lookup still runs.
+	// Duplicate username remains a conflict because usernames are public identity.
 	mock := newAuthMockPool(t)
 	api := newAuthAPI(t, mock, nil)
 	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(handlerUserRows(existing))
-	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 	usernameRecorder := httptest.NewRecorder()
 	api.Signup(usernameRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(signupBody)))
 	if usernameRecorder.Code != http.StatusConflict {
 		t.Fatalf("duplicate username status = %d (%s)", usernameRecorder.Code, usernameRecorder.Body.String())
 	}
 
-	// Duplicate verified email: the username lookup runs first and misses, the
-	// email lookup matches. Same two queries, same response shape.
+	// The same verified address with a fresh username succeeds as a pending
+	// claim and sends a verification link without looking up its owner.
 	mock = newAuthMockPool(t)
 	api = newAuthAPI(t, mock, nil)
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
-	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnRows(handlerUserRows(existing))
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("bob").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+	mock.ExpectExec("INSERT INTO users").WithArgs(pgxmock.AnyArg(), "bob", "alice@example.test", "alice@example.test", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), "alice@example.test", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	emailRecorder := httptest.NewRecorder()
-	api.Signup(emailRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(signupBody)))
-	if emailRecorder.Code != http.StatusConflict {
-		t.Fatalf("duplicate email status = %d (%s)", emailRecorder.Code, emailRecorder.Body.String())
+	api.Signup(emailRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"bob","email":"alice@example.test","password":"StrongPassword123"}`)))
+	if emailRecorder.Code != http.StatusOK {
+		t.Fatalf("verified email claim status = %d (%s)", emailRecorder.Code, emailRecorder.Body.String())
 	}
 
-	if usernameRecorder.Body.String() != emailRecorder.Body.String() {
-		t.Fatalf("collision responses differ: %q vs %q", usernameRecorder.Body.String(), emailRecorder.Body.String())
-	}
 	if !strings.Contains(usernameRecorder.Body.String(), "signup_unavailable") || strings.Contains(usernameRecorder.Body.String(), "taken") {
-		t.Fatalf("collision response is not generic: %s", usernameRecorder.Body.String())
+		t.Fatalf("username collision response is not generic: %s", usernameRecorder.Body.String())
+	}
+}
+
+func TestSignupAllowsNoRecoveryEmail(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("emailfree").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+	mock.ExpectExec("INSERT INTO users").WithArgs(pgxmock.AnyArg(), "emailfree", nil, nil, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	// No verification token is issued without a contact claim.
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	recorder := httptest.NewRecorder()
+	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"emailfree","password":"StrongPassword123"}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("email-free signup status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSignupMapsInsertFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		insertErr  error
+		wantStatus int
+	}{
+		{name: "unique race", insertErr: &pgconn.PgError{Code: "23505"}, wantStatus: http.StatusConflict},
+		{name: "database outage", insertErr: &pgconn.PgError{Code: "08006"}, wantStatus: http.StatusInternalServerError},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mock := newAuthMockPool(t)
+			api := newAuthAPI(t, mock, nil)
+			mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+			mock.ExpectExec("INSERT INTO users").
+				WithArgs(pgxmock.AnyArg(), "alice", "alice@example.test", "alice@example.test", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+				WillReturnError(test.insertErr)
+			recorder := httptest.NewRecorder()
+			api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123"}`)))
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("signup status = %d (%s), want %d", recorder.Code, recorder.Body.String(), test.wantStatus)
+			}
+		})
 	}
 }
 
@@ -66,7 +105,7 @@ func TestVerifyEmailClaimConflictIsGeneric(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAuthAPI(t, mock, nil)
 	mock.ExpectBegin()
-	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
+	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-1", "taken@example.test"))
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow("taken@example.test", "taken@example.test"))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("taken@example.test", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	recorder := httptest.NewRecorder()
@@ -85,13 +124,28 @@ func TestVerifyEmailNothingToPromoteIsIdempotent(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAuthAPI(t, mock, nil)
 	mock.ExpectBegin()
-	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
+	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"user_id", "target_email_normalized"}).AddRow("user-1", "alice@example.test"))
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow(nil, nil))
+	mock.ExpectQuery("SELECT email_normalized FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"email_normalized"}).AddRow("alice@example.test"))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
 	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"already-verified-token"}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("nothing-to-promote verify status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestVerifyEmailDatabaseFailureIsInternal(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE email_verification_tokens").WithArgs(pgxmock.AnyArg()).
+		WillReturnError(&pgconn.PgError{Code: "08006"})
+	mock.ExpectRollback()
+	recorder := httptest.NewRecorder()
+	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("verification outage status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -147,7 +201,7 @@ func TestRequestVerificationTargetsPending(t *testing.T) {
 		mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 		mock.ExpectBegin()
 		mock.ExpectExec("DELETE FROM email_verification_tokens").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
-		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), "alice@example.test", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
 		api.RequestVerification(recorder, requestWithUser(http.MethodPost, "/", "", user.ID))
@@ -163,7 +217,7 @@ func TestRequestVerificationTargetsPending(t *testing.T) {
 		mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 		mock.ExpectBegin()
 		mock.ExpectExec("DELETE FROM email_verification_tokens").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
-		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), "new@example.test", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
 		api.RequestVerification(recorder, requestWithUser(http.MethodPost, "/", "", user.ID))

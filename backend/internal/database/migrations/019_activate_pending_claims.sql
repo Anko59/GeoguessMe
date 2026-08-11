@@ -10,3 +10,12 @@ SET pending_email = email,
     email = NULL,
     email_normalized = NULL
 WHERE email_verified_at IS NULL AND email IS NOT NULL;
+
+-- Bind verification tokens created by the previous release to the contact
+-- claim they were issued for. The column stays nullable during the rolling
+-- compatibility window so an older replica can still insert a token; the new
+-- binary rejects an unbound token and a resend replaces it with a bound one.
+UPDATE email_verification_tokens AS token
+SET target_email_normalized = COALESCE(users.pending_email_normalized, users.email_normalized)
+FROM users
+WHERE token.user_id = users.id AND token.target_email_normalized IS NULL;

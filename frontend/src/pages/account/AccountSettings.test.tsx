@@ -46,6 +46,47 @@ beforeEach(() => {
 });
 
 describe('AccountSettings', () => {
+    it('edits the pending replacement when a verified address also exists', () => {
+        const replacingUser: User = {
+            ...user,
+            email: 'verified@example.test',
+            email_verified_at: '2026-08-01T00:00:00Z',
+            pending_email: 'replacement@example.test',
+        };
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: replacingUser }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        expect(screen.getByLabelText('Recovery email')).toHaveValue('replacement@example.test');
+    });
+
+    it('cancels a pending replacement by omitting a blank email', async () => {
+        mocks.patch.mockResolvedValueOnce({ data: { ...user, pending_email: undefined } });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.change(screen.getByLabelText('Recovery email'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Current password to save profile changes'), {
+            target: { value: 'Password123' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+        await waitFor(() =>
+            expect(mocks.patch).toHaveBeenCalledWith('/auth/profile', {
+                username: 'alice',
+                avatar: 'avatar.png',
+                current_password: 'Password123',
+            }),
+        );
+        expect(mocks.post).not.toHaveBeenCalled();
+    });
+
     it('updates the profile and selected avatar', async () => {
         mocks.patch.mockResolvedValueOnce({
             data: { username: 'alice', email: 'alice@example.test', avatar: 'avatar2.png' },

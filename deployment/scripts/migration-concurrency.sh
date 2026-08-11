@@ -139,6 +139,12 @@ assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE t
     "1" "updated_at column exists"
 assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='users' AND column_name='deleted_at'")" \
     "1" "deleted_at column exists"
+assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='email_verification_tokens' AND column_name='target_email_normalized'")" \
+    "1" "verification tokens are bound to a normalized target column"
+assert_eq "$(psql_query "SELECT to_regclass('public.email_verification_one_unused_per_user_idx') IS NOT NULL")" \
+    "t" "single unused email-verification token index exists"
+assert_eq "$(psql_query "SELECT to_regclass('public.password_reset_one_unused_per_user_idx') IS NOT NULL")" \
+    "t" "single unused password-reset token index exists"
 
 # --- photos: storage_key, mime_type, byte_size, lifecycle_status, retention_at
 assert_eq "$(psql_query "SELECT storage_key FROM photos WHERE id='photo-001'")" \

@@ -13,7 +13,7 @@ export default function AccountSettings() {
     const { user, refresh, logout } = useAuth();
     const navigate = useNavigate();
     const [username, setUsername] = useState(user?.username ?? '');
-    const [email, setEmail] = useState(user?.email ?? user?.pending_email ?? '');
+    const [email, setEmail] = useState(user?.pending_email ?? user?.email ?? '');
     const [avatar, setAvatar] = useState(user?.avatar ?? 'avatar.png');
     const [avatarVersion, setAvatarVersion] = useState(0);
     const [uploading, setUploading] = useState(false);
@@ -64,15 +64,16 @@ export default function AccountSettings() {
         clearNotice();
         setSaving(true);
         const submittedEmail = email.trim();
-        const currentTarget = user?.email ?? user?.pending_email ?? '';
+        const currentTarget = user?.pending_email ?? user?.email ?? '';
         const wasVerified = Boolean(user?.email_verified_at && user?.email);
         try {
-            await api.patch('/auth/profile', {
+            const payload: { username: string; avatar: string; current_password: string; email?: string } = {
                 username,
-                email: submittedEmail,
                 avatar,
                 current_password: profilePassword,
-            });
+            };
+            if (submittedEmail) payload.email = submittedEmail;
+            await api.patch('/auth/profile', payload);
             setProfilePassword('');
             await refresh();
             // A changed address becomes a pending claim, not a replacement

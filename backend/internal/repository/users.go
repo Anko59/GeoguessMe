@@ -27,8 +27,13 @@ func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
 	if pending == "" {
 		pending = user.Email
 	}
+	var pendingValue, normalizedValue any
+	if pending != "" {
+		pendingValue = pending
+		normalizedValue = strings.ToLower(strings.TrimSpace(pending))
+	}
 	query := `INSERT INTO users (id, username, email, email_normalized, pending_email, pending_email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, NULL, NULL, $3, $4, $5, $6, $7, $7)`
-	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pending, strings.ToLower(strings.TrimSpace(pending)), user.Password, user.Avatar, user.CreatedAt)
+	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pendingValue, normalizedValue, user.Password, user.Avatar, user.CreatedAt)
 	return err
 }
 
@@ -241,12 +246,22 @@ func (r *Repository) RevokeAllCredentials(ctx context.Context, userID string) er
 	return tx.Commit(ctx)
 }
 
-// InsertOneTimeToken stores a fresh email-verification or password-reset
-// token, replacing any unused token of the same kind for the user.
-func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, expiresAt time.Time) error {
-	if table != "email_verification_tokens" && table != "password_reset_tokens" {
-		return errors.New("invalid one-time token table")
-	}
+// InsertEmailVerificationToken stores a token bound to the exact normalized
+// pending claim it was issued for. A later claim change cannot repurpose it.
+func (r *Repository) InsertEmailVerificationToken(ctx context.Context, id, userID, hash, targetEmail string, expiresAt time.Time) error {
+	return r.replaceOneTimeToken(ctx, "email_verification_tokens",
+		`INSERT INTO email_verification_tokens(id, user_id, token_hash, target_email_normalized, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		userID, id, userID, hash, strings.ToLower(strings.TrimSpace(targetEmail)), expiresAt)
+}
+
+// InsertPasswordResetToken stores a fresh verified-email recovery token.
+func (r *Repository) InsertPasswordResetToken(ctx context.Context, id, userID, hash string, expiresAt time.Time) error {
+	return r.replaceOneTimeToken(ctx, "password_reset_tokens",
+		`INSERT INTO password_reset_tokens(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`,
+		userID, id, userID, hash, expiresAt)
+}
+
+func (r *Repository) replaceOneTimeToken(ctx context.Context, table, insertQuery, userID string, insertArgs ...any) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -255,7 +270,7 @@ func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, 
 	if _, err := tx.Exec(ctx, "DELETE FROM "+table+" WHERE user_id = $1 AND used_at IS NULL", userID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO "+table+"(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)", id, userID, hash, expiresAt); err != nil {
+	if _, err := tx.Exec(ctx, insertQuery, insertArgs...); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -264,10 +279,10 @@ func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, 
 // VerifyEmailTransaction consumes a verification token and promotes the
 // account's pending email claim in a single transaction so a crash cannot
 // consume the token without updating the account. The token is still
-// user-bound (not bound to the claimed address); the current pending claim is
-// what gets promoted. A verified account without a pending claim is a
-// successful no-op: the token is consumed and committed so verification stays
-// idempotent for already-verified accounts.
+// bound to both the user and normalized address, so it cannot promote a claim
+// that changed after issuance. A verified account without a pending claim is
+// a successful no-op only when the bound target already equals its verified
+// address.
 func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -275,15 +290,26 @@ func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash strin
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var userID string
-	err = tx.QueryRow(ctx, `UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id`, tokenHash).Scan(&userID)
+	var targetEmail sql.NullString
+	err = tx.QueryRow(ctx, `UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id, target_email_normalized`, tokenHash).Scan(&userID, &targetEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrTokenInvalid
 	}
 	if err != nil {
 		return err
 	}
-	if err := promotePendingEmailOn(ctx, tx, userID); err != nil {
+	if !targetEmail.Valid || targetEmail.String == "" {
+		return ErrTokenInvalid
+	}
+	if err := promotePendingEmailOn(ctx, tx, userID, targetEmail.String); err != nil {
 		if errors.Is(err, ErrNothingToPromote) {
+			var verifiedEmail sql.NullString
+			if err := tx.QueryRow(ctx, `SELECT email_normalized FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&verifiedEmail); err != nil {
+				return err
+			}
+			if !verifiedEmail.Valid || verifiedEmail.String != targetEmail.String {
+				return ErrTokenInvalid
+			}
 			return tx.Commit(ctx)
 		}
 		return err
@@ -342,16 +368,37 @@ func (r *Repository) SetUserAvatar(ctx context.Context, userID, avatar string) e
 // UpdateProfile changes the public account fields. A submitted email becomes a
 // pending contact claim instead of replacing the verified address: the current
 // verified email (and its verification state) stays active until the pending
-// claim is promoted by a successful verification. Submitting the already
-// verified address is a no-op for the email columns.
+// claim is promoted by a successful verification. Omitting the email or
+// submitting the already verified address cancels any pending replacement.
 func (r *Repository) UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
-	if _, err := r.pool.Exec(ctx, `UPDATE users SET username = $1, avatar = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL`, username, avatar, userID); err != nil {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := r.pool.Exec(ctx, `UPDATE users SET pending_email = $1, pending_email_normalized = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL AND email_normalized IS DISTINCT FROM $2`, email, strings.ToLower(strings.TrimSpace(email)), userID); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `UPDATE users SET username = $1, avatar = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL`, username, avatar, userID)
+	if err != nil {
 		return nil, err
 	}
-	return r.GetUserByID(ctx, userID)
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if _, err := tx.Exec(ctx, `UPDATE users
+		SET pending_email = CASE WHEN $2 = '' OR email_normalized IS NOT DISTINCT FROM $2 THEN NULL ELSE $1 END,
+			pending_email_normalized = CASE WHEN $2 = '' OR email_normalized IS NOT DISTINCT FROM $2 THEN NULL ELSE $2 END,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $3 AND deleted_at IS NULL`, email, normalized, userID); err != nil {
+		return nil, err
+	}
+	user, err := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1 AND deleted_at IS NULL`, userID))
+	if err != nil || user == nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // ChangePassword updates the password and invalidates every existing session

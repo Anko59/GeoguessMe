@@ -51,4 +51,12 @@ describe('pwaSessionCache', () => {
 
         expect(readSessionHint()).toEqual(unverified);
     });
+
+    it('rejects malformed pending contact data', () => {
+        localStorage.setItem(
+            'geoguessme:pwa-session:v1',
+            JSON.stringify({ id: 'user-2', username: 'bob', avatar: 'avatar.png', pending_email: 42 }),
+        );
+        expect(readSessionHint()).toBeNull();
+    });
 });

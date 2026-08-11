@@ -1079,8 +1079,11 @@ export interface operations {
             content: {
                 'application/json': {
                     username: string;
-                    /** Format: email */
-                    email: string;
+                    /**
+                     * Format: email
+                     * @description Optional recovery/contact claim.
+                     */
+                    email?: string;
                     password: string;
                 };
             };
@@ -1324,8 +1327,11 @@ export interface operations {
             content: {
                 'application/json': {
                     username: string;
-                    /** Format: email */
-                    email: string;
+                    /**
+                     * Format: email
+                     * @description Optional replacement contact claim; omission cancels a pending replacement without removing the verified address.
+                     */
+                    email?: string;
                     /** @enum {string} */
                     avatar:
                         | 'avatar.png'

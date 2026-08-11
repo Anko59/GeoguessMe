@@ -48,23 +48,16 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 		map[string]string{"username": user + "2", "email": email, "password": "StrongPassword123"}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "second pending claim: %s", data)
 
-	// Once one account verifies the address, a new signup with it fails with
-	// the byte-identical generic conflict that reveals nothing.
+	// Once one account verifies the address, signup still accepts it as a
+	// pending claim. Verification—not registration—decides ownership, so this
+	// response cannot enumerate verified recovery addresses.
 	verifyToken := tokensFromMailpitTo(t, "Verify your GeoGuessMe email", "/verify-email", email, 1)[0]
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": verifyToken}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "verify: %s", data)
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/signup",
 		map[string]string{"username": user + "3", "email": email, "password": "StrongPassword123"}, "", nil)
-	require.Equalf(t, http.StatusConflict, resp.StatusCode, "verified email collision: %s", data)
-	require.Equal(t, usernameConflict, data)
-	var envelope struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	require.NoError(t, json.Unmarshal(data, &envelope))
-	require.Equal(t, "signup_unavailable", envelope.Error.Code)
-
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "verified email pending claim: %s", data)
+	require.NotEqual(t, usernameConflict, data)
 	// Reset rate limiter so login requests aren't throttled by the preceding
 	// signup calls that shared the same identity key.
 	resetRateLimiter(t)
@@ -345,11 +338,7 @@ func TestEmailChangeKeepsVerifiedRecovery(t *testing.T) {
 	// with the uniform 202 but never addresses a new reset message to it.
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": oldEmail}, "", nil)
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		require.LessOrEqual(t, mailpitResetCountTo(t, oldEmail), resetCountBefore, "replaced address must no longer be recoverable")
-		time.Sleep(150 * time.Millisecond)
-	}
+	require.Equal(t, resetCountBefore, mailpitResetCountTo(t, oldEmail), "replaced address must no longer be recoverable")
 
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": newEmail}, "", nil)
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)

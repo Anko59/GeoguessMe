@@ -24,7 +24,8 @@ function isUser(value: unknown): value is User {
     return (
         typeof user.id === 'string' &&
         typeof user.username === 'string' &&
-        (user.email === undefined || user.email === null || typeof user.email === 'string')
+        (user.email === undefined || user.email === null || typeof user.email === 'string') &&
+        (user.pending_email === undefined || user.pending_email === null || typeof user.pending_email === 'string')
     );
 }
 

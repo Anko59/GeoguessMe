@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"geoguessme/internal/models"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -96,10 +98,12 @@ func TestProfileUpdateAndPasswordChange(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(updated.Username).WillReturnRows(handlerUserRows(updated))
 	// The submitted email becomes a pending claim, not a replacement verified
 	// address: no email-availability lookup runs and no verified address is
-	// touched. Two UPDATEs follow (username/avatar, then pending claim).
+	// touched. Both updates and the returning read share one transaction.
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET username").WithArgs(updated.Username, updated.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("UPDATE users SET pending_email").WithArgs(updated.Email, updated.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users").WithArgs(updated.Email, updated.Email, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
+	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
 	api.UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice-new","email":"alice-new@example.test","avatar":"avatar2.png","current_password":"Password123"}`, user.ID))
 	if recorder.Code != http.StatusOK {
@@ -143,6 +147,36 @@ func TestProfileValidationBranches(t *testing.T) {
 	requireStatus(t, api.ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"WrongPassword123","new_password":"NewPassword123"}`, user.ID), http.StatusUnauthorized)
 }
 
+func TestProfileUpdateMapsPersistenceFailures(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash), Avatar: "avatar.png"}
+	tests := []struct {
+		name       string
+		updateErr  error
+		wantStatus int
+	}{
+		{name: "unique race", updateErr: &pgconn.PgError{Code: "23505"}, wantStatus: http.StatusConflict},
+		{name: "database outage", updateErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mock := newAuthMockPool(t)
+			api := newAuthAPI(t, mock, nil)
+			mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+			mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(user.Username).
+				WillReturnRows(handlerUserRows(user))
+			mock.ExpectBegin()
+			mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).
+				WillReturnError(test.updateErr)
+			mock.ExpectRollback()
+			requireStatus(t, api.UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","avatar":"avatar.png","current_password":"Password123"}`, user.ID), test.wantStatus)
+		})
+	}
+}
+
 func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAuthAPI(t, mock, nil)
@@ -181,9 +215,11 @@ func TestEmailChangeKeepsVerifiedAddress(t *testing.T) {
 	// the profile update proceeds without any email-availability check.
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
 	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(user.Username).WillReturnRows(handlerUserRows(user))
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE users SET username").WithArgs(user.Username, user.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("UPDATE users SET pending_email").WithArgs("new@example.test", "new@example.test", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE users").WithArgs("new@example.test", "new@example.test", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(afterUpdate))
+	mock.ExpectCommit()
 
 	recorder := httptest.NewRecorder()
 	api.UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"new@example.test","avatar":"avatar.png","current_password":"Password123"}`, user.ID))
