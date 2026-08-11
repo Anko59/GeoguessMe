@@ -1,13 +1,18 @@
+import { randomBytes } from 'node:crypto';
 import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
+
+function secureSuffix(): string {
+    return randomBytes(3).toString('hex');
+}
 
 /** Generate a unique username for test isolation. */
 export function uniqueUsername(): string {
-    return `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    return `user_${Date.now()}_${secureSuffix()}`;
 }
 
 /** Generate a unique email for test isolation. */
 export function uniqueEmail(): string {
-    return `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@test.geoguessme`;
+    return `e2e_${Date.now()}_${secureSuffix()}@test.geoguessme`;
 }
 
 /** Generate a unique group name for test isolation. */
