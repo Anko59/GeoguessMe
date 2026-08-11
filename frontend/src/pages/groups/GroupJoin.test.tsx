@@ -19,6 +19,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     mocks.post.mockReset();
     window.sessionStorage.clear();
+    window.history.replaceState({}, '', '/');
 });
 
 function LocationDisplay() {
@@ -57,6 +58,18 @@ describe('GroupJoin', () => {
         expect(window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY)).toBeNull();
     });
 
+    it('previews a canonical token directly from the fragment', async () => {
+        window.history.replaceState({}, '', `/group/join#invite=${inviteToken}`);
+        mocks.post.mockResolvedValue({ data: { group_name: 'Direct', member_count: 1 } });
+        render(
+            <MemoryRouter initialEntries={[`/group/join#invite=${inviteToken}`]}>
+                <GroupJoin />
+            </MemoryRouter>,
+        );
+        expect(await screen.findByText('Join Direct?')).toBeInTheDocument();
+        expect(mocks.post).toHaveBeenCalledWith('/group/invites/preview', { invite_token: inviteToken });
+    });
+
     it('shows the invalid state and clears the token when the preview returns 404', async () => {
         window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, inviteToken);
         const notFound = new Error('Request failed with status code 404');
@@ -78,6 +91,17 @@ describe('GroupJoin', () => {
             </MemoryRouter>,
         );
         expect(await screen.findByText('No invite link found')).toBeInTheDocument();
+    });
+
+    it('shows the invalid state for a malformed invite fragment', async () => {
+        window.history.replaceState({}, '', '/group/join#invite=not-a-canonical-token');
+        render(
+            <MemoryRouter initialEntries={['/group/join#invite=not-a-canonical-token']}>
+                <GroupJoin />
+            </MemoryRouter>,
+        );
+        expect(await screen.findByText('This invite link is invalid or has expired')).toBeInTheDocument();
+        expect(mocks.post).not.toHaveBeenCalled();
     });
 
     it('creates groups and reports API errors', async () => {

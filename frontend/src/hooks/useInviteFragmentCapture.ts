@@ -10,6 +10,17 @@ const INVITE_TOKEN_PATTERN = '[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]';
 const INVITE_TOKEN_RE = new RegExp(`^${INVITE_TOKEN_PATTERN}$`);
 const INVITE_FRAGMENT_RE = new RegExp(`^#invite=(${INVITE_TOKEN_PATTERN})$`);
 
+/** Returns a canonical token from the current fragment without mutating it. */
+export function readInviteFragmentToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return INVITE_FRAGMENT_RE.exec(window.location.hash)?.[1] ?? null;
+}
+
+/** Reports whether the current URL carries any invite fragment. */
+export function hasInviteFragment(): boolean {
+    return typeof window !== 'undefined' && window.location.hash.startsWith('#invite=');
+}
+
 /** Reads a canonical pending token without letting blocked storage break UI. */
 export function readPendingInviteToken(): string | null {
     try {
@@ -52,8 +63,8 @@ export function useInviteFragmentCapture(): void {
         if (typeof window === 'undefined') return;
         const hash = window.location.hash;
         if (!hash.startsWith('#invite=')) return;
-        const match = INVITE_FRAGMENT_RE.exec(hash);
-        if (match) storePendingInviteToken(match[1]);
+        const token = readInviteFragmentToken();
+        if (token) storePendingInviteToken(token);
         // Strip only the fragment; the token must never remain in the URL.
         window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
     }, [location]);

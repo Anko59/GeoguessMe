@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Icon from '../../components/ui/Icon';
-import { clearPendingInviteToken, readPendingInviteToken } from '../../hooks/useInviteFragmentCapture';
+import {
+    clearPendingInviteToken,
+    hasInviteFragment,
+    readInviteFragmentToken,
+    readPendingInviteToken,
+} from '../../hooks/useInviteFragmentCapture';
 import type { InvitePreview } from '../../types';
 import './GroupJoin.css';
 
@@ -13,10 +18,11 @@ export default function GroupJoin() {
     const location = useLocation();
     const [mode, setMode] = useState<'join' | 'create'>(location.pathname.endsWith('/create') ? 'create' : 'join');
     const [invite, setInvite] = useState<InvitePreview | null>(null);
+    const [inviteToken] = useState(() => readPendingInviteToken() ?? readInviteFragmentToken());
     // Derived synchronously from the pending token so the mount state never
     // requires a setState-in-effect round trip (react-hooks lint).
     const [inviteState, setInviteState] = useState<InviteState>(() =>
-        readPendingInviteToken() ? 'checking' : 'missing',
+        inviteToken ? 'checking' : hasInviteFragment() ? 'invalid' : 'missing',
     );
     const [inviteError, setInviteError] = useState('');
     const [name, setName] = useState('');
@@ -26,7 +32,7 @@ export default function GroupJoin() {
     useEffect(() => {
         if (mode !== 'join') return;
         let active = true;
-        const token = readPendingInviteToken();
+        const token = inviteToken ?? readPendingInviteToken();
         if (!token) return; // the lazy initializer already rendered the 'missing' state
         void api
             .post<InvitePreview>('/group/invites/preview', { invite_token: token })
@@ -53,13 +59,13 @@ export default function GroupJoin() {
         return () => {
             active = false;
         };
-    }, [mode]);
+    }, [inviteToken, mode]);
 
     const joinGroup = useCallback(async (): Promise<void> => {
         setError('');
         setJoining(true);
         try {
-            const token = readPendingInviteToken();
+            const token = inviteToken ?? readPendingInviteToken();
             if (!token) {
                 setInviteState('missing');
                 return;
@@ -72,7 +78,7 @@ export default function GroupJoin() {
         } finally {
             setJoining(false);
         }
-    }, [navigate]);
+    }, [inviteToken, navigate]);
 
     const handleCreate = async (e: React.FormEvent): Promise<void> => {
         e.preventDefault();
@@ -90,7 +96,7 @@ export default function GroupJoin() {
             setMode('join');
             // Reset the join state machine for the freshly entered join tab;
             // the effect below re-runs on the mode change and revalidates.
-            setInviteState(readPendingInviteToken() ? 'checking' : 'missing');
+            setInviteState((inviteToken ?? readPendingInviteToken()) ? 'checking' : 'missing');
             setInviteError('');
         }
         setError('');
