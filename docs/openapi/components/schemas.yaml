@@ -109,12 +109,63 @@ PublicProfile:
 
 Group:
   type: object
-  required: [id, name, code, created_at]
+  required: [id, name, created_at]
   properties:
     id: { type: string, format: uuid }
     name: { type: string }
-    code: { type: string, pattern: "^[A-Z0-9]{6}$" }
     created_at: { type: string, format: date-time }
+
+InviteToken:
+  type: string
+  minLength: 43
+  maxLength: 43
+  pattern: "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+  description: Canonical 32-byte base64url bearer token from a group invite link.
+
+InviteCreateRequest:
+  type: object
+  required: [group_id]
+  properties:
+    group_id: { type: string, format: uuid }
+
+InviteCreateResponse:
+  type: object
+  required: [id, group_id, token, invite_url, created_at, expires_at]
+  properties:
+    id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    token: { $ref: "#/InviteToken" }
+    invite_url:
+      {
+        type: string,
+        format: uri-reference,
+        description: "Join path carrying the token in a fragment (/group/join#invite=<token>); clients prepend their origin to build a shareable link.",
+      }
+    created_at: { type: string, format: date-time }
+    expires_at: { type: string, format: date-time }
+
+InviteListItem:
+  type: object
+  required: [id, creator_user_id, created_at, expires_at, revoked]
+  properties:
+    id: { type: string, format: uuid }
+    creator_user_id: { type: string, format: uuid }
+    created_at: { type: string, format: date-time }
+    expires_at: { type: string, format: date-time }
+    revoked: { type: [string, "null"], format: date-time }
+
+InvitePreviewRequest:
+  type: object
+  required: [invite_token]
+  properties:
+    invite_token: { $ref: "#/InviteToken" }
+
+InvitePreview:
+  type: object
+  required: [group_name, member_count]
+  properties:
+    group_name: { type: string }
+    member_count: { type: integer, minimum: 0 }
 
 GroupPhoto:
   type: object

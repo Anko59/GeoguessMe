@@ -37,6 +37,20 @@ func scanGroup(row interface{ Scan(...any) error }) (*models.Group, error) {
 	return &group, nil
 }
 
+// scanGroupInviteMetadata scans invite metadata without selecting the stored
+// bearer-token hash. List and ID-based management operations never need it.
+func scanGroupInviteMetadata(row interface{ Scan(...any) error }) (*models.GroupInvite, error) {
+	var invite models.GroupInvite
+	err := row.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &invite, nil
+}
+
 // scanGroupPhoto scans a group_photos row in the canonical column order of the
 // group_photos table.
 func scanGroupPhoto(row interface{ Scan(...any) error }) (*models.GroupPhoto, error) {

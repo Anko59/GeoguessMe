@@ -61,7 +61,11 @@ func TestGroupAndUploadValidation(t *testing.T) {
 	mock := newMockPool(t)
 	gameAPI := newGameAPI(t, mock)
 	requireStatus(t, gameAPI.CreateGroup, requestWithUser(http.MethodPost, "/", `{"name":""}`, "user-1"), http.StatusBadRequest)
-	requireStatus(t, gameAPI.JoinGroup, requestWithUser(http.MethodPost, "/", `{"code":"bad"}`, "user-1"), http.StatusBadRequest)
+	// Legacy typed codes are disabled: a code-only join is rejected with 410
+	// Gone (dedicated legacy_group_code_disabled error), and a missing invite
+	// token is also answered with 410 Gone.
+	requireStatus(t, gameAPI.JoinGroup, requestWithUser(http.MethodPost, "/", `{"code":"bad"}`, "user-1"), http.StatusGone)
+	requireStatus(t, gameAPI.JoinGroup, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusGone)
 	repos := repository.NewRepository(mock)
 	nilStoreGame := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
 	requireStatus(t, nilStoreGame.UploadPhoto, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusServiceUnavailable)

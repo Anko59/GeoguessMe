@@ -196,6 +196,10 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/user/profile/{userID}", protected(a.AuthAPI.GetPublicProfile))
 	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
+	mux.Handle("POST /api/v1/group/invites", protected(a.Game.CreateInvite))
+	mux.Handle("GET /api/v1/group/invites", protected(a.Game.ListInvites))
+	mux.Handle("POST /api/v1/group/invites/preview", limit("default")(http.HandlerFunc(a.Game.PreviewInvite)))
+	mux.Handle("DELETE /api/v1/group/invites/{inviteID}", protected(a.Game.RevokeInvite))
 	mux.Handle("/api/v1/group/details", protected(a.Game.GetGroupDetails))
 	mux.Handle("/api/v1/group/members", protected(a.Game.GetGroupMembers))
 	mux.Handle("/api/v1/group/leaderboard", protected(a.Game.GetLeaderboard))
@@ -218,10 +222,6 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(a.Game.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(a.Game.ServeChallengeMedia))
 	mux.Handle("/api/v1/users/{userID}/avatar", protected(a.AuthAPI.ServeUserAvatar))
-	// Link-preview endpoint for group invites: unauthenticated, returns HTML
-	// with Open Graph meta tags for messengers and redirects browsers.
-	mux.HandleFunc("GET /invite/{code}", a.Game.HandleInvitePreview)
-
 	registerSystemRoutes(mux, a.Config, a.DB, a.Metrics, a.Store)
 
 	var handler http.Handler = mux

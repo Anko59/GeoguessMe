@@ -15,6 +15,31 @@ export function uniqueGroup(): string {
     return `TestGroup_${Date.now()}`;
 }
 
+/**
+ * Create an invite in the open group-settings dialog and return the full
+ * invite URL (e.g. `http://localhost:8080/group/join#invite=TOKEN`). The raw
+ * token is only ever carried in the URL fragment; callers pass this URL to
+ * joiner pages, never the bare token.
+ */
+export async function createInviteFromSettings(page: Page): Promise<string> {
+    const settings = page.getByRole('dialog');
+    await settings.getByTestId('create-invite-btn').click();
+    const urlInput = settings.getByTestId('invite-url');
+    await urlInput.waitFor();
+    return await urlInput.inputValue();
+}
+
+/**
+ * Have an already-authenticated page join a group through an invite link.
+ * Navigating with the fragment lets useInviteFragmentCapture stash the token
+ * in sessionStorage; the join button appears once the preview resolves.
+ */
+export async function joinGroupViaInvite(page: Page, inviteUrl: string, groupId: string): Promise<void> {
+    await page.goto(inviteUrl);
+    await page.getByTestId('join-btn').click();
+    await page.waitForURL(new RegExp(`/group/${groupId}$`));
+}
+
 /** Credentials bag returned after signup or login. */
 export interface Credentials {
     username: string;

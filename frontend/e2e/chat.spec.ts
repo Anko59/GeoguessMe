@@ -1,12 +1,20 @@
 import { test, expect } from './fixtures';
-import { expectConnected, seedChatMessages, signupViaUI, signupWithToken, uniqueGroup } from './helpers';
+import {
+    createInviteFromSettings,
+    expectConnected,
+    joinGroupViaInvite,
+    seedChatMessages,
+    signupViaUI,
+    signupWithToken,
+    uniqueGroup,
+} from './helpers';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 interface ChatScenario {
     ownerContext: BrowserContext;
     owner: Page;
     groupId: string;
-    groupCode: string;
+    inviteUrl: string;
 }
 
 async function createScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<ChatScenario> {
@@ -20,12 +28,11 @@ async function createScenario(browser: Browser, contextOptions: BrowserContextOp
 
     const groupId = owner.url().split('/group/')[1];
     await owner.getByRole('button', { name: 'Open group settings' }).click();
-    const settings = owner.getByRole('dialog');
-    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-    await settings.getByRole('button', { name: 'Close settings' }).click();
+    const inviteUrl = await createInviteFromSettings(owner);
+    await owner.getByRole('button', { name: 'Close settings' }).click();
     await expectConnected(owner);
 
-    return { ownerContext, owner, groupId, groupCode };
+    return { ownerContext, owner, groupId, inviteUrl };
 }
 
 async function addMember(
@@ -36,10 +43,7 @@ async function addMember(
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     await signupViaUI(page);
-    await page.goto('/group/join');
-    await page.getByPlaceholder('6-character code').fill(scenario.groupCode);
-    await page.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-    await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+    await joinGroupViaInvite(page, scenario.inviteUrl, scenario.groupId);
     await page.goto(`/group/${scenario.groupId}`);
     await expectConnected(page);
     return { context, page };
@@ -299,9 +303,8 @@ test.describe('Chat via WebSocket', () => {
         const memberCtx = await controlledContext();
         const memberPage = await memberCtx.newPage();
         await signupViaUI(memberPage);
-        await memberPage.goto('/group/join');
-        await memberPage.getByPlaceholder('6-character code').fill(scenario.groupCode);
-        await memberPage.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
+        await memberPage.goto(scenario.inviteUrl);
+        await memberPage.getByTestId('join-btn').click();
         await memberPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
         await memberPage.goto(`/group/${scenario.groupId}`);
         await expectConnected(memberPage);

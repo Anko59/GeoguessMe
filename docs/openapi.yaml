@@ -40,6 +40,12 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/createGroup
   /group/join:
     $ref: ./openapi/paths/groups.yaml#/joinGroup
+  /group/invites:
+    $ref: ./openapi/paths/groups.yaml#/groupInvites
+  /group/invites/preview:
+    $ref: ./openapi/paths/groups.yaml#/invitePreview
+  /group/invites/{inviteID}:
+    $ref: ./openapi/paths/groups.yaml#/revokeInvite
   /group/details:
     $ref: ./openapi/paths/groups.yaml#/groupDetails
   /group/members:

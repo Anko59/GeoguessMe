@@ -143,11 +143,15 @@ func TestGroupAndReadHandlers(t *testing.T) {
 		t.Fatalf("create group status = %d", recorder.Code)
 	}
 
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs("ABC123").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	// JoinGroup validates the live invite and inserts the membership in one
+	// transaction, serializing the grant with invite revocation.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT g.id, g.name, g.code, g.created_at").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	mock.ExpectExec("INSERT INTO group_members").WithArgs(group.ID, "user-1", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
-	gameAPI.JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"code":"abc123"}`))
+	gameAPI.JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("join group status = %d", recorder.Code)
 	}

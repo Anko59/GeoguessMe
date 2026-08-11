@@ -144,3 +144,26 @@
         padding-inline: 0.5rem;
     }
 }
+
+.invite-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.invite-state h2 {
+    margin: 0;
+}
+
+.invite-state p {
+    margin: 0;
+    color: var(--text-muted, #6b7280);
+}
+
+.invite-members {
+    color: var(--text-muted, #6b7280);
+    margin: 0 0 0.75rem;
+}

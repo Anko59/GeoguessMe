@@ -276,9 +276,64 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Join a group by code. */
+        /** Join a group with an invite token. */
         post: operations['joinGroup'];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/group/invites': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the invites of a group for a current member. */
+        get: operations['listInvites'];
+        put?: never;
+        /** Create a group invite; returns the bearer token exactly once. */
+        post: operations['createInvite'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/group/invites/preview': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a group from an invite token without authenticating.
+         * @description Public endpoint. The token travels in the JSON body so it never appears in a URL, path, or access log. Unknown, expired, and revoked tokens all return the same generic 404.
+         */
+        post: operations['previewInvite'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/group/invites/{inviteID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a group invite immediately. */
+        delete: operations['revokeInvite'];
         options?: never;
         head?: never;
         patch?: never;
@@ -690,7 +745,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            code: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -707,6 +761,47 @@ export interface components {
             global_rank: components['schemas']['GlobalRank'];
             global_average_rank: components['schemas']['GlobalRank'];
             global_elo_rank: components['schemas']['GlobalRank'];
+        };
+        /** @description Canonical 32-byte base64url bearer token from a group invite link. */
+        InviteToken: string;
+        InviteListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            creator_user_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            revoked: string | null;
+        };
+        InviteCreateRequest: {
+            /** Format: uuid */
+            group_id: string;
+        };
+        InviteCreateResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            group_id: string;
+            token: components['schemas']['InviteToken'];
+            /**
+             * Format: uri-reference
+             * @description Join path carrying the token in a fragment (/group/join#invite=<token>); clients prepend their origin to build a shareable link.
+             */
+            invite_url: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        InvitePreviewRequest: {
+            invite_token: components['schemas']['InviteToken'];
+        };
+        InvitePreview: {
+            group_name: string;
+            member_count: number;
         };
         Member: {
             /** Format: uuid */
@@ -1391,7 +1486,7 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    code: string;
+                    invite_token: components['schemas']['InviteToken'];
                 };
             };
         };
@@ -1405,8 +1500,108 @@ export interface operations {
                     'application/json': components['schemas']['Group'];
                 };
             };
+            400: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+        };
+    };
+    listInvites: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invites. Never contains the bearer token. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['InviteListItem'][];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+        };
+    };
+    createInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['InviteCreateRequest'];
+            };
+        };
+        responses: {
+            /** @description Invite created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['InviteCreateResponse'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+        };
+    };
+    previewInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['InvitePreviewRequest'];
+            };
+        };
+        responses: {
+            /** @description Non-sensitive group preview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['InvitePreview'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+        };
+    };
+    revokeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inviteID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invite revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
         };
     };
     getGroupDetails: {

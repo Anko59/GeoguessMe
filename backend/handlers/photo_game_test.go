@@ -383,48 +383,52 @@ func TestUploadStorageFailureAndChallengeErrors(t *testing.T) {
 	}
 }
 
-func TestHandleInvitePreview(t *testing.T) {
-	cfg := handlerConfig()
-	cfg.PublicURL = "https://geoguessme.com"
-	mock := newMockPool(t)
-	repos := repository.NewRepository(mock)
-	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, cfg, nil, nil, time.Now)
-	now := time.Now().UTC()
-	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/invite/ABC123?from=Alice", nil)
-	req.SetPathValue("code", "ABC123")
-	gameAPI.HandleInvitePreview(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("invite preview status = %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if rec.Header().Get("Content-Type") != "text/html; charset=utf-8" {
-		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
-	}
-	mustContain := []string{"og:title", "og:description", "Join Paris on GeoGuessMe", "Alice invites you", "og:image", "https://geoguessme.com/logo.png", "/group/join?code=ABC123"}
-	for _, want := range mustContain {
-		if !strings.Contains(body, want) {
-			t.Fatalf("expected body to contain %q, got:\n%s", want, body)
-		}
-	}
-}
-
-func TestHandleInvitePreviewWithoutInviter(t *testing.T) {
+func TestPreviewInviteReturnsNonSensitiveData(t *testing.T) {
 	mock := newMockPool(t)
 	repos := repository.NewRepository(mock)
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
-	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "DEF456", CreatedAt: time.Now().UTC()}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
+	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}).AddRow("Paris", 3))
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/invite/DEF456", nil)
-	req.SetPathValue("code", "DEF456")
-	gameAPI.HandleInvitePreview(rec, req)
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("invite preview status = %d", rec.Code)
+		t.Fatalf("preview status = %d (%s)", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Join the group Paris on GeoGuessMe!") {
-		t.Fatalf("expected fallback message, got %s", rec.Body.String())
+	var body struct {
+		GroupName   string `json:"group_name"`
+		MemberCount int    `json:"member_count"`
+	}
+	if err := decodeJSONBody(rec, &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if body.GroupName != "Paris" || body.MemberCount != 3 {
+		t.Fatalf("preview body = %+v", body)
+	}
+}
+
+func TestPreviewInviteGenericNotFound(t *testing.T) {
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
+
+	// Unknown token hash: generic 404, no group data leaked.
+	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}))
+	rec := httptest.NewRecorder()
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown preview status = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invite_not_found") {
+		t.Fatalf("unknown preview body = %q", rec.Body.String())
+	}
+
+	// Missing token: 400.
+	rec = httptest.NewRecorder()
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{}`, ""))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing token status = %d, want 400", rec.Code)
 	}
 }
