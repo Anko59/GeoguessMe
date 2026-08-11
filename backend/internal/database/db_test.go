@@ -44,7 +44,7 @@ func TestMigrationStatusUsesPool(t *testing.T) {
 	when := time.Now().UTC()
 	mock.ExpectQuery("SELECT version, applied_at FROM schema_migrations").WillReturnRows(pgxmock.NewRows([]string{"version", "applied_at"}).AddRow(1, when))
 	records, err := MigrationStatus(context.Background(), mock)
-	if err != nil || len(records) != 15 || !records[0].Applied || records[1].Applied || records[2].Applied || records[3].Applied || records[4].Applied || records[5].Applied || records[6].Applied || records[7].Applied || records[8].Applied || records[9].Applied || records[10].Applied || records[11].Applied || records[12].Applied || records[13].Applied || records[14].Applied {
+	if err != nil || len(records) != 16 || !records[0].Applied || records[1].Applied || records[2].Applied || records[3].Applied || records[4].Applied || records[5].Applied || records[6].Applied || records[7].Applied || records[8].Applied || records[9].Applied || records[10].Applied || records[11].Applied || records[12].Applied || records[13].Applied || records[14].Applied || records[15].Applied {
 		t.Fatalf("migration records = %+v, %v", records, err)
 	}
 }
