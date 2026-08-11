@@ -51,7 +51,9 @@ singular challenge `group_id` form field — but deliberately leaves the legacy
 reaction database column and synchronization objects in place. Hosted deploys
 run every pending migration before replacing the backend, so bundling the
 cleanup migration with that application revision would remove rollback schema
-compatibility while the previous revision is still serving.
+compatibility while the previous revision is still serving. The 0.3.0 release
+must therefore leave migration 014 out of its ordinary migration set; the
+cleanup is a later, separately reviewed release.
 
 1. Deploy the new application revision (reads/writes only the new fields: the
    opaque `cursor`/`stable_cursor` contract, `reaction`, and repeated

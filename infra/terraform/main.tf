@@ -19,6 +19,30 @@ removed {
   }
 }
 
+locals {
+  # Hashes are rendered into a root-owned host manifest during provisioning.
+  # The runtime verifier must not use the deploy-writable release archive as
+  # its expected baseline because an attacker with deploy access could alter
+  # both the installed file and the comparison source.
+  runtime_hash_files = {
+    "bin/alert.sh"                    = "${path.module}/../../deployment/scripts/hosted/alert.sh"
+    "bin/backup.sh"                   = "${path.module}/../../deployment/scripts/hosted/backup.sh"
+    "bin/common.sh"                   = "${path.module}/../../deployment/scripts/hosted/common.sh"
+    "bin/deploy.sh"                   = "${path.module}/../../deployment/scripts/hosted/deploy.sh"
+    "bin/forced-command.sh"           = "${path.module}/../../deployment/scripts/hosted/forced-command.sh"
+    "bin/health-check.sh"             = "${path.module}/../../deployment/scripts/hosted/health-check.sh"
+    "bin/restore-rehearsal.sh"        = "${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"
+    "bin/verify-deployment-hashes.sh" = "${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"
+    "config/compose.hosted.yaml"      = "${path.module}/../../deployment/compose.hosted.yaml"
+    "config/compose.production.yaml"  = "${path.module}/../../deployment/compose.production.yaml"
+  }
+
+  runtime_hashes = join("\n", [
+    for relative_path, absolute_path in local.runtime_hash_files :
+    "${filesha256(absolute_path)}  ${relative_path}"
+  ])
+}
+
 resource "random_bytes" "tunnel_secret" {
   length = 32
 }
@@ -285,6 +309,7 @@ resource "hcloud_server" "app" {
     alert_script       = base64gzip(file("${path.module}/../../deployment/scripts/hosted/alert.sh"))
     production_compose = base64gzip(file("${path.module}/../../deployment/compose.production.yaml"))
     hosted_compose     = base64gzip(file("${path.module}/../../deployment/compose.hosted.yaml"))
+    runtime_hashes     = local.runtime_hashes
   })
 
   public_net {

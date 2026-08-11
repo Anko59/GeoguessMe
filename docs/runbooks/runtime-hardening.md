@@ -71,11 +71,12 @@ Two complementary checks verify the deployed host matches the revision:
    `TUNNEL_SERVICE_TOKEN_ID`, `TUNNEL_SERVICE_TOKEN_SECRET`,
    `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`). The check compares the
    installed root-owned `/opt/geoguessme/bin` scripts and
-   `/opt/geoguessme/config` compose files against the shared host revision in
-   root-owned `/opt/geoguessme/config/runtime-revision` and exits non-zero on
-   any mismatch. It also reports the selected environment's current application
-   revision for context. The `verify` verb is accepted by `forced-command.sh`;
-   provisioning the updated forced-command and the verification script onto the
+   `/opt/geoguessme/config` compose files against the root-owned
+   `/opt/geoguessme/config/runtime-hashes` manifest and exits non-zero on any
+   mismatch. It also reports the selected environment's current application
+   revision and the root-owned `/opt/geoguessme/config/runtime-revision` for
+   context. The `verify` verb is accepted by `forced-command.sh`; provisioning
+   the updated forced-command, verification script, and hash manifest onto the
    host is a live step (see below).
 2. The existing `geoguessme-health@dev.timer` and
    `geoguessme-health@production.timer` run the same root-owned verifier locally
@@ -103,14 +104,18 @@ set—not only the files changed most recently:
 
 Stop both `geoguessme-health@*.timer` units for the short copy window and use
 `install --owner=root --group=root --mode=...` for each file. After every file
-is installed, write the chosen 40-character commit to a temporary root-owned
-mode-0444 file and atomically rename it to
-`/opt/geoguessme/config/runtime-revision`; update this marker last so a partial
-copy can never be recorded as complete. Then start the timers again. Do not mix
-files from different revisions. Run `verify dev` and `verify production` over
-their respective Access SSH applications immediately; both must pass before the
-maintenance window closes. Rehearse the alert path by creating and restoring a
-controlled mismatch on a disposable host, never by tampering with production.
+is installed, create a temporary root-owned mode-0444 manifest containing the
+SHA-256 of each installed file under its `bin/...` or `config/...` path, and
+atomically rename it to `/opt/geoguessme/config/runtime-hashes`. Then write the
+chosen 40-character commit to a temporary root-owned mode-0444 file and
+atomically rename it to `/opt/geoguessme/config/runtime-revision`; update this
+marker last so a partial copy can never be recorded as complete. The manifest
+must remain root:root and must not be stored in the deploy-writable release
+archive. Then start the timers again. Do not mix files from different revisions.
+Run `verify dev` and `verify production` over their respective Access SSH
+applications immediately; both must pass before the maintenance window closes.
+Rehearse the alert path by creating and restoring a controlled mismatch on a
+disposable host, never by tampering with production.
 
 Repeat this all-files cutover whenever a later deployed revision changes a
 monitored definition. The root-owned compose files are the definitions the live

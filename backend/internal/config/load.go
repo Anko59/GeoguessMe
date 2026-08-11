@@ -28,7 +28,7 @@ func (l *loader) fail(key, kind, value string) {
 // hosts of the four major push providers: Google FCM, Mozilla Push, Apple Web
 // Push, and Windows. Operators may override it, but an explicit empty value is
 // rejected in production when push is enabled.
-const defaultPushEndpointAllowlist = "fcm.googleapis.com,push.services.mozilla.com,web-push.apple.com,wns.windows.com"
+const defaultPushEndpointAllowlist = "fcm.googleapis.com,push.services.mozilla.com,push.apple.com,notify.windows.com"
 
 func (l *loader) stringValue(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {

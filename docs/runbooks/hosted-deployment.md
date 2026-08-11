@@ -148,7 +148,8 @@ materialize the `dev` tree on it; this preserves linear squash history without
 rewriting protected branches. The release workflow checks tree equality,
 verifies the dev signatures, promotes the same manifests without rebuilding,
 adds the production signature, selects the next semantic patch version (with
-`v0.2.0` as the launch floor), creates the GitHub release/tag, and deploys
+reads the committed `.release-version` manifest, validates that it is newer than
+the latest semantic release tag, creates the GitHub release/tag, and deploys
 production. Pull-request jobs never receive deployment secrets.
 
 Both branches require signed commits, the aggregate Dockerized verification

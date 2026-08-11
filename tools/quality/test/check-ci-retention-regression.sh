@@ -129,6 +129,10 @@ contains "$RELEASE" 'imagetools create' "release promotes immutable manifests"
 contains "$RELEASE" 'cosign sign' "release adds the production workflow signature"
 contains "$RELEASE" 'actual_backend.*BACKEND_DIGEST' \
     "promotion verifies the backend digest did not change"
+contains "$RELEASE" 'release_version=.*\.release-version' \
+    "release reads the committed version manifest"
+contains "$RELEASE" 'requested_major' \
+    "release validates semantic version ordering"
 
 contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
 contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"

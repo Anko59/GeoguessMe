@@ -58,8 +58,8 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Errorf("Expected 2 default AllowedOrigins, got %d", len(cfg.AllowedOrigins))
 	}
-	if len(cfg.PushEndpointAllowlist) != 4 || cfg.PushEndpointAllowlist[0] != "fcm.googleapis.com" {
-		t.Errorf("Expected 4 default PushEndpointAllowlist entries starting with fcm.googleapis.com, got %v", cfg.PushEndpointAllowlist)
+	if got, want := strings.Join(cfg.PushEndpointAllowlist, ","), "fcm.googleapis.com,push.services.mozilla.com,push.apple.com,notify.windows.com"; got != want {
+		t.Errorf("Expected canonical default PushEndpointAllowlist %q, got %q", want, got)
 	}
 	if cfg.PushMaxSubscriptionsPerUser != 5 {
 		t.Errorf("Expected default PushMaxSubscriptionsPerUser 5, got %d", cfg.PushMaxSubscriptionsPerUser)

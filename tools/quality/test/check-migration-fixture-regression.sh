@@ -10,6 +10,7 @@ cd "$REPO"
 
 FIXTURE="deployment/scripts/legacy-migration-fixture.sql"
 SCRIPT="deployment/scripts/migration-concurrency.sh"
+MIGRATIONS="backend/internal/database/migrations"
 
 failures=0
 pass() { echo "PASS: $*"; }
@@ -30,6 +31,13 @@ if [ -x "$SCRIPT" ]; then
     pass "migration-concurrency.sh exists and is executable"
 else
     fail "migration-concurrency.sh missing or not executable: $SCRIPT"
+fi
+
+# -- staged cleanup must not be part of this release's migration set ---------
+if find "$MIGRATIONS" -type f -name '014_retire_legacy_reaction_emoji.sql' -print -quit | grep -q .; then
+    fail "migration 014 cleanup is bundled before the compatibility window"
+else
+    pass "migration 014 cleanup remains deferred"
 fi
 
 # -- fixture defines all expected legacy tables ------------------------------
@@ -84,9 +92,9 @@ for label in \
     "group_id backfilled from photo" \
     "kind default" \
     "schema_migrations entries after concurrent run" \
-    "legacy message_reactions.emoji column removed" \
-    "legacy reaction synchronization trigger removed" \
-    "reaction-only writes remain valid after compatibility cleanup" \
+    "legacy message_reactions.emoji column retained" \
+    "legacy reaction synchronization trigger retained" \
+    "reaction-only writes remain valid during compatibility window" \
     "duplicate survivor" \
     "ON CONFLICT DO NOTHING"; do
     if grep -q "$label" "$SCRIPT"; then

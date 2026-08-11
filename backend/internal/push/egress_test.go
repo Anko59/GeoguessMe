@@ -69,7 +69,7 @@ func (c cannedDoer) Do(*http.Request) (*http.Response, error) {
 }
 
 func TestValidateEndpointAgainstAllowlist(t *testing.T) {
-	guard := newEndpointGuard([]string{"fcm.googleapis.com", "push.services.mozilla.com", "web-push.apple.com", "wns.windows.com"}, false, stubResolver{}, recordDial(&[]string{}))
+	guard := newEndpointGuard([]string{"fcm.googleapis.com", "push.services.mozilla.com", "push.apple.com", "notify.windows.com"}, false, stubResolver{}, recordDial(&[]string{}))
 	cases := []struct {
 		name     string
 		endpoint string
@@ -77,8 +77,8 @@ func TestValidateEndpointAgainstAllowlist(t *testing.T) {
 	}{
 		{"fcm exact", "https://fcm.googleapis.com/fcm/send/abc", true},
 		{"mozilla exact", "https://push.services.mozilla.com/v1/abc", true},
-		{"apple exact", "https://web-push.apple.com/abc", true},
-		{"wns exact", "https://wns.windows.com/abc", true},
+		{"apple endpoint", "https://web.push.apple.com/abc", true},
+		{"wns endpoint", "https://cloud.notify.windows.com/?token=abc", true},
 		{"allowlisted subdomain", "https://eu.fcm.googleapis.com/abc", true},
 		{"unlisted domain", "https://evil.example.com/abc", false},
 		{"suffix confusion", "https://fcm.googleapis.com.evil.example/abc", false},

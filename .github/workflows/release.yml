@@ -49,23 +49,29 @@ jobs:
             echo "main does not contain the exact tested dev tree." >&2
             exit 1
           fi
+          release_version=$(tr -d '[:space:]' < .release-version)
+          if [[ ! "$release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo ".release-version must contain exactly MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          IFS=. read -r requested_major requested_minor requested_patch <<< "$release_version"
           latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname |
             grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-          if [[ -z "$latest" ]]; then
-            tag=v0.2.0
-          elif [[ "$latest" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+          if [[ -n "$latest" && "$latest" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             major=${BASH_REMATCH[1]}
             minor=${BASH_REMATCH[2]}
             patch=${BASH_REMATCH[3]}
-            if (( major == 0 && minor < 2 )); then
-              tag=v0.2.0
-            else
-              tag="v${major}.${minor}.$((patch + 1))"
+            if (( requested_major < major ||
+                (requested_major == major && requested_minor < minor) ||
+                (requested_major == major && requested_minor == minor && requested_patch <= patch) )); then
+              echo ".release-version $release_version must be newer than $latest" >&2
+              exit 1
             fi
-          else
+          elif [[ -n "$latest" ]]; then
             echo "Latest release tag is not semantic: $latest" >&2
             exit 1
           fi
+          tag="v$release_version"
           if git rev-parse --verify --quiet "refs/tags/$tag"; then
             echo "Release tag already exists: $tag" >&2
             exit 1
