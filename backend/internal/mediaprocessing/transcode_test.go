@@ -11,7 +11,7 @@ import (
 )
 
 func TestTranscodeArgVectorWithAudio(t *testing.T) {
-	args := transcodeArgs("/src/video.mp4", "/dst/out.mp4", true)
+	args := transcodeArgs("/src/video.mp4", "/dst/out.mp4", true, 2048)
 	want := []string{
 		"-nostdin",
 		"-y",
@@ -31,6 +31,7 @@ func TestTranscodeArgVectorWithAudio(t *testing.T) {
 		"-flags:v", "+bitexact",
 		"-flags:a", "+bitexact",
 		"-c:a", "aac", "-b:a", "128k",
+		"-fs", "2048",
 		"/dst/out.mp4",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -39,7 +40,7 @@ func TestTranscodeArgVectorWithAudio(t *testing.T) {
 }
 
 func TestTranscodeArgVectorWithoutAudio(t *testing.T) {
-	args := transcodeArgs("/src/video.mp4", "/dst/out.mp4", false)
+	args := transcodeArgs("/src/video.mp4", "/dst/out.mp4", false, 2048)
 	for _, seq := range [][]string{{"-map", "0:a:0"}, {"-c:a", "aac"}, {"-b:a", "128k"}} {
 		if hasSequence(args, seq...) {
 			t.Fatalf("audio arg sequence %v present without audio stream: %v", seq, args)
@@ -78,7 +79,7 @@ func hasSequence(haystack []string, seq ...string) bool {
 
 func TestTranscodeSuccess(t *testing.T) {
 	runner := &fakeRunner{exitCode: 0}
-	if err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", true, runner); err != nil {
+	if err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", true, 2048, runner); err != nil {
 		t.Fatalf("Transcode returned error: %v", err)
 	}
 	if runner.name != "ffmpeg" {
@@ -91,7 +92,7 @@ func TestTranscodeSuccess(t *testing.T) {
 
 func TestTranscodeNonZeroExit(t *testing.T) {
 	runner := &fakeRunner{exitCode: 1}
-	err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", false, runner)
+	err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", false, 2048, runner)
 	assertCode(t, err, ErrorTranscodeFailed)
 }
 
@@ -101,7 +102,7 @@ func TestTranscodeTimeout(t *testing.T) {
 	// Let the deadline fire deterministically.
 	time.Sleep(time.Millisecond)
 	runner := &fakeRunner{exitCode: 0, err: context.DeadlineExceeded}
-	err := Transcode(ctx, "/src/in", "/dst/out.mp4", false, runner)
+	err := Transcode(ctx, "/src/in", "/dst/out.mp4", false, 2048, runner)
 	assertCode(t, err, ErrorTimeout)
 }
 
@@ -109,14 +110,14 @@ func TestTranscodeTimeoutViaCtx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	runner := &fakeRunner{exitCode: 0, err: context.Canceled}
-	err := Transcode(ctx, "/src/in", "/dst/out.mp4", false, runner)
+	err := Transcode(ctx, "/src/in", "/dst/out.mp4", false, 2048, runner)
 	// Canceled (not DeadlineExceeded) is treated as an infra failure, not a
 	// validation timeout: the worker restarts the job.
 	assertCode(t, err, ErrorTranscodeFailed)
 }
 
 func TestTranscodeNilRunnerUsesDefault(t *testing.T) {
-	err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", false, nil)
+	err := Transcode(context.Background(), "/src/in", "/dst/out.mp4", false, 2048, nil)
 	if err == nil {
 		t.Fatal("expected an error from the default runner against a missing ffmpeg")
 	}
@@ -156,7 +157,7 @@ func TestTranscodeWithRealFFmpeg(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := Transcode(ctx, src, dst, true, nil); err != nil {
+	if err := Transcode(ctx, src, dst, true, 2<<20, nil); err != nil {
 		t.Fatalf("Transcode with real ffmpeg failed: %v", err)
 	}
 

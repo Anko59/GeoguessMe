@@ -22,16 +22,15 @@ import (
 // complete processing jobs and to enqueue durable deletion of raw sources and
 // partial canonical objects. *repository.Repository satisfies it.
 type JobStore interface {
-	ClaimProcessingJob(ctx context.Context, workerID string) (*models.MediaProcessingJob, error)
-	FailProcessingJob(ctx context.Context, jobID, errorCode string) error
+	ClaimProcessingJob(ctx context.Context, leaseToken string) (*models.MediaProcessingJob, error)
+	FailClaimedProcessingJob(ctx context.Context, jobID, leaseToken, quarantineKey, errorCode string) error
 	EnqueueMediaDeletion(ctx context.Context, source string, keys []string) error
-	CompleteChallengeProcessing(ctx context.Context, jobID string, photos []*models.Photo, mimeType string, byteSize int64) error
-	CompleteChatProcessing(ctx context.Context, jobID string, msg *models.Message, asset *models.ChatMedia) error
+	CompleteChallengeProcessing(ctx context.Context, jobID, leaseToken, quarantineKey string, photos []*models.Photo, mimeType string, byteSize int64) error
+	CompleteChatProcessing(ctx context.Context, jobID, leaseToken, quarantineKey string, msg *models.Message, asset *models.ChatMedia) error
 }
 
-// Broadcaster is the realtime fan-out the worker uses to announce a freshly
-// completed challenge or chat message exactly once after its transaction has
-// committed. *chat.Hub satisfies it.
+// Broadcaster is the best-effort realtime fan-out used after a result commits.
+// Persisted chat history and owner polling remain the durable recovery paths.
 type Broadcaster interface {
 	Broadcast(message models.Message)
 	BroadcastPersisted(message models.Message)
@@ -47,7 +46,7 @@ type PushNotifier interface {
 // Notifier are the only external seams; Runner is the ffprobe/ffmpeg seam
 // (nil selects the OS runner). The worker runs as a single in-process
 // goroutine inside the server process (see main.go), sharing the realtime hub
-// and push notifier so a completed record is announced exactly once.
+// and push notifier.
 type WorkerDeps struct {
 	Jobs           JobStore
 	Store          storage.ObjectStore
@@ -91,11 +90,11 @@ const (
 	// defaultMaxInputBytes is the 10 MiB input cap applied when no explicit
 	// configuration is injected (it mirrors UPLOAD_MAX_BYTES).
 	defaultMaxInputBytes = 10 << 20
+	// Canonical output may expand while transcoding but is never allowed to
+	// consume unbounded local disk or object storage.
+	canonicalOutputMultiplier = 2
 	// canonicalMIMEType is the only media type the worker ever produces.
 	canonicalMIMEType = "video/mp4"
-	// deletionSource identifies quarantine-source deletion jobs enqueued by the
-	// worker. It is informational (observability only).
-	deletionSource = "media-processing"
 )
 
 // NewWorker builds a worker from its explicit dependencies. A nil Runner
@@ -149,7 +148,8 @@ func (w *Worker) Run(ctx context.Context) {
 // was processed so Run can immediately claim the next one. Tests use it for
 // deterministic single-job execution.
 func (w *Worker) RunOnce(ctx context.Context) bool {
-	job, err := w.jobs.ClaimProcessingJob(ctx, w.workerID)
+	leaseToken := w.workerID + ":" + uuid.NewString()
+	job, err := w.jobs.ClaimProcessingJob(ctx, leaseToken)
 	if err != nil {
 		w.logError("claiming media processing job failed", "error", err)
 		return false
@@ -164,8 +164,8 @@ func (w *Worker) RunOnce(ctx context.Context) bool {
 // process handles one claimed job end to end: download the quarantine object,
 // validate and transcode it under the 60-second per-job bound, write the
 // canonical object(s), create the challenge/chat record and complete the job
-// atomically, then announce it exactly once and enqueue durable deletion of
-// the raw source. Every failure path marks the job failed with a stable code
+// atomically with durable deletion of the raw source, then announce it. Every
+// failure path marks the job failed with a stable code
 // and enqueues durable cleanup of the source and any partial canonical
 // objects.
 func (w *Worker) process(ctx context.Context, job *models.MediaProcessingJob) {
@@ -178,33 +178,41 @@ func (w *Worker) process(ctx context.Context, job *models.MediaProcessingJob) {
 	}
 	defer os.RemoveAll(dir)
 
+	// One wall-clock deadline covers the entire untrusted-data path, including
+	// object download, probe, transcode, and reading the bounded result.
+	ctxJob, cancel := context.WithTimeout(ctx, jobTimeout)
+	defer cancel()
 	sourcePath := filepath.Join(dir, "source.bin")
-	if err := w.download(ctx, job.QuarantineKey, sourcePath); err != nil {
-		w.fail(ctx, job, ErrorTranscodeFailed, err)
+	if err := w.download(ctxJob, job.QuarantineKey, sourcePath); err != nil {
+		w.fail(ctx, job, processingErrorCode(err), err)
 		return
 	}
 
-	// The 60-second deadline covers probe + transcode only; the success and
-	// cleanup paths below use the outer context so a deadline expiry can never
-	// orphan the quarantine object.
-	ctxJob, cancel := context.WithTimeout(ctx, jobTimeout)
 	spec, err := Validate(ctxJob, sourcePath, w.maxInputBytes, w.runner)
 	if err != nil {
-		cancel()
 		w.fail(ctx, job, processingErrorCode(err), err)
 		return
 	}
 	canonicalPath := filepath.Join(dir, "canonical.mp4")
-	if err := Transcode(ctxJob, sourcePath, canonicalPath, spec.HasAudio, w.runner); err != nil {
-		cancel()
+	maxOutputBytes := w.maxInputBytes * canonicalOutputMultiplier
+	if w.maxInputBytes > (1<<63-1)/canonicalOutputMultiplier {
+		maxOutputBytes = w.maxInputBytes
+	}
+	if err := Transcode(ctxJob, sourcePath, canonicalPath, spec.HasAudio, maxOutputBytes, w.runner); err != nil {
 		w.fail(ctx, job, processingErrorCode(err), err)
 		return
 	}
-	cancel()
 
-	data, err := os.ReadFile(canonicalPath)
+	info, err := os.Stat(canonicalPath)
+	if err == nil && info.Size() > maxOutputBytes {
+		err = validationError(ErrorOutputTooLarge, "canonical output exceeds %d bytes", maxOutputBytes)
+	}
+	var data []byte
+	if err == nil {
+		data, err = os.ReadFile(canonicalPath)
+	}
 	if err != nil {
-		w.fail(ctx, job, ErrorTranscodeFailed, err)
+		w.fail(ctx, job, processingErrorCode(err), err)
 		return
 	}
 
@@ -263,8 +271,16 @@ func (w *Worker) finishChallenge(ctx context.Context, job *models.MediaProcessin
 			RetentionAt:     now.Add(w.photoRetention),
 		})
 	}
-	if err := w.jobs.CompleteChallengeProcessing(ctx, job.ID, photos, canonicalMIMEType, int64(len(data))); err != nil {
+	if err := w.jobs.CompleteChallengeProcessing(ctx, job.ID, job.WorkerID, job.QuarantineKey, photos, canonicalMIMEType, int64(len(data))); err != nil {
 		w.cleanupKeys(ctx, keys)
+		if errors.Is(err, models.ErrMediaProcessingLeaseLost) {
+			w.logInfo("discarded challenge result after lease loss", "job_id", job.ID)
+			return
+		}
+		if errors.Is(err, models.ErrMediaProcessingAuthorizationRevoked) {
+			w.fail(ctx, job, ErrorAuthorizationRevoked, err)
+			return
+		}
 		w.fail(ctx, job, ErrorTranscodeFailed, err)
 		return
 	}
@@ -287,12 +303,11 @@ func (w *Worker) finishChallenge(ctx context.Context, job *models.MediaProcessin
 			w.notify.NotifyNewChallenge(ctx, photo.GroupID, job.UserID, photo.ID)
 		}
 	}
-	w.enqueueSourceDeletion(ctx, job)
 }
 
 // finishChat writes one canonical object, creates the chat message and its
 // attachment and completes the job in a single transaction, then broadcasts
-// the persisted message exactly once.
+// the persisted message to currently connected clients.
 func (w *Worker) finishChat(ctx context.Context, job *models.MediaProcessingJob, data []byte, now time.Time) {
 	var md models.ChatProcessingMetadata
 	if err := json.Unmarshal(job.Metadata, &md); err != nil {
@@ -326,19 +341,33 @@ func (w *Worker) finishChat(ctx context.Context, job *models.MediaProcessingJob,
 		Content:   md.Content,
 		CreatedAt: now,
 	}
-	if err := w.jobs.CompleteChatProcessing(ctx, job.ID, msg, asset); err != nil {
+	if err := w.jobs.CompleteChatProcessing(ctx, job.ID, job.WorkerID, job.QuarantineKey, msg, asset); err != nil {
 		w.cleanupKeys(ctx, []string{key})
+		if errors.Is(err, models.ErrMediaProcessingLeaseLost) {
+			w.logInfo("discarded chat result after lease loss", "job_id", job.ID)
+			return
+		}
+		if errors.Is(err, models.ErrMediaProcessingAuthorizationRevoked) {
+			w.fail(ctx, job, ErrorAuthorizationRevoked, err)
+			return
+		}
 		w.fail(ctx, job, ErrorTranscodeFailed, err)
 		return
 	}
 	if w.broadcast != nil {
 		w.broadcast.BroadcastPersisted(*msg)
 	}
-	w.enqueueSourceDeletion(ctx, job)
 }
 
 // download streams a quarantine object into a local temp file.
 func (w *Worker) download(ctx context.Context, key, dstPath string) error {
+	size, err := w.store.Stat(ctx, key)
+	if err != nil {
+		return err
+	}
+	if size > w.maxInputBytes {
+		return validationError(ErrorTooLarge, "quarantine object exceeds %d bytes", w.maxInputBytes)
+	}
 	object, err := w.store.Get(ctx, key)
 	if err != nil {
 		return err
@@ -348,10 +377,19 @@ func (w *Worker) download(ctx context.Context, key, dstPath string) error {
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(file, object)
+	written, copyErr := io.Copy(file, io.LimitReader(object, w.maxInputBytes+1))
 	closeErr := file.Close()
 	if copyErr != nil {
 		return copyErr
+	}
+	if written > w.maxInputBytes {
+		return validationError(ErrorTooLarge, "quarantine object exceeds %d bytes", w.maxInputBytes)
+	}
+	if written != size {
+		return errors.New("quarantine object size changed during download")
+	}
+	if err := ctx.Err(); err != nil {
+		return validationError(ErrorTimeout, "download exceeded its deadline")
 	}
 	return closeErr
 }
@@ -361,11 +399,9 @@ func (w *Worker) download(ctx context.Context, key, dstPath string) error {
 // by the caller before fail is reached.
 func (w *Worker) fail(ctx context.Context, job *models.MediaProcessingJob, code string, cause error) {
 	w.logError("media processing job failed", "job_id", job.ID, "code", code, "error", cause)
-	if err := w.jobs.FailProcessingJob(ctx, job.ID, code); err != nil {
+	if err := w.jobs.FailClaimedProcessingJob(ctx, job.ID, job.WorkerID, job.QuarantineKey, code); err != nil {
 		w.logError("marking media processing job failed failed", "job_id", job.ID, "error", err)
-	}
-	if err := w.jobs.EnqueueMediaDeletion(ctx, deletionSource, []string{job.QuarantineKey}); err != nil {
-		w.logError("enqueuing quarantine deletion failed", "job_id", job.ID, "error", err)
+		return
 	}
 }
 
@@ -382,20 +418,15 @@ func (w *Worker) cleanupKeys(ctx context.Context, keys []string) {
 	}
 }
 
-// enqueueSourceDeletion records the raw quarantine source for durable
-// deletion after a successful promotion.
-func (w *Worker) enqueueSourceDeletion(ctx context.Context, job *models.MediaProcessingJob) {
-	if err := w.jobs.EnqueueMediaDeletion(ctx, deletionSource, []string{job.QuarantineKey}); err != nil {
-		w.logError("enqueuing quarantine deletion failed", "job_id", job.ID, "error", err)
-	}
-}
-
 // processingErrorCode maps a validation or transcode error to its stable code,
 // falling back to a generic transcode failure for infrastructure errors so an
 // I/O problem is never misreported as an input rejection.
 func processingErrorCode(err error) string {
 	if code := ErrorCode(err); code != "" {
 		return code
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ErrorTimeout
 	}
 	return ErrorTranscodeFailed
 }

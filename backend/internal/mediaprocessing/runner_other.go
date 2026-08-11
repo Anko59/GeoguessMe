@@ -16,7 +16,7 @@ import (
 // wall-clock bound is the caller's context deadline.
 func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout, stderr strings.Builder
+	var stdout, stderr limitedCapture
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
@@ -30,5 +30,5 @@ func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]
 			err = fmt.Errorf("%w; stderr: %s", err, msg)
 		}
 	}
-	return []byte(stdout.String()), exitCode, err
+	return append([]byte(nil), stdout.Bytes()...), exitCode, err
 }

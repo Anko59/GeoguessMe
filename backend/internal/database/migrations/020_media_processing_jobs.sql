@@ -6,6 +6,13 @@
 -- record atomically once the canonical object has been written. Jobs are
 -- retained for 24 hours (expires_at) so the owner can poll the status
 -- endpoint, then purged by the cleanup runner.
+-- Deletion sources are operational labels, not a closed domain. Earlier
+-- migrations constrained them to four values, which made newer compensation
+-- paths fail exactly when durable cleanup was most important.
+ALTER TABLE media_deletion_jobs DROP CONSTRAINT IF EXISTS media_deletion_jobs_source_check;
+ALTER TABLE media_deletion_jobs
+ADD CONSTRAINT media_deletion_jobs_source_check CHECK (btrim(source) <> '');
+
 CREATE TABLE IF NOT EXISTS media_processing_jobs (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

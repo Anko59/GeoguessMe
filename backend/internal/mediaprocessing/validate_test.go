@@ -18,6 +18,7 @@ type fixtureStream struct {
 	Duration     string `json:"duration"`
 	AvgFrameRate string `json:"avg_frame_rate"`
 	RFrameRate   string `json:"r_frame_rate"`
+	ReadFrames   string `json:"nb_read_frames"`
 }
 
 type fixtureFormat struct {
@@ -194,6 +195,29 @@ func TestValidateRejectsTooHighFPS(t *testing.T) {
 	assertCode(t, err, ErrorTooHighFPS)
 }
 
+func TestValidateUsesCountedFramesForBrowserWebM(t *testing.T) {
+	stream := videoStream("vp8", 320, 240, "", "0/0")
+	stream.RFrameRate = "1000/1"
+	stream.ReadFrames = "25"
+	probe := probeJSON([]fixtureStream{stream}, "0.8")
+	spec, err := mustValidate(t, probe, tempInput(t, 16), 0)
+	if err != nil {
+		t.Fatalf("browser WebM rejected: %v", err)
+	}
+	if spec.FrameRate != 30 {
+		t.Errorf("frame rate = %v, want 30", spec.FrameRate)
+	}
+}
+
+func TestValidateRejectsExcessiveCountedFrameRate(t *testing.T) {
+	stream := videoStream("vp8", 320, 240, "", "0/0")
+	stream.RFrameRate = "1000/1"
+	stream.ReadFrames = "26"
+	probe := probeJSON([]fixtureStream{stream}, "0.8")
+	_, err := mustValidate(t, probe, tempInput(t, 16), 0)
+	assertCode(t, err, ErrorTooHighFPS)
+}
+
 func TestValidateRejectsUnsupportedVideoCodecs(t *testing.T) {
 	for _, codec := range []string{"av1", "hevc"} {
 		probe := probeJSON([]fixtureStream{videoStream(codec, 1280, 720, "10", "30")}, "10")
@@ -271,6 +295,28 @@ func TestValidateRejectsGarbageJSON(t *testing.T) {
 	assertCode(t, err, ErrorInvalidVideo)
 }
 
+func TestValidateReportsProbeDeadline(t *testing.T) {
+	runner := &fakeRunner{err: context.DeadlineExceeded}
+	_, err := Validate(context.Background(), tempInput(t, 16), 0, runner)
+	assertCode(t, err, ErrorTimeout)
+}
+
+func TestValidateRejectsNonFiniteNumbers(t *testing.T) {
+	cases := map[string][2]string{
+		"nan duration":      {"NaN", "30"},
+		"infinite duration": {"+Inf", "30"},
+		"nan frame rate":    {"10", "NaN"},
+		"zero denominator":  {"10", "1/0"},
+	}
+	for name, values := range cases {
+		t.Run(name, func(t *testing.T) {
+			probe := probeJSON([]fixtureStream{videoStream("h264", 1280, 720, values[0], values[1])}, values[0])
+			_, err := mustValidate(t, probe, tempInput(t, 16), 0)
+			assertCode(t, err, ErrorInvalidVideo)
+		})
+	}
+}
+
 func TestValidateProbesWithExpectedArgs(t *testing.T) {
 	srcPath := tempInput(t, 16)
 	runner := &fakeRunner{stdout: []byte(validVideoProbe()), exitCode: 0}
@@ -280,8 +326,8 @@ func TestValidateProbesWithExpectedArgs(t *testing.T) {
 	if runner.name != "ffprobe" {
 		t.Errorf("runner name = %q, want ffprobe", runner.name)
 	}
-	want := fmt.Sprintf("-print_format json -show_streams -show_format %s", srcPath)
-	if got := fmt.Sprintf("%v", runner.args); !containsAll(runner.args, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", srcPath) {
+	want := fmt.Sprintf("-print_format json -count_frames -show_streams -show_format %s", srcPath)
+	if got := fmt.Sprintf("%v", runner.args); !containsAll(runner.args, "-v", "error", "-print_format", "json", "-count_frames", "-show_streams", "-show_format", srcPath) {
 		t.Errorf("ffprobe args = %s, want to contain %s", got, want)
 	}
 }

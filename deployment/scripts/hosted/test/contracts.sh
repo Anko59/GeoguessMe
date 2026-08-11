@@ -186,8 +186,10 @@ assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting
 assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
-assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"'
-assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
+assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
+assert_contains "$BACKEND_DOCKERFILE" 'USER appuser:appuser'
 
 # Reject malformed image input before touching Docker or secrets.
 if "$DEPLOY" dev latest latest 0123456789012345678901234567890123456789 >/dev/null 2>&1; then

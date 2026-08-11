@@ -3,6 +3,7 @@ package mediaprocessing
 import (
 	"context"
 	"errors"
+	"strconv"
 )
 
 // Transcode re-encodes srcPath into a canonical MP4/H.264 object at dstPath.
@@ -16,11 +17,11 @@ import (
 // and ErrorTimeout when the context deadline expires. dstPath is left in a
 // partial state on failure; the caller is responsible for deleting it through
 // the durable cleanup path.
-func Transcode(ctx context.Context, srcPath, dstPath string, hasAudio bool, runner CommandRunner) error {
+func Transcode(ctx context.Context, srcPath, dstPath string, hasAudio bool, maxOutputBytes int64, runner CommandRunner) error {
 	if runner == nil {
 		runner = OSCommandRunner{}
 	}
-	_, exitCode, err := runner.Run(ctx, "ffmpeg", transcodeArgs(srcPath, dstPath, hasAudio)...)
+	_, exitCode, err := runner.Run(ctx, "ffmpeg", transcodeArgs(srcPath, dstPath, hasAudio, maxOutputBytes)...)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return validationError(ErrorTimeout, "transcode exceeded its deadline")
@@ -41,7 +42,7 @@ func Transcode(ctx context.Context, srcPath, dstPath string, hasAudio bool, runn
 // first so the file streams while still downloading. The legacy faststart
 // flag name is required: the pinned alpine ffmpeg 8.1.2-r0 build rejects the
 // newer fast_start spelling (and +fast-start) with a movflags parse error.
-func transcodeArgs(srcPath, dstPath string, hasAudio bool) []string {
+func transcodeArgs(srcPath, dstPath string, hasAudio bool, maxOutputBytes int64) []string {
 	args := []string{
 		"-nostdin",
 		"-y",
@@ -67,6 +68,9 @@ func transcodeArgs(srcPath, dstPath string, hasAudio bool) []string {
 	)
 	if hasAudio {
 		args = append(args, "-c:a", "aac", "-b:a", "128k")
+	}
+	if maxOutputBytes > 0 {
+		args = append(args, "-fs", strconv.FormatInt(maxOutputBytes, 10))
 	}
 	return append(args, dstPath)
 }

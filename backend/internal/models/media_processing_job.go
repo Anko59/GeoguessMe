@@ -1,6 +1,18 @@
 package models
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrMediaProcessingLeaseLost means a worker attempted to mutate a job after
+// its unique claim had been requeued or replaced. Callers must discard any
+// partial canonical output without touching the shared quarantine source.
+var ErrMediaProcessingLeaseLost = errors.New("media processing lease lost")
+
+// ErrMediaProcessingAuthorizationRevoked means the uploader is no longer a
+// member of every target group at finalization time.
+var ErrMediaProcessingAuthorizationRevoked = errors.New("media processing authorization revoked")
 
 // MediaProcessingKind is the target kind of an asynchronous media upload:
 // challenge photos or chat attachments.

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -109,17 +110,40 @@ func TestCompleteAndFailProcessingJob(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'ready'").
-		WithArgs("job-1", "photos/canonical-uuid", "challenge", "photo-1", "video/mp4", int64(1234)).
+		WithArgs("job-1", "photos/canonical-uuid", "challenge", "photo-1", "video/mp4", int64(1234), "lease-1").
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	if err := repo.CompleteProcessingJob(ctx, "job-1", "photos/canonical-uuid", "challenge", "photo-1", "video/mp4", 1234); err != nil {
+	if err := repo.CompleteProcessingJob(ctx, "job-1", "lease-1", "photos/canonical-uuid", "challenge", "photo-1", "video/mp4", 1234); err != nil {
 		t.Fatal(err)
 	}
 
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'failed'").
-		WithArgs("job-2", "transcode_failed").
+		WithArgs("job-2", "transcode_failed", "lease-2").
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	if err := repo.FailProcessingJob(ctx, "job-2", "transcode_failed"); err != nil {
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").WithArgs(pgxmock.AnyArg(), "quarantine/job-2", "media-processing").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if err := repo.FailClaimedProcessingJob(ctx, "job-2", "lease-2", "quarantine/job-2", "transcode_failed"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClaimLeasePreventsStaleTerminalWrites(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	ctx := context.Background()
+	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'ready'").
+		WithArgs("job-1", "photos/canonical", "photo", "photo-1", "video/mp4", int64(12), "stale-lease").
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	if err := repo.CompleteProcessingJob(ctx, "job-1", "stale-lease", "photos/canonical", "photo", "photo-1", "video/mp4", 12); !errors.Is(err, models.ErrMediaProcessingLeaseLost) {
+		t.Fatalf("stale completion error = %v", err)
+	}
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'failed'").
+		WithArgs("job-1", "timeout", "stale-lease").
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectRollback()
+	if err := repo.FailClaimedProcessingJob(ctx, "job-1", "stale-lease", "quarantine/job-1", "timeout"); !errors.Is(err, models.ErrMediaProcessingLeaseLost) {
+		t.Fatalf("stale failure error = %v", err)
 	}
 }
 
@@ -176,15 +200,19 @@ func TestPurgeExpiredProcessingJobs(t *testing.T) {
 	}
 }
 
-func TestAbandonedQuarantineListsIncompleteJobs(t *testing.T) {
+func TestAbandonQueuedProcessingJobsAtomicallyFailsJobs(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery("SELECT id, quarantine_key FROM media_processing_jobs").
-		WithArgs(time.Hour).
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE media_processing_jobs.*status = 'failed'").
+		WithArgs(time.Hour, "timeout").
 		WillReturnRows(pgxmock.NewRows([]string{"id", "quarantine_key"}).
 			AddRow("job-1", "quarantine/raw-1").
 			AddRow("job-2", "quarantine/raw-2"))
-	items, err := repo.AbandonedQuarantine(context.Background(), time.Hour)
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").WithArgs(pgxmock.AnyArg(), "quarantine/raw-1", "media-processing-abandoned").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO media_deletion_jobs").WithArgs(pgxmock.AnyArg(), "quarantine/raw-2", "media-processing-abandoned").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	items, err := repo.AbandonQueuedProcessingJobs(context.Background(), time.Hour, "timeout")
 	if err != nil || len(items) != 2 || items[0].JobID != "job-1" || items[1].QuarantineKey != "quarantine/raw-2" {
 		t.Fatalf("abandoned = %+v, %v", items, err)
 	}

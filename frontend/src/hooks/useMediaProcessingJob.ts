@@ -38,6 +38,8 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
     too_large_dims: 'That video resolution is too large. Please record a smaller clip.',
     too_high_fps: 'That video frame rate is too high. Please record a different clip.',
     too_large: 'That video is too large to process. Please record a shorter clip.',
+    output_too_large: 'The processed video is too large. Please record a shorter clip.',
+    authorization_revoked: 'You no longer have access to every selected group.',
     transcode_failed: 'The video could not be processed. Please try again.',
     timeout: 'Processing that video took too long. Please try again.',
 };
@@ -161,7 +163,7 @@ export function useMediaProcessingJob(
     return {
         job: current,
         error: currentError,
-        isProcessing: jobID !== null && !isDone,
+        isProcessing: jobID !== null && !isDone && currentError === '',
         isDone,
     };
 }

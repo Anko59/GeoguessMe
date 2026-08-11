@@ -87,14 +87,16 @@ func (f *fakeJobStore) ClaimProcessingJob(_ context.Context, workerID string) (*
 	}
 	job := f.claimQueue[0]
 	f.claimQueue = f.claimQueue[1:]
+	job.WorkerID = workerID
 	return job, nil
 }
 
-func (f *fakeJobStore) FailProcessingJob(_ context.Context, jobID, errorCode string) error {
+func (f *fakeJobStore) FailClaimedProcessingJob(_ context.Context, jobID, _, quarantineKey, errorCode string) error {
 	if f.failures == nil {
 		f.failures = map[string]string{}
 	}
 	f.failures[jobID] = errorCode
+	f.deletions = append(f.deletions, deletionCall{source: "media-processing", keys: []string{quarantineKey}})
 	return nil
 }
 
@@ -103,15 +105,16 @@ func (f *fakeJobStore) EnqueueMediaDeletion(_ context.Context, source string, ke
 	return nil
 }
 
-func (f *fakeJobStore) CompleteChallengeProcessing(_ context.Context, jobID string, photos []*models.Photo, mimeType string, byteSize int64) error {
+func (f *fakeJobStore) CompleteChallengeProcessing(_ context.Context, jobID, _, quarantineKey string, photos []*models.Photo, mimeType string, byteSize int64) error {
 	if f.completeErr != nil {
 		return f.completeErr
 	}
 	f.challengeCompletions = append(f.challengeCompletions, challengeCompletion{jobID: jobID, photos: photos, mimeType: mimeType, byteSize: byteSize})
+	f.deletions = append(f.deletions, deletionCall{source: "media-processing", keys: []string{quarantineKey}})
 	return nil
 }
 
-func (f *fakeJobStore) CompleteChatProcessing(_ context.Context, jobID string, msg *models.Message, asset *models.ChatMedia) error {
+func (f *fakeJobStore) CompleteChatProcessing(_ context.Context, jobID, _, quarantineKey string, msg *models.Message, asset *models.ChatMedia) error {
 	if f.completeErr != nil {
 		return f.completeErr
 	}
@@ -121,6 +124,7 @@ func (f *fakeJobStore) CompleteChatProcessing(_ context.Context, jobID string, m
 	msg.MediaID = &asset.ID
 	msg.MediaType = asset.MIMEType
 	f.chatCompletions = append(f.chatCompletions, chatCompletion{jobID: jobID, msg: msg, asset: asset})
+	f.deletions = append(f.deletions, deletionCall{source: "media-processing", keys: []string{quarantineKey}})
 	return nil
 }
 

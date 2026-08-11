@@ -124,13 +124,48 @@ func TestProcessMissingQuarantineSource(t *testing.T) {
 	}
 }
 
+func TestProcessRejectsOversizeQuarantineBeforeDownload(t *testing.T) {
+	store := &fakeObjectStore{objects: map[string][]byte{"quarantine/job-1": []byte("12345")}}
+	jobs := &fakeJobStore{}
+	runner := &scriptedRunner{}
+	worker := newTestWorker(jobs, store, runner, &fakeBroadcaster{}, &fakeNotifier{})
+	worker.maxInputBytes = 4
+	worker.process(context.Background(), challengeJob(models.ChallengeProcessingMetadata{GroupIDs: []string{"g1"}}))
+	if jobs.failures["job-1"] != ErrorTooLarge || len(runner.invoked) != 0 {
+		t.Fatalf("oversize processing = failures %v, runner %v", jobs.failures, runner.invoked)
+	}
+}
+
+func TestProcessRejectsOversizeCanonicalOutput(t *testing.T) {
+	store := &fakeObjectStore{objects: map[string][]byte{"quarantine/job-1": []byte("raw")}}
+	jobs := &fakeJobStore{}
+	runner := &scriptedRunner{canonicalOutput: []byte("1234567"), responses: []runResponse{{stdout: validProbeJSON()}, {exitCode: 0}}}
+	worker := newTestWorker(jobs, store, runner, &fakeBroadcaster{}, &fakeNotifier{})
+	worker.maxInputBytes = 3
+	worker.process(context.Background(), challengeJob(models.ChallengeProcessingMetadata{GroupIDs: []string{"g1"}}))
+	if jobs.failures["job-1"] != ErrorOutputTooLarge {
+		t.Fatalf("failures = %v, want output_too_large", jobs.failures)
+	}
+}
+
+func TestProcessLeaseLossDoesNotDeleteSharedSource(t *testing.T) {
+	store := &fakeObjectStore{objects: map[string][]byte{"quarantine/job-1": []byte("raw video bytes")}}
+	jobs := &fakeJobStore{completeErr: models.ErrMediaProcessingLeaseLost}
+	runner := &scriptedRunner{canonicalOutput: canonicalBytes, responses: []runResponse{{stdout: validProbeJSON()}, {exitCode: 0}}}
+	worker := newTestWorker(jobs, store, runner, &fakeBroadcaster{}, &fakeNotifier{})
+	worker.process(context.Background(), challengeJob(models.ChallengeProcessingMetadata{GroupIDs: []string{"g1"}}))
+	if len(jobs.failures) != 0 || deletionsContainKey(jobs.deletions, "quarantine/job-1") {
+		t.Fatalf("stale worker mutated shared job: failures %v, deletions %v", jobs.failures, jobs.deletions)
+	}
+}
+
 func TestRunOnceClaimsNothing(t *testing.T) {
 	jobs := &fakeJobStore{}
 	worker := newTestWorker(jobs, &fakeObjectStore{}, &scriptedRunner{}, &fakeBroadcaster{}, &fakeNotifier{})
 	if worker.RunOnce(context.Background()) {
 		t.Fatal("RunOnce claimed a job despite an empty queue")
 	}
-	if len(jobs.claimedWorkerIDs) != 1 || jobs.claimedWorkerIDs[0] != "test-worker" {
+	if len(jobs.claimedWorkerIDs) != 1 || !strings.HasPrefix(jobs.claimedWorkerIDs[0], "test-worker:") {
 		t.Fatalf("claims = %v", jobs.claimedWorkerIDs)
 	}
 }

@@ -150,7 +150,7 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 // refuses immediate deletion becomes a durable deletion job so no raw bytes
 // are ever orphaned.
 func (r CleanupRunner) sweepAbandonedProcessing(ctx context.Context, logger *slog.Logger) error {
-	items, err := r.Repos.AbandonedQuarantine(ctx, abandonedProcessingInterval)
+	items, err := r.Repos.AbandonQueuedProcessingJobs(ctx, abandonedProcessingInterval, mediaprocessing.ErrorTimeout)
 	if err != nil {
 		return err
 	}
@@ -162,12 +162,6 @@ func (r CleanupRunner) sweepAbandonedProcessing(ctx context.Context, logger *slo
 				if firstErr == nil {
 					firstErr = enqueueErr
 				}
-			}
-		}
-		if err := r.Repos.FailProcessingJob(ctx, item.JobID, mediaprocessing.ErrorTimeout); err != nil {
-			logger.Error("failing abandoned media processing job failed", "job_id", item.JobID, "error", err)
-			if firstErr == nil {
-				firstErr = err
 			}
 		}
 	}

@@ -67,3 +67,12 @@ func TestValidateNilRunnerUsesDefault(t *testing.T) {
 		t.Fatalf("ErrorCode = %q, want %q", got, ErrorInvalidVideo)
 	}
 }
+
+func TestLimitedCaptureRejectsExcessOutput(t *testing.T) {
+	var capture limitedCapture
+	payload := make([]byte, maxCommandOutputBytes+1)
+	written, err := capture.Write(payload)
+	if err == nil || written != maxCommandOutputBytes || len(capture.Bytes()) != maxCommandOutputBytes {
+		t.Fatalf("limited capture = written %d, bytes %d, err %v", written, len(capture.Bytes()), err)
+	}
+}

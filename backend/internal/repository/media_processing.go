@@ -54,25 +54,29 @@ func (r *Repository) ClaimProcessingJob(ctx context.Context, workerID string) (*
 	return job, err
 }
 
-// CompleteProcessingJob marks a job ready with its canonical result. The
-// canonical object and the challenge/chat record must already have been
-// written by the caller before this succeeds.
-func (r *Repository) CompleteProcessingJob(ctx context.Context, jobID, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
-	return r.completeProcessingJob(ctx, r.pool, jobID, canonicalKey, resultKind, resultID, mimeType, byteSize)
+// CompleteProcessingJob marks a claimed job ready with its canonical result.
+func (r *Repository) CompleteProcessingJob(ctx context.Context, jobID, leaseToken, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
+	return r.completeProcessingJob(ctx, r.pool, jobID, leaseToken, canonicalKey, resultKind, resultID, mimeType, byteSize)
 }
 
 // CompleteProcessingJobTx marks a job ready using the supplied transaction. It
 // is the tx-scoped variant used by the media-processing worker so the result
 // record and the job completion commit atomically.
-func (r *Repository) CompleteProcessingJobTx(ctx context.Context, tx pgx.Tx, jobID, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
-	return r.completeProcessingJob(ctx, tx, jobID, canonicalKey, resultKind, resultID, mimeType, byteSize)
+func (r *Repository) CompleteProcessingJobTx(ctx context.Context, tx pgx.Tx, jobID, leaseToken, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
+	return r.completeProcessingJob(ctx, tx, jobID, leaseToken, canonicalKey, resultKind, resultID, mimeType, byteSize)
 }
 
-func (r *Repository) completeProcessingJob(ctx context.Context, q execer, jobID, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
-	_, err := q.Exec(ctx, `UPDATE media_processing_jobs
+func (r *Repository) completeProcessingJob(ctx context.Context, q execer, jobID, leaseToken, canonicalKey, resultKind, resultID, mimeType string, byteSize int64) error {
+	tag, err := q.Exec(ctx, `UPDATE media_processing_jobs
 		SET status = 'ready', canonical_key = $2, result_kind = $3, result_id = $4, mime_type = $5, byte_size = $6, completed_at = CURRENT_TIMESTAMP
-		WHERE id = $1`, jobID, canonicalKey, resultKind, resultID, mimeType, byteSize)
-	return err
+		WHERE id = $1 AND status = 'processing' AND worker_id = $7`, jobID, canonicalKey, resultKind, resultID, mimeType, byteSize, leaseToken)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return models.ErrMediaProcessingLeaseLost
+	}
+	return nil
 }
 
 // CompleteChallengeProcessing marks a job ready and inserts its per-group
@@ -81,7 +85,7 @@ func (r *Repository) completeProcessingJob(ctx context.Context, q execer, jobID,
 // atomically, so a failure can never leave a ready job without its records or
 // records without a ready job. The job's canonical key and result id point at
 // the first photo.
-func (r *Repository) CompleteChallengeProcessing(ctx context.Context, jobID string, photos []*models.Photo, mimeType string, byteSize int64) error {
+func (r *Repository) CompleteChallengeProcessing(ctx context.Context, jobID, leaseToken, quarantineKey string, photos []*models.Photo, mimeType string, byteSize int64) error {
 	if len(photos) == 0 {
 		return errors.New("challenge processing requires at least one photo")
 	}
@@ -90,10 +94,27 @@ func (r *Repository) CompleteChallengeProcessing(ctx context.Context, jobID stri
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	groupIDs := make([]string, 0, len(photos))
+	for _, photo := range photos {
+		groupIDs = append(groupIDs, photo.GroupID)
+	}
+	var authorized bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (
+		SELECT 1 FROM unnest($2::text[]) AS target(group_id)
+		WHERE NOT EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = target.group_id AND gm.user_id = $1)
+	)`, photos[0].UserID, groupIDs).Scan(&authorized); err != nil {
+		return err
+	}
+	if !authorized {
+		return models.ErrMediaProcessingAuthorizationRevoked
+	}
 	if err := r.Groups.CreatePhotosTx(ctx, tx, photos); err != nil {
 		return err
 	}
-	if err := r.completeProcessingJob(ctx, tx, jobID, photos[0].StorageKey, "photo", photos[0].ID, mimeType, byteSize); err != nil {
+	if err := r.completeProcessingJob(ctx, tx, jobID, leaseToken, photos[0].StorageKey, "photo", photos[0].ID, mimeType, byteSize); err != nil {
+		return err
+	}
+	if err := enqueueMediaDeletionTx(ctx, tx, "media-processing", quarantineKey); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -102,28 +123,52 @@ func (r *Repository) CompleteChallengeProcessing(ctx context.Context, jobID stri
 // CompleteChatProcessing marks a job ready and inserts its chat message and
 // attachment in a single transaction. On success msg carries the media
 // reference the caller needs for the realtime broadcast.
-func (r *Repository) CompleteChatProcessing(ctx context.Context, jobID string, msg *models.Message, asset *models.ChatMedia) error {
+func (r *Repository) CompleteChatProcessing(ctx context.Context, jobID, leaseToken, quarantineKey string, msg *models.Message, asset *models.ChatMedia) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var authorized bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`, msg.GroupID, msg.UserID).Scan(&authorized); err != nil {
+		return err
+	}
+	if !authorized {
+		return models.ErrMediaProcessingAuthorizationRevoked
+	}
 	if err := r.Chat.CreateChatMediaMessageTx(ctx, tx, msg, asset); err != nil {
 		return err
 	}
-	if err := r.completeProcessingJob(ctx, tx, jobID, asset.StorageKey, "chat", msg.ID, asset.MIMEType, asset.ByteSize); err != nil {
+	if err := r.completeProcessingJob(ctx, tx, jobID, leaseToken, asset.StorageKey, "chat", msg.ID, asset.MIMEType, asset.ByteSize); err != nil {
+		return err
+	}
+	if err := enqueueMediaDeletionTx(ctx, tx, "media-processing", quarantineKey); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-// FailProcessingJob marks a job failed with a stable, non-sensitive error
-// code that the owner-facing status endpoint may surface.
-func (r *Repository) FailProcessingJob(ctx context.Context, jobID, errorCode string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE media_processing_jobs
+// FailClaimedProcessingJob fails only the caller's live claim. A stale worker
+// cannot fail or delete the source of a job that has already been reclaimed.
+func (r *Repository) FailClaimedProcessingJob(ctx context.Context, jobID, leaseToken, quarantineKey, errorCode string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `UPDATE media_processing_jobs
 		SET status = 'failed', error_code = $2, completed_at = CURRENT_TIMESTAMP
-		WHERE id = $1`, jobID, errorCode)
-	return err
+		WHERE id = $1 AND status = 'processing' AND worker_id = $3`, jobID, errorCode, leaseToken)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return models.ErrMediaProcessingLeaseLost
+	}
+	if err := enqueueMediaDeletionTx(ctx, tx, "media-processing", quarantineKey); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // GetProcessingJob returns a job by id for its owner. A non-owner or missing
@@ -143,7 +188,7 @@ func (r *Repository) GetProcessingJob(ctx context.Context, jobID, userID string)
 func (r *Repository) RequeueStaleProcessingJobs(ctx context.Context, staleAfter time.Duration) (int, error) {
 	tag, err := r.pool.Exec(ctx, `UPDATE media_processing_jobs
 		SET status = 'queued', started_at = NULL, worker_id = NULL
-		WHERE status = 'processing' AND started_at < CURRENT_TIMESTAMP - $1`, staleAfter)
+		WHERE status = 'processing' AND started_at < CURRENT_TIMESTAMP - $1::interval`, staleAfter)
 	if err != nil {
 		return 0, err
 	}
@@ -169,14 +214,19 @@ type AbandonedQuarantine struct {
 	QuarantineKey string
 }
 
-// AbandonedQuarantine lists quarantine keys of incomplete jobs (queued or
-// processing) older than abandonAfter whose canonical object was never written.
-// The cleanup runner deletes the raw object and fails the job with a stable
-// error code through FailProcessingJob.
-func (r *Repository) AbandonedQuarantine(ctx context.Context, abandonAfter time.Duration) ([]AbandonedQuarantine, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, quarantine_key FROM media_processing_jobs
-		WHERE status IN ('queued', 'processing') AND queued_at < CURRENT_TIMESTAMP - $1
-		ORDER BY queued_at`, abandonAfter)
+// AbandonQueuedProcessingJobs atomically transitions old queued jobs to failed
+// and returns their quarantine keys. Claiming and abandonment can therefore
+// never select the same job, and active workers are never cleaned underneath.
+func (r *Repository) AbandonQueuedProcessingJobs(ctx context.Context, abandonAfter time.Duration, errorCode string) ([]AbandonedQuarantine, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `UPDATE media_processing_jobs
+		SET status = 'failed', error_code = $2, completed_at = CURRENT_TIMESTAMP
+		WHERE status = 'queued' AND queued_at < CURRENT_TIMESTAMP - $1::interval
+		RETURNING id, quarantine_key`, abandonAfter, errorCode)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +239,24 @@ func (r *Repository) AbandonedQuarantine(ctx context.Context, abandonAfter time.
 		}
 		result = append(result, item)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for _, item := range result {
+		if err := enqueueMediaDeletionTx(ctx, tx, "media-processing-abandoned", item.QuarantineKey); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func enqueueMediaDeletionTx(ctx context.Context, tx execer, source, key string) error {
+	_, err := tx.Exec(ctx, `INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ($1, $2, $3) ON CONFLICT (storage_key) WHERE completed_at IS NULL DO NOTHING`, newID(), key, source)
+	return err
 }
 
 func scanProcessingJob(row rowScanner) (*models.MediaProcessingJob, error) {

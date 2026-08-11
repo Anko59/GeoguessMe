@@ -975,7 +975,7 @@ export interface components {
             completed_at?: string | null;
             /** @description Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned. */
             result?: components['schemas']['ChallengeCreated'] | components['schemas']['Message'];
-            /** @description Stable, non-sensitive failure code (for example invalid_video or transcode_failed); present only when the job failed. */
+            /** @description Stable, non-sensitive failure code (for example invalid_video, authorization_revoked, output_too_large, or transcode_failed); present only when the job failed. */
             error_code?: string;
         };
         ChallengeAccepted: {

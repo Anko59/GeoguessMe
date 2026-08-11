@@ -121,6 +121,7 @@ describe('useMediaProcessingJob', () => {
             await vi.advanceTimersByTimeAsync(4_000);
         });
         expect(result.current.error).toContain('temporarily unavailable');
+        expect(result.current.isProcessing).toBe(false);
         expect(result.current.job).toBeNull();
 
         const calls = mocks.get.mock.calls.length;
@@ -186,6 +187,8 @@ describe('useMediaProcessingJob', () => {
 
     it('maps stable failure codes to friendly, non-sensitive copy', () => {
         expect(mediaProcessingErrorMessage('too_long')).toContain('30 seconds or shorter');
+        expect(mediaProcessingErrorMessage('output_too_large')).toContain('processed video is too large');
+        expect(mediaProcessingErrorMessage('authorization_revoked')).toContain('no longer have access');
         expect(mediaProcessingErrorMessage('transcode_failed')).toContain('could not be processed');
         expect(mediaProcessingErrorMessage(undefined)).toContain('could not be processed');
         expect(mediaProcessingErrorMessage('unexpected_internal_code')).toContain('could not be processed');

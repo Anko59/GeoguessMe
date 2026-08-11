@@ -26,8 +26,33 @@
 package mediaprocessing
 
 import (
+	"bytes"
 	"context"
+	"io"
 )
+
+const maxCommandOutputBytes = 1 << 20
+
+// limitedCapture prevents a hostile file from making ffprobe/ffmpeg exhaust
+// worker memory through diagnostic or JSON output.
+type limitedCapture struct {
+	buf bytes.Buffer
+}
+
+func (w *limitedCapture) Write(p []byte) (int, error) {
+	remaining := maxCommandOutputBytes - w.buf.Len()
+	if remaining <= 0 {
+		return 0, io.ErrShortWrite
+	}
+	if len(p) > remaining {
+		_, _ = w.buf.Write(p[:remaining])
+		return remaining, io.ErrShortWrite
+	}
+	return w.buf.Write(p)
+}
+
+func (w *limitedCapture) Bytes() []byte  { return w.buf.Bytes() }
+func (w *limitedCapture) String() string { return w.buf.String() }
 
 // CommandRunner executes an external tool and returns its captured stdout and
 // exit status. It is the single seam through which ffprobe and ffmpeg are

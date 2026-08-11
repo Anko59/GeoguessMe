@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -38,6 +39,12 @@ const (
 	// ErrorTimeout is returned when ffprobe or ffmpeg exceeds the caller's
 	// context deadline.
 	ErrorTimeout = "timeout"
+	// ErrorOutputTooLarge is returned when canonical output reaches its hard
+	// byte ceiling.
+	ErrorOutputTooLarge = "output_too_large"
+	// ErrorAuthorizationRevoked is returned when group membership was revoked
+	// while an upload was quarantined.
+	ErrorAuthorizationRevoked = "authorization_revoked"
 )
 
 // Input acceptance limits. These mirror the F-10 acceptance criteria.
@@ -124,6 +131,7 @@ type ffprobeStream struct {
 	Duration     string `json:"duration"`
 	AvgFrameRate string `json:"avg_frame_rate"`
 	RFrameRate   string `json:"r_frame_rate"`
+	ReadFrames   string `json:"nb_read_frames"`
 }
 
 type ffprobeFormat struct {
@@ -144,11 +152,15 @@ func Validate(ctx context.Context, srcPath string, maxBytes int64, runner Comman
 	stdout, exitCode, err := runner.Run(ctx, "ffprobe",
 		"-v", "error",
 		"-print_format", "json",
+		"-count_frames",
 		"-show_streams",
 		"-show_format",
 		srcPath,
 	)
 	if err != nil || exitCode != 0 {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, validationError(ErrorTimeout, "probe exceeded its deadline")
+		}
 		// Polyglot, truncated, or otherwise unreadable input: ffprobe refuses
 		// to describe it. The reason is not surfaced to owners.
 		return nil, validationError(ErrorInvalidVideo, "ffprobe rejected the input")
@@ -222,6 +234,9 @@ func Validate(ctx context.Context, srcPath string, maxBytes int64, runner Comman
 
 	fps, err := parseFrameRate(vStream.AvgFrameRate)
 	if err != nil {
+		fps, err = frameRateFromCount(vStream.ReadFrames, duration)
+	}
+	if err != nil {
 		fps, err = parseFrameRate(vStream.RFrameRate)
 	}
 	if err != nil || fps <= 0 {
@@ -254,6 +269,27 @@ func Validate(ctx context.Context, srcPath string, maxBytes int64, runner Comman
 	}, nil
 }
 
+// frameRateFromCount handles containers such as browser-produced WebM where
+// ffprobe reports avg_frame_rate as 0/0 and r_frame_rate as the 1000 Hz
+// timestamp timebase rather than the encoded frame rate. Validate invokes
+// ffprobe with -count_frames. Container duration may describe the timestamp
+// span from the first frame to the last, so N frames contain N-1 intervals;
+// using that interval count avoids rejecting a valid short 30 fps recording
+// (25 frames over 0.8 seconds) as 31.25 fps.
+func frameRateFromCount(frames string, duration float64) (float64, error) {
+	frames = strings.TrimSpace(frames)
+	count, err := strconv.ParseFloat(frames, 64)
+	if err != nil || count <= 0 || duration <= 0 || math.IsNaN(count) || math.IsInf(count, 0) {
+		return 0, errors.New("invalid frame count")
+	}
+	intervals := math.Max(count-1, 1)
+	fps := intervals / duration
+	if math.IsNaN(fps) || math.IsInf(fps, 0) {
+		return 0, errors.New("invalid frame rate")
+	}
+	return fps, nil
+}
+
 // parseDuration parses a ffprobe duration string ("10.0", "N/A"). Missing or
 // malformed durations yield an error, which the caller maps to invalid_video.
 func parseDuration(s string) (float64, error) {
@@ -262,7 +298,7 @@ func parseDuration(s string) (float64, error) {
 		return 0, errors.New("empty duration")
 	}
 	d, err := strconv.ParseFloat(s, 64)
-	if err != nil || d < 0 {
+	if err != nil || d < 0 || math.IsNaN(d) || math.IsInf(d, 0) {
 		return 0, errors.New("invalid duration")
 	}
 	return d, nil
@@ -277,7 +313,7 @@ func parseFrameRate(s string) (float64, error) {
 	}
 	if !strings.Contains(s, "/") {
 		f, err := strconv.ParseFloat(s, 64)
-		if err != nil || f <= 0 {
+		if err != nil || f <= 0 || math.IsNaN(f) || math.IsInf(f, 0) {
 			return 0, errors.New("invalid frame rate")
 		}
 		return f, nil
@@ -285,8 +321,12 @@ func parseFrameRate(s string) (float64, error) {
 	parts := strings.SplitN(s, "/", 2)
 	num, err1 := strconv.ParseFloat(parts[0], 64)
 	den, err2 := strconv.ParseFloat(parts[1], 64)
-	if err1 != nil || err2 != nil || num <= 0 || den <= 0 {
+	if err1 != nil || err2 != nil || num <= 0 || den <= 0 || math.IsNaN(num) || math.IsNaN(den) || math.IsInf(num, 0) || math.IsInf(den, 0) {
 		return 0, errors.New("invalid frame rate")
 	}
-	return num / den, nil
+	result := num / den
+	if math.IsNaN(result) || math.IsInf(result, 0) {
+		return 0, errors.New("invalid frame rate")
+	}
+	return result, nil
 }

@@ -47,13 +47,22 @@ const rlimitNPROC = 0x6
 
 // applyChildRlimits applies the package resource ceilings to the current
 // process (the re-exec'd trampoline, which immediately execs the real tool).
-// Errors are ignored on purpose: the rlimits are a defense-in-depth backstop
-// on top of the worker container's cpus/mem/pids deployment bounds, and
-// lowering hard limits is permitted for non-root processes.
-func applyChildRlimits() {
-	_ = syscall.Setrlimit(syscall.RLIMIT_CPU, &syscall.Rlimit{Cur: maxCPUSeconds, Max: maxCPUSeconds})
-	_ = syscall.Setrlimit(syscall.RLIMIT_AS, &syscall.Rlimit{Cur: maxAddrSpaceBytes, Max: maxAddrSpaceBytes})
-	_ = syscall.Setrlimit(rlimitNPROC, &syscall.Rlimit{Cur: maxChildPIDs, Max: maxChildPIDs})
+func applyChildRlimits() error {
+	limits := []struct {
+		resource int
+		value    uint64
+		name     string
+	}{
+		{syscall.RLIMIT_CPU, maxCPUSeconds, "cpu"},
+		{syscall.RLIMIT_AS, maxAddrSpaceBytes, "address-space"},
+		{rlimitNPROC, maxChildPIDs, "process-count"},
+	}
+	for _, limit := range limits {
+		if err := syscall.Setrlimit(limit.resource, &syscall.Rlimit{Cur: limit.value, Max: limit.value}); err != nil {
+			return fmt.Errorf("set %s rlimit: %w", limit.name, err)
+		}
+	}
+	return nil
 }
 
 // HandleRlimitHelperInvocation routes a re-exec'd process into the rlimit
@@ -69,7 +78,10 @@ func HandleRlimitHelperInvocation() bool {
 	if len(args) == 0 {
 		os.Exit(1)
 	}
-	applyChildRlimits()
+	if err := applyChildRlimits(); err != nil {
+		fmt.Fprintf(os.Stderr, "mediaprocessing: %v\n", err)
+		os.Exit(126)
+	}
 	name := args[0]
 	env := make([]string, 0, len(os.Environ()))
 	for _, kv := range os.Environ() {
@@ -106,7 +118,7 @@ func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]
 	cmdArgs := append([]string{name}, args...)
 	cmd := exec.CommandContext(ctx, self, cmdArgs...)
 	cmd.Env = append(os.Environ(), helperEnv+"=1")
-	var stdout, stderr strings.Builder
+	var stdout, stderr limitedCapture
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err = cmd.Run()
@@ -120,5 +132,5 @@ func (OSCommandRunner) Run(ctx context.Context, name string, args ...string) ([]
 			err = fmt.Errorf("%w; stderr: %s", err, msg)
 		}
 	}
-	return []byte(stdout.String()), exitCode, err
+	return append([]byte(nil), stdout.Bytes()...), exitCode, err
 }
