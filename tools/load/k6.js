@@ -54,18 +54,20 @@ export function setup() {
     }
 
     // Verify that the identity rate limiter fires when a single identity
-    // exceeds the configured quota.  The setup login already consumed one
-    // slot; three more login calls from the same identity push past the
-    // per-window limit (3 req / 10 s), confirming the security control is
-    // active without weakening it.
+    // exceeds the configured test quota. The setup login already consumed one
+    // of ten slots, so ten more calls must produce a standards-compliant 429.
+    // Count only the complete response contract so a stray 429 from another
+    // layer cannot satisfy the security assertion.
     const probe = users[0];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
         const r = http.post(
             `${__ENV.BASE_URL}/api/v1/auth/login`,
             JSON.stringify({ username: probe.username, password: probe.password }),
             { headers: { 'Content-Type': 'application/json' } },
         );
-        if (r.status === 429) rateLimitEnforced.add(1);
+        if (r.status === 429 && r.headers['Retry-After'] && r.json('error.code') === 'rate_limited') {
+            rateLimitEnforced.add(1);
+        }
     }
 
     return { users };

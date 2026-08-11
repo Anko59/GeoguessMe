@@ -38,6 +38,7 @@ phases=(
     "Image hardening"
     "Compose configuration validation"
     "Start production-like local stack"
+    "Effective runtime hardening"
     "Health, readiness, and HTTP verification"
 )
 for phase in "${phases[@]}"; do
@@ -190,10 +191,8 @@ fi
 
 # ── Test 13: Container runtime security invariants ───────────────────────────
 echo "--- Test 13: Runtime security checks ---"
-# The script must verify the production compose has read_only and healthcheck
-# settings, but these are validated structurally via compose validation.
-# The script already validates compose config --quiet which catches missing
-# service-level properties. Verify the compose production file still has them.
+# Compose schema validation cannot require our security policy, so verify the
+# policy markers and the migration dependency explicitly.
 COMPOSE_PROD="$(cd "$(dirname "$0")/../../.." && pwd)/deployment/compose.production.yaml"
 if [ -f "$COMPOSE_PROD" ]; then
     if grep -q 'read_only: true' "$COMPOSE_PROD"; then
@@ -209,7 +208,12 @@ if [ -f "$COMPOSE_PROD" ]; then
     # Migration must wait for healthy database when local-db profile is active.
     # The depends_on uses required: false so production deploys without local-db
     # are unaffected.
-    if grep -A 10 '^  migration:' "$COMPOSE_PROD" | grep -q 'service_healthy'; then
+    migration_block=$(awk '
+        /^  migration:$/ { inside = 1; next }
+        inside && /^  [[:alnum:]_-]+:$/ { exit }
+        inside { print }
+    ' "$COMPOSE_PROD")
+    if grep -q 'condition: service_healthy' <<<"$migration_block"; then
         pass "migration service depends on healthy database"
     else
         fail "migration service missing db health dependency"

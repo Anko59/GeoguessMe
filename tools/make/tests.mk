@@ -5,13 +5,16 @@
 test-debt-markers-regression: ## Exercise owned and unowned maintenance-marker fixtures.
 	tools/quality/debt/check-markers-test.sh
 
-test-unit: test-backend test-frontend ## Run backend and frontend unit tests.
+test-unit: test-backend test-frontend test-reconnect-harness ## Run application and operational-tool unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
 test-frontend: ## Run frontend unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
+
+test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/load/reconnect-rehearsal && go test ./...'
 
 test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
