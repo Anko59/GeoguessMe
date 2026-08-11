@@ -28,10 +28,12 @@ two minutes of planned deployment interruption.
    and export its S3 credentials plus rotated `HCLOUD_TOKEN` and
    `CLOUDFLARE_API_TOKEN`.
 
-The Cloudflare Terraform token needs zone DNS, R2 bucket, Tunnel, Access apps,
-and Access service-token write permissions scoped to this account/zone. The
-Hetzner token should be scoped to the dedicated project. Do not reuse either
-token in application or deployment jobs.
+The Cloudflare Terraform token needs zone DNS/settings, Email Routing, R2
+bucket, Tunnel, identity-provider, and Access-application write permissions
+scoped to this account/zone. Service tokens are created outside Terraform, so
+this token does not need Access service-token write permission. The Hetzner
+token should be scoped to the dedicated project. Do not reuse either token in
+application or deployment jobs.
 
 ## Provision
 
@@ -66,7 +68,7 @@ ssh -i /path/to/operator-key \
   ops@deploy.geoguessme.com
 ```
 
-Export a Cloudflare Access service-token ID and secret as
+Export a Cloudflare Access service-token client ID and client secret as
 `TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` before using this
 non-interactive operator route. Create that token outside Terraform (see
 [docs/runbooks/access-tokens.md](access-tokens.md)); Terraform never holds

@@ -38,24 +38,45 @@ variable "access_email" {
 }
 
 variable "dev_health_token_id" {
-  description = "Access service-token ID for development health checks. The token is created outside Terraform and its secret never enters state."
+  description = "Cloudflare resource UUID (result.id, not client_id) for the development health service token. The token is created outside Terraform and its secret never enters state."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", var.dev_health_token_id))
+    error_message = "dev_health_token_id must be the service token's UUID-shaped result.id, not its client_id."
+  }
 }
 
 variable "dev_deploy_token_id" {
-  description = "Access service-token ID for development deployment SSH. The token is created outside Terraform and its secret never enters state."
+  description = "Cloudflare resource UUID (result.id, not client_id) for the development deployment service token. The token is created outside Terraform and its secret never enters state."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", var.dev_deploy_token_id))
+    error_message = "dev_deploy_token_id must be the service token's UUID-shaped result.id, not its client_id."
+  }
 }
 
 variable "prod_deploy_token_id" {
-  description = "Access service-token ID for production deployment SSH. The token is created outside Terraform and its secret never enters state."
+  description = "Cloudflare resource UUID (result.id, not client_id) for the production deployment service token. The token is created outside Terraform and its secret never enters state."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", var.prod_deploy_token_id))
+    error_message = "prod_deploy_token_id must be the service token's UUID-shaped result.id, not its client_id."
+  }
 }
 
 variable "operator_email" {
   description = "Operator mailbox that receives DMARC aggregate/failure reports via Cloudflare Email Routing."
   type        = string
   default     = "jeancollette138@gmail.com"
+}
+
+variable "enable_dmarc_forwarding" {
+  description = "Create the DMARC forwarding rule only after the operator destination address has been verified in Cloudflare."
+  type        = bool
+  default     = false
 }
 
 variable "spf_record" {

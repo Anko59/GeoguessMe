@@ -19,9 +19,10 @@ run "hosted_plan" {
     admin_ssh_public_key         = "ssh-ed25519 AAAAoperator operator"
     dev_ci_ssh_public_key        = "ssh-ed25519 AAAAdevelopment development"
     production_ci_ssh_public_key = "ssh-ed25519 AAAAproduction production"
-    dev_health_token_id          = "mock-dev-health-token-id"
-    dev_deploy_token_id          = "mock-dev-deploy-token-id"
-    prod_deploy_token_id         = "mock-prod-deploy-token-id"
+    dev_health_token_id          = "11111111-1111-4111-8111-111111111111"
+    dev_deploy_token_id          = "22222222-2222-4222-8222-222222222222"
+    prod_deploy_token_id         = "33333333-3333-4333-8333-333333333333"
+    enable_dmarc_forwarding      = true
   }
 
   assert {
@@ -60,8 +61,8 @@ run "hosted_plan" {
   assert {
     condition = (
       cloudflare_email_routing_settings.main.zone_id == var.cloudflare_zone_id &&
-      cloudflare_email_routing_rule.dmarc.matchers[0].value == "dmarc@geoguessme.com" &&
-      cloudflare_email_routing_rule.dmarc.actions[0].value[0] == var.operator_email
+      cloudflare_email_routing_rule.dmarc[0].matchers[0].value == "dmarc@geoguessme.com" &&
+      cloudflare_email_routing_rule.dmarc[0].actions[0].value[0] == var.operator_email
     )
     error_message = "Email routing must forward DMARC reports from dmarc@geoguessme.com to the operator mailbox."
   }

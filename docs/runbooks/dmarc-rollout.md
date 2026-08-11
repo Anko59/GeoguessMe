@@ -18,6 +18,22 @@ DMARC reports go to `dmarc@geoguessme.com`, which Cloudflare Email Routing
 forwards to the operator mailbox (`var.operator_email`). Confirm those reports
 arrive before advancing the policy.
 
+## Enable forwarding safely
+
+Cloudflare will not forward to a destination address until its verification
+email has been accepted, so provisioning is deliberately split into two reviewed
+applies:
+
+1. Set `operator_email` and leave `enable_dmarc_forwarding = false`. Review and
+   apply the plan; this enables Email Routing and requests destination
+   verification without creating a broken forwarding rule.
+2. Accept Cloudflare's verification email and confirm the address is verified in
+   the dashboard.
+3. Set `enable_dmarc_forwarding = true`, create and review a fresh plan, then
+   apply it to create the `dmarc@geoguessme.com` forwarding rule.
+4. Send a test message to `dmarc@geoguessme.com` and confirm it reaches the
+   operator mailbox before relying on the DMARC aggregate reports.
+
 ## Staged rollout
 
 Advance the `p=` value and `pct=` only after each preceding stage has delivered

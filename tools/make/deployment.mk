@@ -172,7 +172,7 @@ terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
 	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
 
 terraform-plan: terraform-init ## Create a reviewed plan in a mode-0700 directory.
-	@mkdir -p -m 0700 infra/terraform/.tfplan
+	@install -d -m 0700 infra/terraform/.tfplan
 	$(TERRAFORM) plan -out=.tfplan/geoguessme.tfplan
 	@chmod 0600 infra/terraform/.tfplan/geoguessme.tfplan
 	@echo 'Plan written to infra/terraform/.tfplan/geoguessme.tfplan (mode 0600).'

@@ -3,15 +3,18 @@ cloudflare_zone_id            = "replace-me"
 admin_ssh_public_key          = "ssh-ed25519 replace-me operator"
 dev_ci_ssh_public_key         = "ssh-ed25519 replace-me github-dev"
 production_ci_ssh_public_key  = "ssh-ed25519 replace-me github-production"
-# Access service-token IDs (non-secret) for the three isolated Access
-# applications. Create each token outside Terraform and pipe its secret into the
-# matching GitHub environment secret (see docs/runbooks/access-tokens.md);
-# Terraform never holds or outputs the client secrets.
-dev_health_token_id  = "replace-me-dev-health-client-id"
-dev_deploy_token_id  = "replace-me-dev-deploy-client-id"
-prod_deploy_token_id = "replace-me-prod-deploy-client-id"
+# Access service-token resource UUIDs (the API response's id, not client_id) for
+# the three isolated Access applications. Create each token outside Terraform;
+# put its client_id and client_secret into the matching GitHub environment (see
+# docs/runbooks/access-tokens.md). Terraform never holds client credentials.
+dev_health_token_id  = "11111111-1111-4111-8111-111111111111"
+dev_deploy_token_id  = "22222222-2222-4222-8222-222222222222"
+prod_deploy_token_id = "33333333-3333-4333-8333-333333333333"
 # Operator mailbox that receives DMARC reports via Cloudflare Email Routing.
 operator_email = "replace-me@example.com"
+# First apply with false, verify the destination from Cloudflare's email, then
+# set true and apply a newly reviewed plan to create the forwarding rule.
+enable_dmarc_forwarding = false
 # Single combined SPF TXT value: Brevo include plus Cloudflare Email Routing
 # forwarding. Do not also add a v=spf1 TXT under brevo_dns_records.
 spf_record = "v=spf1 include:spf.brevo.com include:_spf.mx.cloudflare.net ~all"

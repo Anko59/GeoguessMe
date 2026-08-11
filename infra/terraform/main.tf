@@ -1,3 +1,24 @@
+// Preserve existing Access resources during the policy split. The legacy
+// service token remains live but leaves Terraform state so operators can revoke
+// it only after all three replacement credentials have been verified.
+moved {
+  from = cloudflare_zero_trust_access_application.dev
+  to   = cloudflare_zero_trust_access_application.dev_health
+}
+
+moved {
+  from = cloudflare_zero_trust_access_application.deployment
+  to   = cloudflare_zero_trust_access_application.dev_deployment
+}
+
+removed {
+  from = cloudflare_zero_trust_access_service_token.github
+
+  lifecycle {
+    destroy = false
+  }
+}
+
 resource "random_bytes" "tunnel_secret" {
   length = 32
 }
@@ -122,6 +143,8 @@ resource "cloudflare_email_routing_address" "operator" {
 }
 
 resource "cloudflare_email_routing_rule" "dmarc" {
+  count = var.enable_dmarc_forwarding ? 1 : 0
+
   zone_id  = var.cloudflare_zone_id
   name     = "Forward DMARC reports to operator mailbox"
   enabled  = true
@@ -135,6 +158,11 @@ resource "cloudflare_email_routing_rule" "dmarc" {
     type  = "forward"
     value = [var.operator_email]
   }]
+
+  depends_on = [
+    cloudflare_email_routing_address.operator,
+    cloudflare_email_routing_settings.main,
+  ]
 }
 
 resource "cloudflare_zero_trust_access_identity_provider" "email_otp" {
