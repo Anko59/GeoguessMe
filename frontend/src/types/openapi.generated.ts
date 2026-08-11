@@ -762,6 +762,8 @@ export interface components {
             global_average_rank: components['schemas']['GlobalRank'];
             global_elo_rank: components['schemas']['GlobalRank'];
         };
+        /** @description Canonical 32-byte base64url bearer token from a group invite link. */
+        InviteToken: string;
         InviteListItem: {
             /** Format: uuid */
             id: string;
@@ -783,8 +785,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             group_id: string;
-            /** @description Raw bearer token; returned exactly once at creation. */
-            token: string;
+            token: components['schemas']['InviteToken'];
             /**
              * Format: uri-reference
              * @description Join path carrying the token in a fragment (/group/join#invite=<token>); clients prepend their origin to build a shareable link.
@@ -796,8 +797,7 @@ export interface components {
             expires_at: string;
         };
         InvitePreviewRequest: {
-            /** @description Bearer token delivered via the join-link fragment. */
-            invite_token: string;
+            invite_token: components['schemas']['InviteToken'];
         };
         InvitePreview: {
             group_name: string;
@@ -1486,8 +1486,7 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    /** @description Bearer token from a group invite link. */
-                    invite_token: string;
+                    invite_token: components['schemas']['InviteToken'];
                 };
             };
         };
@@ -1501,6 +1500,7 @@ export interface operations {
                     'application/json': components['schemas']['Group'];
                 };
             };
+            400: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
             410: components['responses']['ErrorResponse'];
         };
@@ -1577,7 +1577,9 @@ export interface operations {
                     'application/json': components['schemas']['InvitePreview'];
                 };
             };
+            400: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
         };
     };
     revokeInvite: {

@@ -232,12 +232,13 @@ describe('App shell — protected routes with authentication', () => {
             return Promise.reject(new Error('unexpected POST ' + url));
         });
         apiMocks.get.mockResolvedValue({ data: [] });
-        routeRef.current = '/group/join#invite=invitetoken1';
+        const inviteToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+        routeRef.current = `/group/join#invite=${inviteToken}`;
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
         // GroupJoin previews the invite token it read from sessionStorage.
         expect(await screen.findByText('Join Friends?')).toBeInTheDocument();
-        expect(sessionStorage.getItem('pending_invite_token')).toBe('invitetoken1');
+        expect(sessionStorage.getItem('pending_invite_token')).toBe(inviteToken);
         // The fragment is stripped from the address bar; the token stays in sessionStorage.
         expect(window.location.hash).toBe('');
     });

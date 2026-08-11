@@ -115,6 +115,13 @@ Group:
     name: { type: string }
     created_at: { type: string, format: date-time }
 
+InviteToken:
+  type: string
+  minLength: 43
+  maxLength: 43
+  pattern: "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+  description: Canonical 32-byte base64url bearer token from a group invite link.
+
 InviteCreateRequest:
   type: object
   required: [group_id]
@@ -127,7 +134,7 @@ InviteCreateResponse:
   properties:
     id: { type: string, format: uuid }
     group_id: { type: string, format: uuid }
-    token: { type: string, description: "Raw bearer token; returned exactly once at creation." }
+    token: { $ref: "#/InviteToken" }
     invite_url:
       {
         type: string,
@@ -151,7 +158,7 @@ InvitePreviewRequest:
   type: object
   required: [invite_token]
   properties:
-    invite_token: { type: string, description: "Bearer token delivered via the join-link fragment." }
+    invite_token: { $ref: "#/InviteToken" }
 
 InvitePreview:
   type: object

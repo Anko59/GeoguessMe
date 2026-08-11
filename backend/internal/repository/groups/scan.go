@@ -37,11 +37,11 @@ func scanGroup(row interface{ Scan(...any) error }) (*models.Group, error) {
 	return &group, nil
 }
 
-// scanGroupInvite scans a group_invites row in the canonical column order of
-// the group_invites table. It is the single owner of invite row scanning.
-func scanGroupInvite(row interface{ Scan(...any) error }) (*models.GroupInvite, error) {
+// scanGroupInviteMetadata scans invite metadata without selecting the stored
+// bearer-token hash. List and ID-based management operations never need it.
+func scanGroupInviteMetadata(row interface{ Scan(...any) error }) (*models.GroupInvite, error) {
 	var invite models.GroupInvite
-	err := row.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.TokenHash, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt)
+	err := row.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

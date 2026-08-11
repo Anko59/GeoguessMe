@@ -61,11 +61,12 @@ joinGroup:
             type: object
             required: [invite_token]
             properties:
-              invite_token: { type: string, description: "Bearer token from a group invite link." }
+              invite_token: { $ref: "../components/schemas.yaml#/InviteToken" }
     responses:
       "200":
         description: Joined group.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Group" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
@@ -136,7 +137,9 @@ invitePreview:
       "200":
         description: Non-sensitive group preview.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/InvitePreview" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 groupDetails:
   get:

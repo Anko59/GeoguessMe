@@ -3,6 +3,7 @@ package groups
 import (
 	"context"
 	"errors"
+	"time"
 
 	"geoguessme/internal/models"
 
@@ -13,7 +14,7 @@ import (
 // SHA-256 hash (invite.TokenHash). The active-invite cap per group and the
 // per-creator daily creation cap are enforced inside one transaction that
 // locks the group and creator rows, so concurrent creations cannot overshoot
-// either limit on the single backend replica.
+// either limit across backend replicas.
 func (r *Repository) CreateInvite(ctx context.Context, invite *models.GroupInvite, maxActivePerGroup, maxPerUserPerDay int) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -27,6 +28,13 @@ func (r *Repository) CreateInvite(ctx context.Context, invite *models.GroupInvit
 		return err
 	}
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, invite.CreatorUserID); err != nil {
+		return err
+	}
+	var membership int
+	if err := tx.QueryRow(ctx, `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2 FOR SHARE`, invite.GroupID, invite.CreatorUserID).Scan(&membership); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotMember
+		}
 		return err
 	}
 
@@ -53,22 +61,20 @@ func (r *Repository) CreateInvite(ctx context.Context, invite *models.GroupInvit
 	return tx.Commit(ctx)
 }
 
-// InviteByTokenHash resolves an invite by its hashed token, or returns nil
-// when no invite carries that hash.
-func (r *Repository) InviteByTokenHash(ctx context.Context, tokenHash string) (*models.GroupInvite, error) {
-	return scanGroupInvite(r.pool.QueryRow(ctx, `SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE token_hash = $1`, tokenHash))
-}
-
 // InviteByID resolves an invite by its id, or returns nil when it does not
 // exist. It never exposes the token hash.
 func (r *Repository) InviteByID(ctx context.Context, inviteID string) (*models.GroupInvite, error) {
-	return scanGroupInvite(r.pool.QueryRow(ctx, `SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE id = $1`, inviteID))
+	return scanGroupInviteMetadata(r.pool.QueryRow(ctx, `SELECT id, group_id, creator_user_id, created_at, expires_at, revoked_at FROM group_invites WHERE id = $1`, inviteID))
 }
 
-// ListInvitesByGroup returns every invite of a group. Token hashes are never
-// selected, so list responses cannot leak the bearer value.
-func (r *Repository) ListInvitesByGroup(ctx context.Context, groupID string) ([]models.GroupInvite, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE group_id = $1 ORDER BY created_at DESC`, groupID)
+// ListInvitesByGroup returns every invite only while userID is a current group
+// member. Token hashes are never selected, so management reads cannot carry
+// bearer-derived material beyond the lookup path that needs it.
+func (r *Repository) ListInvitesByGroup(ctx context.Context, groupID, userID string) ([]models.GroupInvite, error) {
+	rows, err := r.pool.Query(ctx, `SELECT gi.id, gi.group_id, gi.creator_user_id, gi.created_at, gi.expires_at, gi.revoked_at
+		FROM group_invites gi
+		JOIN group_members gm ON gm.group_id = gi.group_id AND gm.user_id = $2
+		WHERE gi.group_id = $1 ORDER BY gi.created_at DESC`, groupID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +82,7 @@ func (r *Repository) ListInvitesByGroup(ctx context.Context, groupID string) ([]
 	invites := []models.GroupInvite{}
 	for rows.Next() {
 		var invite models.GroupInvite
-		if err := rows.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.TokenHash, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt); err != nil {
+		if err := rows.Scan(&invite.ID, &invite.GroupID, &invite.CreatorUserID, &invite.CreatedAt, &invite.ExpiresAt, &invite.RevokedAt); err != nil {
 			return nil, err
 		}
 		invites = append(invites, invite)
@@ -87,27 +93,56 @@ func (r *Repository) ListInvitesByGroup(ctx context.Context, groupID string) ([]
 // RevokeInvite marks an invite revoked unless it is already revoked. It
 // returns true when this call performed the revocation and false when the
 // invite does not exist or was already revoked.
-func (r *Repository) RevokeInvite(ctx context.Context, inviteID, groupID string) (bool, error) {
-	tag, err := r.pool.Exec(ctx, `UPDATE group_invites SET revoked_at = now() WHERE id = $1 AND group_id = $2 AND revoked_at IS NULL`, inviteID, groupID)
+func (r *Repository) RevokeInvite(ctx context.Context, inviteID, groupID, userID string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE group_invites gi SET revoked_at = now()
+		WHERE gi.id = $1 AND gi.group_id = $2 AND gi.revoked_at IS NULL
+		AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = gi.group_id AND gm.user_id = $3)`, inviteID, groupID, userID)
 	if err != nil {
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
 }
 
-// GroupPreview returns the public, non-sensitive preview data for an invite:
-// the group name and its current member count. Callers must validate the
-// invite (token hash match, unrevoked, unexpired) before calling this.
-func (r *Repository) GroupPreview(ctx context.Context, groupID string) (string, int, error) {
+// JoinByInviteTokenHash atomically validates a live invite and adds userID to
+// its group. Locking the invite row serializes joins with revocation, so a
+// revocation cannot land between credential validation and membership grant.
+// Replays by an existing member are intentionally idempotent.
+func (r *Repository) JoinByInviteTokenHash(ctx context.Context, tokenHash, userID string, joinedAt time.Time) (*models.Group, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	group, err := scanGroup(tx.QueryRow(ctx, `SELECT g.id, g.name, g.code, g.created_at
+		FROM group_invites gi JOIN groups g ON g.id = gi.group_id
+		WHERE gi.token_hash = $1 AND gi.revoked_at IS NULL AND gi.expires_at > $2
+		FOR UPDATE OF gi`, tokenHash, joinedAt))
+	if err != nil || group == nil {
+		return group, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, user_id, joined_at) VALUES ($1, $2, $3) ON CONFLICT (group_id, user_id) DO NOTHING`, group.ID, userID, joinedAt); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return group, nil
+}
+
+// GroupPreviewByInviteTokenHash validates the live invite and returns its
+// public group preview in one statement. Keeping validation and the read
+// together prevents a revocation from landing between them.
+func (r *Repository) GroupPreviewByInviteTokenHash(ctx context.Context, tokenHash string, previewedAt time.Time) (string, int, bool, error) {
 	var name string
 	var memberCount int
 	if err := r.pool.QueryRow(ctx, `
 		SELECT g.name, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id)
-		FROM groups g WHERE g.id = $1`, groupID).Scan(&name, &memberCount); err != nil {
+		FROM group_invites gi JOIN groups g ON g.id = gi.group_id
+		WHERE gi.token_hash = $1 AND gi.revoked_at IS NULL AND gi.expires_at > $2`, tokenHash, previewedAt).Scan(&name, &memberCount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", 0, ErrNotFound
+			return "", 0, false, nil
 		}
-		return "", 0, err
+		return "", 0, false, err
 	}
-	return name, memberCount, nil
+	return name, memberCount, true, nil
 }

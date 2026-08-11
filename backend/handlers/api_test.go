@@ -143,18 +143,15 @@ func TestGroupAndReadHandlers(t *testing.T) {
 		t.Fatalf("create group status = %d", recorder.Code)
 	}
 
-	// JoinGroup: resolve the invite by its token hash, load the group, then
-	// add the member (idempotent when already a member).
-	inviteExpiry := now.Add(7 * 24 * time.Hour)
-	mock.ExpectQuery("SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE token_hash").
-		WithArgs(pgxmock.AnyArg()).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "creator_user_id", "token_hash", "created_at", "expires_at", "revoked_at"}).
-			AddRow("00000000-0000-0000-0000-0000000000aa", group.ID, "user-2", "hash", now, inviteExpiry, nil))
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE id").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	// JoinGroup validates the live invite and inserts the membership in one
+	// transaction, serializing the grant with invite revocation.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT g.id, g.name, g.code, g.created_at").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
 	mock.ExpectExec("INSERT INTO group_members").WithArgs(group.ID, "user-1", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
-	gameAPI.JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"invite_token":"some-invite-token"}`))
+	gameAPI.JoinGroup(recorder, ownerRequest(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("join group status = %d", recorder.Code)
 	}

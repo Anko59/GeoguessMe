@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
     post: vi.fn(),
 }));
 
+const inviteToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
 vi.mock('../../api', () => ({
     default: { post: mocks.post },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
@@ -26,7 +28,7 @@ function LocationDisplay() {
 
 describe('GroupJoin', () => {
     it('previews an invite from sessionStorage and joins with the token in the request body', async () => {
-        window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, 'tok123');
+        window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, inviteToken);
         mocks.post.mockImplementation((url: string) => {
             if (url === '/group/invites/preview') {
                 return Promise.resolve({ data: { group_name: 'Friends', member_count: 3 } });
@@ -51,12 +53,12 @@ describe('GroupJoin', () => {
         fireEvent.click(within(form as HTMLElement).getByRole('button', { name: 'Join Group' }));
         await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/group/joined'));
         // The token travels only in the request body, never in the URL.
-        expect(mocks.post).toHaveBeenCalledWith('/group/join', { invite_token: 'tok123' });
+        expect(mocks.post).toHaveBeenCalledWith('/group/join', { invite_token: inviteToken });
         expect(window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY)).toBeNull();
     });
 
     it('shows the invalid state and clears the token when the preview returns 404', async () => {
-        window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, 'dead-token');
+        window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, inviteToken);
         const notFound = new Error('Request failed with status code 404');
         (notFound as { response?: { status?: number } }).response = { status: 404 };
         mocks.post.mockRejectedValue(notFound);

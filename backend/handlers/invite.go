@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strings"
@@ -21,6 +22,14 @@ const (
 	maxActiveInvitesPerGroup = 5
 	maxInvitesPerUserPerDay  = 10
 )
+
+// validInviteToken accepts only the canonical 32-byte RawURL base64 form
+// emitted by GenerateOpaqueToken. Rejecting malformed credentials before
+// hashing avoids unnecessary database work and keeps bearer parsing exact.
+func validInviteToken(token string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	return err == nil && len(decoded) == 32 && base64.RawURLEncoding.EncodeToString(decoded) == token
+}
 
 type CreateInviteRequest struct {
 	GroupID string `json:"group_id"`
@@ -92,6 +101,8 @@ func (a *GameAPI) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.groups.CreateInvite(r.Context(), invite, maxActiveInvitesPerGroup, maxInvitesPerUserPerDay); err != nil {
 		switch {
+		case errors.Is(err, groups.ErrNotMember):
+			WriteError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
 		case errors.Is(err, groups.ErrTooManyGroupInvites):
 			WriteError(w, http.StatusConflict, "too_many_active_invites", "This group already has the maximum number of active invites")
 		case errors.Is(err, groups.ErrTooManyUserInvites):
@@ -127,7 +138,7 @@ func (a *GameAPI) ListInvites(w http.ResponseWriter, r *http.Request) {
 	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	invites, err := a.groups.ListInvitesByGroup(r.Context(), groupID)
+	invites, err := a.groups.ListInvitesByGroup(r.Context(), groupID, userID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load invites")
 		return
@@ -167,7 +178,7 @@ func (a *GameAPI) RevokeInvite(w http.ResponseWriter, r *http.Request) {
 	if !a.requireMember(w, r, invite.GroupID, userID) {
 		return
 	}
-	revoked, err := a.groups.RevokeInvite(r.Context(), inviteID, invite.GroupID)
+	revoked, err := a.groups.RevokeInvite(r.Context(), inviteID, invite.GroupID, userID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to revoke invite")
 		return
@@ -192,23 +203,18 @@ func (a *GameAPI) PreviewInvite(w http.ResponseWriter, r *http.Request) {
 	if !DecodeJSON(w, r, &req) {
 		return
 	}
-	token := strings.TrimSpace(req.InviteToken)
-	if token == "" {
-		WriteError(w, http.StatusBadRequest, "invalid_invite_token", "invite_token is required")
+	token := req.InviteToken
+	if !validInviteToken(token) {
+		WriteError(w, http.StatusBadRequest, "invalid_invite_token", "invite_token must be a valid invite token")
 		return
 	}
-	invite, err := a.groups.InviteByTokenHash(r.Context(), auth.HashToken(token))
+	name, memberCount, found, err := a.groups.GroupPreviewByInviteTokenHash(r.Context(), auth.HashToken(token), a.clock())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to preview invite")
 		return
 	}
-	if invite == nil || invite.RevokedAt != nil || !invite.ExpiresAt.After(a.clock()) {
+	if !found {
 		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
-		return
-	}
-	name, memberCount, err := a.groups.GroupPreview(r.Context(), invite.GroupID)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to preview invite")
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"group_name": name, "member_count": memberCount})

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Icon from '../../components/ui/Icon';
-import { PENDING_INVITE_TOKEN_KEY } from '../../hooks/useInviteFragmentCapture';
+import { clearPendingInviteToken, readPendingInviteToken } from '../../hooks/useInviteFragmentCapture';
 import type { InvitePreview } from '../../types';
 import './GroupJoin.css';
 
@@ -16,7 +16,7 @@ export default function GroupJoin() {
     // Derived synchronously from the pending token so the mount state never
     // requires a setState-in-effect round trip (react-hooks lint).
     const [inviteState, setInviteState] = useState<InviteState>(() =>
-        window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY) ? 'checking' : 'missing',
+        readPendingInviteToken() ? 'checking' : 'missing',
     );
     const [inviteError, setInviteError] = useState('');
     const [name, setName] = useState('');
@@ -26,7 +26,7 @@ export default function GroupJoin() {
     useEffect(() => {
         if (mode !== 'join') return;
         let active = true;
-        const token = window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
+        const token = readPendingInviteToken();
         if (!token) return; // the lazy initializer already rendered the 'missing' state
         void api
             .post<InvitePreview>('/group/invites/preview', { invite_token: token })
@@ -43,7 +43,7 @@ export default function GroupJoin() {
                     (requestError as { response?: { status?: number } }).response?.status === 404
                 ) {
                     // Unknown, expired, and revoked tokens all return a generic 404.
-                    window.sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+                    clearPendingInviteToken();
                     setInviteState('invalid');
                     return;
                 }
@@ -59,13 +59,13 @@ export default function GroupJoin() {
         setError('');
         setJoining(true);
         try {
-            const token = window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
+            const token = readPendingInviteToken();
             if (!token) {
                 setInviteState('missing');
                 return;
             }
             const res = await api.post('/group/join', { invite_token: token });
-            window.sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+            clearPendingInviteToken();
             navigate(`/group/${res.data.id}`);
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Failed to join group'));
@@ -90,7 +90,7 @@ export default function GroupJoin() {
             setMode('join');
             // Reset the join state machine for the freshly entered join tab;
             // the effect below re-runs on the mode change and revalidates.
-            setInviteState(window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY) ? 'checking' : 'missing');
+            setInviteState(readPendingInviteToken() ? 'checking' : 'missing');
             setInviteError('');
         }
         setError('');

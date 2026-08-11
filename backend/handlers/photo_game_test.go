@@ -387,17 +387,11 @@ func TestPreviewInviteReturnsNonSensitiveData(t *testing.T) {
 	mock := newMockPool(t)
 	repos := repository.NewRepository(mock)
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
-	now := time.Now().UTC()
-	groupID := "00000000-0000-0000-0000-000000000001"
-	mock.ExpectQuery("SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE token_hash").
-		WithArgs(pgxmock.AnyArg()).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "creator_user_id", "token_hash", "created_at", "expires_at", "revoked_at"}).
-			AddRow("00000000-0000-0000-0000-0000000000aa", groupID, "user-1", "hash", now, now.Add(7*24*time.Hour), nil))
 	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
-		WithArgs(groupID).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}).AddRow("Paris", 3))
 	rec := httptest.NewRecorder()
-	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"sometoken"}`, ""))
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview status = %d (%s)", rec.Code, rec.Body.String())
 	}
@@ -419,11 +413,11 @@ func TestPreviewInviteGenericNotFound(t *testing.T) {
 	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
 
 	// Unknown token hash: generic 404, no group data leaked.
-	mock.ExpectQuery("SELECT id, group_id, creator_user_id, token_hash, created_at, expires_at, revoked_at FROM group_invites WHERE token_hash").
-		WithArgs(pgxmock.AnyArg()).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "creator_user_id", "token_hash", "created_at", "expires_at", "revoked_at"}))
+	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}))
 	rec := httptest.NewRecorder()
-	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"unknown"}`, ""))
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown preview status = %d, want 404", rec.Code)
 	}

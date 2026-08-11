@@ -104,43 +104,25 @@ func (a *GameAPI) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
 		return
 	}
-	token := strings.TrimSpace(req.InviteToken)
+	token := req.InviteToken
 	if token == "" {
 		// No bearer invite token: the join credential is absent. Legacy
 		// typed-group-code joins were removed (F-06).
 		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
 		return
 	}
+	if !validInviteToken(token) {
+		WriteError(w, http.StatusBadRequest, "invalid_invite_token", "invite_token must be a valid invite token")
+		return
+	}
 	userID := GetUserIDFromContext(r)
-	invite, err := a.groups.InviteByTokenHash(r.Context(), auth.HashToken(token))
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
-		return
-	}
-	if invite == nil || invite.RevokedAt != nil || !invite.ExpiresAt.After(a.clock()) {
-		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
-		return
-	}
-	group, err := a.groups.ByID(r.Context(), invite.GroupID)
+	group, err := a.groups.JoinByInviteTokenHash(r.Context(), auth.HashToken(token), userID, a.clock())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
 	if group == nil {
 		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
-		return
-	}
-	if isMember, err := a.groups.IsMember(r.Context(), group.ID, userID); err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
-		return
-	} else if isMember {
-		// Invite links are intentionally idempotent: completing authentication
-		// and replaying an invite must still open the existing group.
-		WriteJSON(w, http.StatusOK, group)
-		return
-	}
-	if err := a.groups.AddMember(r.Context(), &models.GroupMember{GroupID: group.ID, UserID: userID, JoinedAt: a.clock()}); err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
 	WriteJSON(w, http.StatusOK, group)
