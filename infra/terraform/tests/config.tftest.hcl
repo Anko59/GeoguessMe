@@ -103,6 +103,20 @@ run "hosted_plan" {
       alert_script       = base64gzip(file("../../deployment/scripts/hosted/alert.sh"))
       production_compose = base64gzip(file("../../deployment/compose.production.yaml"))
       hosted_compose     = base64gzip(file("../../deployment/compose.hosted.yaml"))
+      runtime_hashes = join("\n", [
+        for relative_path, absolute_path in {
+          "bin/alert.sh"                    = "../../deployment/scripts/hosted/alert.sh"
+          "bin/backup.sh"                   = "../../deployment/scripts/hosted/backup.sh"
+          "bin/common.sh"                   = "../../deployment/scripts/hosted/common.sh"
+          "bin/deploy.sh"                   = "../../deployment/scripts/hosted/deploy.sh"
+          "bin/forced-command.sh"           = "../../deployment/scripts/hosted/forced-command.sh"
+          "bin/health-check.sh"             = "../../deployment/scripts/hosted/health-check.sh"
+          "bin/restore-rehearsal.sh"        = "../../deployment/scripts/hosted/restore-rehearsal.sh"
+          "bin/verify-deployment-hashes.sh" = "../../deployment/scripts/hosted/verify-deployment-hashes.sh"
+          "config/compose.hosted.yaml"      = "../../deployment/compose.hosted.yaml"
+          "config/compose.production.yaml"  = "../../deployment/compose.production.yaml"
+        } : "${filesha256(absolute_path)}  ${relative_path}"
+      ])
     })) <= 32768
     error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
   }

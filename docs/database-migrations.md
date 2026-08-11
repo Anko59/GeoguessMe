@@ -27,7 +27,6 @@ subdirectories such as `migrations/2026/`:
 backend/internal/database/migrations/
 ├── 001_initial.sql
 ├── ...
-├── 014_retire_legacy_reaction_emoji.sql
 └── 2026/
     ├── 015_websocket_ticket_auth_version.sql
     └── 016_push_subscription_expiry_index.sql
@@ -145,19 +144,21 @@ Repository insertion uses
 duplicate active obligation is an idempotent success while genuine database
 errors still fail.
 
-## Migration 014: Retire the legacy reaction column
+## Deferred migration 014: Retire the legacy reaction column
 
 Migration 011 temporarily kept `message_reactions.emoji` synchronized with the
 canonical `reaction` column so an older application image remained usable during
-deployment and rollback. Migration 014 is the separately staged, forward-only
-cleanup after the reaction-only application revision was deployed and the
-previous revision left the rollback window.
+deployment and rollback. The cleanup SQL is intentionally absent from the
+ordinary migration set in this release. Migration 014 must be added by a
+separately reviewed cleanup PR only after the compatible application revision
+has been deployed, soaked, and the previous revision has left the rollback
+window.
 
-It removes the synchronization trigger and function, the two compatibility
-constraints, and the `emoji` column. Reaction rows and the canonical `reaction`
-primary key remain intact. After this migration, application rollback must use
-the pre-migration database backup; re-adding compatibility columns is not a
-supported downgrade.
+That later migration will remove the synchronization trigger and function, the
+two compatibility constraints, and the `emoji` column. Reaction rows and the
+canonical `reaction` primary key remain intact. After this migration,
+application rollback must use the pre-migration database backup; re-adding
+compatibility columns is not a supported downgrade.
 
 ## Status command
 

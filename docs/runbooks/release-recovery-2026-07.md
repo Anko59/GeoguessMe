@@ -84,8 +84,8 @@ resources, but it cannot recover an already-issued service-token secret.
    hand-copy changes.
 4. Merge only after the release PR confirms tree equality and required checks.
    The `main` workflow promotes the exact development image digests, signs them
-   for production, creates the patch tag/release, and deploys production through
-   Cloudflare Access.
+   for production, creates the version declared in `.release-version`, and
+   deploys production through Cloudflare Access.
 5. Confirm production health, active-release metadata, backup freshness,
    WebSocket connectivity, and the intended Push state. For 0.2.3, Push remains
    intentionally disabled until stable VAPID values are added to the encrypted

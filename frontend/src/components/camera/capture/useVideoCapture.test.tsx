@@ -57,7 +57,7 @@ function installMediaStream() {
     );
 }
 
-function makeStream(stops: { stop: () => void }[], kind: 'video' | 'audio') {
+function makeStream(stops: { stop: () => void; requestFrame?: () => void }[], kind: 'video' | 'audio') {
     return {
         getTracks: () => stops,
         getVideoTracks: () => (kind === 'video' ? stops : []),
@@ -177,21 +177,27 @@ describe('useVideoCapture', () => {
         const videoStop = vi.fn();
         const audioStop = vi.fn();
         const canvasVideoStop = vi.fn();
+        const requestFrame = vi.fn();
         const videoStream = makeStream([{ stop: videoStop }], 'video');
-        const canvasStream = makeStream([{ stop: canvasVideoStop }], 'video');
+        const canvasStream = makeStream([{ stop: canvasVideoStop, requestFrame }], 'video');
         const getUserMedia = vi.fn().mockResolvedValue(makeStream([{ stop: audioStop }], 'audio'));
         vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+        const captureStream = vi.fn(() => canvasStream);
         Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
             configurable: true,
-            value: vi.fn(() => canvasStream),
+            value: captureStream,
         });
         vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
             setTransform: vi.fn(),
             drawImage: vi.fn(),
         } as unknown as CanvasRenderingContext2D);
+        const animationFrames: FrameRequestCallback[] = [];
         vi.stubGlobal(
             'requestAnimationFrame',
-            vi.fn(() => 1),
+            vi.fn((callback: FrameRequestCallback) => {
+                animationFrames.push(callback);
+                return animationFrames.length;
+            }),
         );
         vi.stubGlobal('cancelAnimationFrame', vi.fn());
 
@@ -216,6 +222,13 @@ describe('useVideoCapture', () => {
         expect(recorder.current?.stream.getTracks()).toHaveLength(2);
         expect(recorder.current?.stream.getTracks()[0]).toBe(canvasStream.getTracks()[0]);
         expect(videoStop).not.toHaveBeenCalled();
+
+        expect(captureStream).toHaveBeenCalledWith(0);
+        expect(animationFrames).toHaveLength(1);
+        await act(async () => {
+            animationFrames.shift()?.(0);
+        });
+        expect(requestFrame).toHaveBeenCalledTimes(1);
 
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'stop' }));

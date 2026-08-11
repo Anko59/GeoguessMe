@@ -3,16 +3,16 @@ set -eu
 
 # Authenticated host runtime-integrity check. Compares the installed, root-owned
 # host runtime definitions (/opt/geoguessme/bin operator scripts and
-# /opt/geoguessme/config compose files) against the same files inside the
-# release directory of the root-owned runtime revision. Any mismatch means the
-# running host definitions were modified out-of-band after the operator's
-# reviewed cutover and the check fails with a non-zero exit code.
+# /opt/geoguessme/config compose files) against the root-owned hash manifest.
+# Any mismatch means the running host definitions were modified out-of-band
+# after the operator's reviewed cutover and the check fails with a non-zero
+# exit code.
 #
 # Application revisions are environment-specific, while these host definitions
-# are shared. CONFIG_ROOT/runtime-revision therefore records the one reviewed
-# source revision from which the root-owned files were installed. The matching
-# APP_ROOT/releases/<revision> directory is the GitHub archive the deploy flow
-# installed, so its files are the expected hashes.
+# are shared. CONFIG_ROOT/runtime-revision records the one reviewed source
+# revision from which the root-owned files were installed, while
+# CONFIG_ROOT/runtime-hashes is the immutable expected baseline. The verifier
+# never trusts the deploy-writable release archive for expected hashes.
 #
 # Runs on the host through the Cloudflare Access SSH forced command:
 #   verify <environment>
@@ -46,18 +46,33 @@ case "$runtime_revision" in
 esac
 [ "${#runtime_revision}" -eq 40 ] || die "runtime revision must be 40 hex characters"
 
-release=$(release_dir "$runtime_revision")
-[ -d "$release" ] || die "release directory missing: $release"
+manifest="$CONFIG_ROOT/runtime-hashes"
+[ -f "$manifest" ] || die "runtime hash manifest is missing: $manifest"
 
 mismatch=0
 
-# compare <expected-file> <installed-file> <label>
+# compare <manifest-path> <installed-file> <label>
 compare() {
-    expected_file=$1
+    relative_path=$1
     installed_file=$2
     label=$3
-    [ -f "$expected_file" ] || {
-        printf 'MISSING expected file in runtime revision %s: %s\n' "$runtime_revision" "$expected_file" >&2
+    expected_hashes=$(awk -v expected_path="$relative_path" '$2 == expected_path { print $1 }' "$manifest")
+    expected_count=$(printf '%s\n' "$expected_hashes" | awk 'NF { count++ } END { print count + 0 }')
+    if [ "$expected_count" -ne 1 ]; then
+        printf 'MISSING or duplicate expected path in runtime hash manifest: %s\n' "$relative_path" >&2
+        mismatch=1
+        return
+    fi
+    expected_hash=$expected_hashes
+    case "$expected_hash" in
+        *[!0-9a-f]* | '')
+            printf 'INVALID expected hash in runtime hash manifest: %s\n' "$relative_path" >&2
+            mismatch=1
+            return
+            ;;
+    esac
+    [ "${#expected_hash}" -eq 64 ] || {
+        printf 'INVALID expected hash length in runtime hash manifest: %s\n' "$relative_path" >&2
         mismatch=1
         return
     }
@@ -66,7 +81,6 @@ compare() {
         mismatch=1
         return
     fi
-    expected_hash=$(sha256sum "$expected_file" | awk '{print $1}')
     actual_hash=$(sha256sum "$installed_file" | awk '{print $1}')
     if [ "$expected_hash" = "$actual_hash" ]; then
         printf '  ok   %s\n' "$label"
@@ -80,40 +94,25 @@ compare() {
 }
 
 echo "runtime hash check: environment=$environment app_revision=$app_revision runtime_revision=$runtime_revision"
-echo "  comparing installed host definitions against $release"
+echo "  comparing installed host definitions against $manifest"
 
 # Operator scripts installed by provisioning (cloud-init) into /opt/geoguessme/bin.
 for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
     compare \
-        "$release/deployment/scripts/hosted/$script.sh" \
+        "bin/$script.sh" \
         "$APP_ROOT/bin/$script.sh" \
         "bin/$script.sh"
 done
 
 # Root-owned compose definitions used by the `compose` helper.
 compare \
-    "$release/deployment/compose.production.yaml" \
+    "config/compose.production.yaml" \
     "$CONFIG_ROOT/compose.production.yaml" \
     "config/compose.production.yaml"
 compare \
-    "$release/deployment/compose.hosted.yaml" \
+    "config/compose.hosted.yaml" \
     "$CONFIG_ROOT/compose.hosted.yaml" \
     "config/compose.hosted.yaml"
-
-# Files without a host-installed counterpart are verified through other
-# immutable channels and reported for the operator's review:
-#   - deployment/caddy/Caddyfile is baked into the immutable web image whose
-#     digest and cosign signature are verified during every deployment, so a
-#     host-side copy does not exist to compare.
-#   - infra/cloud-init/cloud-config.yaml.tftpl defines the initial
-#     provisioning; it is fixed at first boot and its live state is reviewed by
-#     the read-only host inspection, not per revision.
-caddy_hash=$(sha256sum "$release/deployment/caddy/Caddyfile" 2>/dev/null | awk '{print $1}')
-cloud_init_hash=$(sha256sum "$release/infra/cloud-init/cloud-config.yaml.tftpl" 2>/dev/null | awk '{print $1}')
-caddy_hash=${caddy_hash:-unavailable}
-cloud_init_hash=${cloud_init_hash:-unavailable}
-printf '  info  caddy Caddyfile sha256=%s (baked into cosign-verified web image)\n' "$caddy_hash"
-printf '  info  cloud-init cloud-config.yaml.tftpl sha256=%s (fixed at provisioning)\n' "$cloud_init_hash"
 
 if [ "$mismatch" -ne 0 ]; then
     echo "runtime hash check FAILED: installed host definitions differ from runtime revision $runtime_revision" >&2

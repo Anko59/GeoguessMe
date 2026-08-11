@@ -119,6 +119,11 @@ write_files:
     permissions: "0444"
     content: |
       ${runtime_revision}
+  - path: /opt/geoguessme/config/runtime-hashes
+    owner: root:root
+    permissions: "0444"
+    content: |
+      ${runtime_hashes}
   - path: /etc/systemd/system/geoguessme-backup@.service
     permissions: "0644"
     content: |

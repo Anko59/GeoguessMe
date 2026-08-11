@@ -81,7 +81,9 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAG
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
-assert_contains "$ROOT/.github/workflows/release.yml" 'tag=v0.2.0'
+assert_contains "$ROOT/.release-version" '0.3.0'
+assert_contains "$ROOT/.github/workflows/release.yml" 'release_version=$(tr -d'
+assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
 assert_contains "$ROOT/.github/workflows/release.yml" 'main_tree=$(git rev-parse "$GITHUB_SHA^{tree}")'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign verify'
@@ -252,8 +254,9 @@ if grep -En 'set -x|printenv|env[[:space:]]*$' "$ROOT"/deployment/scripts/hosted
 fi
 
 # The runtime hash check compares the installed root-owned host definitions
-# (bin scripts, config compose files) against the deployed revision and must
-# fail when any installed file was modified out-of-band.
+# (bin scripts, config compose files) against a root-owned manifest and must
+# fail when any installed file was modified out-of-band. A deploy-writable
+# release copy must not be able to change the expected baseline.
 VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
 hash_root=$(mktemp -d)
 trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
@@ -277,6 +280,17 @@ cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.pro
 cp "$ROOT/deployment/compose.hosted.yaml" \
     "$hash_root/app/releases/$runtime_revision/deployment/compose.hosted.yaml"
 cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
+{
+    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+        sha256sum "$hash_root/app/bin/$script.sh" |
+            awk -v path="bin/$script.sh" '{print $1 "  " path}'
+    done
+    sha256sum "$hash_root/app/config/compose.production.yaml" |
+        awk '{print $1 "  config/compose.production.yaml"}'
+    sha256sum "$hash_root/app/config/compose.hosted.yaml" |
+        awk '{print $1 "  config/compose.hosted.yaml"}'
+} >"$hash_root/app/config/runtime-hashes"
+chmod 0444 "$hash_root/app/config/runtime-hashes"
 run_verify() {
     GEOGUESSME_APP_ROOT="$hash_root/app" \
         GEOGUESSME_STATE_ROOT="$hash_root/state" \
@@ -286,6 +300,11 @@ run_verify() {
 }
 if ! run_verify >/dev/null 2>&1; then
     fail 'runtime hash check rejected matching host definitions'
+fi
+printf '\n# deploy-writable release copy must not alter the expected baseline\n' \
+    >>"$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
+if ! run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check trusted a mutable release copy as its baseline'
 fi
 if SSH_ORIGINAL_COMMAND='verify production' \
     GEOGUESSME_APP_ROOT="$hash_root/app" \
