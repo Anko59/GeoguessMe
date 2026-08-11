@@ -61,6 +61,12 @@ type Config struct {
 	PhotoRetention  time.Duration
 	UploadDir       string
 
+	// MediaProcessingWorker starts the in-process media-processing worker
+	// goroutine (quarantined video promotion). Enabled by default now that the
+	// runtime image ships ffmpeg/ffprobe; deployments must provide the
+	// media-processing worker container bounds (see docs/video-processing.md).
+	MediaProcessingWorker bool
+
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
 

@@ -15,6 +15,7 @@ import (
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
+	"geoguessme/internal/mediaprocessing"
 	"geoguessme/internal/models"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
@@ -22,6 +23,13 @@ import (
 )
 
 func main() {
+	// The media-processing worker re-execs this binary as an rlimit trampoline
+	// before running ffprobe/ffmpeg (see internal/mediaprocessing). A re-exec'd
+	// copy must route into the trampoline before any other logic; a normal
+	// start returns immediately.
+	if mediaprocessing.HandleRlimitHelperInvocation() {
+		return
+	}
 	command := "serve"
 	if len(os.Args) > 1 {
 		command = os.Args[1]
@@ -133,6 +141,30 @@ func main() {
 
 	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
 	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog, PushSubscriptionExpiry: cfg.PushSubscriptionExpiry}).Run(workerCtx)
+
+	// The media-processing worker promotes quarantined video uploads into
+	// canonical records. It runs as a single in-process goroutine sharing the
+	// realtime hub and push notifier so a completed record is announced exactly
+	// once (the product runs one backend replica; see F-04). Enabled by
+	// MEDIA_PROCESSING_WORKER; the runtime image must provide ffprobe/ffmpeg.
+	if cfg.MediaProcessingWorker {
+		worker := mediaprocessing.NewWorker(mediaprocessing.WorkerDeps{
+			Jobs:           repos,
+			Store:          store,
+			Broadcaster:    hub,
+			Notifier:       pushSvc,
+			Runner:         mediaprocessing.OSCommandRunner{},
+			MaxInputBytes:  cfg.UploadMaxBytes,
+			ChallengeTTL:   cfg.ChallengeTTL,
+			PhotoRetention: cfg.PhotoRetention,
+			WorkerID:       fmt.Sprintf("media-%d-%d", os.Getpid(), time.Now().UnixNano()),
+			PollInterval:   500 * time.Millisecond,
+			Logger:         logger,
+			Now:            time.Now,
+		})
+		go worker.Run(workerCtx)
+		logger.Info("media processing worker started", "worker_id", fmt.Sprintf("media-%d", os.Getpid()))
+	}
 
 	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {

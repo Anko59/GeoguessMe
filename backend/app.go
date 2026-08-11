@@ -210,6 +210,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(a.Game.UploadPhoto))
+	mux.Handle("/api/v1/media-processing/{jobID}", protected(a.Game.GetMediaProcessingJob))
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)
 	pushHTTP := push.NewHTTP(a.Push)

@@ -355,6 +355,11 @@ messageMediaUpload:
           description: Persisted media message,
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Message" } } },
         }
+      "202":
+        {
+          description: "Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}.",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
+        }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 

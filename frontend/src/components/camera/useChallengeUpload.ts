@@ -30,6 +30,8 @@ interface ChallengeUploadDeps {
     setFileMode: React.Dispatch<React.SetStateAction<boolean>>;
     setError: React.Dispatch<React.SetStateAction<string>>;
     setUploading: React.Dispatch<React.SetStateAction<boolean>>;
+    /** Stores the asynchronous video-processing job id returned by a 202 upload. */
+    setProcessingJobID: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 /** Bundles the challenge send flow: a single-flight geolocation request, the
@@ -57,6 +59,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
         setFileMode,
         setError,
         setUploading,
+        setProcessingJobID,
     } = deps;
 
     const requestLocation = useCallback((): Promise<GeolocationPosition> => {
@@ -110,7 +113,13 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
             const position = await requestLocation();
             if (video) {
                 const extension = video.blob.type === 'video/mp4' ? 'mp4' : 'webm';
-                await uploadPhoto(video.blob, `capture.${extension}`, groupIDs, position, hideLocation);
+                const job = await uploadPhoto(video.blob, `capture.${extension}`, groupIDs, position, hideLocation);
+                if (job) {
+                    // Asynchronous processing: the polling flow resolves the
+                    // upload on ready and reports failures via the camera error.
+                    setProcessingJobID(job.id);
+                    return;
+                }
             } else {
                 await uploadPhoto(
                     dataURLToBlob(photo as string),
@@ -149,6 +158,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
         setCapturedPhoto,
         setError,
         setFileMode,
+        setProcessingJobID,
         setUploading,
         stopCamera,
     ]);

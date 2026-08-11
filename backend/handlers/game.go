@@ -9,6 +9,7 @@ import (
 
 	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/config"
+	"geoguessme/internal/models"
 	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/storage"
@@ -28,6 +29,22 @@ type DeletionEnqueuer interface {
 	EnqueueMediaDeletion(ctx context.Context, source string, keys []string) error
 }
 
+// MediaProcessingStore is the persistence seam for asynchronous media
+// processing jobs: creating a job when a video upload is quarantined and
+// reading a job's status for its owner. *repository.Repository satisfies it.
+type MediaProcessingStore interface {
+	CreateProcessingJob(ctx context.Context, job *models.MediaProcessingJob) error
+	GetProcessingJob(ctx context.Context, jobID, userID string) (*models.MediaProcessingJob, error)
+}
+
+// UploadMediaStore combines the durable media-deletion seam and the
+// processing-job persistence seam so upload handlers keep a single injected
+// dependency for every media lifecycle operation.
+type UploadMediaStore interface {
+	DeletionEnqueuer
+	MediaProcessingStore
+}
+
 // GameAPI serves the gameplay slice from injected dependencies (PR 6): groups,
 // challenges, guesses, media delivery, and leaderboard. It owns transport only:
 // request parsing, authorization delegation through the canonical membership
@@ -38,7 +55,7 @@ type DeletionEnqueuer interface {
 type GameAPI struct {
 	groups   *groups.Repository
 	messages *chatrepo.Repository
-	media    DeletionEnqueuer
+	media    UploadMediaStore
 	store    storage.ObjectStore
 	cfg      *config.Config
 	push     PushNotifier
@@ -50,7 +67,7 @@ type GameAPI struct {
 func NewGameAPI(
 	groupsRepo *groups.Repository,
 	messages *chatrepo.Repository,
-	media DeletionEnqueuer,
+	media UploadMediaStore,
 	store storage.ObjectStore,
 	cfg *config.Config,
 	push PushNotifier,

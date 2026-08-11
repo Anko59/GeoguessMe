@@ -1,8 +1,11 @@
 package integration_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +16,39 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
+
+type processingJobResponse struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Status    string `json:"status"`
+	ErrorCode string `json:"error_code"`
+}
+
+func uploadChatMediaJob(t *testing.T, bearer, groupID, content string) processingJobResponse {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("media", "clip.webm")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("content", content))
+	require.NoError(t, writer.Close())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/group/messages/media", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equalf(t, http.StatusAccepted, resp.StatusCode, "chat video upload %d: %s", resp.StatusCode, data)
+	var job processingJobResponse
+	require.NoError(t, json.Unmarshal(data, &job))
+	return job
+}
 
 func wsBase() string {
 	u, err := url.Parse(baseURL)
@@ -379,11 +415,23 @@ func TestChatMediaIsPersistedBroadcastAndPrivate(t *testing.T) {
 	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+sent.MediaID, nil, outsider.access, nil)
 	require.Equal(t, http.StatusForbidden, resp.StatusCode, "non-members must never read chat attachments")
 
-	video := uploadChatMediaFile(t, alice.access, groupID, "A short clip", "clip.webm", []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'})
-	require.Equal(t, "media", video.Kind)
-	require.Equal(t, "video/webm", video.MediaType)
-	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+video.MediaID, nil, bob.access, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "video/webm", resp.Header.Get("Content-Type"))
-	require.NotEmpty(t, data)
+	video := uploadChatMediaJob(t, alice.access, groupID, "A short clip")
+	require.Equal(t, "chat", video.Kind)
+	require.Equal(t, "queued", video.Status)
+	require.NotEmpty(t, video.ID)
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+video.ID, nil, bob.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	statusURL := "/api/v1/media-processing/" + video.ID
+	resp, _ = doJSON(t, http.MethodGet, statusURL, nil, outsider.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	var job processingJobResponse
+	require.Eventually(t, func() bool {
+		resp, data = doJSON(t, http.MethodGet, statusURL, nil, alice.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.NoError(t, json.Unmarshal(data, &job))
+		return job.Status == "failed" || job.Status == "ready"
+	}, 20*time.Second, 500*time.Millisecond)
+	require.Equal(t, "failed", job.Status)
+	require.Equal(t, "invalid_video", job.ErrorCode)
 }

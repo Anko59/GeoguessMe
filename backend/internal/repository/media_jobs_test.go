@@ -84,6 +84,13 @@ func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	mock.ExpectExec("DELETE FROM refresh_sessions").WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec("DELETE FROM challenge_views").WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectQuery("SELECT id, storage_key FROM photos").WithArgs(100).WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key"}))
+	// Media-processing job lifecycle: requeue stale, sweep abandoned quarantine,
+	// then purge finished jobs past retention.
+	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'queued'").WithArgs(5 * time.Minute).WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE media_processing_jobs.*status = 'failed'").WithArgs(time.Hour, "timeout").WillReturnRows(pgxmock.NewRows([]string{"id", "quarantine_key"}))
+	mock.ExpectCommit()
+	mock.ExpectExec("DELETE FROM media_processing_jobs.*expires_at").WillReturnResult(pgxmock.NewResult("DELETE", 0))
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE media_deletion_jobs").WithArgs(15*time.Minute, 25).WillReturnRows(pgxmock.NewRows([]string{"id", "storage_key", "attempts"}))
 	mock.ExpectCommit()

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -38,13 +39,13 @@ type ChatAPI struct {
 	cfg      *config.Config
 	hub      *chatHub.Hub
 	now      func() time.Time
-	media    DeletionEnqueuer
+	media    UploadMediaStore
 }
 
 // NewChatAPI constructs the chat transport with its explicit dependencies.
 // now is the injectable clock (time.Now in production) and media is the
-// durable deletion-job seam for upload compensation.
-func NewChatAPI(messages *chatrepo.Repository, groups *groups.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time, media DeletionEnqueuer) *ChatAPI {
+// durable deletion-job and processing-job seam for upload lifecycle.
+func NewChatAPI(messages *chatrepo.Repository, groups *groups.Repository, store storage.ObjectStore, cfg *config.Config, hub *chatHub.Hub, now func() time.Time, media UploadMediaStore) *ChatAPI {
 	return &ChatAPI{messages: messages, groups: groups, store: store, cfg: cfg, hub: hub, now: now, media: media}
 }
 
@@ -179,6 +180,13 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
+	// Browser-recorded videos are processed asynchronously: the raw source is
+	// quarantined and a processing job is queued instead of creating a visible
+	// message immediately. Images keep the synchronous path below unchanged.
+	if strings.HasPrefix(normalized.MIMEType, "video/") {
+		a.queueVideoChatMessage(w, r, groupID, userID, normalized, content, replyToID)
+		return
+	}
 
 	now := a.now().UTC()
 	asset := &models.ChatMedia{ID: uuid.NewString(), GroupID: groupID, UserID: userID, StorageKey: "chat-media/" + uuid.NewString(), MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: now}
@@ -202,6 +210,57 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	a.hub.BroadcastPersisted(*message)
 	WriteJSON(w, http.StatusCreated, message)
+}
+
+// queueVideoChatMessage stores a raw video under the private quarantine
+// prefix, records a queued processing job carrying the chat message context,
+// and answers 202 Accepted. No chat message or attachment row is created
+// here: the worker creates the canonical object and the message atomically on
+// success. A storage failure after the quarantine put compensates the object
+// so no raw bytes are left unowned.
+func (a *ChatAPI) queueVideoChatMessage(w http.ResponseWriter, r *http.Request, groupID, userID string, upload *media.Upload, content string, replyToID *string) {
+	metadata, err := json.Marshal(models.ChatProcessingMetadata{GroupID: groupID, Content: content, ReplyToID: replyToID})
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to queue media processing")
+		return
+	}
+	jobID := uuid.NewString()
+	quarantineKey := storage.QuarantineKey(jobID)
+	if err := a.store.Put(r.Context(), quarantineKey, bytes.NewReader(upload.Data), int64(len(upload.Data)), upload.MIMEType); err != nil {
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
+		return
+	}
+	job := &models.MediaProcessingJob{
+		ID:            jobID,
+		UserID:        userID,
+		Kind:          models.MediaProcessingKindChat,
+		Status:        models.MediaProcessingStatusQueued,
+		QuarantineKey: quarantineKey,
+		MIMEType:      upload.MIMEType,
+		ByteSize:      int64(len(upload.Data)),
+		GroupID:       groupID,
+		QueuedAt:      a.now().UTC(),
+		Metadata:      metadata,
+	}
+	if err := a.media.CreateProcessingJob(r.Context(), job); err != nil {
+		a.compensateChatMediaDelete(r, quarantineKey)
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to queue media processing")
+		return
+	}
+	WriteJSON(w, http.StatusAccepted, job.ToResponse())
+}
+
+// compensateChatMediaDelete removes a quarantine object after a failed upload
+// so no orphaned bytes are left behind; a failed delete is enqueued as a
+// durable deletion job instead of being dropped.
+func (a *ChatAPI) compensateChatMediaDelete(r *http.Request, key string) {
+	if err := a.store.Delete(r.Context(), key); err != nil {
+		if enqueueErr := a.media.EnqueueMediaDeletion(r.Context(), "upload-compensation", []string{key}); enqueueErr != nil {
+			slog.Error("failed to persist chat media upload compensation", "storage_key", key, "delete_error", err, "enqueue_error", enqueueErr)
+		} else {
+			slog.Warn("queued chat upload compensation after storage delete failure", "storage_key", key, "error", err)
+		}
+	}
 }
 
 // ServeChatMedia streams an attachment only after checking that the requester
@@ -232,6 +291,13 @@ func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.groups.RequireMember(r.Context(), asset.GroupID, GetUserIDFromContext(r)); err != nil {
 		WriteError(w, http.StatusForbidden, "forbidden", "Media is not available")
+		return
+	}
+	// Defense-in-depth: only canonical keys are ever served. Quarantine keys
+	// hold raw asynchronous uploads and must never be streamable, even if a
+	// database row referenced one.
+	if !storage.IsCanonicalKey(asset.StorageKey) {
+		WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 		return
 	}
 	object, err := a.store.Get(r.Context(), asset.StorageKey)

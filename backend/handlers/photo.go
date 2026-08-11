@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -75,6 +76,13 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "invalid_media", err.Error())
 		return
 	}
+	// Browser-recorded videos are processed asynchronously: the raw source is
+	// quarantined and a processing job is queued instead of creating visible
+	// challenges immediately. Images keep the synchronous path below unchanged.
+	if strings.HasPrefix(normalized.MIMEType, "video/") {
+		a.queueVideoChallenge(w, r, userID, normalized, groupIDs, lat, long, hideLocation)
+		return
+	}
 	now := a.clock()
 	photos := make([]*models.Photo, 0, len(groupIDs))
 	keys := make([]string, 0, len(groupIDs))
@@ -113,6 +121,108 @@ func (a *GameAPI) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	response["photos"] = photoSummaries
 	WriteJSON(w, http.StatusCreated, response)
+}
+
+// queueVideoChallenge stores a raw video under the private quarantine prefix,
+// records a queued processing job carrying the challenge upload context, and
+// answers 202 Accepted. No challenge row is created here: the worker creates
+// the canonical object and one independent challenge per target group on
+// success. A storage failure after the quarantine put compensates the object
+// so no raw bytes are left unowned.
+func (a *GameAPI) queueVideoChallenge(w http.ResponseWriter, r *http.Request, userID string, upload *media.Upload, groupIDs []string, lat, long float64, hideLocation bool) {
+	metadata, err := json.Marshal(models.ChallengeProcessingMetadata{GroupIDs: groupIDs, Lat: lat, Long: long, HideLocation: hideLocation})
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to queue media processing")
+		return
+	}
+	jobID := uuid.NewString()
+	quarantineKey := storage.QuarantineKey(jobID)
+	if err := a.store.Put(r.Context(), quarantineKey, bytes.NewReader(upload.Data), int64(len(upload.Data)), upload.MIMEType); err != nil {
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to store media")
+		return
+	}
+	job := &models.MediaProcessingJob{
+		ID:            jobID,
+		UserID:        userID,
+		Kind:          models.MediaProcessingKindChallenge,
+		Status:        models.MediaProcessingStatusQueued,
+		QuarantineKey: quarantineKey,
+		MIMEType:      upload.MIMEType,
+		ByteSize:      int64(len(upload.Data)),
+		GroupID:       groupIDs[0],
+		QueuedAt:      a.clock(),
+		Metadata:      metadata,
+	}
+	if err := a.media.CreateProcessingJob(r.Context(), job); err != nil {
+		a.compensateMediaDeletes(r, []string{quarantineKey})
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to queue media processing")
+		return
+	}
+	WriteJSON(w, http.StatusAccepted, job.ToResponse())
+}
+
+// GetMediaProcessingJob returns the owner-facing status of an asynchronous
+// media-processing job. Only the uploader may read it: a non-owner or missing
+// job answers the same 404 so job identifiers cannot be enumerated. When the
+// job is ready the response embeds the challenge or chat message result the
+// synchronous upload path would have returned; when it failed it exposes only
+// a stable, non-sensitive error code. Storage keys and upload metadata are
+// never serialized.
+func (a *GameAPI) GetMediaProcessingJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+	jobID := r.PathValue("jobID")
+	if err := ValidateID(jobID, "job_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_job_id", "Job ID is required")
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	job, err := a.media.GetProcessingJob(r.Context(), jobID, userID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load media processing status")
+		return
+	}
+	if job == nil {
+		WriteError(w, http.StatusNotFound, "not_found", "Media processing job not found")
+		return
+	}
+	resp := job.ToResponse()
+	if job.Status == models.MediaProcessingStatusReady {
+		a.enrichProcessingResult(r, &resp, job)
+	}
+	WriteJSON(w, http.StatusOK, resp)
+}
+
+// enrichProcessingResult resolves a ready job's stored result reference to the
+// same result shape the synchronous upload path returns: the challenge record
+// for challenge jobs and the chat message for chat jobs. A missing record
+// leaves the compact identifier from ToResponse in place rather than failing
+// the whole status read.
+func (a *GameAPI) enrichProcessingResult(r *http.Request, resp *models.MediaProcessingJobResponse, job *models.MediaProcessingJob) {
+	switch job.ResultKind {
+	case "photo":
+		photo, err := a.groups.Photo(r.Context(), job.ResultID)
+		if err != nil || photo == nil {
+			slog.Warn("media processing job ready but challenge photo missing", "job_id", job.ID, "result_id", job.ResultID, "error", err)
+			return
+		}
+		resp.Result = map[string]any{
+			"id":          photo.ID,
+			"group_id":    photo.GroupID,
+			"expires_at":  photo.ExpiresAt,
+			"created_at":  photo.CreatedAt,
+			"server_time": a.clock(),
+		}
+	case "chat":
+		message, err := a.messages.GetMessageForViewer(r.Context(), job.ResultID, job.UserID)
+		if err != nil || message == nil {
+			slog.Warn("media processing job ready but chat message missing", "job_id", job.ID, "result_id", job.ResultID, "error", err)
+			return
+		}
+		resp.Result = message
+	}
 }
 
 // errNotGroupMember distinguishes a membership failure from an invalid id so
@@ -290,6 +400,13 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if photo.LifecycleStatus == "removed" {
+		WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
+		return
+	}
+	// Defense-in-depth: only canonical keys are ever served. Quarantine keys
+	// hold raw asynchronous uploads and must never be streamable, even if a
+	// database row referenced one.
+	if !storage.IsCanonicalKey(photo.StorageKey) {
 		WriteError(w, http.StatusGone, "media_removed", "The original media is no longer available")
 		return
 	}

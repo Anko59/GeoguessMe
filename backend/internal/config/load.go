@@ -221,6 +221,8 @@ func Load() (*Config, error) {
 		PhotoRetention:  l.durationValue("PHOTO_RETENTION", 30*24*time.Hour),
 		UploadDir:       l.stringValue("UPLOAD_DIR", "./uploads"),
 
+		MediaProcessingWorker: l.boolValue("MEDIA_PROCESSING_WORKER", true),
+
 		RateLimitRequests: l.intValue("RATE_LIMIT_REQUESTS", 10),
 		RateLimitWindow:   l.durationValue("RATE_LIMIT_WINDOW", time.Minute),
 		RateLimitPolicies: []RateLimitPolicy{

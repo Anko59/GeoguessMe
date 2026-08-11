@@ -169,6 +169,7 @@ describe('Camera file and upload flows', () => {
         ];
         mocks.get.mockResolvedValueOnce({ data: groups }).mockResolvedValue({ data: {} });
         mocks.getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+        mocks.post.mockResolvedValue({ data: {} });
         stubGeolocation();
         const onUploadComplete = vi.fn();
         render(<Camera groupID="group-1" onUploadComplete={onUploadComplete} />);

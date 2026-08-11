@@ -271,8 +271,10 @@ func TestDeletionWorkerRetryOnFailure(t *testing.T) {
 	// and logs internally; errors are recorded on the job row.
 	repository.CleanupRunner{Store: del, Repos: repository.NewRepository(db)}.DrainDeletionQueue(ctx)
 
-	// Verify the job was attempted.
-	require.Equal(t, []string{key}, del.calls(), "deleter must have been called for the key")
+	// Verify this job was attempted. Other tests may have legitimately queued
+	// durable cleanup obligations (for example a quarantined video), so this
+	// assertion is scoped to the key owned by this test.
+	require.Contains(t, del.calls(), key, "deleter must have been called for the key")
 
 	// Prove the job remains incomplete, with the error recorded and a future retry.
 	var completedAt *time.Time

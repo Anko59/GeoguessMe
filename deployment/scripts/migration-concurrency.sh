@@ -247,6 +247,10 @@ assert_eq "$(psql_query "SELECT count(*) FROM pg_indexes WHERE indexname='media_
 # --- migration 003: unique partial index
 assert_eq "$(psql_query "SELECT count(*) FROM pg_indexes WHERE indexname='media_deletion_jobs_active_storage_key_idx'")" \
     "1" "media_deletion_jobs_active_storage_key_idx exists"
+psql_exec "INSERT INTO media_deletion_jobs(id, storage_key, source) VALUES ('source-label-check', 'quarantine/source-label-check', 'media-processing')"
+assert_eq "$(psql_query "SELECT source FROM media_deletion_jobs WHERE id='source-label-check'")" \
+    "media-processing" "deletion source accepts non-empty operational labels"
+psql_exec "DELETE FROM media_deletion_jobs WHERE id='source-label-check'"
 
 # -- 4. idempotent rerun ----------------------------------------------------
 echo "=== Verifying idempotent rerun ==="

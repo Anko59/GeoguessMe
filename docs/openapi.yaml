@@ -66,6 +66,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/messageMedia
   /photo/upload:
     $ref: ./openapi/paths/challenges.yaml#/upload
+  /media-processing/{jobID}:
+    $ref: ./openapi/paths/challenges.yaml#/mediaProcessing
   /challenges/{photoID}/accept:
     $ref: ./openapi/paths/challenges.yaml#/accept
   /challenges/{photoID}/media:

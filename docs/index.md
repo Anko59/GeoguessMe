@@ -6,12 +6,12 @@ and submit one server-timed guess.
 
 ## Audience guide
 
-| Role                    | Recommended reading                                                                                                                                                               |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Operator / deployer** | [deployment](deployment.md), [configuration](configuration.md), [operations](operations.md), [database-migrations](database-migrations.md), [troubleshooting](troubleshooting.md) |
-| **Developer**           | [local-development](local-development.md), [architecture](architecture.md), [testing](testing.md), [configuration](configuration.md)                                              |
-| **API consumer**        | [api](api.md), [authentication](authentication.md), [openapi.yaml](openapi.yaml)                                                                                                  |
-| **Security reviewer**   | [security-and-privacy](security-and-privacy.md), [authentication](authentication.md), [architecture](architecture.md)                                                             |
+| Role                    | Recommended reading                                                                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Operator / deployer** | [deployment](deployment.md), [configuration](configuration.md), [operations](operations.md), [video-processing](video-processing.md), [database-migrations](database-migrations.md), [troubleshooting](troubleshooting.md) |
+| **Developer**           | [local-development](local-development.md), [architecture](architecture.md), [testing](testing.md), [configuration](configuration.md)                                                                                       |
+| **API consumer**        | [api](api.md), [authentication](authentication.md), [openapi.yaml](openapi.yaml)                                                                                                                                           |
+| **Security reviewer**   | [security-and-privacy](security-and-privacy.md), [authentication](authentication.md), [architecture](architecture.md)                                                                                                      |
 
 ## Documentation map
 
@@ -36,6 +36,8 @@ and submit one server-timed guess.
 - [Testing](testing.md) — unit, integration, E2E, CI equivalence
 - [Deployment](deployment.md) — images, topologies, upgrade, rollback
 - [Operations](operations.md) — health, metrics, backups, incident response
+- [Video processing](video-processing.md) — async video pipeline, quarantine,
+  transcoding, cleanup
 - [Database migrations](database-migrations.md) — rules, execution, recovery
 - [Security and privacy](security-and-privacy.md) — model, data inventory,
   operator obligations

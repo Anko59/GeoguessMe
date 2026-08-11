@@ -43,11 +43,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # The in-process media-processing worker bounds each ffprobe/ffmpeg child to
+    # 1 CPU / 512 MiB / 128 PIDs / 60s via rlimits (see mediaprocessing). This
+    # container hosts the Go server plus one bounded transcode, so the ceiling
+    # sits above the per-job backstop. Worker temp files (quarantine download +
+    # transcode output) live on the /tmp tmpfs above the read-only root.
     deploy:
       resources:
         limits:
-          cpus: ${GEOGUESSME_BACKEND_CPUS:-1.0}
-          memory: ${GEOGUESSME_BACKEND_MEMORY:-768M}
+          cpus: ${GEOGUESSME_BACKEND_CPUS:-2.0}
+          memory: ${GEOGUESSME_BACKEND_MEMORY:-1G}
+          pids: ${GEOGUESSME_BACKEND_PIDS:-256}
 
   web:
     image: ${WEB_IMAGE:?WEB_IMAGE must be set to an immutable tag}
