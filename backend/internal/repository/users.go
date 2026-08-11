@@ -12,11 +12,25 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
 	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at, pending_email"
 )
+
+// ErrUsernameConflict reports that a username write lost the database's
+// uniqueness race. Repository methods translate the driver-specific error so
+// transport handlers never depend on pgx or database constraint details.
+var ErrUsernameConflict = errors.New("username is already in use")
+
+func translateUsernameConflict(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return ErrUsernameConflict
+	}
+	return err
+}
 
 // CreateUser inserts a new account. The submitted address is stored as a
 // pending contact claim (pending_email); the verified email column stays NULL
@@ -34,7 +48,7 @@ func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
 	}
 	query := `INSERT INTO users (id, username, email, email_normalized, pending_email, pending_email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, NULL, NULL, $3, $4, $5, $6, $7, $7)`
 	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pendingValue, normalizedValue, user.Password, user.Avatar, user.CreatedAt)
-	return err
+	return translateUsernameConflict(err)
 }
 
 // GetUserByUsername resolves an account by its unique username.
@@ -378,7 +392,7 @@ func (r *Repository) UpdateProfile(ctx context.Context, userID, username, email,
 	defer func() { _ = tx.Rollback(ctx) }()
 	tag, err := tx.Exec(ctx, `UPDATE users SET username = $1, avatar = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL`, username, avatar, userID)
 	if err != nil {
-		return nil, err
+		return nil, translateUsernameConflict(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, nil

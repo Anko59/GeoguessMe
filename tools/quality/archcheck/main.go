@@ -12,8 +12,8 @@
 //     literals and byte-string literals. Composite values remain mutable even
 //     when their elements look table-like, so intentional package tables must
 //     be listed in
-//     tools/quality/archcheck/mutable-globals.allowlist. The only entry today
-//     is the mutex-protected rate-limiter singleton.
+//     tools/quality/archcheck/mutable-globals.allowlist with an ownership
+//     justification.
 //  2. sql-in-handlers — HTTP handlers under backend/handlers/ must not import
 //     database/sql or pgx and must not contain SQL command string literals.
 //  3. env-read — no direct environment reads outside backend/internal/config/
@@ -70,7 +70,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}
-		root = wd
+		root, err = findRepoRoot(wd)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -87,6 +91,28 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("archcheck PASSED")
+}
+
+// findRepoRoot walks upward from start so invoking archcheck from its package
+// directory still scans the repository. It fails closed instead of treating a
+// missing backend directory as a clean repository.
+func findRepoRoot(start string) (string, error) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+	for {
+		backend, backendErr := os.Stat(filepath.Join(dir, "backend"))
+		checker, checkerErr := os.Stat(filepath.Join(dir, "tools", "quality", "archcheck"))
+		if backendErr == nil && backend.IsDir() && checkerErr == nil && checker.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("archcheck: repository root not found from %s", start)
+		}
+		dir = parent
+	}
 }
 
 func checkRepo(root string) []violation {

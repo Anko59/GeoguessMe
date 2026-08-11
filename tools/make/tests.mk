@@ -30,7 +30,7 @@ test-makefile-fragments-regression: ## Verify the Makefile fragment split preser
 	bash tools/quality/check-makefile-fragments-regression.sh
 
 test-archcheck-regression: ## Run architecture-checker regression tests.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/tools/quality/archcheck && go test ./...'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/tools/quality/archcheck && go test -count=1 ./...'
 
 test-ci-retention-regression: ## Verify CI workflow has bounded retention and cache scopes.
 	bash tools/quality/test/check-ci-retention-regression.sh
