@@ -100,7 +100,8 @@ func TestInvitePreviewIsNonSensitiveAndPublic(t *testing.T) {
 	require.NotContains(t, string(data), inviteToken)
 
 	// Unknown tokens are a generic 404 with no leak.
-	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/invites/preview", map[string]string{"invite_token": "does-not-exist"}, "", nil)
+	unknownToken := strings.Repeat("B", 42) + "A"
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/invites/preview", map[string]string{"invite_token": unknownToken}, "", nil)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	require.Contains(t, string(data), "invite_not_found")
 }
@@ -168,7 +169,7 @@ func TestInviteCreateCapAndLegacyJoinDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, inviteToken, tokenHash, "raw bearer token must never be stored")
 
-	// Sanity: preview works again for a fresh invite (multi-recipient token).
+	// Revocation remains durable after another invite is created.
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/invites/preview", map[string]string{"invite_token": inviteToken}, "", nil)
 	require.Equalf(t, http.StatusNotFound, resp.StatusCode, "revoked token must stay invalid: %s", data)
 }

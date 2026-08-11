@@ -74,8 +74,21 @@ export default function SettingsModal({
     }, [groupId, isOpen]);
 
     useEffect(() => {
-        if (!isOpen) return;
         let active = true;
+        // A raw invite is intentionally ephemeral. Clear it whenever the modal
+        // opens, closes, or moves to another group so it cannot reappear later.
+        queueMicrotask(() => {
+            if (active) {
+                setCreatedInvite(null);
+                setCopied(false);
+                setInviteError('');
+            }
+        });
+        if (!isOpen) {
+            return () => {
+                active = false;
+            };
+        }
         void api
             .get<InviteListItem[]>('/group/invites', { params: { group_id: groupId } })
             .then((response) => {
@@ -151,9 +164,18 @@ export default function SettingsModal({
     const inviteLink = createdInvite ? `${window.location.origin}${createdInvite.invite_url}` : '';
     const copyInvite = () => {
         if (!createdInvite) return;
-        navigator.clipboard.writeText(inviteLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (!navigator.clipboard) {
+            setInviteError('Clipboard access is unavailable. Select and copy the link manually.');
+            return;
+        }
+        setInviteError('');
+        void navigator.clipboard
+            .writeText(inviteLink)
+            .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            })
+            .catch(() => setInviteError('Unable to copy the invite. Select and copy the link manually.'));
     };
 
     const toggleNotifications = () => {

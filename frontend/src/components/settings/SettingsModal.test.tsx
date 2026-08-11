@@ -96,7 +96,7 @@ describe('SettingsModal', () => {
             }
             return Promise.resolve({ data: {} });
         });
-        render(
+        const view = render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
                     <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
@@ -121,6 +121,53 @@ describe('SettingsModal', () => {
             `${window.location.origin}/group/join#invite=secret-token`,
         );
         expect(await screen.findByText('Copied!')).toBeInTheDocument();
+
+        view.rerender(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen={false} onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        view.rerender(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        await waitFor(() => expect(screen.queryByLabelText('Invite link')).toBeNull());
+    });
+
+    it('reports clipboard failures without claiming the link was copied', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: vi.fn().mockRejectedValue(new DOMException('blocked')) },
+        });
+        mocks.post.mockResolvedValue({
+            data: {
+                id: 'new-inv',
+                group_id: 'group-1',
+                token: 'secret-token',
+                invite_url: '/group/join#invite=secret-token',
+                created_at: '2026-08-05T00:00:00Z',
+                expires_at: '2026-08-12T00:00:00Z',
+            },
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Copy' }));
+        expect(
+            await screen.findByText('Unable to copy the invite. Select and copy the link manually.'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Copied!')).toBeNull();
     });
 
     it('revokes an invite and refreshes the list', async () => {
