@@ -59,6 +59,7 @@ services:
     user: "65532:65532"
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
+    pids_limit: ${GEOGUESSME_BACKEND_PIDS:-256}
     networks: [frontend, app]
     restart: unless-stopped
     depends_on:
@@ -94,6 +95,7 @@ services:
     # required for that bind after dropping the Docker default set.
     cap_add: ["NET_BIND_SERVICE"]
     security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
     networks: [frontend]
     restart: unless-stopped
     depends_on:

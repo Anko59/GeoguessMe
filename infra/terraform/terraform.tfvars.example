@@ -3,6 +3,8 @@ cloudflare_zone_id            = "replace-me"
 admin_ssh_public_key          = "ssh-ed25519 replace-me operator"
 dev_ci_ssh_public_key         = "ssh-ed25519 replace-me github-dev"
 production_ci_ssh_public_key  = "ssh-ed25519 replace-me github-production"
+# Exact commit checked out while rendering this host's root-owned runtime files.
+runtime_revision = "replace-with-40-character-lowercase-git-sha"
 # Access service-token resource UUIDs (the API response's id, not client_id) for
 # the three isolated Access applications. Create each token outside Terraform;
 # put its client_id and client_secret into the matching GitHub environment (see

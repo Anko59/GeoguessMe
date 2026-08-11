@@ -21,13 +21,15 @@ case "${1:-}" in
         ;;
     verify)
         # Authenticated runtime-integrity check; no credentials or payload are
-        # accepted. The script runs from the current release so the host never
-        # needs a deploy-writable copy outside the deployed revision.
+        # accepted. Execute only the root-owned provisioned verifier; a release
+        # directory is writable by the deploy account and must never supply
+        # code for this trust check.
         [ "$#" -eq 2 ] || {
             printf 'expected: verify ENVIRONMENT\n' >&2
             exit 126
         }
-        exec "${GEOGUESSME_APP_ROOT:-/opt/geoguessme}/$allowed_environment/current/deployment/scripts/hosted/verify-deployment-hashes.sh" "$allowed_environment"
+        [ "$2" = "$allowed_environment" ] || exit 126
+        exec "${GEOGUESSME_APP_ROOT:-/opt/geoguessme}/bin/verify-deployment-hashes.sh" "$allowed_environment"
         ;;
     *)
         exit 126

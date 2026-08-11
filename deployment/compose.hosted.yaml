@@ -30,6 +30,7 @@ services:
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
     networks: [app]
     restart: unless-stopped
     healthcheck:

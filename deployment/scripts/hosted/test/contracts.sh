@@ -38,6 +38,8 @@ assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
 assert_contains "$FORCED" '[ "$#" -eq 4 ]'
 assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
+assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
+assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
 
 # Both workflows must match the forced command's arity. PRs #56 and #57 extended
 # this command string with VAPID material while forced-command.sh was untouched,
@@ -135,6 +137,7 @@ fi
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
 assert_contains "$HEALTH" 'for service in postgres backend web'
 assert_contains "$HEALTH" '.State.Health.Status'
+assert_contains "$HEALTH" 'verify-deployment-hashes.sh" "$environment"'
 assert_contains "$COMMON" 'BACKEND_IMAGE="$backend"'
 
 # Secret generation fills every external credential, uses an isolated backup
@@ -254,22 +257,25 @@ fi
 VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
 hash_root=$(mktemp -d)
 trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
-# REVISION in deployment metadata is a 40-character git commit SHA.
-revision=$(printf 'b%.0s' $(seq 1 40))
-mkdir -p "$hash_root/app/releases/$revision/deployment/scripts/hosted" \
+# The environment's app revision may differ from the shared host-runtime
+# revision; integrity must use the latter for both environments.
+app_revision=$(printf 'a%.0s' $(seq 1 40))
+runtime_revision=$(printf 'b%.0s' $(seq 1 40))
+mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
     "$hash_root/app/bin" "$hash_root/app/config" \
     "$hash_root/state/releases/dev"
-printf 'REVISION=%s\n' "$revision" >"$hash_root/state/releases/dev/current.env"
-for script in common deploy forced-command backup restore-rehearsal health-check alert; do
+printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
+printf '%s\n' "$runtime_revision" >"$hash_root/app/config/runtime-revision"
+for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
     cp "$ROOT/deployment/scripts/hosted/$script.sh" \
-        "$hash_root/app/releases/$revision/deployment/scripts/hosted/$script.sh"
+        "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted/$script.sh"
     cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
 done
 cp "$ROOT/deployment/compose.production.yaml" \
-    "$hash_root/app/releases/$revision/deployment/compose.production.yaml"
+    "$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
 cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.production.yaml"
 cp "$ROOT/deployment/compose.hosted.yaml" \
-    "$hash_root/app/releases/$revision/deployment/compose.hosted.yaml"
+    "$hash_root/app/releases/$runtime_revision/deployment/compose.hosted.yaml"
 cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
 run_verify() {
     GEOGUESSME_APP_ROOT="$hash_root/app" \
@@ -281,9 +287,37 @@ run_verify() {
 if ! run_verify >/dev/null 2>&1; then
     fail 'runtime hash check rejected matching host definitions'
 fi
+if SSH_ORIGINAL_COMMAND='verify production' \
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+    GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$FORCED" dev >/dev/null 2>&1; then
+    fail 'dev forced command accepted a production integrity request'
+fi
+if ! SSH_ORIGINAL_COMMAND='verify dev' \
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+    GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$FORCED" dev >/dev/null 2>&1; then
+    fail 'dev forced command rejected its own integrity request'
+fi
+printf '\n# tampered verifier\n' >>"$hash_root/app/bin/verify-deployment-hashes.sh"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a tampered installed verifier'
+fi
+cp "$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh" \
+    "$hash_root/app/bin/verify-deployment-hashes.sh"
 printf '\n# tampered out-of-band\n' >>"$hash_root/app/config/compose.production.yaml"
 if run_verify >/dev/null 2>&1; then
     fail 'runtime hash check accepted a tampered host definition'
+fi
+cp "$ROOT/deployment/compose.production.yaml" \
+    "$hash_root/app/config/compose.production.yaml"
+printf '%s\n' invalid >"$hash_root/app/config/runtime-revision"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted an invalid root-owned runtime revision'
 fi
 if GEOGUESSME_APP_ROOT="$hash_root/app" GEOGUESSME_STATE_ROOT="$hash_root/state" \
     GEOGUESSME_SECRET_ROOT="$hash_root/secrets" GEOGUESSME_LOCK_ROOT="$hash_root/locks" \

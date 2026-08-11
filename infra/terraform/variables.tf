@@ -26,6 +26,16 @@ variable "production_ci_ssh_public_key" {
   sensitive   = true
 }
 
+variable "runtime_revision" {
+  description = "Exact lowercase 40-character Git commit whose root-owned scripts and compose definitions are rendered into cloud-init."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{40}$", var.runtime_revision))
+    error_message = "runtime_revision must be an exact lowercase 40-character Git commit."
+  }
+}
+
 variable "access_email" {
   description = "Only human identity allowed into Cloudflare Access applications."
   type        = string
