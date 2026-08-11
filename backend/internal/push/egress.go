@@ -119,6 +119,9 @@ func (g *EndpointGuard) ValidateEndpoint(endpoint string) error {
 	if !g.HostAllowed(host) {
 		return errors.New("endpoint host is not an allowlisted push provider")
 	}
+	if port := parsed.Port(); port != "" && port != "443" && !(g.allowLoopback && isLoopbackHost(host)) {
+		return errors.New("endpoint must use the HTTPS default port")
+	}
 	return nil
 }
 
@@ -129,6 +132,12 @@ func (g *EndpointGuard) dialContext(ctx context.Context, network, addr string) (
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("push dial: invalid address %q: %w", addr, err)
+	}
+	if !g.HostAllowed(host) {
+		return nil, fmt.Errorf("push dial: host %q is not allowlisted", host)
+	}
+	if port != "443" && !(g.allowLoopback && isLoopbackHost(host)) {
+		return nil, fmt.Errorf("push dial: port %q is not allowed", port)
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		if ipBlocked(ip, g.allowLoopback) {
@@ -163,12 +172,24 @@ func ipBlocked(ip net.IP, allowLoopback bool) bool {
 		if ip4.IsLoopback() {
 			return !allowLoopback
 		}
-		return ip4.IsPrivate() || ip4.IsLinkLocalUnicast() || ip4.IsMulticast() || isIPv4Documentation(ip4) || isIPv4Broadcast(ip4)
+		return ip4.IsPrivate() || ip4.IsLinkLocalUnicast() || ip4.IsMulticast() || isIPv4SpecialUse(ip4)
 	}
 	if ip.IsLoopback() {
 		return !allowLoopback
 	}
 	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || isIPv6Documentation(ip)
+}
+
+// isIPv4SpecialUse rejects non-public IANA special-purpose ranges which Go's
+// IsPrivate/IsGlobalUnicast predicates intentionally do not classify as
+// private. In particular, carrier-grade NAT and benchmarking space can route
+// to infrastructure that must never be reachable through a stored endpoint.
+func isIPv4SpecialUse(ip net.IP) bool {
+	return ip[0] == 0 ||
+		(ip[0] == 100 && ip[1] >= 64 && ip[1] <= 127) ||
+		(ip[0] == 192 && ip[1] == 0 && ip[2] == 0) ||
+		(ip[0] == 198 && (ip[1] == 18 || ip[1] == 19)) ||
+		ip[0] >= 240 || isIPv4Documentation(ip)
 }
 
 // isIPv4Documentation reports whether ip is inside RFC 5737 documentation space.
@@ -179,10 +200,6 @@ func isIPv4Documentation(ip net.IP) bool {
 }
 
 // isIPv4Broadcast reports whether ip is the IPv4 limited broadcast address.
-func isIPv4Broadcast(ip net.IP) bool {
-	return ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255
-}
-
 // isIPv6Documentation reports whether ip is inside the RFC 3849 2001:db8::/32
 // documentation prefix.
 func isIPv6Documentation(ip net.IP) bool {

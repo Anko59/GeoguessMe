@@ -438,7 +438,10 @@ func TestValidateProductionRejectsEmptyPushAllowlist(t *testing.T) {
 
 func TestValidateRejectsMalformedPushAllowlist(t *testing.T) {
 	c := validConfig()
-	c.PushEndpointAllowlist = []string{"https://fcm.googleapis.com", "", "bad host"}
+	c.PushEndpointAllowlist = []string{
+		"https://fcm.googleapis.com", "", "bad host", ".example.com",
+		"example.com.", "two..dots.example", "-prefix.example", "suffix-.example",
+	}
 	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "allowlist domain") {
 		t.Fatalf("expected malformed allowlist rejection, got %v", err)
 	}

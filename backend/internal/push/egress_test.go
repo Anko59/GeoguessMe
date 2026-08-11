@@ -84,6 +84,7 @@ func TestValidateEndpointAgainstAllowlist(t *testing.T) {
 		{"suffix confusion", "https://fcm.googleapis.com.evil.example/abc", false},
 		{"loopback without permission", "https://127.0.0.1:9999/abc", false},
 		{"plain http", "http://fcm.googleapis.com/abc", false},
+		{"nonstandard HTTPS port", "https://fcm.googleapis.com:8443/abc", false},
 		{"ftp scheme", "ftp://fcm.googleapis.com/abc", false},
 		{"relative url", "/abc", false},
 	}
@@ -121,7 +122,9 @@ func TestBlockedIPRejectsUnsafeRanges(t *testing.T) {
 		// broadcast, documentation, and unspecified.
 		"127.0.0.1", "10.0.0.1", "172.16.0.1", "172.31.255.254", "192.168.1.1",
 		"169.254.0.1", "169.254.169.254", "224.0.0.1", "255.255.255.255",
-		"192.0.2.1", "198.51.100.1", "203.0.113.1", "0.0.0.0",
+		"0.1.2.3", "100.64.0.1", "100.127.255.254", "192.0.0.1",
+		"192.0.2.1", "198.18.0.1", "198.19.255.254", "198.51.100.1",
+		"203.0.113.1", "240.0.0.1", "255.255.255.255", "0.0.0.0",
 		// IPv6 unspecified, loopback, unique-local, link-local, multicast,
 		// documentation, and IPv4-mapped forms.
 		"::", "::1", "fc00::1", "fd00::1", "fe80::1", "ff02::1", "2001:db8::1",
@@ -154,7 +157,7 @@ func TestBlockedIPRejectsUnsafeRanges(t *testing.T) {
 
 func TestDialGuardRejectsPrivateDestinations(t *testing.T) {
 	var dialed []string
-	guard := newEndpointGuard(nil, false, stubResolver{"fcm.googleapis.com": {net.ParseIP("127.0.0.1"), net.ParseIP("10.0.0.1")}}, recordDial(&dialed))
+	guard := newEndpointGuard([]string{"fcm.googleapis.com"}, false, stubResolver{"fcm.googleapis.com": {net.ParseIP("127.0.0.1"), net.ParseIP("10.0.0.1")}}, recordDial(&dialed))
 	if _, err := guard.dialContext(context.Background(), "tcp", "fcm.googleapis.com:443"); err == nil {
 		t.Fatal("a hostname resolving to private addresses must be rejected")
 	}
@@ -186,7 +189,7 @@ func TestDialGuardRejectsObfuscatedAndMetadataDestinations(t *testing.T) {
 func TestDialGuardPinsAllowedAddress(t *testing.T) {
 	var dialed []string
 	// The first candidate is blocked, so the dial must pin the second.
-	guard := newEndpointGuard(nil, false, stubResolver{"fcm.googleapis.com": {net.ParseIP("10.0.0.1"), net.ParseIP("8.8.8.8")}}, recordDial(&dialed))
+	guard := newEndpointGuard([]string{"fcm.googleapis.com"}, false, stubResolver{"fcm.googleapis.com": {net.ParseIP("10.0.0.1"), net.ParseIP("8.8.8.8")}}, recordDial(&dialed))
 	if _, err := guard.dialContext(context.Background(), "tcp", "fcm.googleapis.com:443"); err == nil || !strings.Contains(err.Error(), "dial stub called") {
 		t.Fatalf("expected the pinned dial to be attempted, got %v", err)
 	}
@@ -197,13 +200,29 @@ func TestDialGuardPinsAllowedAddress(t *testing.T) {
 
 func TestDialGuardReResolvesPerDialAgainstRebinding(t *testing.T) {
 	resolver := &flippingResolver{answers: [][]net.IP{{net.ParseIP("8.8.8.8")}, {net.ParseIP("127.0.0.1")}}}
-	guard := newEndpointGuard(nil, false, resolver, recordDial(&[]string{}))
+	guard := newEndpointGuard([]string{"fcm.googleapis.com"}, false, resolver, recordDial(&[]string{}))
 	if _, err := guard.dialContext(context.Background(), "tcp", "fcm.googleapis.com:443"); err == nil || !strings.Contains(err.Error(), "dial stub called") {
 		t.Fatalf("first dial must reach the stub, got %v", err)
 	}
 	// The second dial re-resolves and must now be blocked.
 	if _, err := guard.dialContext(context.Background(), "tcp", "fcm.googleapis.com:443"); err == nil || strings.Contains(err.Error(), "dial stub called") {
 		t.Fatalf("second dial must be blocked after the answer flipped to a private address, got %v", err)
+	}
+}
+
+func TestDialGuardRechecksHostAllowlist(t *testing.T) {
+	var dialed []string
+	guard := newEndpointGuard(
+		[]string{"fcm.googleapis.com"},
+		false,
+		stubResolver{"evil.example": {net.ParseIP("8.8.8.8")}},
+		recordDial(&dialed),
+	)
+	if _, err := guard.dialContext(context.Background(), "tcp", "evil.example:443"); err == nil || !strings.Contains(err.Error(), "not allowlisted") {
+		t.Fatalf("dial-time allowlist must reject an untrusted public host, got %v", err)
+	}
+	if len(dialed) != 0 {
+		t.Fatalf("untrusted host reached dialer: %v", dialed)
 	}
 }
 

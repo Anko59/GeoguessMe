@@ -4,10 +4,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"geoguessme/handlers"
 )
@@ -243,4 +246,51 @@ func writePushJSON(w http.ResponseWriter, status int, value any) {
 
 func writePushError(w http.ResponseWriter, status int, code, message string) {
 	writePushJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
+}
+
+// serviceMetrics is the Prometheus text surface of the push fan-out service.
+type serviceMetrics struct {
+	queueDepth       atomic.Int64
+	drops            atomic.Uint64
+	deliveries       atomic.Uint64
+	deliveryFailures atomic.Uint64
+	subscriptions    atomic.Int64
+	duration         latencyHistogram
+}
+
+type latencyHistogram struct {
+	buckets []float64
+	counts  [8]atomic.Uint64
+	sumMs   atomic.Int64
+	count   atomic.Uint64
+}
+
+var deliveryHistogramBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
+
+func newServiceMetrics() *serviceMetrics {
+	return &serviceMetrics{duration: latencyHistogram{buckets: deliveryHistogramBuckets}}
+}
+
+func (m *serviceMetrics) observeDuration(seconds float64) {
+	m.duration.sumMs.Add(int64(seconds * 1000))
+	m.duration.count.Add(1)
+	for i, bound := range m.duration.buckets {
+		if seconds <= bound {
+			m.duration.counts[i].Add(1)
+		}
+	}
+	m.duration.counts[len(m.duration.buckets)].Add(1)
+}
+
+func (m *serviceMetrics) render(w io.Writer) {
+	fmt.Fprintf(w, "push_queue_depth %d\n", m.queueDepth.Load())
+	fmt.Fprintf(w, "push_drops_total %d\n", m.drops.Load())
+	fmt.Fprintf(w, "push_delivery_failures_total %d\n", m.deliveryFailures.Load())
+	fmt.Fprintf(w, "push_subscriptions_total %d\n", m.subscriptions.Load())
+	fmt.Fprintf(w, "push_delivery_duration_seconds_count %d\n", m.duration.count.Load())
+	fmt.Fprintf(w, "push_delivery_duration_seconds_sum %s\n", strconv.FormatFloat(float64(m.duration.sumMs.Load())/1000, 'f', 3, 64))
+	for i, bound := range m.duration.buckets {
+		fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=%q} %d\n", strconv.FormatFloat(bound, 'f', -1, 64), m.duration.counts[i].Load())
+	}
+	fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=\"+Inf\"} %d\n", m.duration.counts[len(m.duration.buckets)].Load())
 }

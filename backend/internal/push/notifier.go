@@ -4,14 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"geoguessme/internal/config"
@@ -36,25 +32,29 @@ type Deps struct {
 // triggering request is never blocked by slow or unreachable push services.
 // It implements the handlers.PushNotifier interface structurally.
 type Service struct {
-	store      Store
-	deliver    Deliverer
-	keys       *KeyPair
-	cfg        *config.Config
-	guard      *EndpointGuard
-	logger     *slog.Logger
-	jobs       chan fanoutJob
-	wg         sync.WaitGroup
-	stopOnce   sync.Once
-	stopCh     chan struct{}
-	metrics    *serviceMetrics
-	hostSems   map[string]chan struct{}
-	hostSemsMu sync.Mutex
+	store       Store
+	deliver     Deliverer
+	keys        *KeyPair
+	cfg         *config.Config
+	guard       *EndpointGuard
+	logger      *slog.Logger
+	jobs        chan fanoutJob
+	wg          sync.WaitGroup
+	stopOnce    sync.Once
+	stopCh      chan struct{}
+	enqueueMu   sync.RWMutex
+	stopping    bool
+	metrics     *serviceMetrics
+	hostSems    map[string]chan struct{}
+	overflowSem chan struct{}
+	hostSemsMu  sync.Mutex
 }
 
 type fanoutJob struct {
 	userIDs []string
 	payload []byte
 	reason  string
+	groupID string
 }
 
 // NewService constructs a notification service. Call Start to launch workers
@@ -64,15 +64,16 @@ func NewService(deps Deps) *Service {
 		deps.Logger = slog.Default()
 	}
 	svc := &Service{
-		store:    deps.Store,
-		deliver:  deps.Deliver,
-		keys:     deps.Keys,
-		cfg:      deps.Config,
-		logger:   deps.Logger,
-		jobs:     make(chan fanoutJob, queueDepthFromConfig(deps.Config)),
-		stopCh:   make(chan struct{}),
-		metrics:  newServiceMetrics(),
-		hostSems: make(map[string]chan struct{}),
+		store:       deps.Store,
+		deliver:     deps.Deliver,
+		keys:        deps.Keys,
+		cfg:         deps.Config,
+		logger:      deps.Logger,
+		jobs:        make(chan fanoutJob, queueDepthFromConfig(deps.Config)),
+		stopCh:      make(chan struct{}),
+		metrics:     newServiceMetrics(),
+		hostSems:    make(map[string]chan struct{}),
+		overflowSem: make(chan struct{}, deliveryPerHostFromConfig(deps.Config)),
 	}
 	if deps.Config != nil {
 		svc.guard = NewEndpointGuard(deps.Config.PushEndpointAllowlist, deps.Config.Environment != config.EnvProduction)
@@ -102,17 +103,32 @@ func (s *Service) Start(ctx context.Context, workers int) {
 	go s.subscriptionCountLoop(ctx)
 }
 
-// Stop closes the job queue and stops background workers and the metrics
-// refresh loop, waiting for in-flight deliveries to finish. It is idempotent
+// Stop signals background workers and the metrics refresh loop, waiting for
+// in-flight deliveries to finish. The jobs channel deliberately remains open:
+// request handlers can race with shutdown, and closing it would make an
+// otherwise harmless late notification panic. It is idempotent
 // so callers can invoke it from both explicit shutdown code and a deferred
 // safety net. Callers should cancel the run context first so any in-progress
 // HTTP send aborts promptly instead of waiting for its timeout.
 func (s *Service) Stop() {
 	s.stopOnce.Do(func() {
+		s.enqueueMu.Lock()
+		s.stopping = true
 		close(s.stopCh)
-		close(s.jobs)
+		s.enqueueMu.Unlock()
 	})
 	s.wg.Wait()
+	// No producer can publish after stopping is set. Account for jobs which
+	// were accepted before shutdown but not selected by a worker.
+	for {
+		select {
+		case <-s.jobs:
+			s.metrics.queueDepth.Add(-1)
+			s.metrics.drops.Add(1)
+		default:
+			return
+		}
+	}
 }
 
 // --- configuration-backed delivery bounds ---------------------------------
@@ -142,8 +158,12 @@ func (s *Service) deliveryWorkers() int {
 }
 
 func (s *Service) deliveryPerHost() int {
-	if s.cfg != nil && s.cfg.PushDeliveryPerHost > 0 {
-		return s.cfg.PushDeliveryPerHost
+	return deliveryPerHostFromConfig(s.cfg)
+}
+
+func deliveryPerHostFromConfig(cfg *config.Config) int {
+	if cfg != nil && cfg.PushDeliveryPerHost > 0 {
+		return cfg.PushDeliveryPerHost
 	}
 	return 2
 }
@@ -162,6 +182,11 @@ func (s *Service) hostSem(host string) chan struct{} {
 	defer s.hostSemsMu.Unlock()
 	sem, ok := s.hostSems[host]
 	if !ok {
+		// Provider subdomains are attacker-controlled subscription input. Keep
+		// their semaphore cache bounded and share one conservative overflow gate.
+		if len(s.hostSems) >= 32 {
+			return s.overflowSem
+		}
 		perHost := s.deliveryPerHost()
 		if perHost < 1 {
 			perHost = 2
@@ -180,7 +205,7 @@ func endpointHost(endpoint string) string {
 	if err != nil || parsed.Host == "" {
 		return ""
 	}
-	return parsed.Host
+	return strings.ToLower(parsed.Hostname())
 }
 
 // --- subscription-count gauge ---------------------------------------------
@@ -229,17 +254,33 @@ func (s *Service) MetricsText() string {
 
 func (s *Service) worker(ctx context.Context) {
 	defer s.wg.Done()
-	for job := range s.jobs {
-		s.metrics.queueDepth.Add(-1)
-		s.deliverJob(ctx, job)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.stopCh:
+			return
+		case job := <-s.jobs:
+			s.metrics.queueDepth.Add(-1)
+			s.deliverJob(ctx, job)
+		}
 	}
 }
 
 func (s *Service) enqueue(job fanoutJob) {
+	s.enqueueMu.RLock()
+	defer s.enqueueMu.RUnlock()
+	if s.stopping {
+		s.metrics.drops.Add(1)
+		return
+	}
+	// Increment before publishing the job. A worker may receive immediately,
+	// so incrementing after the send can transiently expose a negative gauge.
+	s.metrics.queueDepth.Add(1)
 	select {
 	case s.jobs <- job:
-		s.metrics.queueDepth.Add(1)
 	default:
+		s.metrics.queueDepth.Add(-1)
 		// A full queue means push delivery is backed up; drop rather than
 		// block or grow memory unbounded. Notifications are best-effort.
 		s.metrics.drops.Add(1)
@@ -250,7 +291,9 @@ func (s *Service) enqueue(job fanoutJob) {
 // deliverJob sends the payload to every subscription owned by the target users.
 // Permanently invalid subscriptions are removed; transient errors are logged.
 func (s *Service) deliverJob(ctx context.Context, job fanoutJob) {
-	subs, err := s.store.ListForUsers(ctx, job.userIDs)
+	// Recheck membership at delivery time. A member removed after enqueue must
+	// never receive delayed group names or message content from the queue.
+	subs, err := s.store.ListForGroupUsers(ctx, job.groupID, job.userIDs)
 	if err != nil {
 		s.logger.Error("push target lookup failed", "reason", job.reason, "error", err)
 		return
@@ -313,7 +356,7 @@ func (s *Service) NotifyNewChallenge(ctx context.Context, groupID, excludeUserID
 		return
 	}
 	payload := newPayload("New challenge", uploader+" posted a new challenge in "+groupName, groupURL(groupID), "challenge:"+photoID)
-	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_challenge"})
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_challenge", groupID: groupID})
 }
 
 // NotifyNewMessage alerts a group about a new chat message from a member.
@@ -327,7 +370,7 @@ func (s *Service) NotifyNewMessage(ctx context.Context, groupID, senderUserID, c
 	}
 	body := sender + ": " + truncate(strings.TrimSpace(content), 140)
 	payload := newPayload(groupName, body, groupURL(groupID), "chat:"+groupID)
-	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_message"})
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_message", groupID: groupID})
 }
 
 func (s *Service) resolveChallenge(ctx context.Context, groupID, excludeUserID, photoID string) (targets []NotificationTarget, groupName, uploader string) {
@@ -395,61 +438,4 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit-1]) + "…"
-}
-
-// --- metrics surface ------------------------------------------------------
-
-// serviceMetrics is the Prometheus text surface of the push fan-out service
-// (F-08). Counters and gauges are updated by the notifier without locks and
-// rendered on demand by Service.MetricsText; the middleware /metrics endpoint
-// appends the rendered block after the HTTP metrics.
-type serviceMetrics struct {
-	queueDepth       atomic.Int64
-	drops            atomic.Uint64
-	deliveries       atomic.Uint64
-	deliveryFailures atomic.Uint64
-	subscriptions    atomic.Int64
-	duration         latencyHistogram
-}
-
-// latencyHistogram records delivery durations in fixed Prometheus-compatible
-// buckets (le semantics). Bucket boundaries are in seconds and chosen around
-// the 5s send deadline so queue saturation and slow providers surface in the
-// tail.
-type latencyHistogram struct {
-	buckets []float64 // upper bounds, seconds (inclusive)
-	counts  [8]atomic.Uint64
-	sumMs   atomic.Int64
-	count   atomic.Uint64
-}
-
-var deliveryHistogramBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
-
-func newServiceMetrics() *serviceMetrics {
-	return &serviceMetrics{duration: latencyHistogram{buckets: deliveryHistogramBuckets}}
-}
-
-func (m *serviceMetrics) observeDuration(seconds float64) {
-	ms := int64(seconds * 1000)
-	m.duration.sumMs.Add(ms)
-	m.duration.count.Add(1)
-	for i, bound := range m.duration.buckets {
-		if seconds <= bound {
-			m.duration.counts[i].Add(1)
-		}
-	}
-	m.duration.counts[len(m.duration.buckets)].Add(1) // +Inf bucket
-}
-
-func (m *serviceMetrics) render(w io.Writer) {
-	fmt.Fprintf(w, "push_queue_depth %d\n", m.queueDepth.Load())
-	fmt.Fprintf(w, "push_drops_total %d\n", m.drops.Load())
-	fmt.Fprintf(w, "push_delivery_failures_total %d\n", m.deliveryFailures.Load())
-	fmt.Fprintf(w, "push_subscriptions_total %d\n", m.subscriptions.Load())
-	fmt.Fprintf(w, "push_delivery_duration_seconds_count %d\n", m.duration.count.Load())
-	fmt.Fprintf(w, "push_delivery_duration_seconds_sum %s\n", strconv.FormatFloat(float64(m.duration.sumMs.Load())/1000, 'f', 3, 64))
-	for i, bound := range m.duration.buckets {
-		fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=%q} %d\n", strconv.FormatFloat(bound, 'f', -1, 64), m.duration.counts[i].Load())
-	}
-	fmt.Fprintf(w, "push_delivery_duration_seconds_bucket{le=\"+Inf\"} %d\n", m.duration.counts[len(m.duration.buckets)].Load())
 }

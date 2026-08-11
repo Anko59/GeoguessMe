@@ -3,6 +3,7 @@ package push
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -220,6 +221,44 @@ func TestQueueMetricsRecordDepthAndDrops(t *testing.T) {
 	svc.Stop()
 }
 
+func TestEnqueueAfterStopIsSafeAndAccountedAsDrop(t *testing.T) {
+	svc := newTestService(&fakeStore{}, &fakeDeliverer{})
+	svc.Stop()
+
+	svc.enqueue(fanoutJob{reason: "shutdown-race"})
+
+	if got := svc.metrics.queueDepth.Load(); got != 0 {
+		t.Fatalf("queue depth after stopped enqueue = %d, want 0", got)
+	}
+	if got := svc.metrics.drops.Load(); got != 1 {
+		t.Fatalf("drops after stopped enqueue = %d, want 1", got)
+	}
+}
+
+func TestEndpointHostNormalizesCaseAndPort(t *testing.T) {
+	if got := endpointHost("https://FCM.GoogleApis.Com:8443/send"); got != "fcm.googleapis.com" {
+		t.Fatalf("endpointHost = %q, want normalized hostname", got)
+	}
+}
+
+func TestHostSemaphoreCacheIsBounded(t *testing.T) {
+	svc := newConfiguredService(&fakeStore{}, &fakeDeliverer{}, &config.Config{PushDeliveryPerHost: 1})
+	var overflow chan struct{}
+	for i := 0; i < 64; i++ {
+		sem := svc.hostSem(fmt.Sprintf("provider-%d.example", i))
+		if i >= 32 {
+			if overflow == nil {
+				overflow = sem
+			} else if sem != overflow {
+				t.Fatal("overflow hosts must share the bounded fallback semaphore")
+			}
+		}
+	}
+	if got := len(svc.hostSems); got != 32 {
+		t.Fatalf("host semaphore cache size = %d, want 32", got)
+	}
+}
+
 func TestMetricsTextRendersPushMetrics(t *testing.T) {
 	svc := newTestService(&fakeStore{}, &fakeDeliverer{})
 	svc.metrics.queueDepth.Store(2)
@@ -290,7 +329,7 @@ func TestUpsertRefreshesExistingEndpointAtCap(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT id FROM users WHERE id = \\$1 FOR UPDATE").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
 	mock.ExpectQuery("push_subscriptions WHERE user_id = \\$1 AND endpoint = \\$2").WithArgs("user-1", "https://fcm.example/a").WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
-	mock.ExpectExec("INSERT INTO push_subscriptions").WithArgs(
+	mock.ExpectExec("INSERT INTO push_subscriptions(?s).*created_at = EXCLUDED.created_at.*last_used_at = NULL").WithArgs(
 		pgxmock.AnyArg(), "user-1", "https://fcm.example/a", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 	).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()

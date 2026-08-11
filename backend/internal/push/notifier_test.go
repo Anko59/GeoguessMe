@@ -16,15 +16,17 @@ import (
 )
 
 type fakeStore struct {
-	mu            sync.Mutex
-	targets       []NotificationTarget
-	targetCalls   int
-	groupName     string
-	usernames     map[string]string
-	subsByUser    map[string][]Subscription
-	deletedIDs    []string
-	deleteIDError error
-	touchedIDs    []string
+	mu              sync.Mutex
+	targets         []NotificationTarget
+	targetCalls     int
+	groupName       string
+	usernames       map[string]string
+	subsByUser      map[string][]Subscription
+	deliveryMembers map[string]bool
+	listCalled      chan struct{}
+	deletedIDs      []string
+	deleteIDError   error
+	touchedIDs      []string
 }
 
 func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
@@ -47,6 +49,29 @@ func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
 	}
 	if len(targets) != 1 || targets[0].UserID != "user-2" {
 		t.Fatalf("notification targets = %+v", targets)
+	}
+}
+
+func TestListForGroupUsersRechecksCurrentMembership(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Error(err)
+		}
+		mock.Close()
+	})
+	mock.ExpectQuery("JOIN group_members").WithArgs("group-1", []string{"user-2"}).WillReturnRows(
+		pgxmock.NewRows([]string{"id", "user_id", "endpoint", "p256dh", "auth", "user_agent", "created_at"}),
+	)
+	subs, err := (pgStore{pool: mock}).ListForGroupUsers(context.Background(), "group-1", []string{"user-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 0 {
+		t.Fatalf("removed group member subscriptions = %v, want none", subs)
 	}
 }
 
@@ -106,10 +131,21 @@ func (f *fakeStore) Delete(_ context.Context, userID, endpoint string) error {
 func (f *fakeStore) ListForUser(_ context.Context, userID string) ([]Subscription, error) {
 	return f.subsByUser[userID], nil
 }
-func (f *fakeStore) ListForUsers(_ context.Context, userIDs []string) ([]Subscription, error) {
+func (f *fakeStore) ListForGroupUsers(_ context.Context, _ string, userIDs []string) ([]Subscription, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var out []Subscription
 	for _, id := range userIDs {
+		if f.deliveryMembers != nil && !f.deliveryMembers[id] {
+			continue
+		}
 		out = append(out, f.subsByUser[id]...)
+	}
+	if f.listCalled != nil {
+		select {
+		case f.listCalled <- struct{}{}:
+		default:
+		}
 	}
 	return out, nil
 }
@@ -301,6 +337,35 @@ func TestNotifySkipsWhenNoTargets(t *testing.T) {
 	svc.NotifyNewChallenge(context.Background(), "g1", "u1", "photo-1")
 	if len(deliver.snapshot()) != 0 {
 		t.Fatal("delivery happened with no targets")
+	}
+}
+
+func TestDeliveryRechecksMembershipAfterEnqueue(t *testing.T) {
+	store := &fakeStore{
+		targets:         []NotificationTarget{{UserID: "u2"}},
+		groupName:       "Private group",
+		usernames:       map[string]string{"u1": "alice"},
+		subsByUser:      map[string][]Subscription{"u2": {{ID: "s1", UserID: "u2"}}},
+		deliveryMembers: map[string]bool{"u2": true},
+		listCalled:      make(chan struct{}, 1),
+	}
+	deliver := newFakeDeliverer()
+	svc := newTestService(store, deliver)
+
+	// Enqueue while u2 is a target, then revoke membership before a worker can
+	// resolve subscriptions. The delayed job must not disclose its payload.
+	svc.NotifyNewMessage(context.Background(), "g1", "u1", "secret")
+	store.mu.Lock()
+	store.deliveryMembers["u2"] = false
+	store.mu.Unlock()
+	svc.Start(context.Background(), 1)
+	defer svc.Stop()
+
+	if !waitForSignal(store.listCalled, time.Second) {
+		t.Fatal("worker did not recheck current group membership")
+	}
+	if got := len(deliver.snapshot()); got != 0 {
+		t.Fatalf("removed member received %d delayed deliveries", got)
 	}
 }
 

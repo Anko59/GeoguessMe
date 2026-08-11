@@ -372,14 +372,19 @@ func (c *Config) MetricsAuthRequired() bool {
 // subdomain, so wildcards are neither needed nor accepted.
 func validAllowlistDomain(value string) bool {
 	value = strings.TrimSpace(value)
-	if value == "" || strings.ContainsAny(value, " \t/") || strings.Contains(value, "://") {
+	if value == "" || len(value) > 253 || strings.ContainsAny(value, " \t/") || strings.Contains(value, "://") {
 		return false
 	}
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-':
-		default:
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
+		}
+		for _, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			default:
+				return false
+			}
 		}
 	}
 	return true

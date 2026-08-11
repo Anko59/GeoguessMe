@@ -37,7 +37,7 @@ type Store interface {
 	Upsert(ctx context.Context, sub *Subscription, maxPerUser int) error
 	Delete(ctx context.Context, userID, endpoint string) error
 	ListForUser(ctx context.Context, userID string) ([]Subscription, error)
-	ListForUsers(ctx context.Context, userIDs []string) ([]Subscription, error)
+	ListForGroupUsers(ctx context.Context, groupID string, userIDs []string) ([]Subscription, error)
 	DeleteByID(ctx context.Context, id string) error
 	// CountSubscriptionsByUser reports how many active subscriptions one user
 	// currently holds; the subscribe handler uses it for the per-user cap.
@@ -98,7 +98,12 @@ func (s pgStore) Upsert(ctx context.Context, sub *Subscription, maxPerUser int) 
 	}
 	const query = `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent`
+		ON CONFLICT (user_id, endpoint) DO UPDATE SET
+			p256dh = EXCLUDED.p256dh,
+			auth = EXCLUDED.auth,
+			user_agent = EXCLUDED.user_agent,
+			created_at = EXCLUDED.created_at,
+			last_used_at = NULL`
 	if _, err := tx.Exec(ctx, query, sub.ID, sub.UserID, sub.Endpoint, sub.P256DH, sub.Auth, sub.UserAgent, sub.CreatedAt); err != nil {
 		return fmt.Errorf("upsert push subscription: %w", err)
 	}
@@ -157,11 +162,14 @@ func (s pgStore) ListForUser(ctx context.Context, userID string) ([]Subscription
 	return scanSubscriptions(rows)
 }
 
-func (s pgStore) ListForUsers(ctx context.Context, userIDs []string) ([]Subscription, error) {
+func (s pgStore) ListForGroupUsers(ctx context.Context, groupID string, userIDs []string) ([]Subscription, error) {
 	if len(userIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at FROM push_subscriptions WHERE user_id = ANY($1)`, userIDs)
+	rows, err := s.pool.Query(ctx, `SELECT ps.id, ps.user_id, ps.endpoint, ps.p256dh, ps.auth, ps.user_agent, ps.created_at
+		FROM push_subscriptions ps
+		JOIN group_members gm ON gm.user_id = ps.user_id AND gm.group_id = $1
+		WHERE ps.user_id = ANY($2)`, groupID, userIDs)
 	if err != nil {
 		return nil, err
 	}
