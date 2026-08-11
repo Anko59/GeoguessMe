@@ -191,6 +191,14 @@ assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha
 assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
 assert_contains "$BACKEND_DOCKERFILE" 'USER appuser:appuser'
 
+# Terraform plans may contain sensitive values. Re-running the target must
+# repair an existing directory's permissions, and a successful apply removes
+# the exact reviewed plan.
+assert_contains "$ROOT/tools/make/deployment.mk" 'install -d -m 0700 infra/terraform/.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'chmod 0600 infra/terraform/.tfplan/geoguessme.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'apply .tfplan/geoguessme.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'rm -f infra/terraform/.tfplan/geoguessme.tfplan'
+
 # Reject malformed image input before touching Docker or secrets.
 if "$DEPLOY" dev latest latest 0123456789012345678901234567890123456789 >/dev/null 2>&1; then
     fail 'mutable image references were accepted'
