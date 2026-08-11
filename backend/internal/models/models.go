@@ -7,8 +7,9 @@ import (
 type User struct {
 	ID              string     `json:"id"`
 	Username        string     `json:"username"`
-	Email           string     `json:"email"`
+	Email           string     `json:"email,omitempty"` // verified contact; empty when unverified (column NULL)
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	PendingEmail    string     `json:"-"` // submitted-but-unverified contact claim
 	Password        string     `json:"-"`
 	Avatar          string     `json:"avatar"`
 	AuthVersion     int        `json:"-"`

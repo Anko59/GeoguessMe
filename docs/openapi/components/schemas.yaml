@@ -11,11 +11,23 @@ APIError:
 
 AuthUser:
   type: object
-  required: [id, username, email]
+  required: [id, username]
   properties:
     id: { type: string, format: uuid }
     username: { type: string }
-    email: { type: string, format: email }
+    email:
+      type: [string, "null"]
+      format: email
+      description: >
+        The verified contact address, present only after the account has
+        verified a claim. Email is a recovery/contact channel, not an
+        authorization identity; an unverified account simply has no email.
+    pending_email:
+      type: string
+      format: email
+      description: >
+        The current unverified contact claim. The verified email stays active
+        until this claim is successfully verified.
     email_verified_at: { type: [string, "null"], format: date-time }
     avatar: { type: string }
 

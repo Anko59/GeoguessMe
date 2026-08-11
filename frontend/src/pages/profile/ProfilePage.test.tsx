@@ -168,4 +168,21 @@ describe('ProfilePage', () => {
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
     });
+
+    it('shows only the verified recovery email on the owner profile', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                email: 'alice@example.test',
+                email_verified_at: '2026-01-01T00:00:00Z',
+                pending_email: 'new@example.test',
+            },
+        });
+        renderProfile();
+
+        expect(await screen.findByText('alice@example.test')).toBeInTheDocument();
+        // A pending claim is never shown on a profile view; it is managed in
+        // account settings.
+        expect(screen.queryByText('new@example.test')).not.toBeInTheDocument();
+    });
 });

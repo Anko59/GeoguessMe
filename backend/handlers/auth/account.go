@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -13,9 +14,11 @@ import (
 	"geoguessme/handlers"
 	authsvc "geoguessme/internal/auth"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository"
 	"geoguessme/internal/validation"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,42 +40,54 @@ func (a *AuthAPI) Signup(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_username", err.Error())
 		return
 	}
-	if err := validation.ValidateEmail(req.Email); err != nil {
-		handlers.WriteError(w, http.StatusBadRequest, "invalid_email", err.Error())
-		return
+	if req.Email != "" {
+		if err := validation.ValidateEmail(req.Email); err != nil {
+			handlers.WriteError(w, http.StatusBadRequest, "invalid_email", err.Error())
+			return
+		}
 	}
 	if err := validation.ValidatePassword(req.Password); err != nil {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_password", err.Error())
 		return
 	}
-	if user, err := a.repos.GetUserByUsername(r.Context(), req.Username); err != nil {
-		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create account")
-		return
-	} else if user != nil {
-		handlers.WriteError(w, http.StatusConflict, "username_taken", "Username is already in use")
-		return
-	}
-	if user, err := a.repos.GetUserByEmail(r.Context(), req.Email); err != nil {
-		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create account")
-		return
-	} else if user != nil {
-		handlers.WriteError(w, http.StatusConflict, "email_taken", "Email is already in use")
-		return
-	}
+	// Pay the configured password-hash cost before any registration-state
+	// decision so username and verified-email collisions cannot be separated
+	// from an available account by the missing bcrypt work.
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), a.configuredCost())
 	if err != nil {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create account")
 		return
 	}
-	now := time.Now()
-	user := &models.User{ID: uuid.NewString(), Username: req.Username, Email: req.Email, Password: string(hash), Avatar: a.randomAvatar(), CreatedAt: now, UpdatedAt: now}
-	if err := a.repos.CreateUser(r.Context(), user); err != nil {
-		handlers.WriteError(w, http.StatusConflict, "account_exists", "Unable to create account with those details")
+	// Only the public username can collide at signup. An email is merely a
+	// pending recovery claim—even when another account already verified that
+	// address—so signup never reveals whether an address is registered. The
+	// first account to verify owns it; later verification attempts fail with a
+	// generic error.
+	if other, err := a.repos.GetUserByUsername(r.Context(), req.Username); err != nil {
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create account")
+		return
+	} else if other != nil {
+		handlers.WriteError(w, http.StatusConflict, "signup_unavailable", "Unable to create an account with these details")
 		return
 	}
-	if err := a.issueVerificationToken(r, user); err != nil {
-		// Account creation and gameplay do not depend on SMTP availability.
-		slog.Warn("verification delivery failed", "error", err, "user_id", user.ID)
+	now := time.Now()
+	user := &models.User{ID: uuid.NewString(), Username: req.Username, PendingEmail: req.Email, Password: string(hash), Avatar: a.randomAvatar(), CreatedAt: now, UpdatedAt: now}
+	if err := a.repos.CreateUser(r.Context(), user); err != nil {
+		// A concurrent signup can still lose the username race.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			handlers.WriteError(w, http.StatusConflict, "signup_unavailable", "Unable to create an account with these details")
+			return
+		}
+		slog.Error("signup account insert failed", "error", err)
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create account")
+		return
+	}
+	if req.Email != "" {
+		if err := a.issueVerificationToken(r, user, req.Email); err != nil {
+			// Account creation and gameplay do not depend on SMTP availability.
+			slog.Warn("verification delivery failed", "error", err, "user_id", user.ID)
+		}
 	}
 	a.issueSession(r.Context(), w, user)
 }
@@ -185,8 +200,15 @@ func (a *AuthAPI) RequestVerification(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
-	if user.EmailVerifiedAt == nil {
-		_ = a.issueVerificationToken(r, user)
+	// Resend targets the current pending claim only. A verified account with
+	// no pending claim has nothing left to verify and is a silent no-op; the
+	// response stays uniform so the endpoint never reveals verification state.
+	if user.EmailVerifiedAt == nil || user.PendingEmail != "" {
+		if target := repository.ResendTargetEmail(user); target != nil {
+			if err := a.issueVerificationToken(r, user, *target); err != nil {
+				slog.Warn("verification resend failed", "error", err, "user_id", user.ID)
+			}
+		}
 	}
 	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the account can receive mail, a verification link has been sent"})
 }
@@ -203,7 +225,20 @@ func (a *AuthAPI) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.repos.VerifyEmailTransaction(r.Context(), authsvc.HashToken(req.Token)); err != nil {
-		handlers.WriteError(w, http.StatusBadRequest, "invalid_token", "Verification token is invalid or expired")
+		// Claim conflicts (the address is already verified by another account)
+		// surface as a generic verification error that reveals neither the
+		// conflict nor the owning account. Nothing-to-promote is a successful
+		// no-op handled by the repository (the token is consumed and committed).
+		if errors.Is(err, repository.ErrClaimConflict) {
+			handlers.WriteError(w, http.StatusBadRequest, "verification_failed", "Unable to verify the email address")
+			return
+		}
+		if errors.Is(err, repository.ErrTokenInvalid) || errors.Is(err, repository.ErrUserNotFound) {
+			handlers.WriteError(w, http.StatusBadRequest, "invalid_token", "Verification token is invalid or expired")
+			return
+		}
+		slog.Error("email verification transaction failed", "error", err)
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to verify email")
 		return
 	}
 	handlers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Email verified"})
@@ -222,8 +257,13 @@ func (a *AuthAPI) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
 	}
-	if user, _ := a.repos.GetUserByEmail(r.Context(), req.Email); user != nil {
-		_ = a.issueResetToken(r, user)
+	user, err := a.repos.GetUserByVerifiedEmail(r.Context(), req.Email)
+	if err != nil {
+		slog.Error("password recovery lookup failed", "error", err)
+	} else if user != nil {
+		if err := a.issueResetToken(r, user); err != nil {
+			slog.Warn("password recovery delivery failed", "error", err, "user_id", user.ID)
+		}
 	}
 	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the email is registered, a reset link has been sent"})
 }
@@ -299,7 +339,7 @@ func boolByte(value bool) byte {
 	return 0
 }
 
-func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User) error {
+func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User, target string) error {
 	token, err := authsvc.GenerateOpaqueToken(32)
 	if err != nil {
 		return err
@@ -308,10 +348,10 @@ func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User) err
 	if a.cfg.VerificationTTL > 0 {
 		ttl = a.cfg.VerificationTTL
 	}
-	if err := a.repos.InsertOneTimeToken(r.Context(), "email_verification_tokens", uuid.NewString(), user.ID, authsvc.HashToken(token), time.Now().Add(ttl)); err != nil {
+	if err := a.repos.InsertEmailVerificationToken(r.Context(), uuid.NewString(), user.ID, authsvc.HashToken(token), target, time.Now().Add(ttl)); err != nil {
 		return err
 	}
-	return a.mailer.Send(user.Email, "Verify your GeoGuessMe email", a.tokenURL("verify-email", token))
+	return a.mailer.Send(target, "Verify your GeoGuessMe email", a.tokenURL("verify-email", token))
 }
 
 func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
@@ -323,7 +363,7 @@ func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
 	if a.cfg.ResetTTL > 0 {
 		ttl = a.cfg.ResetTTL
 	}
-	if err := a.repos.InsertOneTimeToken(r.Context(), "password_reset_tokens", uuid.NewString(), user.ID, authsvc.HashToken(token), time.Now().Add(ttl)); err != nil {
+	if err := a.repos.InsertPasswordResetToken(r.Context(), uuid.NewString(), user.ID, authsvc.HashToken(token), time.Now().Add(ttl)); err != nil {
 		return err
 	}
 	return a.mailer.Send(user.Email, "Reset your GeoGuessMe password", a.tokenURL("reset-password", token))

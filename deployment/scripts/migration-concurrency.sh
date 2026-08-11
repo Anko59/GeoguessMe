@@ -101,27 +101,33 @@ assert_eq "$(psql_query "SELECT count(*) FROM schema_migrations")" "$EXPECTED_MI
 echo "=== Verifying legacy data transformations ==="
 
 # --- users: email backfill, email_normalized, score column dropped, auth_version
+# Migrations 018/019 reclassified unverified addresses as pending claims, so
+# the legacy fixture users (never verified) now carry pending_email and their
+# verified email columns are NULL.
+assert_eq "$(psql_query "SELECT pending_email FROM users WHERE id='legacy-001'")" \
+    "player_one@legacy.invalid" \
+    "legacy-001 email backfill moved to pending_email (NULL→username@legacy.invalid)"
 assert_eq "$(psql_query "SELECT email FROM users WHERE id='legacy-001'")" \
+    "" \
+    "legacy-001 email column NULL after pending reclassification"
+assert_eq "$(psql_query "SELECT pending_email_normalized FROM users WHERE id='legacy-001'")" \
     "player_one@legacy.invalid" \
-    "legacy-001 email backfill (NULL→username@legacy.invalid)"
-assert_eq "$(psql_query "SELECT email_normalized FROM users WHERE id='legacy-001'")" \
-    "player_one@legacy.invalid" \
-    "legacy-001 email_normalized"
-assert_eq "$(psql_query "SELECT email FROM users WHERE id='legacy-002'")" \
+    "legacy-001 pending_email_normalized"
+assert_eq "$(psql_query "SELECT pending_email FROM users WHERE id='legacy-002'")" \
     "Player_Two@legacy.invalid" \
-    "legacy-002 email backfill (preserves case in email, normalized separately)"
-assert_eq "$(psql_query "SELECT email_normalized FROM users WHERE id='legacy-002'")" \
+    "legacy-002 email backfill moved to pending_email (preserves case)"
+assert_eq "$(psql_query "SELECT pending_email_normalized FROM users WHERE id='legacy-002'")" \
     "player_two@legacy.invalid" \
-    "legacy-002 email_normalized lowercased"
-assert_eq "$(psql_query "SELECT email FROM users WHERE id='legacy-003'")" \
+    "legacy-002 pending_email_normalized lowercased"
+assert_eq "$(psql_query "SELECT pending_email FROM users WHERE id='legacy-003'")" \
     "  spaced_user  @legacy.invalid" \
-    "legacy-003 email backfill (username with spaces)"
-assert_eq "$(psql_query "SELECT email_normalized FROM users WHERE id='legacy-003'")" \
+    "legacy-003 email backfill moved to pending_email (username with spaces)"
+assert_eq "$(psql_query "SELECT pending_email_normalized FROM users WHERE id='legacy-003'")" \
     "spaced_user  @legacy.invalid" \
-    "legacy-003 email_normalized trimmed+lowered"
-assert_eq "$(psql_query "SELECT email FROM users WHERE id='legacy-004'")" \
+    "legacy-003 pending_email_normalized trimmed+lowered"
+assert_eq "$(psql_query "SELECT pending_email FROM users WHERE id='legacy-004'")" \
     "player_four@legacy.invalid" \
-    "legacy-004 email backfill"
+    "legacy-004 email backfill moved to pending_email"
 # score column must be gone
 assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='users' AND column_name='score'")" \
     "0" "score column dropped"
@@ -133,6 +139,12 @@ assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE t
     "1" "updated_at column exists"
 assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='users' AND column_name='deleted_at'")" \
     "1" "deleted_at column exists"
+assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='email_verification_tokens' AND column_name='target_email_normalized'")" \
+    "1" "verification tokens are bound to a normalized target column"
+assert_eq "$(psql_query "SELECT to_regclass('public.email_verification_one_unused_per_user_idx') IS NOT NULL")" \
+    "t" "single unused email-verification token index exists"
+assert_eq "$(psql_query "SELECT to_regclass('public.password_reset_one_unused_per_user_idx') IS NOT NULL")" \
+    "t" "single unused password-reset token index exists"
 
 # --- photos: storage_key, mime_type, byte_size, lifecycle_status, retention_at
 assert_eq "$(psql_query "SELECT storage_key FROM photos WHERE id='photo-001'")" \

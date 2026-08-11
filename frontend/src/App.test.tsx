@@ -124,7 +124,7 @@ describe('App shell — public routes', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByPlaceholderText('Email')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Email — verify to enable account recovery')).toBeInTheDocument();
         expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
     });
 

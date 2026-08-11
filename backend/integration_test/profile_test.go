@@ -68,3 +68,49 @@ func TestPublicProfileVisibility(t *testing.T) {
 	resp, _ = doJSON(t, http.MethodGet, "/api/v1/user/profile/does-not-exist", nil, alice.access, nil)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
+
+// TestVerificationTokenIsBoundToPendingEmail proves a token issued for one
+// pending claim cannot promote a replacement claim entered later.
+func TestVerificationTokenIsBoundToPendingEmail(t *testing.T) {
+	resetRateLimiter(t)
+	user := unique("bound-claim")
+	firstEmail := user + "-first@example.test"
+	secondEmail := user + "-second@example.test"
+	const pass = "StrongPassword123"
+	session := signup(t, user, firstEmail, pass)
+	staleToken := tokensFromMailpitTo(t, "Verify your GeoGuessMe email", "/verify-email", firstEmail, 1)[0]
+
+	resp, data := doJSON(t, http.MethodPatch, "/api/v1/auth/profile", map[string]string{
+		"username":         user,
+		"email":            secondEmail,
+		"avatar":           "avatar.png",
+		"current_password": pass,
+	}, session.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "profile update: %s", data)
+
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": staleToken}, "", nil)
+	require.Equalf(t, http.StatusBadRequest, resp.StatusCode, "stale verification: %s", data)
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(data, &envelope))
+	require.Equal(t, "invalid_token", envelope.Error.Code)
+
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/auth/profile", nil, session.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "profile read: %s", data)
+	var profile struct {
+		Email        string `json:"email"`
+		PendingEmail string `json:"pending_email"`
+	}
+	require.NoError(t, json.Unmarshal(data, &profile))
+	require.Empty(t, profile.Email)
+	require.Equal(t, secondEmail, profile.PendingEmail)
+
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/verify/request", nil, session.access, nil)
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	currentToken := tokensFromMailpitTo(t, "Verify your GeoGuessMe email", "/verify-email", secondEmail, 1)[0]
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": currentToken}, "", nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "current verification: %s", data)
+}

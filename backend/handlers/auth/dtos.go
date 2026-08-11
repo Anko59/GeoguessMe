@@ -20,12 +20,17 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// AuthUser is the public account shape returned by auth and profile flows.
+// AuthUser is the owner-only account shape returned by auth and profile flows.
+// Email is nullable because email is a verified contact/recovery channel, not
+// an authorization identity: an account without a verified address simply has
+// no email. PendingEmail is the current unverified contact claim. Public
+// profiles never expose either field.
 type AuthUser struct {
 	ID              string     `json:"id"`
 	Username        string     `json:"username"`
-	Email           string     `json:"email"`
+	Email           *string    `json:"email,omitempty"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	PendingEmail    *string    `json:"pending_email,omitempty"`
 	Avatar          string     `json:"avatar"`
 }
 
@@ -93,6 +98,15 @@ type ProfileResponse struct {
 }
 
 // userResponse maps a user row onto the wire-shaped AuthUser view model.
+// Only non-empty addresses are exposed, so an unverified account has no email
+// key at all and a pending claim appears only while one exists.
 func userResponse(user *models.User) AuthUser {
-	return AuthUser{ID: user.ID, Username: user.Username, Email: user.Email, EmailVerifiedAt: user.EmailVerifiedAt, Avatar: user.Avatar}
+	response := AuthUser{ID: user.ID, Username: user.Username, EmailVerifiedAt: user.EmailVerifiedAt, Avatar: user.Avatar}
+	if user.Email != "" {
+		response.Email = &user.Email
+	}
+	if user.PendingEmail != "" {
+		response.PendingEmail = &user.PendingEmail
+	}
+	return response
 }

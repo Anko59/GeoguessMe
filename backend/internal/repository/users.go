@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -14,13 +15,25 @@ import (
 )
 
 const (
-	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at"
+	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at, pending_email"
 )
 
-// CreateUser inserts a new account.
+// CreateUser inserts a new account. The submitted address is stored as a
+// pending contact claim (pending_email); the verified email column stays NULL
+// until the claim is verified, so an unverified address never acts as an
+// authorization identity nor occupies the verified-email uniqueness index.
 func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
-	query := `INSERT INTO users (id, username, email, email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`
-	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, user.Email, strings.ToLower(strings.TrimSpace(user.Email)), user.Password, user.Avatar, user.CreatedAt)
+	pending := user.PendingEmail
+	if pending == "" {
+		pending = user.Email
+	}
+	var pendingValue, normalizedValue any
+	if pending != "" {
+		pendingValue = pending
+		normalizedValue = strings.ToLower(strings.TrimSpace(pending))
+	}
+	query := `INSERT INTO users (id, username, email, email_normalized, pending_email, pending_email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, NULL, NULL, $3, $4, $5, $6, $7, $7)`
+	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pendingValue, normalizedValue, user.Password, user.Avatar, user.CreatedAt)
 	return err
 }
 
@@ -114,12 +127,19 @@ type rowScanner interface{ Scan(dest ...any) error }
 func scanUser(row rowScanner) (*models.User, error) {
 	var user models.User
 	var verified *time.Time
-	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt)
+	var email, pendingEmail sql.NullString
+	err := row.Scan(&user.ID, &user.Username, &email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt, &pendingEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if email.Valid {
+		user.Email = email.String
+	}
+	if pendingEmail.Valid {
+		user.PendingEmail = pendingEmail.String
 	}
 	user.EmailVerifiedAt = verified
 	return &user, nil
@@ -226,12 +246,22 @@ func (r *Repository) RevokeAllCredentials(ctx context.Context, userID string) er
 	return tx.Commit(ctx)
 }
 
-// InsertOneTimeToken stores a fresh email-verification or password-reset
-// token, replacing any unused token of the same kind for the user.
-func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, hash string, expiresAt time.Time) error {
-	if table != "email_verification_tokens" && table != "password_reset_tokens" {
-		return errors.New("invalid one-time token table")
-	}
+// InsertEmailVerificationToken stores a token bound to the exact normalized
+// pending claim it was issued for. A later claim change cannot repurpose it.
+func (r *Repository) InsertEmailVerificationToken(ctx context.Context, id, userID, hash, targetEmail string, expiresAt time.Time) error {
+	return r.replaceOneTimeToken(ctx, "email_verification_tokens",
+		`INSERT INTO email_verification_tokens(id, user_id, token_hash, target_email_normalized, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		userID, id, userID, hash, strings.ToLower(strings.TrimSpace(targetEmail)), expiresAt)
+}
+
+// InsertPasswordResetToken stores a fresh verified-email recovery token.
+func (r *Repository) InsertPasswordResetToken(ctx context.Context, id, userID, hash string, expiresAt time.Time) error {
+	return r.replaceOneTimeToken(ctx, "password_reset_tokens",
+		`INSERT INTO password_reset_tokens(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`,
+		userID, id, userID, hash, expiresAt)
+}
+
+func (r *Repository) replaceOneTimeToken(ctx context.Context, table, insertQuery, userID string, insertArgs ...any) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -240,15 +270,19 @@ func (r *Repository) InsertOneTimeToken(ctx context.Context, table, id, userID, 
 	if _, err := tx.Exec(ctx, "DELETE FROM "+table+" WHERE user_id = $1 AND used_at IS NULL", userID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO "+table+"(id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)", id, userID, hash, expiresAt); err != nil {
+	if _, err := tx.Exec(ctx, insertQuery, insertArgs...); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-// VerifyEmailTransaction consumes a verification token and marks the account
-// verified in a single transaction so a crash cannot consume the token without
-// updating the account.
+// VerifyEmailTransaction consumes a verification token and promotes the
+// account's pending email claim in a single transaction so a crash cannot
+// consume the token without updating the account. The token is still
+// bound to both the user and normalized address, so it cannot promote a claim
+// that changed after issuance. A verified account without a pending claim is
+// a successful no-op only when the bound target already equals its verified
+// address.
 func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -256,14 +290,28 @@ func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash strin
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var userID string
-	err = tx.QueryRow(ctx, `UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id`, tokenHash).Scan(&userID)
+	var targetEmail sql.NullString
+	err = tx.QueryRow(ctx, `UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE token_hash = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP RETURNING user_id, target_email_normalized`, tokenHash).Scan(&userID, &targetEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrTokenInvalid
 	}
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID); err != nil {
+	if !targetEmail.Valid || targetEmail.String == "" {
+		return ErrTokenInvalid
+	}
+	if err := promotePendingEmailOn(ctx, tx, userID, targetEmail.String); err != nil {
+		if errors.Is(err, ErrNothingToPromote) {
+			var verifiedEmail sql.NullString
+			if err := tx.QueryRow(ctx, `SELECT email_normalized FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&verifiedEmail); err != nil {
+				return err
+			}
+			if !verifiedEmail.Valid || verifiedEmail.String != targetEmail.String {
+				return ErrTokenInvalid
+			}
+			return tx.Commit(ctx)
+		}
 		return err
 	}
 	return tx.Commit(ctx)
@@ -317,14 +365,40 @@ func (r *Repository) SetUserAvatar(ctx context.Context, userID, avatar string) e
 	return err
 }
 
-// UpdateProfile changes the public account fields. Changing the email address
-// clears verification so the new address must be verified independently.
+// UpdateProfile changes the public account fields. A submitted email becomes a
+// pending contact claim instead of replacing the verified address: the current
+// verified email (and its verification state) stays active until the pending
+// claim is promoted by a successful verification. Omitting the email or
+// submitting the already verified address cancels any pending replacement.
 func (r *Repository) UpdateProfile(ctx context.Context, userID, username, email, avatar string) (*models.User, error) {
-	_, err := r.pool.Exec(ctx, `UPDATE users SET username = $1, email = $2, email_normalized = $3, avatar = $4, email_verified_at = CASE WHEN email_normalized <> $3 THEN NULL ELSE email_verified_at END, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND deleted_at IS NULL`, username, email, strings.ToLower(strings.TrimSpace(email)), avatar, userID)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return r.GetUserByID(ctx, userID)
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `UPDATE users SET username = $1, avatar = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND deleted_at IS NULL`, username, avatar, userID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if _, err := tx.Exec(ctx, `UPDATE users
+		SET pending_email = CASE WHEN $2 = '' OR email_normalized IS NOT DISTINCT FROM $2 THEN NULL ELSE $1 END,
+			pending_email_normalized = CASE WHEN $2 = '' OR email_normalized IS NOT DISTINCT FROM $2 THEN NULL ELSE $2 END,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $3 AND deleted_at IS NULL`, email, normalized, userID); err != nil {
+		return nil, err
+	}
+	user, err := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1 AND deleted_at IS NULL`, userID))
+	if err != nil || user == nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // ChangePassword updates the password and invalidates every existing session

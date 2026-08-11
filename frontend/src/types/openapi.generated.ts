@@ -695,8 +695,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             username: string;
-            /** Format: email */
-            email: string;
+            /**
+             * Format: email
+             * @description The verified contact address, present only after the account has verified a claim. Email is a recovery/contact channel, not an authorization identity; an unverified account simply has no email.
+             */
+            email?: string | null;
+            /**
+             * Format: email
+             * @description The current unverified contact claim. The verified email stays active until this claim is successfully verified.
+             */
+            pending_email?: string;
             /** Format: date-time */
             email_verified_at?: string | null;
             avatar?: string;
@@ -1071,8 +1079,11 @@ export interface operations {
             content: {
                 'application/json': {
                     username: string;
-                    /** Format: email */
-                    email: string;
+                    /**
+                     * Format: email
+                     * @description Optional recovery/contact claim.
+                     */
+                    email?: string;
                     password: string;
                 };
             };
@@ -1316,8 +1327,11 @@ export interface operations {
             content: {
                 'application/json': {
                     username: string;
-                    /** Format: email */
-                    email: string;
+                    /**
+                     * Format: email
+                     * @description Optional replacement contact claim; omission cancels a pending replacement without removing the verified address.
+                     */
+                    email?: string;
                     /** @enum {string} */
                     avatar:
                         | 'avatar.png'
