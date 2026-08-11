@@ -177,9 +177,88 @@ BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
     --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
 # ---------------------------------------------------------------------------
-# Phase 4: Health, readiness, and HTTP verification
+# Phase 4: Effective runtime hardening
 # ---------------------------------------------------------------------------
-echo "--- Phase 4: Health, readiness, and HTTP verification ---"
+echo "--- Phase 4: Effective runtime hardening ---"
+
+container_id() {
+    BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+        docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
+        --project-directory "$REPO" -p "$PROJECT" ps -aq "$1"
+}
+
+assert_inspect() {
+    service=$1
+    field=$2
+    format=$3
+    expected=$4
+    id=$(container_id "$service")
+    test -n "$id" || {
+        echo "FAIL: $service container is missing" >&2
+        exit 1
+    }
+    actual=$(docker inspect --format "$format" "$id")
+    test "$actual" = "$expected" || {
+        echo "FAIL: $service $field is $actual, want $expected" >&2
+        exit 1
+    }
+    echo "  ok   $service $field=$actual"
+}
+
+for service in migration backend web db minio smtp; do
+    assert_inspect "$service" cap_drop '{{join .HostConfig.CapDrop ","}}' ALL
+    assert_inspect "$service" no_new_privileges \
+        '{{join .HostConfig.SecurityOpt ","}}' no-new-privileges:true
+done
+
+for service in migration backend web db; do
+    assert_inspect "$service" read_only '{{.HostConfig.ReadonlyRootfs}}' true
+done
+
+assert_inspect migration pids_limit '{{.HostConfig.PidsLimit}}' 64
+assert_inspect backend pids_limit '{{.HostConfig.PidsLimit}}' \
+    "${GEOGUESSME_BACKEND_PIDS:-256}"
+assert_inspect web pids_limit '{{.HostConfig.PidsLimit}}' 128
+assert_inspect db pids_limit '{{.HostConfig.PidsLimit}}' 256
+assert_inspect minio pids_limit '{{.HostConfig.PidsLimit}}' 128
+assert_inspect smtp pids_limit '{{.HostConfig.PidsLimit}}' 128
+
+assert_inspect web cap_add '{{join .HostConfig.CapAdd ","}}' CAP_NET_BIND_SERVICE
+assert_inspect db cap_add '{{join .HostConfig.CapAdd ","}}' \
+    CAP_CHOWN,CAP_DAC_OVERRIDE,CAP_FOWNER,CAP_SETGID,CAP_SETUID
+
+# The dollar-prefixed names below are Docker's Go-template variables, not shell
+# variables.
+# shellcheck disable=SC2016
+assert_inspect migration networks \
+    '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' \
+    "${PROJECT}_app "
+# shellcheck disable=SC2016
+assert_inspect web networks \
+    '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' \
+    "${PROJECT}_frontend "
+for service in db minio smtp; do
+    # shellcheck disable=SC2016
+    assert_inspect "$service" networks \
+        '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' \
+        "${PROJECT}_app "
+done
+# shellcheck disable=SC2016
+backend_networks=$(docker inspect --format \
+    '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' \
+    "$(container_id backend)" | xargs -n1 | sort | xargs)
+expected_backend_networks=$(printf '%s\n' "${PROJECT}_app" "${PROJECT}_frontend" | sort | xargs)
+test "$backend_networks" = "$expected_backend_networks" || {
+    echo "FAIL: backend networks are $backend_networks, want $expected_backend_networks" >&2
+    exit 1
+}
+echo "  ok   backend networks=$backend_networks"
+
+# ---------------------------------------------------------------------------
+# Phase 5: Health, readiness, and HTTP verification
+# ---------------------------------------------------------------------------
+echo "--- Phase 5: Health, readiness, and HTTP verification ---"
 
 # Poll readiness through the gateway.
 deadline=$((SECONDS + 120))
@@ -225,5 +304,5 @@ fi
 
 echo ""
 echo "prod-container-verify PASSED: non-root users, image healthchecks,"
-echo "  production Compose validation, local stack startup, health/readiness,"
+echo "  effective runtime restrictions, local stack startup, health/readiness,"
 echo "  and representative HTTP behavior verified"

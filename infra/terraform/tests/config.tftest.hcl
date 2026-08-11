@@ -19,6 +19,7 @@ run "hosted_plan" {
     admin_ssh_public_key         = "ssh-ed25519 AAAAoperator operator"
     dev_ci_ssh_public_key        = "ssh-ed25519 AAAAdevelopment development"
     production_ci_ssh_public_key = "ssh-ed25519 AAAAproduction production"
+    runtime_revision             = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     dev_health_token_id          = "11111111-1111-4111-8111-111111111111"
     dev_deploy_token_id          = "22222222-2222-4222-8222-222222222222"
     prod_deploy_token_id         = "33333333-3333-4333-8333-333333333333"
@@ -90,10 +91,12 @@ run "hosted_plan" {
       admin_key          = var.admin_ssh_public_key
       dev_ci_key         = var.dev_ci_ssh_public_key
       production_key     = var.production_ci_ssh_public_key
+      runtime_revision   = var.runtime_revision
       tunnel_token       = "mock-tunnel-token"
       common_script      = base64gzip(file("../../deployment/scripts/hosted/common.sh"))
       deploy_script      = base64gzip(file("../../deployment/scripts/hosted/deploy.sh"))
       forced_script      = base64gzip(file("../../deployment/scripts/hosted/forced-command.sh"))
+      verify_script      = base64gzip(file("../../deployment/scripts/hosted/verify-deployment-hashes.sh"))
       backup_script      = base64gzip(file("../../deployment/scripts/hosted/backup.sh"))
       restore_script     = base64gzip(file("../../deployment/scripts/hosted/restore-rehearsal.sh"))
       health_script      = base64gzip(file("../../deployment/scripts/hosted/health-check.sh"))

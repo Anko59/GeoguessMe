@@ -47,7 +47,10 @@ Terraform ignores post-creation `user_data` drift because Hetzner cannot update
 cloud-init in place and replacing a stateful host is unsafe. Apply bootstrap
 changes explicitly to the running host and verify them, or use the documented
 backup/restore replacement procedure; a newly created host always receives the
-current template.
+current template. Runtime scripts and compose definitions must be updated as one
+exact-revision set using the procedure in
+[docs/runbooks/runtime-hardening.md](runtime-hardening.md#applying-monitored-host-definitions);
+copying only the latest changed file creates an unverifiable host state.
 
 The deployment and backup locks live below `/run`, which is cleared at boot.
 Cloud-init installs `/etc/tmpfiles.d/geoguessme.conf` so systemd recreates

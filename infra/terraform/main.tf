@@ -273,10 +273,12 @@ resource "hcloud_server" "app" {
     admin_key          = var.admin_ssh_public_key
     dev_ci_key         = var.dev_ci_ssh_public_key
     production_key     = var.production_ci_ssh_public_key
+    runtime_revision   = var.runtime_revision
     tunnel_token       = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
     common_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/common.sh"))
     deploy_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/deploy.sh"))
     forced_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"))
+    verify_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"))
     backup_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/backup.sh"))
     restore_script     = base64gzip(file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"))
     health_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/health-check.sh"))

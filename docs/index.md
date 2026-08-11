@@ -54,6 +54,8 @@ and submit one server-timed guess.
   increase after seven green days
 - [DMARC rollout runbook](runbooks/dmarc-rollout.md) — p=none to reject,
   advancing only while aligned mail passes
+- [Runtime hardening runbook](runbooks/runtime-hardening.md) — container
+  hardening, mandatory rehearsal, host hash verification, closure checklist
 - [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
   record, corrected safeguards, and release checklist
 
