@@ -19,6 +19,60 @@ clean-build: ## Build production images from scratch without any layer cache.
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
 
+# Final/runtime images audited by `make audit-images` (F-01). The defaults are
+# the digest-pinned third-party runtime/deployment images; override with
+# AUDIT_IMAGES=... The backend/web application images are appended automatically
+# when BACKEND_IMAGE/WEB_IMAGE are set (CI) or when the geoguessme-*-:local
+# images exist (built with `make build-images`). Images already present in the
+# host daemon are exported and scanned via --input so private registry
+# credentials never need to enter the Trivy container.
+AUDIT_IMAGES ?= postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f \
+	caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 \
+	cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf \
+	hashicorp/terraform:1.15.8@sha256:7ae513256f7ce67879e218ae8593d6fbe216ec9e123abe6c94e4e10704857963 \
+	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea \
+	restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+
+audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
+	@bash tools/quality/image-scan-exceptions-check.sh
+	@set -eu; \
+	mkdir -p security/image-reports/.trivy-cache; \
+	images="$(AUDIT_IMAGES)"; \
+	if [ -n "$${BACKEND_IMAGE:-}" ] && [ -n "$${WEB_IMAGE:-}" ]; then \
+		images="$$images $${BACKEND_IMAGE} $${WEB_IMAGE}"; \
+	elif docker image inspect geoguessme-backend:local >/dev/null 2>&1; then \
+		images="$$images geoguessme-backend:local geoguessme-web:local"; \
+	else \
+		echo 'audit-images: warning: app images skipped (set BACKEND_IMAGE/WEB_IMAGE or run `make build-images`)' >&2; \
+	fi; \
+	for img in $$images; do \
+		safe=$$(printf '%s' "$$img" | tr '/:@' '___'); \
+		mkdir -p "security/image-reports/$$safe"; \
+		bash tools/quality/image-scan-exceptions-check.sh --emit "$$img" "security/image-reports/$$safe/ignore.trivy"; \
+		if docker image inspect "$$img" >/dev/null 2>&1; then \
+			base_name=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$$img"); \
+			base_digest=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.digest" }}' "$$img"); \
+			[ "$$base_name" = '<no value>' ] && base_name=''; \
+			[ "$$base_digest" = '<no value>' ] && base_digest=''; \
+			if [ -n "$$base_name" ] || [ -n "$$base_digest" ]; then \
+				[ -n "$$base_name" ] && [ -n "$$base_digest" ] || { echo "audit-images: $$img has incomplete OCI base-image provenance" >&2; exit 1; }; \
+				case "$$base_name" in *@sha256:*) echo "audit-images: $$img base.name must not contain a digest" >&2; exit 1;; esac; \
+				printf '%s' "$$base_digest" | grep -Eq '^sha256:[0-9a-f]{64}$$' || { echo "audit-images: $$img has malformed base.digest" >&2; exit 1; }; \
+				bash tools/quality/image-scan-exceptions-check.sh --append "$$base_name@$$base_digest" "security/image-reports/$$safe/ignore.trivy"; \
+			fi; \
+			docker save "$$img" -o "security/image-reports/$$safe/image.tar"; \
+			scan_target="--input /workspace/security/image-reports/$$safe/image.tar"; \
+		else \
+			scan_target="$$img"; \
+		fi; \
+		echo "==> audit-images: $$img"; \
+		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --exit-code 0 --format json --output "/workspace/security/image-reports/$$safe/report.json" $$scan_target; \
+		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --skip-db-update --format spdx-json --output "/workspace/security/image-reports/$$safe/sbom.spdx.json" $$scan_target; \
+		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile "/workspace/security/image-reports/$$safe/ignore.trivy" --format table $$scan_target; \
+		echo "    audit-images: $$img OK (report: security/image-reports/$$safe/report.json, sbom: security/image-reports/$$safe/sbom.spdx.json)"; \
+	done; \
+	echo 'audit-images: complete'
+
 compose-validate: ## Validate every Compose file.
 	docker compose -f deployment/compose.dev.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.test.yaml --project-directory . config --quiet

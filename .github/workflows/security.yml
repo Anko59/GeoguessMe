@@ -38,3 +38,33 @@ jobs:
           languages: ${{ matrix.language }}
       - uses: github/codeql-action/autobuild@5595ccaf912efad79be6eef63a5619ff05969be3
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3
+
+  audit-images:
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # F-01: weekly and branch-push image gate. `make audit-images` scans the
+      # digest-pinned third-party runtime/deployment image set (backend, web,
+      # database, deployment utilities, and privileged tool images) and fails
+      # on fixed High/Critical findings. Application images are scanned at
+      # publication (deploy.yml) and promotion (release.yml) where the exact
+      # digest is known; this job does not scan a mutable `:dev` tag (none is
+      # published) or `dev-${SHA}` (would race deploy.yml and is not
+      # reproducible). Scanning app images here would additionally require
+      # trivy registry credentials inside the tool container (the trivy
+      # service has no host docker auth mount).
+      - name: Scan final images for fixed High/Critical findings
+        run: make audit-images
+      - name: Upload scan reports and SBOMs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: image-scan-weekly
+          path: security/image-reports/
+          retention-days: 7
+          if-no-files-found: ignore

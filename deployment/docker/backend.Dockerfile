@@ -12,6 +12,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldf
 
 # Distroless static Debian 12 nonroot (immutable index digest).
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b
+LABEL org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot" \
+    org.opencontainers.image.base.digest="sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b"
 COPY --from=build /out/geoguessme /usr/local/bin/geoguessme
 EXPOSE 8080
 USER nonroot:nonroot

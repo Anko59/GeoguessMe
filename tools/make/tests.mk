@@ -50,6 +50,9 @@ test-restart-regression: ## Run restart-rehearsal regression tests.
 test-migration-fixture-regression: ## Run migration fixture regression tests.
 	bash tools/quality/test/check-migration-fixture-regression.sh
 
+test-image-scan-exceptions-regression: ## Run image-scan exceptions regression tests.
+	bash tools/quality/test/image-scan-exceptions/test-image-scan-exceptions-regression.sh
+
 test-integration: build-images ## Run the isolated integration stack and tests in Docker.
 	$(TEST_ENV) tools/quality/run-integration.sh
 
