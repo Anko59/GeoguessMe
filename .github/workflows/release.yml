@@ -173,14 +173,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          RESTIC_IMAGE=$(sed -n "s/^readonly RESTIC_IMAGE='\(.*\)'/\1/p" deployment/scripts/hosted/common.sh)
+          [[ "$RESTIC_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]
+          export RESTIC_IMAGE
           docker pull "$BACKEND"
           docker pull "$WEB"
+          docker pull "$RESTIC_IMAGE"
           docker tag "$BACKEND" geoguessme-backend:local
           docker tag "$WEB" geoguessme-web:local
           make audit-images AUDIT_IMAGES=
           # Fail closed: the gate must prove it scanned both promoted digests.
           test -s security/image-reports/geoguessme-backend_local/report.json
           test -s security/image-reports/geoguessme-web_local/report.json
+          restic_safe=$(printf '%s' "$RESTIC_IMAGE" | tr '/:@' '___')
+          test -s "security/image-reports/$restic_safe/report.json"
       - name: Upload image-scan reports and SBOMs
         # Reports/SBOM contain no secrets; retained 7 days. Globbing only the
         # report and SBOM files keeps the trivy DB cache
@@ -198,8 +204,9 @@ jobs:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
         run: |
-          cosign sign --yes -a "revision=$GITHUB_SHA" "$BACKEND"
-          cosign sign --yes -a "revision=$GITHUB_SHA" "$WEB"
+          for image in "$BACKEND" "$WEB"; do
+            cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
+          done
       - name: Export immutable references
         id: refs
         run: |
@@ -221,6 +228,9 @@ jobs:
             BACKEND_IMAGE=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
             WEB_IMAGE=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
             ```
+
+            Hosted backup and restore use the digest-pinned Restic reference
+            committed in `deployment/scripts/hosted/common.sh`.
 
   deploy:
     name: Deploy production digest

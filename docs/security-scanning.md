@@ -12,10 +12,17 @@ The target scans the following images (see `AUDIT_IMAGES` in
 `tools/make/deployment.mk`):
 
 - **Database** — `postgres:15-alpine` (digest-pinned).
-- **Web server** — `caddy:2.11.4-alpine` (digest-pinned; the frontend final
-  image is Caddy-based).
-- **Deployment utilities** — `cloudflare/cloudflared`, `hashicorp/terraform`,
-  `ghcr.io/getsops/sops`, and `restic/restic` (all digest-pinned).
+- **Web server** — the digest-pinned Caddy 2.11.4 frontend image. Until the
+  official image includes the `golang.org/x/net` v0.56.0 fix, the Dockerfile
+  rebuilds the released Caddy binary from the pinned official builder with that
+  dependency override; the resulting application image is scanned directly.
+- **Deployment utilities** — `cloudflare/cloudflared` and `ghcr.io/getsops/sops`
+  (all digest-pinned). The pinned Restic release is rebuilt with the fixed
+  `golang.org/x/net` module and the remediation image is scanned. The Restic
+  image is published and signed with the exact development revision because
+  hosted backup and restore operations run it on deployment hosts. Terraform is
+  rebuilt with the same dependency fix and covered by `make terraform-test`; it
+  is a local planning tool, not a shipped runtime.
 - **Application images** — appended automatically:
     - from the `BACKEND_IMAGE` / `WEB_IMAGE` environment variables when set (CI
       publishes and release promotion scan the exact `name@sha256` digests);
@@ -120,5 +127,6 @@ When the blocking gate reports a fixed High/Critical finding:
 2. Resolve and record its content digest (the image must remain pinned as
    `name@sha256:...`; never downgrade a digest pin to a floating tag).
 3. Re-run `make audit-images` and repeat until the fixed finding is gone.
-4. If a newer version is not yet available, record a committed exception with an
-   owner and a 30-day expiry, then revisit it before it expires.
+4. If a newer upstream version is not yet available, apply the fix in the
+   shipped image when the dependency can be safely rebuilt and verified; do not
+   bypass the blocking gate with an exception merely to release.

@@ -151,8 +151,8 @@ canonical `reaction` column so an older application image remained usable during
 deployment and rollback. The cleanup SQL is intentionally absent from the
 ordinary migration set in this release. Migration 014 must be added by a
 separately reviewed cleanup PR only after the compatible application revision
-has been deployed, soaked, and the previous revision has left the rollback
-window.
+has been deployed, rollback validation has completed, and the previous revision
+has left the rollback window.
 
 That later migration will remove the synchronization trigger and function, the
 two compatibility constraints, and the `emoji` column. Reaction rows and the

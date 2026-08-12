@@ -223,7 +223,8 @@ for tbl in challenge_views refresh_sessions email_verification_tokens password_r
         "t" "table $tbl exists"
 done
 
-# --- migration 014 remains deferred until the compatible release has soaked
+# --- migration 014 remains deferred until the compatible release has completed
+#     rollback validation and left the rollback window
 assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='message_reactions' AND column_name='emoji'")" \
     "1" "legacy message_reactions.emoji column retained"
 assert_eq "$(psql_query "SELECT count(*) FROM pg_trigger WHERE tgname='sync_message_reaction_columns' AND NOT tgisinternal")" \

@@ -13,6 +13,7 @@ HOSTED="$ROOT/deployment/compose.hosted.yaml"
 CADDY="$ROOT/deployment/caddy/Caddyfile"
 FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
 BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
+RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
 
 fail() {
@@ -41,9 +42,8 @@ assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
 assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
 assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
 
-# Both workflows must match the forced command's arity. PRs #56 and #57 extended
-# this command string with VAPID material while forced-command.sh was untouched,
-# so every development deployment was rejected with exit 126.
+# Both workflows must match the forced command's arity. This protocol is
+# provisioned root-owned on the host and must stay compatible between releases.
 assert_forced_command_arity() {
     workflow=$1
     command_string=$(sed -n 's/.*"\(deploy \$BACKEND \$WEB \$GITHUB_SHA\)".*/\1/p' "$workflow")
@@ -189,8 +189,13 @@ age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMM
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
+assert_contains "$FRONTEND_DOCKERFILE" 'caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4'
+assert_contains "$FRONTEND_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
+assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
+assert_contains "$RESTIC_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
+assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="restic/restic:0.19.1"'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
 assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'

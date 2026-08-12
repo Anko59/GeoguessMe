@@ -55,8 +55,10 @@ route using a short-lived service-token policy and the existing operator key.
 The repair created `/etc/tmpfiles.d/geoguessme.conf`, which recreates
 `/run/lock/geoguessme` as `deploy:deploy` with mode `0750` at every boot. The
 bootstrap template and Terraform test now enforce the same rule for new hosts.
-The CI deploy key remains restricted to the four-field `deploy` command; it is
-not broadened into a general-purpose server shell merely to repair host state.
+The CI deploy key remains restricted to the fixed `deploy` command protocol; it
+is not broadened into a general-purpose server shell merely to repair host
+state. Hosted backup and restore operations use the digest-pinned Restic image
+from the root-owned runtime script.
 
 ## Access credential recovery
 

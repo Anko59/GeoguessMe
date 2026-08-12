@@ -162,9 +162,10 @@ prohibit force-push/deletion. The `development` environment accepts only `dev`;
 
 Verify Access OTP for `jeancollette138@gmail.com`, signup/verification/reset
 email, uploads and reads, WebSockets, client-IP rate limiting, TLS/security
-headers, backup creation, and isolated restore on dev. Soak for at least 24
-hours. Resolve or supersede every failing Dependabot PR before merging the
-release PR.
+headers, backup creation, and isolated restore on dev. No fixed soak or
+quarantine delay is required; record this acceptance evidence for the exact
+deployed revision before merging the release PR. Resolve or supersede every
+failing Dependabot PR before merging the release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated
 restore rehearsal. Verify public health, account email, R2, WebSockets, backup
