@@ -21,19 +21,19 @@ clean-build: ## Build production images from scratch without any layer cache.
 
 # Final/runtime images audited by `make audit-images` (F-01). The defaults are
 # the digest-pinned third-party runtime/deployment images; override with
-# AUDIT_IMAGES=... The backend/web application images are appended automatically
-# when BACKEND_IMAGE/WEB_IMAGE are set (CI) or when the geoguessme-*-:local
-# images exist (built with `make build-images`). Images already present in the
-# host daemon are exported and scanned via --input so private registry
-# credentials never need to enter the Trivy container.
+# AUDIT_IMAGES=... The backend/web application images and locally rebuilt
+# security-patched tool images are appended automatically when they exist.
+# Images already present in the host daemon are exported and scanned via
+# --input so private registry credentials never need to enter the Trivy
+# container.
 AUDIT_IMAGES ?= postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f \
-	caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 \
 	cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf \
-	hashicorp/terraform:1.15.8@sha256:7ae513256f7ce67879e218ae8593d6fbe216ec9e123abe6c94e4e10704857963 \
-	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea \
-	restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
-audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
+build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
+	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic
+
+audit-images: build-security-tool-images ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
@@ -45,9 +45,23 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 	else \
 		echo 'audit-images: warning: app images skipped (set BACKEND_IMAGE/WEB_IMAGE or run `make build-images`)' >&2; \
 	fi; \
+	if docker image inspect geoguessme-restic:local >/dev/null 2>&1; then \
+		images="$$images geoguessme-restic:local"; \
+	fi; \
+	if [ -n "$${RESTIC_IMAGE:-}" ]; then \
+		images="$$images $${RESTIC_IMAGE}"; \
+	fi; \
+	for local_image in geoguessme/restic-tools:0.19.1-xnet-0.56.0; do \
+		if docker image inspect "$$local_image" >/dev/null 2>&1; then \
+			images="$$images $$local_image"; \
+		else \
+			echo "audit-images: warning: local remediation image skipped: $$local_image" >&2; \
+		fi; \
+	done; \
 	for img in $$images; do \
 		safe=$$(printf '%s' "$$img" | tr '/:@' '___'); \
 		mkdir -p "security/image-reports/$$safe"; \
+		image_archive=''; \
 		bash tools/quality/image-scan-exceptions-check.sh --emit "$$img" "security/image-reports/$$safe/ignore.trivy"; \
 		if docker image inspect "$$img" >/dev/null 2>&1; then \
 			base_name=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$$img"); \
@@ -60,8 +74,9 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 				printf '%s' "$$base_digest" | grep -Eq '^sha256:[0-9a-f]{64}$$' || { echo "audit-images: $$img has malformed base.digest" >&2; exit 1; }; \
 				bash tools/quality/image-scan-exceptions-check.sh --append "$$base_name@$$base_digest" "security/image-reports/$$safe/ignore.trivy"; \
 			fi; \
-			docker save "$$img" -o "security/image-reports/$$safe/image.tar"; \
-			scan_target="--input /workspace/security/image-reports/$$safe/image.tar"; \
+			image_archive="security/image-reports/$$safe/image.tar"; \
+			docker save "$$img" -o "$$image_archive"; \
+			scan_target="--input /workspace/$$image_archive"; \
 		else \
 			scan_target="$$img"; \
 		fi; \
@@ -69,6 +84,7 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --exit-code 0 --format json --output "/workspace/security/image-reports/$$safe/report.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --skip-db-update --format spdx-json --output "/workspace/security/image-reports/$$safe/sbom.spdx.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile "/workspace/security/image-reports/$$safe/ignore.trivy" --format table $$scan_target; \
+		[ -z "$$image_archive" ] || rm -f "$$image_archive"; \
 		echo "    audit-images: $$img OK (report: security/image-reports/$$safe/report.json, sbom: security/image-reports/$$safe/sbom.spdx.json)"; \
 	done; \
 	echo 'audit-images: complete'

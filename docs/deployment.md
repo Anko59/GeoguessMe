@@ -40,8 +40,10 @@ and rollback evidence.
 ## Live acceptance
 
 Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
-be validated on dev, followed by a 24-hour soak and an isolated production
-backup restore, before the first production promotion to `main`.
+be validated on dev, and an isolated production backup restore must be
+completed, before the first production promotion to `main`. There is no fixed
+24-hour soak or quarantine delay; promotion may proceed once this live evidence
+and every automated release gate pass for the exact deployed revision.
 
 ## Compatibility-removal rollout
 
@@ -59,8 +61,8 @@ cleanup is a later, separately reviewed release.
    opaque `cursor`/`stable_cursor` contract, `reaction`, and repeated
    `group_ids`). The database stays backward compatible during this window, so
    the previous revision can still serve or roll back.
-2. Complete the normal deployment and soak, then confirm the previous revision
-   is no longer running and is outside the rollback window.
+2. Complete the normal deployment, then confirm the previous revision is no
+   longer running and is outside the rollback window.
 3. Migration 014, delivered in a separate cleanup PR after the compatible
    application deployment succeeded, drops the legacy reaction column, trigger,
    function, and constraints. Its deployment applies the forward-only migration

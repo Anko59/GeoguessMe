@@ -43,8 +43,8 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@# geoguessme-tools_frontend-node-modules named volume. Create the stub so
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
-	$(COMPOSE_TOOLS) build go-tools go-security node-tools
-	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff caddy cloudflared
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy terraform
+	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff cloudflared
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
@@ -52,8 +52,8 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 
 bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR gate.
 	@mkdir -p frontend/node_modules
-	$(COMPOSE_TOOLS) build go-tools go-security node-tools
-	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff caddy terraform
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy terraform
+	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 
 bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.

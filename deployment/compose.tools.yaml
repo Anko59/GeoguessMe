@@ -137,10 +137,14 @@ services:
     volumes:
       - ./:/workspace
 
-  # Caddy 2.11.4-alpine (linux/amd64 digest: 5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648)
+  # Caddy 2.11.4 with golang.org/x/net v0.56.0, matching the production
+  # frontend image's patched binary.
   caddy:
     <<: *host-tools
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    build:
+      context: .
+      dockerfile: deployment/docker/caddy-tools.Dockerfile
+    image: geoguessme/caddy-tools:2.11.4-xnet-0.56.0
     entrypoint: []
     volumes:
       - *workspace
@@ -154,11 +158,15 @@ services:
       - TUNNEL_SERVICE_TOKEN_SECRET
     volumes: []
 
-  # Terraform 1.15.8. State is remote in R2; provider credentials are passed
-  # explicitly and never baked into this image or Compose configuration.
+  # Terraform 1.15.8 with golang.org/x/net v0.56.0. State is remote in R2;
+  # provider credentials are passed explicitly and never baked into this image
+  # or Compose configuration.
   terraform:
     <<: *host-tools
-    image: hashicorp/terraform:1.15.8@sha256:7ae513256f7ce67879e218ae8593d6fbe216ec9e123abe6c94e4e10704857963
+    build:
+      context: .
+      dockerfile: deployment/docker/terraform-tools.Dockerfile
+    image: geoguessme/terraform-tools:1.15.8-xnet-0.56.0
     entrypoint: []
     working_dir: /workspace/infra/terraform
     environment:
@@ -169,6 +177,18 @@ services:
       - TF_DATA_DIR=/workspace/infra/terraform/.terraform
     volumes:
       - ./:/workspace
+
+  # Restic 0.19.1 with golang.org/x/net v0.56.0. Hosted backup and restore
+  # scripts receive this image as an exact signed registry reference.
+  restic:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/restic-tools.Dockerfile
+    image: geoguessme/restic-tools:0.19.1-xnet-0.56.0
+    entrypoint: []
+    volumes:
+      - *workspace
 
   sops:
     <<: *host-tools
