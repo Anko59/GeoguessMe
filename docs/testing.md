@@ -57,7 +57,7 @@ The gates intentionally become broader as a change approaches deployment:
 | Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                          |
 | Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
 | Merge to `dev`            | One complete `make verify`, then signed-image publication and development deployment                      |
-| Successful dev deployment | Source-blind Black-box QA workflow plus isolated production-backup restore                                |
+| Successful dev deployment | Source-blind Black-box QA workflow against the exact deployed revision                                    |
 | Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
 | Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
 | Nightly                   | Complete `make verify`                                                                                    |

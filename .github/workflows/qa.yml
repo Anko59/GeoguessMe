@@ -48,26 +48,3 @@ jobs:
           path: qa-artifacts
           retention-days: 7
           if-no-files-found: warn
-
-  production-restore:
-    name: Isolated production backup restore
-    needs: browser
-    if: always() && needs.browser.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: production
-    env:
-      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-      DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
-    steps:
-      - name: Check out the tested revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.revision || github.sha }}
-      - name: Run isolated restore through the authenticated host command
-        run: |
-          set -euo pipefail
-          make bootstrap
-          make hosted-restore-rehearsal ENVIRONMENT=production

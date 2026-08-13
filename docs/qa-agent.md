@@ -37,10 +37,7 @@ make qa-agent QA_REPORT_DIR=qa-artifacts
 
 The `Black-box QA` workflow runs automatically after a successful development
 deployment and can also be dispatched for an explicit revision. It uploads the
-JSON/Markdown report, screenshots, traces, and diagnostics for seven days. Its
-production job invokes the authenticated, fixed-form `restore-rehearsal`
-command, which restores the latest encrypted production backup into a disposable
-database container and removes that container on exit.
+JSON/Markdown report, screenshots, traces, and diagnostics for seven days.
 
 Email delivery is intentionally reported as a scope limitation unless a mailbox
 integration is configured: the browser verifies that the application accepted

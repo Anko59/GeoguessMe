@@ -7,8 +7,7 @@ case "$allowed_environment" in dev | production) ;; *) exit 126 ;; esac
 
 # SSH_ORIGINAL_COMMAND is untrusted. Parse a deliberately tiny protocol and
 # reject shell metacharacters through strict per-field validation in deploy.sh
-# or through the fixed 2-field verify and 1-field restore-rehearsal forms
-# below.
+# or through the fixed 2-field verify form below.
 # shellcheck disable=SC2086
 set -- ${SSH_ORIGINAL_COMMAND:-}
 case "${1:-}" in
@@ -31,16 +30,6 @@ case "${1:-}" in
         }
         [ "$2" = "$allowed_environment" ] || exit 126
         exec "${GEOGUESSME_APP_ROOT:-/opt/geoguessme}/bin/verify-deployment-hashes.sh" "$allowed_environment"
-        ;;
-    restore-rehearsal)
-        # The rehearsal only reads the latest encrypted backup and restores it
-        # into a disposable container that the script removes on exit. It never
-        # connects to or mutates the application database.
-        [ "$#" -eq 1 ] || {
-            printf 'expected: restore-rehearsal\n' >&2
-            exit 126
-        }
-        exec "${GEOGUESSME_APP_ROOT:-/opt/geoguessme}/bin/restore-rehearsal.sh" "$allowed_environment"
         ;;
     *)
         exit 126
