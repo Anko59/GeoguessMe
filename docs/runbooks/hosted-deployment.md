@@ -165,11 +165,10 @@ deployed dev revision: Access-protected browser entry, signup/logout/refresh,
 pending recovery-email dispatch state, uploads and reads, WebSockets, client-IP
 rate limiting, TLS/security headers, group authorization, mobile layout, and
 exploratory navigation. It uploads a revision-bound report and must have no
-reproducible findings. Its second job performs an isolated production-backup
-restore through the fixed-form authenticated host command. No fixed soak or
-quarantine delay is required; the successful workflow is the acceptance evidence
-for the exact revision before merging the release PR. Resolve or supersede every
-failing Dependabot PR before merging the release PR.
+reproducible findings. No fixed soak or quarantine delay is required; the
+successful workflow is the acceptance evidence for the exact revision before
+merging the release PR. Resolve or supersede every failing Dependabot PR before
+merging the release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated
 restore rehearsal. Verify public health, account email, R2, WebSockets, backup
