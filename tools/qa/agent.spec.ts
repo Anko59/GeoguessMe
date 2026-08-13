@@ -1,16 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
+import { QA_PASSWORD, readAccounts, type Credentials } from './accounts';
 
-const password = 'QaAgentPass123';
 const image = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==',
     'base64',
 );
-
-interface Credentials {
-    username: string;
-    email: string;
-}
 
 interface Diagnostics {
     consoleErrors: string[];
@@ -36,11 +31,6 @@ function containsCloudflareTelemetryUrl(text: string): boolean {
 
 function suffix(): string {
     return `${Date.now()}_${randomBytes(3).toString('hex')}`;
-}
-
-function credentials(label: string): Credentials {
-    const id = `${label}_${suffix()}`;
-    return { username: id.slice(0, 48), email: `${id}@qa.geoguessme.invalid` };
 }
 
 function observe(page: Page): Diagnostics {
@@ -96,17 +86,24 @@ function assertClean(diagnostics: Diagnostics): void {
     expect(problems, problems.join('\n')).toEqual([]);
 }
 
-async function signup(page: Page, account: Credentials): Promise<void> {
-    await page.goto('/signup');
+async function dismissInstallPrompt(page: Page): Promise<void> {
+    const dialog = page.getByRole('dialog', { name: 'Install GeoGuessMe' });
+    try {
+        await dialog.waitFor({ state: 'visible', timeout: 5000 });
+    } catch {
+        return;
+    }
+    await dialog.getByRole('button', { name: /dismiss|close/i }).click();
+}
+
+async function login(page: Page, account: Credentials): Promise<void> {
+    await page.goto('/login');
     await page.getByLabel('Username').fill(account.username);
-    await page.getByLabel(/Recovery email/).fill(account.email);
-    await page.getByLabel('Password').fill(password);
-    await page.getByRole('button', { name: 'Sign Up' }).click();
+    await page.getByLabel('Password').fill(QA_PASSWORD);
+    await page.getByRole('button', { name: 'Login' }).click();
     await page.waitForURL(/\/groups(?:$|\?)/);
     await expect(page.getByRole('heading', { name: 'My Groups' })).toBeVisible();
-    const installPrompt = page.getByRole('dialog', { name: 'Install GeoGuessMe' });
-    const dismissInstallPrompt = installPrompt.getByRole('button', { name: /dismiss|close/i });
-    if (await dismissInstallPrompt.isVisible().catch(() => false)) await dismissInstallPrompt.click();
+    await dismissInstallPrompt(page);
 }
 
 async function createGroup(page: Page): Promise<string> {
@@ -152,9 +149,10 @@ test.describe('Independent black-box release QA', () => {
             expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
             expect(headers['content-security-policy']).toContain("default-src 'self'");
 
-            const account = credentials('qa_auth');
-            await signup(page, account);
+            const account = (await readAccounts()).owner;
+            await login(page, account);
             await page.goto('/settings');
+            await dismissInstallPrompt(page);
             await expect(page.getByText('Pending verification')).toBeVisible();
             await expect(page.getByText(new RegExp(`Verification was requested for ${account.email}`))).toBeVisible();
 
@@ -162,14 +160,13 @@ test.describe('Independent black-box release QA', () => {
             await page.waitForURL(/\/settings$/);
             await page.goto('/');
             await page.goto('/settings');
+            await dismissInstallPrompt(page);
             await page.getByRole('button', { name: /log ?out/i }).click();
             await page.waitForURL(/\/$/);
             await page.goto('/groups');
             await page.waitForURL(/\/login/);
 
-            await page.getByLabel('Username').fill(account.username);
-            await page.getByLabel('Password').fill(password);
-            await page.getByRole('button', { name: 'Login' }).click();
+            await login(page, account);
             await page.waitForURL(/\/groups/);
             await page.reload();
             await page.waitForURL(/\/groups/);
@@ -187,7 +184,8 @@ test.describe('Independent black-box release QA', () => {
         const owner = await ownerContext.newPage();
         const ownerDiagnostics = observe(owner);
         try {
-            await signup(owner, credentials('qa_owner'));
+            const accounts = await readAccounts();
+            await login(owner, accounts.owner);
             const groupID = await createGroup(owner);
             const inviteURL = await createInvite(owner);
             await expect(owner.getByRole('status')).toHaveText('Connected', { timeout: 20000 });
@@ -213,7 +211,7 @@ test.describe('Independent black-box release QA', () => {
             contexts.push(memberContext);
             const member = await memberContext.newPage();
             const memberDiagnostics = observe(member);
-            await signup(member, credentials('qa_member'));
+            await login(member, accounts.member);
             await joinInvite(member, inviteURL, groupID);
             await expect(member.getByRole('status')).toHaveText('Connected', { timeout: 20000 });
             await owner.goto(`/group/${groupID}`);
@@ -234,7 +232,7 @@ test.describe('Independent black-box release QA', () => {
             contexts.push(outsiderContext);
             const outsider = await outsiderContext.newPage();
             const outsiderDiagnostics = observe(outsider);
-            await signup(outsider, credentials('qa_outsider'));
+            await login(outsider, accounts.outsider);
             await outsider.goto(`/group/${groupID}`);
             await expect(outsider.getByRole('alert')).toContainText('not a member');
             await member.goto('/group/join#invite=not-a-real-qa-invite');
@@ -258,7 +256,7 @@ test.describe('Independent black-box release QA', () => {
         const page = await context.newPage();
         const diagnostics = observe(page);
         try {
-            await signup(page, credentials('qa_mobile'));
+            await login(page, (await readAccounts()).owner);
             await expect
                 .poll(() =>
                     page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),

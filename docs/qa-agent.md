@@ -22,6 +22,11 @@ a reproducible finding with its project, build revision, observed error, and
 artifact paths. The agent never changes application code; fixes remain a
 separate implementation task.
 
+The workflow provisions three disposable browser accounts once per run and
+reuses them across both desktop and mobile projects. This keeps the QA agent
+within the deployed signup rate limit while still exercising separate owner,
+member, and outsider authorization paths.
+
 ## Running it
 
 The Dockerized target requires a deployed URL. Cloudflare Access headers are
