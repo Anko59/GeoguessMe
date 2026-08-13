@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "qa-browser": {
+      "command": "make",
+      "args": ["--no-print-directory", "qa-browser-mcp"],
+      "cwd": ".",
+      "lifecycle": "lazy",
+      "directTools": true,
+      "requestTimeoutMs": 120000
+    }
+  }
+}

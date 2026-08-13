@@ -22,6 +22,9 @@ GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 QA_REPORT_DIR ?= qa-artifacts
+QA_BUDGET ?= full
+QA_RUNTIME ?= codex
+QA_BUILD_SHA ?= $(shell git rev-parse origin/dev 2>/dev/null || git rev-parse HEAD)
 
 # Optional Docker build flags for CI cache integration (type=local or type=gha).
 # Unset locally so that builds use the default Docker daemon cache.

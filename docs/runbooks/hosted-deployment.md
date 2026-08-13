@@ -28,12 +28,13 @@ two minutes of planned deployment interruption.
    and export its S3 credentials plus rotated `HCLOUD_TOKEN` and
    `CLOUDFLARE_API_TOKEN`.
 
-The Cloudflare Terraform token needs zone DNS/settings, Email Routing, R2
-bucket, Tunnel, identity-provider, and Access-application write permissions
-scoped to this account/zone. Service tokens are created outside Terraform, so
-this token does not need Access service-token write permission. The Hetzner
-token should be scoped to the dedicated project. Do not reuse either token in
-application or deployment jobs.
+The Cloudflare API token needs zone DNS/settings, Email Routing, R2 bucket,
+Tunnel, identity-provider, and Access-application write permissions scoped to
+this account/zone. The local QA runner also uses it for temporary dev service
+tokens and therefore needs Access service-token write permission. Terraform does
+not manage those short-lived QA objects. The Hetzner token should be scoped to
+the dedicated project. Do not reuse either token in application or deployment
+jobs.
 
 ## Provision
 
@@ -160,15 +161,15 @@ prohibit force-push/deletion. The `development` environment accepts only `dev`;
 
 ## Dev acceptance and production launch
 
-The source-blind Black-box QA workflow runs these checks against the exact
-deployed dev revision: Access-protected browser entry, signup/logout/refresh,
-pending recovery-email dispatch state, uploads and reads, WebSockets, client-IP
-rate limiting, TLS/security headers, group authorization, mobile layout, and
-exploratory navigation. It uploads a revision-bound report and must have no
-reproducible findings. No fixed soak or quarantine delay is required; the
-successful workflow is the acceptance evidence for the exact revision before
-merging the release PR. Resolve or supersede every failing Dependabot PR before
-merging the release PR.
+Run the local LLM-driven source-blind QA agent against the exact deployed dev
+revision: Access-protected browser entry, signup/logout/refresh, pending
+recovery-email dispatch state, uploads and reads, WebSockets, client-IP rate
+limiting, TLS/security headers, group authorization, mobile layout, and
+exploratory navigation. Retain its revision-bound report with the release record
+and do not promote while it contains a reproducible `BUG` finding. There is no
+fixed soak or quarantine delay, and this acceptance step does not run in GitHub
+Actions. Resolve or supersede every failing Dependabot PR before merging the
+release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated
 restore rehearsal. Verify public health, account email, R2, WebSockets, backup

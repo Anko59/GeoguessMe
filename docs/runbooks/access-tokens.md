@@ -37,6 +37,19 @@ returned values separately:
 The client secret is shown only once: treat a lost secret as unrecoverable and
 rotate. Never put either client credential in `terraform.tfvars`.
 
+## Local deployed-dev QA access
+
+The local LLM QA runner does not require a stored browser service token. When
+`QA_ACCESS_CLIENT_ID` and `QA_ACCESS_CLIENT_SECRET` are absent, it uses the
+existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to discover the
+matching Access application, create a one-hour service token and an
+application-local policy, and remove both on exit. The API token consequently
+needs `Access: Service Tokens Write` and `Access: Apps and Policies Write` for
+this workflow. The client credentials exist only in process memory and the
+browser container environment; they are not printed, prompted for, or written to
+the report. A cleanup failure emits a warning; the service token remains limited
+to its one-hour lifetime.
+
 ## Piping into GitHub environment secrets
 
 Each token's secret goes directly into its GitHub environment secret, never into

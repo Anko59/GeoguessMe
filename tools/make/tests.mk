@@ -68,15 +68,34 @@ test-e2e-pr: build-images ## Run the Chromium PR browser suite in the isolated s
 test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
-qa-agent: ## Run source-blind exploratory QA against QA_BASE_URL and write evidence to QA_REPORT_DIR.
-	@test -n "$${QA_BASE_URL:-}" || { echo 'QA_BASE_URL is required' >&2; exit 2; }
+test-qa-agent: ## Validate the provider-neutral QA contract and MCP lifecycle in Docker.
+	bash tools/qa/test-agent.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser-mcp.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mcp.mjs
+
+qa-agent: ## Run the local LLM-driven source-blind QA agent against deployed dev.
+	QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" \
+		bash tools/qa/run-local.sh
+
+qa-agent-fast: ## Run the short local LLM QA budget against deployed dev.
+	$(MAKE) qa-agent QA_BUDGET=fast
+
+qa-agent-full: ## Run the full local LLM QA budget against deployed dev.
+	$(MAKE) qa-agent QA_BUDGET=full
+
+qa-agent-nightly: ## Run the extended local LLM QA budget against deployed dev.
+	$(MAKE) qa-agent QA_BUDGET=nightly
+
+qa-browser-mcp: ## Run the Dockerized provider-neutral browser MCP server.
+	@test -n "$$(printenv QA_BASE_URL)" || { echo 'QA_BASE_URL is required' >&2; exit 2; }
 	@mkdir -p "$(QA_REPORT_DIR)"
-	$(COMPOSE_TOOLS) run -T --rm --no-deps --user "$(shell id -u):$(shell id -g)" \
-		-w /workspace/frontend \
-		-e NODE_PATH=/workspace/frontend/node_modules \
-		-e QA_BASE_URL -e QA_ACCESS_CLIENT_ID -e QA_ACCESS_CLIENT_SECRET -e QA_BUILD_SHA \
-		-e QA_ARTIFACT_DIR=/tmp/qa-artifacts -v "$(abspath $(QA_REPORT_DIR)):/tmp/qa-artifacts" \
-		playwright node node_modules/.bin/playwright test --config /workspace/tools/qa/playwright.config.ts
+	@$(COMPOSE_TOOLS) run -T --rm --no-deps --user "$(shell id -u):$(shell id -g)" \
+		-e QA_BASE_URL -e QA_BUILD_SHA -e QA_RUNTIME -e QA_BUDGET \
+		-e QA_ACCESS_CLIENT_ID -e QA_ACCESS_CLIENT_SECRET \
+		-e QA_ARTIFACT_DIR=/tmp/qa-artifacts \
+		-e QA_HOST_ARTIFACT_DIR="$(abspath $(QA_REPORT_DIR))" \
+		-v "$(abspath $(QA_REPORT_DIR)):/tmp/qa-artifacts" \
+		playwright node /workspace/tools/qa/browser-mcp.mjs
 
 test-e2e-repeat: build-images ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5 (range 1..20)
 	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be an integer in 1..20"; exit 2;; esac

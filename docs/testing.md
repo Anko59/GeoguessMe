@@ -29,7 +29,7 @@ tools from pinned images and named caches.
 | make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                 | All integration tests PASS                                                |
 | make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                 | All Playwright projects PASS                                              |
 | make test-e2e-pr                           | Chromium desktop Playwright project; CI may set `GEOGUESSME_E2E_SHARD=N/M` for isolated shards                                                                                     | PR browser checks PASS                                                    |
-| make qa-agent                              | Source-blind exploratory browser QA against `QA_BASE_URL`; writes a revision-bound report and artifacts to `QA_REPORT_DIR`                                                         | Black-box QA workflow PASS                                                |
+| make qa-agent                              | Local LLM-driven source-blind exploratory QA against deployed `QA_BASE_URL`; writes a revision-bound report and artifacts to `QA_REPORT_DIR`                                       | `qa-report.json` with no blocking `BUG` findings                          |
 | make quality                               | Structure, format, lint, type-check, audit, regression, unit, race, coverage, build, compose-validate                                                                              | Zero violations; all gates PASS                                           |
 | make migration-test                        | Concurrent, idempotent, legacy-fixture migration tests (advisory lock, backfill, dedupe)                                                                                           | migration-concurrency.sh PASS                                             |
 | make backup-rehearsal                      | Disposable backup, restore, continuity verification                                                                                                                                | backup-restore-rehearsal.sh PASS                                          |
@@ -48,19 +48,19 @@ inside containers.
 
 The gates intentionally become broader as a change approaches deployment:
 
-| Event                     | Gate                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                 |
-| Local push                | `make preflight`                                                                                          |
-| Documentation-only PR     | `make preflight-docs`                                                                                     |
-| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                        |
-| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                          |
-| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
-| Merge to `dev`            | One complete `make verify`, then signed-image publication and development deployment                      |
-| Successful dev deployment | Source-blind Black-box QA workflow against the exact deployed revision                                    |
-| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
-| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
-| Nightly                   | Complete `make verify`                                                                                    |
+| Event                     | Gate                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                       |
+| Local push                | `make preflight`                                                                                                |
+| Documentation-only PR     | `make preflight-docs`                                                                                           |
+| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                              |
+| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                                |
+| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                                    |
+| Merge to `dev`            | One complete `make verify`, then signed-image publication and development deployment                            |
+| Successful dev deployment | Local LLM-driven source-blind QA against the exact deployed revision; retain the report with the release record |
+| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest        |
+| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy       |
+| Nightly                   | Complete `make verify`                                                                                          |
 
 The aggregate required status remains `Dockerized verification gate`, so branch
 protection cannot be bypassed when path-selected jobs are skipped. Unknown paths
@@ -105,6 +105,10 @@ CI checks out the repository and invokes the same focused Make targets available
 locally. It does not install Go, Node, Python, Playwright, or linters directly
 on the runner. The complete `make verify` target is intentionally reserved for
 the exact dev deployment revision and nightly verification.
+
+Exploratory LLM QA is a separate local acceptance step because CI does not
+receive provider credentials. Its browser implementation still runs through the
+pinned Docker tool image.
 
 The CI workflow uses shard-scoped Docker layer caching (bounded by branch and
 lockfile hash), explicit artifact retention of 7 days for failure diagnostics,

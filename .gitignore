@@ -29,6 +29,7 @@ dist/
 /frontend/playwright-report/
 /frontend/.playwright-run/
 /frontend/coverage/
+/qa-artifacts/
 
 # --- Local storage, database dumps, backups ---
 /backend/uploads/*
