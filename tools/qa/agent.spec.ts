@@ -21,7 +21,17 @@ interface Diagnostics {
 }
 
 function isCloudflareTelemetry(url: string): boolean {
-    return url.includes('static.cloudflareinsights.com/');
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && parsed.hostname === 'static.cloudflareinsights.com';
+    } catch {
+        return false;
+    }
+}
+
+function containsCloudflareTelemetryUrl(text: string): boolean {
+    const urls = text.match(/https?:\/\/[^\s'\")]+/g) ?? [];
+    return urls.some((url) => isCloudflareTelemetry(url));
 }
 
 function suffix(): string {
@@ -48,7 +58,7 @@ function observe(page: Page): Diagnostics {
         if (message.type() !== 'error') return;
         const text = message.text();
         const isExternalTelemetryNoise =
-            text.includes('static.cloudflareinsights.com/') ||
+            containsCloudflareTelemetryUrl(text) ||
             (diagnostics.cloudflareTelemetrySeen &&
                 /Failed to load resource: the server responded with a status of (401|429)/.test(text));
         if (!isExternalTelemetryNoise) diagnostics.consoleErrors.push(text);
