@@ -28,7 +28,7 @@ include tools/make/openapi-contract.mk
 	structure-check type-check archcheck \
 	test-unit test-backend test-frontend test-reconnect-harness test-race test-backend-race test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
-	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression \
+	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression qa-agent \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
@@ -38,7 +38,7 @@ include tools/make/openapi-contract.mk
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
-	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
+	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check hosted-restore-rehearsal terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
 	vapid-keys \
 	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci \
 	maintenance-report cache-status prune-report prune disk-cleanup-report disk-cleanup build-cache-prune artifacts-clean clean reset-dev \

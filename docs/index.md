@@ -38,6 +38,8 @@ and submit one server-timed guess.
 - [Operations](operations.md) — health, metrics, backups, incident response
 - [Video processing](video-processing.md) — async video pipeline, quarantine,
   transcoding, cleanup
+- [Black-box QA agent](qa-agent.md) — source-blind exploratory release
+  acceptance and evidence
 - [Database migrations](database-migrations.md) — rules, execution, recovery
 - [Security and privacy](security-and-privacy.md) — model, data inventory,
   operator obligations

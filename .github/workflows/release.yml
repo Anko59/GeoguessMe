@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: write
       id-token: write
       packages: write
@@ -99,6 +100,21 @@ jobs:
             echo "backend_release=ghcr.io/$owner/geoguessme-backend:$RELEASE_TAG"
             echo "web_release=ghcr.io/$owner/geoguessme-web:$RELEASE_TAG"
           } >> "$GITHUB_OUTPUT"
+      - name: Require exact-revision black-box QA evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEV_SHA: ${{ steps.source.outputs.dev_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          qa_run=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/qa.yml/runs?branch=dev&event=workflow_run&status=success&per_page=100" \
+            --jq '.workflow_runs[] | select(.head_sha == env.DEV_SHA) | .id' | head -1)
+          test -n "$qa_run" || {
+            echo "No successful Black-box QA workflow exists for dev revision $DEV_SHA." >&2
+            exit 1
+          }
+          echo "Using successful Black-box QA workflow $qa_run for dev revision $DEV_SHA."
       - name: Resolve immutable development digests
         id: digests
         env:

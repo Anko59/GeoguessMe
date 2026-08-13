@@ -187,6 +187,22 @@ deployment-hash-check: ## Verify installed host runtime definitions match the de
 		-o ProxyCommand='$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname %h' \
 		"deploy@$$target_host" "verify $(ENVIRONMENT)"
 
+hosted-restore-rehearsal: ## Restore the latest hosted backup into an isolated disposable database through Access SSH.
+	@case "$(ENVIRONMENT)" in dev|production) ;; *) echo 'ENVIRONMENT=dev|production is required' >&2; exit 2 ;; esac
+	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
+	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
+	@test -n "$${DEPLOY_SSH_PRIVATE_KEY:-}" || { echo 'DEPLOY_SSH_PRIVATE_KEY is required' >&2; exit 2; }
+	@test -n "$${DEPLOY_SSH_KNOWN_HOSTS:-}" || { echo 'DEPLOY_SSH_KNOWN_HOSTS is required' >&2; exit 2; }
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT INT TERM; \
+	case "$(ENVIRONMENT)" in dev) target_host=deploy.geoguessme.com ;; production) target_host=deploy-prod.geoguessme.com ;; esac; \
+	printf '%s\n' "$$DEPLOY_SSH_PRIVATE_KEY" >"$$tmp/deploy"; \
+	printf '%s\n' "$$DEPLOY_SSH_KNOWN_HOSTS" >"$$tmp/known_hosts"; \
+	chmod 0600 "$$tmp/deploy" "$$tmp/known_hosts"; \
+	ssh -i "$$tmp/deploy" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+		-o UserKnownHostsFile="$$tmp/known_hosts" \
+		-o ProxyCommand='$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname %h' \
+		"deploy@$$target_host" restore-rehearsal
+
 terraform-fmt: ## Format infrastructure code in the pinned Terraform container.
 	$(TERRAFORM) fmt -recursive
 
