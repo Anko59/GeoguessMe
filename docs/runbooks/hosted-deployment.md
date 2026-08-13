@@ -160,11 +160,15 @@ prohibit force-push/deletion. The `development` environment accepts only `dev`;
 
 ## Dev acceptance and production launch
 
-Verify Access OTP for `jeancollette138@gmail.com`, signup/verification/reset
-email, uploads and reads, WebSockets, client-IP rate limiting, TLS/security
-headers, backup creation, and isolated restore on dev. No fixed soak or
-quarantine delay is required; record this acceptance evidence for the exact
-deployed revision before merging the release PR. Resolve or supersede every
+The source-blind Black-box QA workflow runs these checks against the exact
+deployed dev revision: Access-protected browser entry, signup/logout/refresh,
+pending recovery-email dispatch state, uploads and reads, WebSockets, client-IP
+rate limiting, TLS/security headers, group authorization, mobile layout, and
+exploratory navigation. It uploads a revision-bound report and must have no
+reproducible findings. Its second job performs an isolated production-backup
+restore through the fixed-form authenticated host command. No fixed soak or
+quarantine delay is required; the successful workflow is the acceptance evidence
+for the exact revision before merging the release PR. Resolve or supersede every
 failing Dependabot PR before merging the release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated

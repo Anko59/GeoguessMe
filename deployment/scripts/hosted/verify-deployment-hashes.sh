@@ -16,8 +16,10 @@ set -eu
 #
 # Runs on the host through the Cloudflare Access SSH forced command:
 #   verify <environment>
-# It is authenticated: forced-command.sh accepts only `deploy` and `verify`
-# verbs over the deployment service-token SSH path, never a shell.
+#   restore-rehearsal
+# It is authenticated: forced-command.sh accepts only the fixed deployment,
+# verification, and disposable-restore forms over the deployment service-token
+# SSH path, never a shell.
 #
 # Usage: verify-deployment-hashes.sh <environment>   (dev or production)
 

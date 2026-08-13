@@ -41,6 +41,7 @@ assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
 assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
 assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
+assert_contains "$FORCED" 'restore-rehearsal.sh'
 
 # Both workflows must match the forced command's arity. This protocol is
 # provisioned root-owned on the host and must stay compatible between releases.
@@ -109,6 +110,11 @@ assert_contains "$DEPLOY" 'previous images and secrets were restored; database w
 assert_contains "$DEPLOY" 'secret_replaced=true'
 if grep -Eq 'restore-postgres|pg_restore' "$DEPLOY"; then
     fail 'deploy script must never restore a database automatically'
+fi
+
+if SSH_ORIGINAL_COMMAND='restore-rehearsal production extra' \
+    "$FORCED" production >/dev/null 2>&1; then
+    fail 'restore rehearsal accepted an extra argument'
 fi
 
 # Backup retention and isolated restore requirements.

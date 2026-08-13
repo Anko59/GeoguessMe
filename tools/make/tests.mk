@@ -68,6 +68,16 @@ test-e2e-pr: build-images ## Run the Chromium PR browser suite in the isolated s
 test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
+qa-agent: ## Run source-blind exploratory QA against QA_BASE_URL and write evidence to QA_REPORT_DIR.
+	@test -n "$${QA_BASE_URL:-}" || { echo 'QA_BASE_URL is required' >&2; exit 2; }
+	@mkdir -p "$(QA_REPORT_DIR)"
+	$(COMPOSE_TOOLS) run -T --rm --no-deps --user "$(shell id -u):$(shell id -g)" \
+		-w /workspace/frontend \
+		-e NODE_PATH=/workspace/frontend/node_modules \
+		-e QA_BASE_URL -e QA_ACCESS_CLIENT_ID -e QA_ACCESS_CLIENT_SECRET -e QA_BUILD_SHA \
+		-e QA_ARTIFACT_DIR=/tmp/qa-artifacts -v "$(abspath $(QA_REPORT_DIR)):/tmp/qa-artifacts" \
+		playwright node node_modules/.bin/playwright test --config /workspace/tools/qa/playwright.config.ts
+
 test-e2e-repeat: build-images ## Run E2E suite COUNT times to catch flakes. Usage: make test-e2e-repeat COUNT=5 (range 1..20)
 	@case "$(COUNT)" in ''|*[!0-9]*) echo "COUNT must be an integer in 1..20"; exit 2;; esac
 	@if [ "$(COUNT)" -lt 1 ] || [ "$(COUNT)" -gt 20 ]; then echo "COUNT must be in 1..20"; exit 2; fi
