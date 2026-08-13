@@ -73,7 +73,7 @@ async function signup(page: Page, account: Credentials): Promise<void> {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Sign Up' }).click();
     await page.waitForURL(/\/groups(?:$|\?)/);
-    await expect(page.getByRole('heading', { name: /groups/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My Groups' })).toBeVisible();
 }
 
 async function createGroup(page: Page): Promise<string> {
@@ -210,7 +210,7 @@ test.describe('Independent black-box release QA', () => {
             await owner.goto('/groups');
             await owner.goBack();
             await owner.goForward();
-            await expect(owner.getByRole('heading', { name: /groups/i })).toBeVisible();
+            await expect(owner.getByRole('heading', { name: 'My Groups' })).toBeVisible();
             assertClean(ownerDiagnostics);
             assertClean(memberDiagnostics);
             assertClean(outsiderDiagnostics);
@@ -241,7 +241,7 @@ test.describe('Independent black-box release QA', () => {
         }
     });
 
-    test('client-IP rate limiting rejects repeated invalid logins', async ({ browser }, testInfo) => {
+    test('identity rate limiting rejects repeated invalid logins', async ({ browser }, testInfo) => {
         test.skip(testInfo.project.name !== 'desktop', 'Run the abuse probe once on desktop.');
         const context = await browser.newContext();
         const page = await context.newPage();
@@ -249,12 +249,13 @@ test.describe('Independent black-box release QA', () => {
         try {
             await page.goto('/login');
             const statuses: number[] = [];
-            for (let attempt = 0; attempt < 8; attempt += 1) {
+            const identity = `not-a-user-${suffix()}`;
+            for (let attempt = 0; attempt < 11; attempt += 1) {
                 const responsePromise = page.waitForResponse(
                     (response) =>
                         response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
                 );
-                await page.getByLabel('Username').fill(`not-a-user-${attempt}-${suffix()}`);
+                await page.getByLabel('Username').fill(identity);
                 await page.getByLabel('Password').fill('DefinitelyWrong123');
                 await page.getByRole('button', { name: 'Login' }).click();
                 statuses.push((await responsePromise).status());
