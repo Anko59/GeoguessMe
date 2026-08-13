@@ -17,6 +17,11 @@ interface Diagnostics {
     pageErrors: string[];
     failedRequests: string[];
     serverErrors: string[];
+    cloudflareTelemetrySeen: boolean;
+}
+
+function isCloudflareTelemetry(url: string): boolean {
+    return url.includes('static.cloudflareinsights.com/');
 }
 
 function suffix(): string {
@@ -29,13 +34,28 @@ function credentials(label: string): Credentials {
 }
 
 function observe(page: Page): Diagnostics {
-    const diagnostics: Diagnostics = { consoleErrors: [], pageErrors: [], failedRequests: [], serverErrors: [] };
+    const diagnostics: Diagnostics = {
+        consoleErrors: [],
+        pageErrors: [],
+        failedRequests: [],
+        serverErrors: [],
+        cloudflareTelemetrySeen: false,
+    };
+    page.on('request', (request) => {
+        if (isCloudflareTelemetry(request.url())) diagnostics.cloudflareTelemetrySeen = true;
+    });
     page.on('console', (message) => {
-        if (message.type() === 'error') diagnostics.consoleErrors.push(message.text());
+        if (message.type() !== 'error') return;
+        const text = message.text();
+        const isExternalTelemetryNoise =
+            text.includes('static.cloudflareinsights.com/') ||
+            (diagnostics.cloudflareTelemetrySeen &&
+                /Failed to load resource: the server responded with a status of (401|429)/.test(text));
+        if (!isExternalTelemetryNoise) diagnostics.consoleErrors.push(text);
     });
     page.on('pageerror', (error) => diagnostics.pageErrors.push(error.message));
     page.on('requestfailed', (request) => {
-        if (request.failure()?.errorText !== 'net::ERR_ABORTED')
+        if (request.failure()?.errorText !== 'net::ERR_ABORTED' && !isCloudflareTelemetry(request.url()))
             diagnostics.failedRequests.push(`${request.method()} ${request.url()}`);
     });
     page.on('response', (response) => {
@@ -74,12 +94,15 @@ async function signup(page: Page, account: Credentials): Promise<void> {
     await page.getByRole('button', { name: 'Sign Up' }).click();
     await page.waitForURL(/\/groups(?:$|\?)/);
     await expect(page.getByRole('heading', { name: 'My Groups' })).toBeVisible();
+    const installPrompt = page.getByRole('dialog', { name: 'Install GeoGuessMe' });
+    const dismissInstallPrompt = installPrompt.getByRole('button', { name: /dismiss|close/i });
+    if (await dismissInstallPrompt.isVisible().catch(() => false)) await dismissInstallPrompt.click();
 }
 
 async function createGroup(page: Page): Promise<string> {
     await page.goto('/group/create');
     await page.getByPlaceholder('Group Name').fill(`QA Circle ${suffix()}`);
-    await page.getByRole('button', { name: 'Create Group' }).click();
+    await page.locator('form').getByRole('button', { name: 'Create Group' }).click();
     await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
     return page.url().split('/group/')[1];
 }
@@ -233,7 +256,7 @@ test.describe('Independent black-box release QA', () => {
                 .toBe(true);
             await page.goto('/group/create');
             await expect(page.getByPlaceholder('Group Name')).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Create Group' })).toBeVisible();
+            await expect(page.locator('form').getByRole('button', { name: 'Create Group' })).toBeVisible();
             assertClean(diagnostics);
         } finally {
             await record(page, testInfo, diagnostics);
