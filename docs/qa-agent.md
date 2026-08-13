@@ -22,10 +22,11 @@ a reproducible finding with its project, build revision, observed error, and
 artifact paths. The agent never changes application code; fixes remain a
 separate implementation task.
 
-The workflow provisions three disposable browser accounts once per run and
-reuses them across both desktop and mobile projects. This keeps the QA agent
-within the deployed signup rate limit while still exercising separate owner,
-member, and outsider authorization paths.
+The workflow provisions three dedicated browser accounts once and reuses them
+across both desktop and mobile projects. If an account already exists, setup
+authenticates it through the normal login flow instead of creating another
+account. This keeps repeated runs within the deployed signup rate limit while
+still exercising separate owner, member, and outsider authorization paths.
 
 ## Running it
 

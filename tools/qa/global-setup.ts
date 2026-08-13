@@ -1,18 +1,23 @@
-import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { chromium, type FullConfig, type Page } from '@playwright/test';
 import { accountFile, QA_PASSWORD, type Credentials, type QaAccounts } from './accounts';
 
-function suffix(): string {
-    return `${Date.now()}_${randomBytes(3).toString('hex')}`;
+function credentials(username: string, email?: string): Credentials {
+    return { username, ...(email ? { email } : {}) };
 }
 
-function credentials(label: string, email = false): Credentials {
-    const id = `${label}_${suffix()}`;
-    return {
-        username: id.slice(0, 48),
-        ...(email ? { email: `${id}@qa.geoguessme.invalid` } : {}),
-    };
+const QA_ACCOUNTS: QaAccounts = {
+    owner: credentials('qa_release_owner', 'qa-release-owner@example.test'),
+    member: credentials('qa_release_member'),
+    outsider: credentials('qa_release_outsider'),
+};
+
+async function login(page: Page, account: Credentials): Promise<void> {
+    await page.goto('/login');
+    await page.getByLabel('Username').fill(account.username);
+    await page.getByLabel('Password').fill(QA_PASSWORD);
+    await page.getByRole('button', { name: 'Login' }).click();
+    await page.waitForURL(/\/groups(?:$|\?)/);
 }
 
 async function signup(page: Page, account: Credentials): Promise<void> {
@@ -20,8 +25,26 @@ async function signup(page: Page, account: Credentials): Promise<void> {
     await page.getByLabel('Username').fill(account.username);
     if (account.email) await page.getByLabel(/Recovery email/).fill(account.email);
     await page.getByLabel('Password').fill(QA_PASSWORD);
+    const responsePromise = page.waitForResponse((response) =>
+        new URL(response.url()).pathname.endsWith('/api/v1/auth/signup'),
+    );
     await page.getByRole('button', { name: 'Sign Up' }).click();
-    await page.waitForURL(/\/groups(?:$|\?)/);
+    const response = await responsePromise;
+    if (response.status() === 409) {
+        await login(page, account);
+        return;
+    }
+    if (!response.ok()) throw new Error(`QA account signup failed with HTTP ${response.status()}`);
+    try {
+        await page.waitForURL(/\/(?:groups|login)(?:$|\?)/, { timeout: 15000 });
+    } catch {
+        const alert = await page
+            .getByRole('alert')
+            .textContent()
+            .catch(() => null);
+        throw new Error(`QA account signup did not navigate from ${page.url()}${alert ? `: ${alert}` : ''}`);
+    }
+    if (new URL(page.url()).pathname === '/login') await login(page, account);
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
@@ -34,11 +57,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         extraHTTPHeaders['CF-Access-Client-Secret'] = process.env.QA_ACCESS_CLIENT_SECRET;
     }
 
-    const accounts: QaAccounts = {
-        owner: credentials('qa_owner', true),
-        member: credentials('qa_member'),
-        outsider: credentials('qa_outsider'),
-    };
+    const accounts = QA_ACCOUNTS;
     const browser = await chromium.launch();
     try {
         for (const account of Object.values(accounts)) {
