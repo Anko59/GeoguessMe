@@ -14,6 +14,7 @@ const artifactDir = process.env.QA_ARTIFACT_DIR || '/tmp/qa-artifacts';
 export default defineConfig({
     testDir: '.',
     testMatch: /agent\.spec\.ts$/,
+    globalSetup: './global-setup.ts',
     forbidOnly: true,
     retries: 0,
     workers: 1,
