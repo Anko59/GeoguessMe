@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # Production backend image. Build context is the repository root so both the
 # backend and frontend images share one root .dockerignore.
-# Go 1.25.12-alpine (immutable index digest).
-FROM golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS build
+# Go 1.25.13-alpine (immutable index digest).
+FROM golang:1.25.13-alpine@sha256:844b27705f54e73773e0f9bc3c780633b9d7f4b4831bf35cdad02a81a4c80bd0 AS build
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./backend/
 WORKDIR /src/backend
