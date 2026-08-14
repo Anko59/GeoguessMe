@@ -244,8 +244,8 @@ jobs:
     steps:
       - name: Install pinned cloudflared
         run: |
-          curl -fsSLo cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.3/cloudflared-linux-amd64.deb
-          echo '049777d30f9bf93da6df8bbe31383460eb2aa51a832c6551824d56f9fcc55974  cloudflared.deb' | sha256sum -c -
+          curl -fsSLo cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.8.0/cloudflared-linux-amd64.deb
+          echo '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb' | sha256sum -c -
           sudo dpkg -i cloudflared.deb
       - name: Deploy through Cloudflare Access
         env:

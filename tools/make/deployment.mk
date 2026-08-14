@@ -27,7 +27,7 @@ clean-build: ## Build production images from scratch without any layer cache.
 # --input so private registry credentials never need to enter the Trivy
 # container.
 AUDIT_IMAGES ?= postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f \
-	cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf \
+	cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
 build-security-tool-images: ## Build locally patched security-tool images used by the image audit.

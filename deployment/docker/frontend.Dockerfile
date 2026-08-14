@@ -9,11 +9,13 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Caddy 2.11.4 builder (immutable index digest). The released Caddy image still
-# carries golang.org/x/net v0.55.0, which has a fixed High vulnerability. Build
-# the same Caddy release with the patched v0.56.0 module until upstream ships a
-# patched image.
-FROM caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4 AS caddy-build
+# Caddy 2.11.4 builder helper (immutable digest), using the separately pinned
+# Go 1.26.6 compiler so the generated gateway binary includes current stdlib
+# fixes as well as the patched golang.org/x/net module.
+FROM caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4 AS xcaddy
+FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS caddy-build
+RUN apk add --no-cache git=2.54.0-r0
+COPY --from=xcaddy /usr/bin/xcaddy /usr/bin/xcaddy
 RUN xcaddy build v2.11.4 \
     --output /usr/bin/caddy \
     --replace 'golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0'
