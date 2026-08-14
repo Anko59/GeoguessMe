@@ -152,7 +152,7 @@ function availableLinkKinds(value, productOrigin) {
 
 function plainText(value) {
   return String(value)
-    .replace(/<style[\s\S]*?<\/style\s*>|<script[\s\S]*?<\/script\s*>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style[^>]*>|<script[\s\S]*?<\/script[^>]*>/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
