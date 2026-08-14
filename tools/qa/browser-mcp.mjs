@@ -1,11 +1,12 @@
 import { chromium } from "/workspace/frontend/node_modules/playwright/index.mjs";
-import { mkdir, writeFile } from "node:fs/promises";
 import process from "node:process";
 import { fakeLocation, probe } from "./browser-capabilities.mjs";
 import { LinkTransferStore } from "./link-transfer.mjs";
 import { MailboxGateway } from "./mailbox.mjs";
 import { redactUrls } from "./safe-output.mjs";
 import { loginAccount } from "./account-pool.mjs";
+import { signUpEmailAccount } from "./email-account.mjs";
+import { writeQaReport } from "./report.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -22,6 +23,8 @@ const findings = [];
 const artifacts = [];
 const mailbox = new MailboxGateway({ provider: process.env.QA_MAILBOX_PROVIDER || "mailtm", productUrl: baseUrl });
 const linkTransfers = new LinkTransferStore({ baseUrl });
+const emailMailboxIds = new Set();
+const searchedMailboxIds = new Set();
 const startedAt = new Date().toISOString();
 const deadline = Date.now() + budget.maxMinutes * 60 * 1000;
 let browser;
@@ -38,6 +41,7 @@ const tools = [
     properties: { session_id: { type: "string" } },
   }),
   tool("qa_account_login", "Log an isolated browser session into a dedicated owner, member, or outsider QA account without exposing credentials.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
+  tool("qa_email_account_signup", "Create a fresh email-backed QA account through the visible signup flow; the generated password stays inside the browser provider. Assign it to one of the three QA roles and keep that session for the role.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
   tool("tab_open", "Open a second tab in an existing session.", {
     type: "object",
     required: ["session_id"],
@@ -236,6 +240,7 @@ async function newSession(args) {
   sessions.set(sessionId, session);
   return { session_id: sessionId, tab_id: tabId, viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) };
 }
+
 function accessHeaders() {
   const id = process.env.QA_ACCESS_CLIENT_ID;
   const secret = process.env.QA_ACCESS_CLIENT_SECRET;
@@ -296,32 +301,7 @@ function assertAllowedNavigation(value) {
   if (url.origin !== baseUrl.origin) throw new Error("Navigation outside QA_BASE_URL origin is blocked");
   return url.toString();
 }
-async function writeReport(summary = {}) {
-  await mkdir(artifactDir, { recursive: true });
-  const report = {
-    schema_version: 1,
-    started_at: startedAt,
-    finished_at: new Date().toISOString(),
-    target: { base_url: `${baseUrl.origin}${baseUrl.pathname}`, build_sha: process.env.QA_BUILD_SHA || "unknown" },
-    runtime: process.env.QA_RUNTIME || "unknown",
-    budget: process.env.QA_BUDGET || "full",
-    status: summary.status || (findings.length ? "FINDINGS" : "BLOCKED"),
-    summary: summary.summary || "The runtime ended before qa_finish was called.",
-    journeys_exercised: summary.journeys_exercised || [],
-    journeys_not_exercised: summary.journeys_not_exercised || [],
-    limitations: summary.limitations || [],
-    capabilities: {
-      camera_mock: true,
-      geolocation_mock: fakeLocation(),
-      mailbox_provider: process.env.QA_MAILBOX_PROVIDER || "mailtm",
-      mailboxes_created: mailbox.mailboxes.size,
-    },
-    findings,
-    artifacts,
-  };
-  await writeFile(`${artifactDir}/qa-report.json`, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  return { report_path: `${hostArtifactDir}/qa-report.json`, finding_count: findings.length, blocking_finding_count: findings.filter((finding) => finding.blocking).length };
-}
+const writeReport = (summary = {}) => writeQaReport({ artifactDir, hostArtifactDir, startedAt, baseUrl, runtime: process.env.QA_RUNTIME || "unknown", budget: process.env.QA_BUDGET || "full", buildSha: process.env.QA_BUILD_SHA || "unknown", mailboxProvider: process.env.QA_MAILBOX_PROVIDER || "mailtm", geolocation: fakeLocation(), mailboxCount: mailbox.mailboxes.size, summary, findings, artifacts });
 async function call(name, args) {
   if (name === "session_create") return newSession(args);
   if (name === "session_close") {
@@ -332,6 +312,11 @@ async function call(name, args) {
     return { closed: args.session_id };
   }
   if (name === "qa_account_login") return loginAccount(sessionFor(args).page, baseUrl, args.account_role);
+  if (name === "qa_email_account_signup") {
+    const result = await signUpEmailAccount({ ...args, page: sessionFor(args).page, baseUrl, mailbox });
+    emailMailboxIds.add(result.mailbox_id);
+    return { ...result, authenticated: true };
+  }
   if (name === "tab_open") {
     const session = sessions.get(args.session_id);
     if (!session) throw new Error(`Unknown session: ${args.session_id}`);
@@ -420,7 +405,11 @@ async function call(name, args) {
     return { console: tab.console.slice(-20), network: tab.network.slice(-20) };
   }
   if (name === "mailbox_create") return mailbox.create();
-  if (name === "mailbox_search") return mailbox.search(args);
+  if (name === "mailbox_search") {
+    const result = await mailbox.search(args);
+    searchedMailboxIds.add(args.mailbox_id);
+    return result;
+  }
   if (name === "mailbox_read") return mailbox.read(args);
   if (name === "mailbox_open_link") {
     const { page } = sessionFor(args);
@@ -447,6 +436,12 @@ async function call(name, args) {
     return { id: finding.id, blocking: finding.blocking, finding_count: findings.length };
   }
   if (name === "qa_finish") {
+    if (["full", "nightly"].includes(process.env.QA_BUDGET || "full") && args.status !== "BLOCKED") {
+      const emailCoverageReady = [...emailMailboxIds].some((mailboxId) => searchedMailboxIds.has(mailboxId));
+      if (!emailCoverageReady) {
+        throw new Error("Full and nightly QA runs must create an email-backed account and search its mailbox; finish BLOCKED if the mailbox journey cannot be exercised");
+      }
+    }
     finished = true;
     return writeReport(args);
   }

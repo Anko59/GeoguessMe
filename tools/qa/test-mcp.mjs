@@ -9,7 +9,7 @@ const pageServer = createServer((request, response) => {
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
 const child = spawn(process.execPath, ["/workspace/tools/qa/browser-mcp.mjs"], {
-  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract", QA_ACCOUNT_PASSWORD: "contract-password" },
+  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract", QA_ACCOUNT_PASSWORD: "contract-password", QA_BUDGET: "fast" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 child.stderr.on("data", (chunk) => process.stderr.write(chunk));
@@ -58,7 +58,7 @@ try {
   child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const listed = await request(2, "tools/list");
   const names = new Set(listed.tools.map((entry) => entry.name));
-  for (const required of ["session_create", "qa_account_login", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
+  for (const required of ["session_create", "qa_account_login", "qa_email_account_signup", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
   if (process.env.QA_LIVE_MAILBOX === "1") {
