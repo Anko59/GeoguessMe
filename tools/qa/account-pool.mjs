@@ -11,7 +11,7 @@ function configuredAccount(role) {
 
 export async function loginAccount(page, baseUrl, role) {
   const account = configuredAccount(role);
-  await page.goto(new URL("/login", baseUrl), { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.goto(new URL("/login", baseUrl).toString(), { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.getByLabel("Username").fill(account.username);
   await page.getByLabel("Password").fill(account.password);
   await page.getByRole("button", { name: "Login" }).click();
