@@ -27,8 +27,11 @@ budgets:
     journey_limit: 20
 journeys:
   - authentication-and-session
+  - email-verification-and-recovery
   - groups-and-authorization
+  - multi-user-group-chat
   - photo-challenge-game
+  - camera-location-media
   - refresh-and-reconnect
   - leaderboard-and-progression
   - realtime-chat
@@ -49,3 +52,4 @@ secrets:
     - cookies
     - email_codes
     - reset_links
+    - mailbox_passwords

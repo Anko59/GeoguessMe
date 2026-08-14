@@ -21,7 +21,22 @@ The browser adapter is `tools/qa/browser-mcp.mjs`. It runs in the pinned
 Playwright Docker image, keeps isolated browser sessions and tabs, exposes
 accessibility/text/state/diagnostic observations first, and writes targeted
 screenshots only when the model requests them. It does not expose arbitrary
-JavaScript, HTTP, source, shell, or filesystem tools.
+JavaScript, HTTP, source, shell, or filesystem tools. Chromium supplies a fake
+camera device and each context receives a fixed geolocation (Paris by default;
+override with `QA_FAKE_LATITUDE`, `QA_FAKE_LONGITUDE`, and
+`QA_FAKE_LOCATION_ACCURACY`). `browser_capabilities` performs a controlled
+camera/location probe so the report can distinguish an unexercised journey from
+a missing test capability.
+
+The same MCP server exposes a high-level disposable mailbox contract:
+`mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
+default provider is Mail.tm, which requires no operator mailbox credential; the
+gateway keeps provider tokens and mailbox passwords out of the model output, and
+tokenized product links are opened server-side without being returned or
+recorded. Mailbox accounts are deleted when the MCP process exits. This is
+intentionally limited to throwaway QA mailboxes; it must not be used for real
+user mail. The provider's public API is documented at
+[Mail.tm API documentation](https://docs.mail.tm/).
 
 The runtime adapters are deliberately thin:
 
@@ -56,6 +71,12 @@ a short investigation or `make qa-agent-nightly` for the extended budget.
 The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
+
+Full and nightly runs are instructed to create separate mailboxes/accounts for
+an owner, member, and outsider, then exercise invitation, group conversation,
+and authorization boundaries in separate browser sessions. If Mail.tm is
+unavailable, the affected email and multi-user journeys are reported as blocked
+rather than silently treated as passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised

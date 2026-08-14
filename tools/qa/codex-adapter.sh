@@ -21,7 +21,7 @@ codex exec \
     -c 'mcp_servers.qa_browser.command="make"' \
     -c 'mcp_servers.qa_browser.args=["--no-print-directory","-C","'"$root_dir"'","qa-browser-mcp"]' \
     -c 'mcp_servers.qa_browser.cwd="'"$root_dir"'"' \
-    -c 'mcp_servers.qa_browser.env_vars=["QA_BASE_URL","QA_BUILD_SHA","QA_REPORT_DIR","QA_RUNTIME","QA_BUDGET","QA_ACCESS_CLIENT_ID","QA_ACCESS_CLIENT_SECRET"]' \
+    -c 'mcp_servers.qa_browser.env_vars=["QA_BASE_URL","QA_BUILD_SHA","QA_REPORT_DIR","QA_RUNTIME","QA_BUDGET","QA_ACCESS_CLIENT_ID","QA_ACCESS_CLIENT_SECRET","QA_MAILBOX_PROVIDER","QA_FAKE_LATITUDE","QA_FAKE_LONGITUDE","QA_FAKE_LOCATION_ACCURACY"]' \
     -c 'mcp_servers.qa_browser.default_tools_approval_mode="approve"' \
     - <<EOF >/dev/null
 $prompt

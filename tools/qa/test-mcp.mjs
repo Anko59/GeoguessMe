@@ -1,10 +1,18 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { createServer } from "node:http";
 
+const pageServer = createServer((request, response) => {
+  response.setHeader("Content-Type", "text/html");
+  response.end("<!doctype html><title>QA MCP contract</title><main>ready <a href=\"/group/join#invite=secret-invite\">invite</a></main>");
+});
+await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
+const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
 const child = spawn(process.execPath, ["/workspace/tools/qa/browser-mcp.mjs"], {
-  env: { ...process.env, QA_BASE_URL: process.env.QA_BASE_URL || "https://dev.geoguessme.com", QA_ARTIFACT_DIR: "/tmp/qa-contract" },
+  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract" },
   stdio: ["pipe", "pipe", "pipe"],
 });
+child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 let buffer = "";
 const responses = new Map();
 const waiters = new Map();
@@ -53,16 +61,37 @@ try {
   for (const required of ["session_create", "browser_observe", "browser_screenshot", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
+  if (process.env.QA_LIVE_MAILBOX === "1") {
+    const liveMailbox = await request(20, "tools/call", { name: "mailbox_create", arguments: {} });
+    if (!liveMailbox.structuredContent?.mailbox_id || !liveMailbox.structuredContent?.address) {
+      throw new Error(`live mailbox creation failed: ${liveMailbox.content?.[0]?.text || "no address"}`);
+    }
+    console.log("Live mailbox provider contract PASSED");
+  }
   const session = await request(3, "tools/call", { name: "session_create", arguments: { width: 800, height: 600 } });
   if (!session.structuredContent?.session_id) throw new Error("session_create returned no session id");
-  await request(4, "tools/call", { name: "session_close", arguments: { session_id: session.structuredContent.session_id } });
-  const report = await request(5, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });
+  const sessionId = session.structuredContent.session_id;
+  await request(4, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
+  const observed = await request(5, "tools/call", { name: "browser_observe", arguments: { session_id: sessionId } });
+  if (JSON.stringify(observed).includes("secret-invite")) throw new Error("safe browser output leaked an invite token");
+  const capabilities = await request(6, "tools/call", { name: "browser_capabilities", arguments: { session_id: sessionId } });
+  if (!capabilities.structuredContent?.camera?.usable || !capabilities.structuredContent?.geolocation?.usable) {
+    throw new Error("synthetic camera/location capability probe failed");
+  }
+  for (const required of ["browser_capabilities", "mailbox_create", "mailbox_search", "mailbox_read", "mailbox_open_link"]) {
+    if (!names.has(required)) throw new Error(`missing extended QA tool ${required}`);
+  }
+  await request(7, "tools/call", { name: "session_close", arguments: { session_id: sessionId } });
+  const report = await request(8, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });
   if (!report.structuredContent?.report_path) throw new Error("qa_finish returned no report path");
   child.stdin.end();
   await once(child, "close");
+  pageServer.close();
+  await once(pageServer, "close");
   console.log("MCP lifecycle contract PASSED");
 } catch (error) {
   child.kill("SIGTERM");
+  pageServer.close();
   console.error(error.message);
   process.exitCode = 1;
 }

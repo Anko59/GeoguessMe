@@ -1,7 +1,9 @@
 import { chromium } from "/workspace/frontend/node_modules/playwright/index.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import process from "node:process";
-
+import { fakeLocation, probe } from "./browser-capabilities.mjs";
+import { MailboxGateway } from "./mailbox.mjs";
+import { redactUrls } from "./safe-output.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -16,12 +18,12 @@ const budget = budgets[process.env.QA_BUDGET] || budgets.full;
 const sessions = new Map();
 const findings = [];
 const artifacts = [];
+const mailbox = new MailboxGateway({ provider: process.env.QA_MAILBOX_PROVIDER || "mailtm", productUrl: baseUrl });
 const startedAt = new Date().toISOString();
 const deadline = Date.now() + budget.maxMinutes * 60 * 1000;
 let browser;
 let sequence = 0;
 let finished = false;
-
 const tools = [
   tool("session_create", "Create an isolated browser session.", {
     type: "object",
@@ -52,6 +54,7 @@ const tools = [
     required: ["session_id"],
     properties: { session_id: { type: "string" }, tab_id: { type: "string" } },
   }),
+  tool("browser_capabilities", "Probe the granted synthetic camera and location services with a fixed safe check.", pageSchema()),
   tool("browser_click", "Click one visible control selected by role, label, text, or placeholder.", actionSchema()),
   tool("browser_type", "Fill one visible text control selected by role, label, text, or placeholder.", {
     ...actionSchema(),
@@ -98,6 +101,28 @@ const tools = [
     properties: { ...pageSchema().properties, purpose: { type: "string" } },
   }),
   tool("browser_diagnostics", "Read recent console and network summaries without sensitive payloads.", pageSchema()),
+  tool("mailbox_create", "Create a disposable QA mailbox for a fresh test account; its password stays inside the provider gateway.", {
+    type: "object", properties: {},
+  }),
+  tool("mailbox_search", "Search a QA mailbox for product email and optionally wait for delivery.", {
+    type: "object",
+    required: ["mailbox_id"],
+    properties: {
+      mailbox_id: { type: "string" }, subject_contains: { type: "string" }, from_contains: { type: "string" },
+      since: { type: "string" }, wait_ms: { type: "integer", minimum: 0, maximum: 60000 },
+    },
+  }),
+  tool("mailbox_read", "Read safe mailbox metadata and body text with links and email secrets removed.", {
+    type: "object", required: ["mailbox_id", "message_id"],
+    properties: { mailbox_id: { type: "string" }, message_id: { type: "string" } },
+  }),
+  tool("mailbox_open_link", "Open one matching product link from a mailbox message without returning its tokenized URL.", {
+    type: "object", required: ["session_id", "mailbox_id", "message_id", "kind"],
+    properties: {
+      session_id: { type: "string" }, tab_id: { type: "string" }, mailbox_id: { type: "string" }, message_id: { type: "string" },
+      kind: { type: "string", enum: ["verification", "group-invite", "password-reset", "any"] },
+    },
+  }),
   tool("qa_record_finding", "Record a reproducible black-box QA finding.", {
     type: "object",
     required: ["category", "severity", "title", "steps", "expected", "actual", "impact"],
@@ -153,6 +178,7 @@ function clipped(value, limit = maxText) {
 function safeUrl(value) {
   try {
     const url = new URL(value, baseUrl);
+    if (/(?:token|secret|code|key|password|auth|cookie|invite|reset|verify)/i.test(`${url.pathname} ${url.search} ${url.hash}`)) return "[redacted-url]";
     for (const key of [...url.searchParams.keys()]) {
       if (/token|secret|code|key|password|auth|cookie/i.test(key)) url.searchParams.set(key, "[redacted]");
     }
@@ -164,7 +190,7 @@ function safeUrl(value) {
 }
 
 function safeText(value) {
-  let text = String(value ?? "");
+  let text = redactUrls(String(value ?? ""));
   for (const secret of [process.env.QA_ACCESS_CLIENT_ID, process.env.QA_ACCESS_CLIENT_SECRET]) {
     if (secret && secret.length > 3) text = text.split(secret).join("[redacted]");
   }
@@ -188,7 +214,10 @@ function sessionFor(args) {
 }
 
 async function ensureBrowser() {
-  browser ||= await chromium.launch({ headless: true });
+  browser ||= await chromium.launch({
+    headless: true,
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+  });
   return browser;
 }
 
@@ -196,6 +225,8 @@ async function newSession(args) {
   const instance = await ensureBrowser();
   const context = await instance.newContext({
     viewport: { width: args.width || 1440, height: args.height || 900 },
+    permissions: ["camera", "geolocation"],
+    geolocation: fakeLocation(),
     extraHTTPHeaders: accessHeaders(),
   });
   const page = await context.newPage();
@@ -288,6 +319,12 @@ async function writeReport(summary = {}) {
     journeys_exercised: summary.journeys_exercised || [],
     journeys_not_exercised: summary.journeys_not_exercised || [],
     limitations: summary.limitations || [],
+    capabilities: {
+      camera_mock: true,
+      geolocation_mock: fakeLocation(),
+      mailbox_provider: process.env.QA_MAILBOX_PROVIDER || "mailtm",
+      mailboxes_created: mailbox.mailboxes.size,
+    },
     findings,
     artifacts,
   };
@@ -326,6 +363,10 @@ async function call(name, args) {
     return observe(args);
   }
   if (name === "browser_observe") return observe(args);
+  if (name === "browser_capabilities") {
+    const { page } = sessionFor(args);
+    return probe(page);
+  }
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {
     const { page } = sessionFor(args);
     const locator = await locate(page, args.target);
@@ -377,6 +418,19 @@ async function call(name, args) {
     const { tab } = sessionFor(args);
     return { console: tab.console.slice(-20), network: tab.network.slice(-20) };
   }
+  if (name === "mailbox_create") return mailbox.create();
+  if (name === "mailbox_search") return mailbox.search(args);
+  if (name === "mailbox_read") return mailbox.read(args);
+  if (name === "mailbox_open_link") {
+    const { page } = sessionFor(args);
+    const link = await mailbox.link(args);
+    try {
+      await page.goto(link.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } catch {
+      throw new Error("Mailbox link navigation failed");
+    }
+    return observe(args);
+  }
   if (name === "qa_record_finding") {
     if (findings.length >= budget.maxFindings) {
       throw new Error(`Finding budget exhausted for ${process.env.QA_BUDGET || "full"} run`);
@@ -402,6 +456,7 @@ async function close() {
   if (!finished) await writeReport();
   for (const session of sessions.values()) await session.context.close().catch(() => {});
   await browser?.close().catch(() => {});
+  await mailbox.cleanup();
 }
 
 process.stdin.setEncoding("utf8");
