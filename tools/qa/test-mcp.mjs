@@ -4,12 +4,12 @@ import { createServer } from "node:http";
 
 const pageServer = createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");
-  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
+  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <form action="/groups" method="get"><label>Username <input aria-label="Username"></label><label>Password <input aria-label="Password" type="password"></label><button type="submit">Login</button></form><label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
 });
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
 const child = spawn(process.execPath, ["/workspace/tools/qa/browser-mcp.mjs"], {
-  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract" },
+  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract", QA_ACCOUNT_PASSWORD: "contract-password" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 child.stderr.on("data", (chunk) => process.stderr.write(chunk));
@@ -87,6 +87,10 @@ try {
   const capabilities = await request(10, "tools/call", { name: "browser_capabilities", arguments: { session_id: sessionId } });
   if (!capabilities.structuredContent?.camera?.usable || !capabilities.structuredContent?.geolocation?.usable) {
     throw new Error("synthetic camera/location capability probe failed");
+  }
+  const loggedIn = await request(11, "tools/call", { name: "qa_account_login", arguments: { session_id: sessionId, account_role: "owner" } });
+  if (!loggedIn.structuredContent?.authenticated || loggedIn.structuredContent.account_role !== "owner") {
+    throw new Error("qa_account_login contract failed");
   }
   for (const required of ["browser_capabilities", "mailbox_create", "mailbox_search", "mailbox_read", "mailbox_open_link"]) {
     if (!names.has(required)) throw new Error(`missing extended QA tool ${required}`);
