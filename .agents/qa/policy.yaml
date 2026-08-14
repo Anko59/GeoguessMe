@@ -1,0 +1,55 @@
+version: 1
+name: geoguessme-exploratory-qa
+source_blind: true
+allowed_runtime_tools:
+  - qa-browser
+allowed_product_docs:
+  - docs/authentication.md
+  - docs/gameplay.md
+  - docs/api.md
+  - docs/pwa-and-push.md
+  - docs/photo-filters.md
+budgets:
+  fast:
+    max_minutes: 15
+    max_findings: 10
+    screenshot_limit: 4
+    journey_limit: 4
+  full:
+    max_minutes: 45
+    max_findings: 30
+    screenshot_limit: 12
+    journey_limit: 10
+  nightly:
+    max_minutes: 120
+    max_findings: 60
+    screenshot_limit: 30
+    journey_limit: 20
+journeys:
+  - authentication-and-session
+  - email-verification-and-recovery
+  - groups-and-authorization
+  - multi-user-group-chat
+  - photo-challenge-game
+  - camera-location-media
+  - refresh-and-reconnect
+  - leaderboard-and-progression
+  - realtime-chat
+  - profile-and-settings
+  - responsive-mobile
+finding_categories:
+  - BUG
+  - UX_DEBT
+  - VISUAL
+  - PERFORMANCE
+blocking_categories:
+  - BUG
+secrets:
+  never_report:
+    - passwords
+    - access_tokens
+    - refresh_tokens
+    - cookies
+    - email_codes
+    - reset_links
+    - mailbox_passwords

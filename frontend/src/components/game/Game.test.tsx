@@ -87,6 +87,7 @@ describe('Game', () => {
             />,
         );
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Challenge results' })).toHaveAttribute('aria-modal', 'true');
         expect(screen.getByText('The original media has been removed; scores remain available.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(onClose).toHaveBeenCalled();
@@ -288,6 +289,7 @@ describe('Game', () => {
             });
         withGame(<Game gameMessage={message({ photo_id: 'photo-3', kind: 'challenge' })} onClose={vi.fn()} />);
         expect(await screen.findByAltText('Challenge location')).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Challenge photo' })).toHaveAttribute('aria-modal', 'true');
     });
 
     it('celebrates a newly submitted top-tier score', async () => {

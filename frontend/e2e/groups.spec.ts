@@ -43,6 +43,9 @@ test.describe('Group operations', () => {
             // mobile layout must not collapse both into a generic label).
             await expect(owner.page.getByRole('link', { name: 'Profile' })).toBeVisible();
             await expect(owner.page.getByRole('link', { name: 'Settings' })).toBeVisible();
+            await owner.page.getByRole('link', { name: 'Settings' }).click();
+            await expect(owner.page).toHaveURL(/\/settings$/);
+            await expect(owner.page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         } finally {
             await owner.context.close();
         }

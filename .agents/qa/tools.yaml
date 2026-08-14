@@ -1,0 +1,45 @@
+version: 1
+provider_neutral: true
+server: qa-browser
+transport: stdio
+description: >-
+  Browser and evidence tools for a source-blind exploratory agent. The
+  implementation is Playwright-backed but the agent contract is browser-neutral.
+tools:
+  - session_create
+  - session_close
+  - qa_account_login
+  - tab_open
+  - tab_switch
+  - browser_navigate
+  - browser_observe
+  - browser_transfer_link
+  - browser_open_transferred_link
+  - browser_capabilities
+  - browser_click
+  - browser_type
+  - browser_select
+  - browser_upload
+  - browser_key
+  - browser_reload
+  - browser_back
+  - browser_forward
+  - browser_resize
+  - browser_wait_for
+  - browser_screenshot
+  - browser_diagnostics
+  - mailbox_create
+  - mailbox_search
+  - mailbox_read
+  - mailbox_open_link
+  - qa_record_finding
+  - qa_finish
+rules:
+  observe_before_act: true
+  state_based_waits_only: true
+  screenshots_are_targeted: true
+  screenshots_are_not_default_model_input: true
+  arbitrary_javascript: false
+  arbitrary_http: false
+  source_access: false
+  mailbox_provider: high_level_only
