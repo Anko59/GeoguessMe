@@ -38,6 +38,14 @@ intentionally limited to throwaway QA mailboxes; it must not be used for real
 user mail. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
+Visible one-time group invite links have a separate safe handoff contract:
+`browser_transfer_link` captures a labeled invite control in the owner session
+and returns only an opaque single-use transfer ID;
+`browser_open_transferred_link` consumes that ID in the member session. The raw
+link never enters model output, diagnostics, screenshots, or the report. A
+failed transfer is a QA harness failure and blocks the multi-user journey; it
+must not be recorded as an acceptable coverage limitation.
+
 The runtime adapters are deliberately thin:
 
 - `tools/qa/codex-adapter.sh` uses the local authenticated Codex CLI and passes
@@ -73,10 +81,10 @@ accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
 Full and nightly runs are instructed to create separate mailboxes/accounts for
-an owner, member, and outsider, then exercise invitation, group conversation,
-and authorization boundaries in separate browser sessions. If Mail.tm is
-unavailable, the affected email and multi-user journeys are reported as blocked
-rather than silently treated as passed.
+an owner, member, and outsider, then use the opaque invite handoff to exercise
+invitation, group conversation, and authorization boundaries in separate browser
+sessions. If Mail.tm is unavailable, the affected email and multi-user journeys
+are reported as blocked rather than silently treated as passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised

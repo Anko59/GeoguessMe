@@ -61,17 +61,23 @@ error handling when visible during those journeys.
 For multi-user checks, create at least three distinct mailboxes/accounts in a
 full or nightly run, use separate browser sessions, and assign clear roles:
 owner, member, and outsider. Have the owner invite the other accounts, accept
-the invitations through `mailbox_open_link`, exercise a group conversation with
+the invitation in the member session. For a visible one-time invite link, use
+`browser_transfer_link` on the owner's labeled invite-link control, then use
+`browser_open_transferred_link` from the member session; retain only the opaque
+transfer ID and never copy the raw link. Exercise a group conversation with
 multiple members, then test an outsider's authorization boundary. Do not claim
 realtime delivery from a single session; observe it from the separate member
-sessions.
+sessions. If the transfer tool cannot complete this handoff, report the journey
+as `BLOCKED` due to a QA harness failure; do not accept it as a product
+limitation or claim that the journey was tested.
 
 For email-dependent flows, use `mailbox_search` with a state-based wait and
-`mailbox_read` for safe metadata. Use `mailbox_open_link` for verification,
-invite, or reset links; it navigates without returning tokenized URLs. If the
-mailbox provider is unavailable, mark those journeys blocked and retain the
-limitation. For performance, use observable timings and repeated state
-transitions, not unsupported guesses about server internals.
+`mailbox_read` for safe metadata. Use `mailbox_open_link` for verification or
+reset links; it navigates without returning tokenized URLs. Use the opaque
+browser transfer tools for visible one-time invites. If the mailbox provider is
+unavailable, mark those journeys blocked and retain the limitation. For
+performance, use observable timings and repeated state transitions, not
+unsupported guesses about server internals.
 
 The final report must distinguish `PASS`, `FINDINGS`, and `BLOCKED`. A report
 with no finding is not evidence that every journey was completed: summarize

@@ -12,6 +12,8 @@ tools:
   - tab_switch
   - browser_navigate
   - browser_observe
+  - browser_transfer_link
+  - browser_open_transferred_link
   - browser_capabilities
   - browser_click
   - browser_type

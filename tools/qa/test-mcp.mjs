@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 
 const pageServer = createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");
-  response.end("<!doctype html><title>QA MCP contract</title><main>ready <a href=\"/group/join#invite=secret-invite\">invite</a></main>");
+  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
 });
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
@@ -58,7 +58,7 @@ try {
   child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const listed = await request(2, "tools/list");
   const names = new Set(listed.tools.map((entry) => entry.name));
-  for (const required of ["session_create", "browser_observe", "browser_screenshot", "qa_record_finding", "qa_finish"]) {
+  for (const required of ["session_create", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
   if (process.env.QA_LIVE_MAILBOX === "1") {
@@ -74,15 +74,26 @@ try {
   await request(4, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const observed = await request(5, "tools/call", { name: "browser_observe", arguments: { session_id: sessionId } });
   if (JSON.stringify(observed).includes("secret-invite")) throw new Error("safe browser output leaked an invite token");
-  const capabilities = await request(6, "tools/call", { name: "browser_capabilities", arguments: { session_id: sessionId } });
+  const transfer = await request(6, "tools/call", { name: "browser_transfer_link", arguments: { session_id: sessionId, target: { label: "Invite link" }, kind: "group-invite" } });
+  if (!transfer.structuredContent?.transfer_id || JSON.stringify(transfer).includes("secret-invite")) throw new Error("invite transfer leaked a link or returned no opaque id");
+  const member = await request(7, "tools/call", { name: "session_create", arguments: { width: 800, height: 600 } });
+  const memberId = member.structuredContent?.session_id;
+  if (!memberId) throw new Error("member session_create returned no session id");
+  await request(8, "tools/call", { name: "browser_navigate", arguments: { session_id: memberId, url: pageUrl } });
+  const opened = await request(9, "tools/call", { name: "browser_open_transferred_link", arguments: { session_id: memberId, transfer_id: transfer.structuredContent.transfer_id } });
+  if (JSON.stringify(opened).includes("secret-invite")) throw new Error("opened invite transfer leaked an invite token");
+  const reused = await request(14, "tools/call", { name: "browser_open_transferred_link", arguments: { session_id: memberId, transfer_id: transfer.structuredContent.transfer_id } });
+  if (!reused.isError || JSON.stringify(reused).includes("secret-invite")) throw new Error("invite transfer was not single-use or leaked a token on reuse");
+  const capabilities = await request(10, "tools/call", { name: "browser_capabilities", arguments: { session_id: sessionId } });
   if (!capabilities.structuredContent?.camera?.usable || !capabilities.structuredContent?.geolocation?.usable) {
     throw new Error("synthetic camera/location capability probe failed");
   }
   for (const required of ["browser_capabilities", "mailbox_create", "mailbox_search", "mailbox_read", "mailbox_open_link"]) {
     if (!names.has(required)) throw new Error(`missing extended QA tool ${required}`);
   }
-  await request(7, "tools/call", { name: "session_close", arguments: { session_id: sessionId } });
-  const report = await request(8, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });
+  await request(11, "tools/call", { name: "session_close", arguments: { session_id: sessionId } });
+  await request(12, "tools/call", { name: "session_close", arguments: { session_id: memberId } });
+  const report = await request(15, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });
   if (!report.structuredContent?.report_path) throw new Error("qa_finish returned no report path");
   child.stdin.end();
   await once(child, "close");

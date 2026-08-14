@@ -2,6 +2,7 @@ import { chromium } from "/workspace/frontend/node_modules/playwright/index.mjs"
 import { mkdir, writeFile } from "node:fs/promises";
 import process from "node:process";
 import { fakeLocation, probe } from "./browser-capabilities.mjs";
+import { LinkTransferStore } from "./link-transfer.mjs";
 import { MailboxGateway } from "./mailbox.mjs";
 import { redactUrls } from "./safe-output.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
@@ -19,6 +20,7 @@ const sessions = new Map();
 const findings = [];
 const artifacts = [];
 const mailbox = new MailboxGateway({ provider: process.env.QA_MAILBOX_PROVIDER || "mailtm", productUrl: baseUrl });
+const linkTransfers = new LinkTransferStore({ baseUrl });
 const startedAt = new Date().toISOString();
 const deadline = Date.now() + budget.maxMinutes * 60 * 1000;
 let browser;
@@ -53,6 +55,10 @@ const tools = [
     type: "object",
     required: ["session_id"],
     properties: { session_id: { type: "string" }, tab_id: { type: "string" } },
+  }),
+  tool("browser_transfer_link", "Capture a visible same-origin group invite into an opaque single-use transfer; never return the link.", { ...actionSchema(), required: ["session_id", "target", "kind"], properties: { ...actionSchema().properties, kind: { type: "string", enum: ["group-invite"] } } }),
+  tool("browser_open_transferred_link", "Open an opaque group invite transfer in this isolated browser session; never return the link.", {
+    type: "object", required: ["session_id", "transfer_id"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, transfer_id: { type: "string" } },
   }),
   tool("browser_capabilities", "Probe the granted synthetic camera and location services with a fixed safe check.", pageSchema()),
   tool("browser_click", "Click one visible control selected by role, label, text, or placeholder.", actionSchema()),
@@ -146,11 +152,9 @@ const tools = [
     },
   }),
 ];
-
 function tool(name, description, inputSchema) {
   return { name, description, inputSchema: inputSchema || { type: "object", properties: {} } };
 }
-
 function pageSchema() {
   return {
     type: "object",
@@ -158,7 +162,6 @@ function pageSchema() {
     properties: { session_id: { type: "string" }, tab_id: { type: "string" } },
   };
 }
-
 function actionSchema() {
   return {
     type: "object",
@@ -169,12 +172,10 @@ function actionSchema() {
     },
   };
 }
-
 function clipped(value, limit = maxText) {
   const text = String(value ?? "");
   return text.length <= limit ? text : `${text.slice(0, limit)}\n[truncated]`;
 }
-
 function safeUrl(value) {
   try {
     const url = new URL(value, baseUrl);
@@ -188,7 +189,6 @@ function safeUrl(value) {
     return "[invalid-url]";
   }
 }
-
 function safeText(value) {
   let text = redactUrls(String(value ?? ""));
   for (const secret of [process.env.QA_ACCESS_CLIENT_ID, process.env.QA_ACCESS_CLIENT_SECRET]) {
@@ -204,7 +204,6 @@ function safeText(value) {
   );
   return clipped(text);
 }
-
 function sessionFor(args) {
   const session = sessions.get(args.session_id);
   if (!session) throw new Error(`Unknown session: ${args.session_id}`);
@@ -212,7 +211,6 @@ function sessionFor(args) {
   if (!tab) throw new Error(`Unknown tab in session: ${args.tab_id}`);
   return { session, tab, page: tab.page };
 }
-
 async function ensureBrowser() {
   browser ||= await chromium.launch({
     headless: true,
@@ -220,7 +218,6 @@ async function ensureBrowser() {
   });
   return browser;
 }
-
 async function newSession(args) {
   const instance = await ensureBrowser();
   const context = await instance.newContext({
@@ -237,13 +234,11 @@ async function newSession(args) {
   sessions.set(sessionId, session);
   return { session_id: sessionId, tab_id: tabId, viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) };
 }
-
 function accessHeaders() {
   const id = process.env.QA_ACCESS_CLIENT_ID;
   const secret = process.env.QA_ACCESS_CLIENT_SECRET;
   return id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {};
 }
-
 function attachPage(page, tabId) {
   const state = { page, tabId, console: [], network: [] };
   page.on("console", (message) => pushBounded(state.console, { type: message.type(), text: safeText(message.text()) }));
@@ -255,12 +250,10 @@ function attachPage(page, tabId) {
   });
   return state;
 }
-
 function pushBounded(list, value) {
   list.push(value);
   if (list.length > maxItems) list.splice(0, list.length - maxItems);
 }
-
 async function locate(page, target) {
   if (!target || typeof target !== "object") throw new Error("A role, label, text, placeholder, or test id target is required");
   let locator;
@@ -274,14 +267,12 @@ async function locate(page, target) {
   if (count !== 1) throw new Error(`Target resolved to ${count} elements; refine it with an accessible role or label`);
   return locator;
 }
-
 function waitLocator(page, args) {
   if (args.text) return page.getByText(args.text, { exact: true });
   if (args.role) return page.getByRole(args.role, args.name ? { name: args.name, exact: true } : undefined);
   if (args.label) return page.getByLabel(args.label, { exact: true });
   throw new Error("browser_wait_for requires text, role, or label, or a URL");
 }
-
 async function observe(args) {
   const { page, tab } = sessionFor(args);
   const [title, text, aria] = await Promise.all([
@@ -298,13 +289,11 @@ async function observe(args) {
     diagnostics: { console: tab.console.slice(-10), network: tab.network.slice(-10) },
   };
 }
-
 function assertAllowedNavigation(value) {
   const url = new URL(value, baseUrl);
   if (url.origin !== baseUrl.origin) throw new Error("Navigation outside QA_BASE_URL origin is blocked");
   return url.toString();
 }
-
 async function writeReport(summary = {}) {
   await mkdir(artifactDir, { recursive: true });
   const report = {
@@ -363,6 +352,16 @@ async function call(name, args) {
     return observe(args);
   }
   if (name === "browser_observe") return observe(args);
+  if (name === "browser_transfer_link") {
+    const { page } = sessionFor(args);
+    const locator = await locate(page, args.target);
+    return linkTransfers.capture(await locator.inputValue().catch(() => locator.getAttribute("href")));
+  }
+  if (name === "browser_open_transferred_link") {
+    const { page } = sessionFor(args);
+    await page.goto(linkTransfers.consume(args.transfer_id), { waitUntil: "domcontentloaded", timeout: 30000 });
+    return observe(args);
+  }
   if (name === "browser_capabilities") {
     const { page } = sessionFor(args);
     return probe(page);
@@ -456,6 +455,7 @@ async function close() {
   if (!finished) await writeReport();
   for (const session of sessions.values()) await session.context.close().catch(() => {});
   await browser?.close().catch(() => {});
+  linkTransfers.clear();
   await mailbox.cleanup();
 }
 
