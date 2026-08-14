@@ -38,6 +38,14 @@ intentionally limited to throwaway QA mailboxes; it must not be used for real
 user mail. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
+It also exposes `qa_email_account_signup`, which creates a fresh account with a
+disposable recovery address through the visible signup form while keeping the
+generated password inside the browser provider. Full and nightly runs assign
+this account to the owner role, use its mailbox for verification and password
+recovery, and use the two remaining roles for the multi-user journey. This keeps
+the mailbox-backed account within the three-account signup budget. A run that
+cannot do so is blocked as QA-harness failure.
+
 Visible one-time group invite links have a separate safe handoff contract:
 `browser_transfer_link` captures a labeled invite control in the owner session
 and returns only an opaque single-use transfer ID;
@@ -81,7 +89,8 @@ accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
 Full and nightly runs use the dedicated account pool for an owner, member, and
-outsider, then use the opaque invite handoff to exercise invitation, group
+outsider, plus a separate mailbox-backed account for authentication and
+recovery. They then use the opaque invite handoff to exercise invitation, group
 conversation, and authorization boundaries in separate browser sessions. When
 `QA_ACCOUNT_PASSWORD` is supplied, the role usernames default to
 `qa_release_owner`, `qa_release_member`, and `qa_release_outsider` and may be
