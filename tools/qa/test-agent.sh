@@ -20,6 +20,8 @@ rg -q 'qa-browser-mcp' "$root_dir/tools/make/tests.mk"
 rg -q 'mailbox_open_link' "$root_dir/.agents/qa/tools.yaml"
 rg -q 'browser_transfer_link' "$root_dir/.agents/qa/tools.yaml"
 rg -q 'browser_open_transferred_link' "$root_dir/.agents/qa/tools.yaml"
+qa_recipe=$(sed -n '/^qa-agent: /,/^qa-agent-fast: /p' "$root_dir/tools/make/tests.mk")
+grep -q $'\t@QA_BASE_URL=' <<<"$qa_recipe"
 rg -q 'qa_account_login' "$root_dir/.agents/qa/AGENT.md"
 rg -q 'three distinct dedicated accounts' "$root_dir/.agents/qa/AGENT.md"
 rg -q 'CLOUDFLARE_API_TOKEN' "$root_dir/tools/qa/cloudflare-access.sh"
