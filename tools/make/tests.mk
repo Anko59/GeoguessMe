@@ -78,7 +78,7 @@ test-qa-mailbox-live: ## Verify the disposable QA mailbox provider from the Play
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps -e QA_LIVE_MAILBOX=1 playwright node /workspace/tools/qa/test-mcp.mjs
 
 qa-agent: ## Run the local LLM-driven source-blind QA agent against deployed dev.
-	QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" QA_MAILBOX_PROVIDER="$(QA_MAILBOX_PROVIDER)" \
+	QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" QA_MAILBOX_PROVIDER="$(QA_MAILBOX_PROVIDER)" QA_ACCOUNT_PASSWORD="$(QA_ACCOUNT_PASSWORD)" QA_ACCOUNT_OWNER_USERNAME="$(QA_ACCOUNT_OWNER_USERNAME)" QA_ACCOUNT_MEMBER_USERNAME="$(QA_ACCOUNT_MEMBER_USERNAME)" QA_ACCOUNT_OUTSIDER_USERNAME="$(QA_ACCOUNT_OUTSIDER_USERNAME)" \
 		bash tools/qa/run-local.sh
 
 qa-agent-fast: ## Run the short local LLM QA budget against deployed dev.
@@ -96,6 +96,7 @@ qa-browser-mcp: ## Run the Dockerized provider-neutral browser MCP server.
 	@$(COMPOSE_TOOLS) run -T --rm --no-deps --user "$(shell id -u):$(shell id -g)" \
 		-e QA_BASE_URL -e QA_BUILD_SHA -e QA_RUNTIME -e QA_BUDGET \
 		-e QA_ACCESS_CLIENT_ID -e QA_ACCESS_CLIENT_SECRET \
+		-e QA_ACCOUNT_PASSWORD -e QA_ACCOUNT_OWNER_USERNAME -e QA_ACCOUNT_MEMBER_USERNAME -e QA_ACCOUNT_OUTSIDER_USERNAME \
 		-e QA_MAILBOX_PROVIDER -e QA_FAKE_LATITUDE -e QA_FAKE_LONGITUDE -e QA_FAKE_LOCATION_ACCURACY \
 		-e QA_ARTIFACT_DIR=/tmp/qa-artifacts \
 		-e QA_HOST_ARTIFACT_DIR="$(abspath $(QA_REPORT_DIR))" \

@@ -80,11 +80,16 @@ The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
-Full and nightly runs are instructed to create separate mailboxes/accounts for
-an owner, member, and outsider, then use the opaque invite handoff to exercise
-invitation, group conversation, and authorization boundaries in separate browser
-sessions. If Mail.tm is unavailable, the affected email and multi-user journeys
-are reported as blocked rather than silently treated as passed.
+Full and nightly runs use the dedicated account pool for an owner, member, and
+outsider, then use the opaque invite handoff to exercise invitation, group
+conversation, and authorization boundaries in separate browser sessions. The
+local operator supplies the pool password through `QA_ACCOUNT_PASSWORD`; the
+role usernames default to `qa_release_owner`, `qa_release_member`, and
+`qa_release_outsider` and may be overridden with the corresponding
+`QA_ACCOUNT_*_USERNAME` variables. The password is passed only to the local
+browser provider and is never placed in the prompt, report, or CI. If the pool
+or Mail.tm is unavailable, the affected journeys are reported as blocked rather
+than silently treated as passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised

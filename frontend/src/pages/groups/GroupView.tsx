@@ -56,87 +56,89 @@ export default function GroupView() {
 
     if (!id) return <div>Invalid Group ID</div>;
     return (
-        <div className="group-view">
-            <div className="group-header">
-                <div className="header-content">
-                    <Link to="/groups" className="back-btn">
-                        <Icon name="arrow-left" className="back-arrow-icon" />
-                        <span className="visually-hidden">Back to groups</span>
-                    </Link>
-                    <FullScreenImage
-                        src={groupPhotoURL}
-                        alt={`${group?.name ?? 'Group'} group photo`}
-                        className="header-logo-toggle"
-                    >
-                        <img src={groupPhotoURL} alt="" className="header-logo" />
-                    </FullScreenImage>
-                    <div className="group-title-block">
-                        <span>Group</span>
-                        <h1 className="group-name">{group?.name ?? 'Group'}</h1>
-                    </div>
-                    {user && (
-                        <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
-                            <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
+        <>
+            <div className="group-view" aria-hidden={gameMessage !== null}>
+                <div className="group-header">
+                    <div className="header-content">
+                        <Link to="/groups" className="back-btn">
+                            <Icon name="arrow-left" className="back-arrow-icon" />
+                            <span className="visually-hidden">Back to groups</span>
                         </Link>
+                        <FullScreenImage
+                            src={groupPhotoURL}
+                            alt={`${group?.name ?? 'Group'} group photo`}
+                            className="header-logo-toggle"
+                        >
+                            <img src={groupPhotoURL} alt="" className="header-logo" />
+                        </FullScreenImage>
+                        <div className="group-title-block">
+                            <span>Group</span>
+                            <h1 className="group-name">{group?.name ?? 'Group'}</h1>
+                        </div>
+                        {user && (
+                            <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
+                                <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
+                            </Link>
+                        )}
+                        <button
+                            className="settings-btn"
+                            onClick={() => setSettingsOpen(true)}
+                            aria-label="Open group settings"
+                        >
+                            <img src="/settings_gear_icon.png" alt="" />
+                        </button>
+                    </div>
+                </div>
+                {error && (
+                    <div className="error-message" role="alert">
+                        {error}
+                    </div>
+                )}
+                <SettingsModal
+                    isOpen={settingsOpen}
+                    onClose={() => setSettingsOpen(false)}
+                    groupName={group?.name ?? ''}
+                    groupId={id}
+                    onGroupPhotoUpdated={() => {
+                        bustGroupPhotoCache(id);
+                        setGroupPhotoRefreshKey((key) => key + 1);
+                    }}
+                />
+                <div className="tab-content">
+                    {activeTab === 'camera' && (
+                        <div className="tab-panel fade-in">
+                            <Camera groupID={id} onUploadComplete={() => setActiveTab('chat')} />
+                        </div>
                     )}
-                    <button
-                        className="settings-btn"
-                        onClick={() => setSettingsOpen(true)}
-                        aria-label="Open group settings"
-                    >
-                        <img src="/settings_gear_icon.png" alt="" />
-                    </button>
+                    {activeTab === 'chat' && (
+                        <div className="tab-panel fade-in">
+                            <Chat
+                                messages={messages}
+                                wsRef={wsRef}
+                                currentUserId={user?.id ?? ''}
+                                groupID={id}
+                                connectionStatus={connectionStatus}
+                                onChallengeMessage={setGameMessage}
+                                onMessageUpdated={updateMessage}
+                                onLoadOlder={loadOlder}
+                                hasMoreOlder={hasMoreOlder}
+                                loadingOlder={loadingOlder}
+                            />
+                        </div>
+                    )}
+                    {activeTab === 'leaderboard' && (
+                        <div className="tab-panel leaderboard-tab-panel fade-in">
+                            <Leaderboard key={id} groupID={id} />
+                        </div>
+                    )}
                 </div>
-            </div>
-            {error && (
-                <div className="error-message" role="alert">
-                    {error}
-                </div>
-            )}
-            <SettingsModal
-                isOpen={settingsOpen}
-                onClose={() => setSettingsOpen(false)}
-                groupName={group?.name ?? ''}
-                groupId={id}
-                onGroupPhotoUpdated={() => {
-                    bustGroupPhotoCache(id);
-                    setGroupPhotoRefreshKey((key) => key + 1);
-                }}
-            />
-            <div className="tab-content">
-                {activeTab === 'camera' && (
-                    <div className="tab-panel fade-in">
-                        <Camera groupID={id} onUploadComplete={() => setActiveTab('chat')} />
-                    </div>
-                )}
-                {activeTab === 'chat' && (
-                    <div className="tab-panel fade-in">
-                        <Chat
-                            messages={messages}
-                            wsRef={wsRef}
-                            currentUserId={user?.id ?? ''}
-                            groupID={id}
-                            connectionStatus={connectionStatus}
-                            onChallengeMessage={setGameMessage}
-                            onMessageUpdated={updateMessage}
-                            onLoadOlder={loadOlder}
-                            hasMoreOlder={hasMoreOlder}
-                            loadingOlder={loadingOlder}
-                        />
-                    </div>
-                )}
-                {activeTab === 'leaderboard' && (
-                    <div className="tab-panel leaderboard-tab-panel fade-in">
-                        <Leaderboard key={id} groupID={id} />
-                    </div>
-                )}
+                <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
             <Game
                 gameMessage={gameMessage}
                 onChallengeStatusChange={updateChallengeStatus}
                 onClose={() => setGameMessage(null)}
             />
-            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        </div>
+        </>
     );
 }

@@ -34,12 +34,15 @@ test.describe('Authentication', () => {
 
         // Navigate to settings and click logout
         await page.goto('/settings');
+        await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         await page.waitForSelector('.logout-btn', { state: 'visible' });
         await page.click('.logout-btn');
         await page.waitForURL('/');
 
         // Must NOT be on the settings page after logout
         await expect(page).not.toHaveURL(/\/settings/);
+        await expect(page.getByRole('heading', { name: /Guess the place\. Share the story\./ })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Settings' })).not.toBeVisible();
 
         // Navigating to /groups must redirect to /login
         await page.goto('/groups');

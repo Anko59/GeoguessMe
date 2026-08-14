@@ -58,7 +58,7 @@ try {
   child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const listed = await request(2, "tools/list");
   const names = new Set(listed.tools.map((entry) => entry.name));
-  for (const required of ["session_create", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
+  for (const required of ["session_create", "qa_account_login", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
   if (process.env.QA_LIVE_MAILBOX === "1") {

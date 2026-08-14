@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthResponse } from './types';
@@ -248,6 +248,31 @@ describe('App shell — protected routes with authentication', () => {
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
         expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    });
+
+    it('renders the settings route when reached through authenticated navigation', async () => {
+        routeRef.current = '/groups';
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        expect(await screen.findByRole('heading', { name: 'My Groups' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('link', { name: 'Settings' }));
+
+        expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+        expect(window.location.pathname).toBe('/settings');
+    });
+
+    it('renders the public landing page immediately after logout', async () => {
+        routeRef.current = '/settings';
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
+
+        expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(window.location.pathname).toBe('/');
     });
 });
 

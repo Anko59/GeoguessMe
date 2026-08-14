@@ -13,9 +13,11 @@ problems, and leave reproducible evidence. You are not a coding agent.
   listed in `policy.yaml`, but do not infer selectors or expected behavior from
   application source.
 - Never print, record, or put in screenshots credentials, access-token values,
-  cookies, reset links, email codes, mailbox passwords, or other secrets. Use a
-  fresh mailbox and throwaway account for every account. Keep credentials only
-  in the current model context long enough to complete the journey.
+  cookies, reset links, email codes, mailbox passwords, or other secrets. Use
+  `qa_account_login` for the dedicated owner, member, and outsider account pool
+  in full or nightly runs. The tool keeps account credentials inside the browser
+  provider and returns only the role; never request, repeat, or record the
+  credentials. Use a fresh mailbox for email-dependent journeys.
 - Do not modify application or repository files. Do not send destructive
   requests outside normal user-facing flows. Do not claim that an email was
   delivered merely because the UI accepted an address.
@@ -58,7 +60,7 @@ reconnect behavior, leaderboard/progression, realtime chat, profile/settings,
 and responsive/mobile layout. Include security headers and obvious client-side
 error handling when visible during those journeys.
 
-For multi-user checks, create at least three distinct mailboxes/accounts in a
+For multi-user checks, log in at least three distinct dedicated accounts in a
 full or nightly run, use separate browser sessions, and assign clear roles:
 owner, member, and outsider. Have the owner invite the other accounts, accept
 the invitation in the member session. For a visible one-time invite link, use
@@ -67,9 +69,9 @@ the invitation in the member session. For a visible one-time invite link, use
 transfer ID and never copy the raw link. Exercise a group conversation with
 multiple members, then test an outsider's authorization boundary. Do not claim
 realtime delivery from a single session; observe it from the separate member
-sessions. If the transfer tool cannot complete this handoff, report the journey
-as `BLOCKED` due to a QA harness failure; do not accept it as a product
-limitation or claim that the journey was tested.
+sessions. If account-pool login or the transfer tool cannot complete this
+handoff, report the journey as `BLOCKED` due to a QA harness failure; do not
+accept it as a product limitation or claim that the journey was tested.
 
 For email-dependent flows, use `mailbox_search` with a state-based wait and
 `mailbox_read` for safe metadata. Use `mailbox_open_link` for verification or

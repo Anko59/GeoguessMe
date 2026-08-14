@@ -8,6 +8,7 @@ description: >-
 tools:
   - session_create
   - session_close
+  - qa_account_login
   - tab_open
   - tab_switch
   - browser_navigate

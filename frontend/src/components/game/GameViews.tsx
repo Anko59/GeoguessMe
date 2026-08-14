@@ -30,20 +30,28 @@ interface GameViewProps {
     onClose: () => void;
 }
 
+function GameOverlay({ children, label }: { children: ReactNode; label: string }) {
+    return (
+        <div className="game-overlay" role="dialog" aria-modal="true" aria-label={label}>
+            {children}
+        </div>
+    );
+}
+
 function GameLoadingView({ loadingMedia }: { loadingMedia: boolean }) {
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Loading challenge">
             <div className="loading-container fade-in">
                 <div className="loading-spinner" />
                 <p>{loadingMedia ? 'Loading private photo…' : 'Loading challenge…'}</p>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 
 function GameErrorView({ state, onClose }: { state: GameState; onClose: () => void }) {
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Challenge unavailable">
             <div className="result-view scale-in">
                 <h2>{state.status === 'expired' ? 'Challenge expired' : 'Challenge unavailable'}</h2>
                 <p>{state.message ?? 'This challenge is no longer available.'}</p>
@@ -51,13 +59,13 @@ function GameErrorView({ state, onClose }: { state: GameState; onClose: () => vo
                     Close
                 </button>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 
 function GameViewingView({ state, remaining }: { state: GameState; remaining: number }) {
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Challenge photo">
             <div className="photo-view scale-in">
                 {state.mediaType?.startsWith('video/') ? (
                     <video
@@ -77,19 +85,19 @@ function GameViewingView({ state, remaining }: { state: GameState; remaining: nu
                     </div>
                 </div>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 
 function GameWaitingView({ remaining }: { remaining: number }) {
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Challenge waiting">
             <div className="skipped-message fade-in">
                 <img src="/timer_icon.png" alt="" className="skip-icon" />
                 <p>Photo hidden</p>
                 <p className="skip-subtitle">Guessing opens in {remaining} seconds.</p>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 
@@ -104,7 +112,7 @@ function GameGuessingView({
 }) {
     const submitting = state.status === 'submitting';
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Challenge guessing">
             <div className="guessing-view fade-in">
                 <div className="guessing-header">
                     <h3>Where was this taken?</h3>
@@ -130,7 +138,7 @@ function GameGuessingView({
                     )}
                 </button>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 
@@ -151,7 +159,7 @@ function GameResultsView({
             ? 'when the reveal period ends'
             : locationRevealClause(state.results.location_reveals_at, serverNowMs);
     return (
-        <div className="game-overlay">
+        <GameOverlay label="Challenge results">
             <div className="result-view scale-in">
                 <div className="result-header">
                     <h2>Challenge results</h2>
@@ -230,7 +238,7 @@ function GameResultsView({
                     Close
                 </button>
             </div>
-        </div>
+        </GameOverlay>
     );
 }
 

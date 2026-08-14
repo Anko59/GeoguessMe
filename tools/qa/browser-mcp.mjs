@@ -5,6 +5,7 @@ import { fakeLocation, probe } from "./browser-capabilities.mjs";
 import { LinkTransferStore } from "./link-transfer.mjs";
 import { MailboxGateway } from "./mailbox.mjs";
 import { redactUrls } from "./safe-output.mjs";
+import { loginAccount } from "./account-pool.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -36,6 +37,7 @@ const tools = [
     required: ["session_id"],
     properties: { session_id: { type: "string" } },
   }),
+  tool("qa_account_login", "Log an isolated browser session into a dedicated owner, member, or outsider QA account without exposing credentials.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
   tool("tab_open", "Open a second tab in an existing session.", {
     type: "object",
     required: ["session_id"],
@@ -320,7 +322,6 @@ async function writeReport(summary = {}) {
   await writeFile(`${artifactDir}/qa-report.json`, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   return { report_path: `${hostArtifactDir}/qa-report.json`, finding_count: findings.length, blocking_finding_count: findings.filter((finding) => finding.blocking).length };
 }
-
 async function call(name, args) {
   if (name === "session_create") return newSession(args);
   if (name === "session_close") {
@@ -330,6 +331,7 @@ async function call(name, args) {
     sessions.delete(args.session_id);
     return { closed: args.session_id };
   }
+  if (name === "qa_account_login") return loginAccount(sessionFor(args).page, baseUrl, args.account_role);
   if (name === "tab_open") {
     const session = sessions.get(args.session_id);
     if (!session) throw new Error(`Unknown session: ${args.session_id}`);
@@ -450,7 +452,6 @@ async function call(name, args) {
   }
   throw new Error(`Unknown tool: ${name}`);
 }
-
 async function close() {
   if (!finished) await writeReport();
   for (const session of sessions.values()) await session.context.close().catch(() => {});
