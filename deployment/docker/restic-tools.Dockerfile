@@ -3,7 +3,7 @@
 # Restic 0.19.1 with the fixed golang.org/x/net module. The upstream image
 # still embeds v0.55.0, so build the pinned, signed source release with v0.56.0
 # until an upstream image includes the fix.
-FROM golang:1.25.13-alpine@sha256:844b27705f54e73773e0f9bc3c780633b9d7f4b4831bf35cdad02a81a4c80bd0 AS restic-build
+FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS restic-build
 
 RUN apk add --no-cache git=2.54.0-r0
 WORKDIR /src

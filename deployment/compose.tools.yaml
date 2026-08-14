@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.25.13
+    image: geoguessme/go-tools:1.26.6
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.25.13
+    image: geoguessme/go-tools:1.26.6
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -149,10 +149,10 @@ services:
     volumes:
       - *workspace
 
-  # cloudflared 2026.7.3 (multi-arch digest); used as an SSH ProxyCommand.
+  # cloudflared 2026.8.0 (multi-arch digest); used as an SSH ProxyCommand.
   cloudflared:
     <<: *host-tools
-    image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+    image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
@@ -213,7 +213,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-security.Dockerfile
-    image: geoguessme/go-security:1.25.13
+    image: geoguessme/go-security:1.26.6
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -222,7 +222,7 @@ services:
 
   go-security-write:
     <<: *host-tools
-    image: geoguessme/go-security:1.25.13
+    image: geoguessme/go-security:1.26.6
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
