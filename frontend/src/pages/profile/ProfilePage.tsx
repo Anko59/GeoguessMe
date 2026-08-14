@@ -47,7 +47,8 @@ export default function ProfilePage() {
     }, [isOwnProfile, userId]);
 
     useEffect(() => {
-        queueMicrotask(() => void loadProfile());
+        const task = window.setTimeout(() => void loadProfile(), 0);
+        return () => window.clearTimeout(task);
     }, [loadProfile]);
 
     if (loading) {

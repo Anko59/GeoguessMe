@@ -50,7 +50,7 @@ beforeEach(() => {
 describe('Map component', () => {
     it('renders the map container', () => {
         render(<Map onLocationSelect={vi.fn()} selectedLocation={null} />);
-        expect(screen.getByTestId('MapContainer')).toBeInTheDocument();
+        expect(screen.getByRole('application', { name: 'Guess map' })).toBeInTheDocument();
         expect(screen.getByTestId('TileLayer')).toBeInTheDocument();
     });
 

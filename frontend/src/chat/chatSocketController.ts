@@ -80,6 +80,8 @@ export interface ChatSocketControllerOptions {
     onMessages: (messages: Message[]) => void;
     /** User-facing error message. */
     onError: (message: string) => void;
+    /** Return false for terminal connection errors that must not be retried. */
+    shouldReconnect?: (error: unknown) => boolean;
     /** Deliver the live socket so the host can expose and send through it. */
     onSocketChange?: (socket: WebSocket | null) => void;
     /** Format a caught error into a message (defaults to a plain toString). */
@@ -111,6 +113,7 @@ export function createChatSocketController(options: ChatSocketControllerOptions)
     const toErrorMessage =
         options.toErrorMessage ??
         ((error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback));
+    const shouldReconnect = options.shouldReconnect ?? (() => true);
     const setPhase = (next: ChatSocketPhase): void => {
         if (phase === next) return;
         phase = next;
@@ -232,7 +235,7 @@ export function createChatSocketController(options: ChatSocketControllerOptions)
             if (stopped || currentGeneration !== generation) return;
             options.onError(toErrorMessage(requestError, 'Unable to open chat connection'));
             setPhase('offline');
-            scheduleReconnect();
+            if (shouldReconnect(requestError)) scheduleReconnect();
         }
     };
 
