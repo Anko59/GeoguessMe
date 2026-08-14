@@ -80,13 +80,15 @@ export default function GroupView() {
                                 <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
                             </Link>
                         )}
-                        <button
-                            className="settings-btn"
-                            onClick={() => setSettingsOpen(true)}
-                            aria-label="Open group settings"
-                        >
-                            <img src="/settings_gear_icon.png" alt="" />
-                        </button>
+                        {group && !groupError && (
+                            <button
+                                className="settings-btn"
+                                onClick={() => setSettingsOpen(true)}
+                                aria-label="Open group settings"
+                            >
+                                <img src="/settings_gear_icon.png" alt="" />
+                            </button>
+                        )}
                     </div>
                 </div>
                 {error && (

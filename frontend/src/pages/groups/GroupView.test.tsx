@@ -144,6 +144,7 @@ describe('GroupView', () => {
         mocks.get.mockRejectedValue(new Error('group unavailable'));
         renderGroupView('group-1');
         expect(await screen.findByRole('alert')).toHaveTextContent('group unavailable');
+        expect(screen.queryByRole('button', { name: 'Open group settings' })).toBeNull();
     });
 
     it('shows messages error when useGroupMessages reports an error', async () => {

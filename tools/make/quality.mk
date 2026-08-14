@@ -78,7 +78,7 @@ audit: ## Run dependency vulnerability audits in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
 deps-go-security-update: ## Update vulnerable Go security modules and normalize metadata.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/crypto@v0.54.0 golang.org/x/text@v0.40.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/crypto@v0.54.0 golang.org/x/image@v0.45.0 golang.org/x/text@v0.41.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
 
 deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only
