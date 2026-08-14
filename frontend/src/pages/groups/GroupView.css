@@ -7,6 +7,45 @@
     overflow: hidden;
 }
 
+.group-error-state {
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+}
+
+.group-error-panel {
+    width: min(100%, 32rem);
+    padding: clamp(1.5rem, 5vw, 3rem);
+    display: grid;
+    justify-items: start;
+    gap: var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    text-align: left;
+}
+
+.group-error-eyebrow {
+    color: var(--brand-blue-accessible);
+    font-size: 0.75rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.group-error-panel h1 {
+    margin: 0;
+    color: var(--brand-navy);
+    font-size: clamp(1.5rem, 4vw, 2.2rem);
+    line-height: 1.15;
+}
+
+.group-error-panel p {
+    margin: 0;
+    color: var(--ink-muted);
+}
+
 .group-header {
     z-index: 100;
     flex: none;

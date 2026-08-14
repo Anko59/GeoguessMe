@@ -17,15 +17,26 @@ import Icon from '../../components/ui/Icon';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import './GroupView.css';
 
+function isForbiddenError(error: unknown): boolean {
+    return (error as { response?: { status?: unknown } })?.response?.status === 403;
+}
+
 export default function GroupView() {
     const { id } = useParams();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<TabType>('chat');
-    const [group, setGroup] = useState<Group | null>(null);
+    const [groupState, setGroupState] = useState<{
+        id: string;
+        group: Group | null;
+        error: string;
+        accessDenied: boolean;
+    }>({ id: '', group: null, error: '', accessDenied: false });
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [groupPhotoRefreshKey, setGroupPhotoRefreshKey] = useState(0);
-    const [groupError, setGroupError] = useState('');
+    const group = groupState.id === id ? groupState.group : null;
+    const groupError = groupState.id === id ? groupState.error : '';
+    const groupAccessDenied = groupState.id === id && groupState.accessDenied;
     const {
         messages,
         connectionStatus,
@@ -36,25 +47,56 @@ export default function GroupView() {
         loadOlder,
         hasMoreOlder,
         loadingOlder,
-    } = useGroupMessages(id, user?.id);
+    } = useGroupMessages(groupError ? undefined : id, user?.id);
     const groupPhotoURL = useGroupPhotoUrl(id ?? '', groupPhotoRefreshKey);
 
     useEffect(() => {
         if (!id) return;
+        let active = true;
         void api
             .get<Group>('/group/details', { params: { id } })
-            .then((response) => setGroup(response.data))
-            .catch((requestError: unknown) => setGroupError(getAPIErrorMessage(requestError, 'Unable to load group')));
+            .then((response) => {
+                if (active) setGroupState({ id, group: response.data, error: '', accessDenied: false });
+            })
+            .catch((requestError: unknown) => {
+                if (active) {
+                    setGroupState({
+                        id,
+                        group: null,
+                        error: getAPIErrorMessage(requestError, 'Unable to load group'),
+                        accessDenied: isForbiddenError(requestError),
+                    });
+                }
+            });
+        return () => {
+            active = false;
+        };
     }, [id]);
 
     useEffect(() => {
-        if (!id || !user) return;
+        if (!id || !user || groupError) return;
         prefetchLeaderboard(user.id, id);
-    }, [id, user]);
+    }, [groupError, id, user]);
 
     const error = groupError || messagesError;
 
     if (!id) return <div>Invalid Group ID</div>;
+    if (groupError) {
+        return (
+            <main className="group-view group-error-state">
+                <section className="group-error-panel" role="alert" aria-labelledby="group-error-title">
+                    <span className="group-error-eyebrow">Group unavailable</span>
+                    <h1 id="group-error-title">
+                        {groupAccessDenied ? 'You do not have access to this group.' : 'Unable to load this group.'}
+                    </h1>
+                    {!groupAccessDenied && <p>{groupError}</p>}
+                    <Link to="/groups" className="btn btn-secondary">
+                        Back to groups
+                    </Link>
+                </section>
+            </main>
+        );
+    }
     return (
         <>
             <div className="group-view" aria-hidden={gameMessage !== null}>
