@@ -7,6 +7,8 @@ import { redactUrls } from "./safe-output.mjs";
 import { loginAccount } from "./account-pool.mjs";
 import { signUpEmailAccount } from "./email-account.mjs";
 import { writeQaReport } from "./report.mjs";
+import { CoverageTracker } from "./coverage.mjs";
+import { actionSchema, pageSchema, tool } from "./mcp-schemas.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -23,8 +25,7 @@ const findings = [];
 const artifacts = [];
 const mailbox = new MailboxGateway({ provider: process.env.QA_MAILBOX_PROVIDER || "mailtm", productUrl: baseUrl });
 const linkTransfers = new LinkTransferStore({ baseUrl });
-const emailMailboxIds = new Set();
-const searchedMailboxIds = new Set();
+const coverage = new CoverageTracker();
 const startedAt = new Date().toISOString();
 const deadline = Date.now() + budget.maxMinutes * 60 * 1000;
 let browser;
@@ -158,26 +159,6 @@ const tools = [
     },
   }),
 ];
-function tool(name, description, inputSchema) {
-  return { name, description, inputSchema: inputSchema || { type: "object", properties: {} } };
-}
-function pageSchema() {
-  return {
-    type: "object",
-    required: ["session_id"],
-    properties: { session_id: { type: "string" }, tab_id: { type: "string" } },
-  };
-}
-function actionSchema() {
-  return {
-    type: "object",
-    required: ["session_id", "target"],
-    properties: {
-      session_id: { type: "string" }, tab_id: { type: "string" },
-      target: { type: "object", additionalProperties: false },
-    },
-  };
-}
 function clipped(value, limit = maxText) {
   const text = String(value ?? "");
   return text.length <= limit ? text : `${text.slice(0, limit)}\n[truncated]`;
@@ -287,6 +268,7 @@ async function observe(args) {
     page.locator("body").innerText({ timeout: 3000 }).catch(() => ""),
     page.locator("body").ariaSnapshot({ timeout: 3000 }).catch(() => ""),
   ]);
+  coverage.observed(args.session_id, page.url(), text);
   return {
     tab_id: tab.tabId,
     url: safeUrl(page.url()),
@@ -301,7 +283,7 @@ function assertAllowedNavigation(value) {
   if (url.origin !== baseUrl.origin) throw new Error("Navigation outside QA_BASE_URL origin is blocked");
   return url.toString();
 }
-const writeReport = (summary = {}) => writeQaReport({ artifactDir, hostArtifactDir, startedAt, baseUrl, runtime: process.env.QA_RUNTIME || "unknown", budget: process.env.QA_BUDGET || "full", buildSha: process.env.QA_BUILD_SHA || "unknown", mailboxProvider: process.env.QA_MAILBOX_PROVIDER || "mailtm", geolocation: fakeLocation(), mailboxCount: mailbox.mailboxes.size, summary, findings, artifacts });
+const writeReport = (summary = {}) => writeQaReport({ artifactDir, hostArtifactDir, startedAt, baseUrl, runtime: process.env.QA_RUNTIME || "unknown", budget: process.env.QA_BUDGET || "full", buildSha: process.env.QA_BUILD_SHA || "unknown", mailboxProvider: process.env.QA_MAILBOX_PROVIDER || "mailtm", geolocation: fakeLocation(), mailboxCount: mailbox.mailboxes.size, coverage: summary.coverage, summary, findings, artifacts });
 async function call(name, args) {
   if (name === "session_create") return newSession(args);
   if (name === "session_close") {
@@ -311,10 +293,16 @@ async function call(name, args) {
     sessions.delete(args.session_id);
     return { closed: args.session_id };
   }
-  if (name === "qa_account_login") return loginAccount(sessionFor(args).page, baseUrl, args.account_role);
+  if (name === "qa_account_login") {
+    const result = await loginAccount(sessionFor(args).page, baseUrl, args.account_role);
+    coverage.role(args.session_id, args.account_role);
+    return result;
+  }
   if (name === "qa_email_account_signup") {
-    const result = await signUpEmailAccount({ ...args, page: sessionFor(args).page, baseUrl, mailbox });
-    emailMailboxIds.add(result.mailbox_id);
+    const result = await signUpEmailAccount({ accountRole: args.account_role, page: sessionFor(args).page, baseUrl, mailbox });
+    coverage.emailAccount();
+    coverage.mailboxCreated(result.mailbox_id);
+    coverage.role(args.session_id, args.account_role);
     return { ...result, authenticated: true };
   }
   if (name === "tab_open") {
@@ -342,16 +330,21 @@ async function call(name, args) {
   if (name === "browser_transfer_link") {
     const { page } = sessionFor(args);
     const locator = await locate(page, args.target);
-    return linkTransfers.capture(await locator.inputValue().catch(() => locator.getAttribute("href")));
+    const transfer = linkTransfers.capture(await locator.inputValue().catch(() => locator.getAttribute("href")));
+    coverage.transferCaptured();
+    return transfer;
   }
   if (name === "browser_open_transferred_link") {
     const { page } = sessionFor(args);
     await page.goto(linkTransfers.consume(args.transfer_id), { waitUntil: "domcontentloaded", timeout: 30000 });
+    coverage.transferOpened();
     return observe(args);
   }
   if (name === "browser_capabilities") {
     const { page } = sessionFor(args);
-    return probe(page);
+    const result = await probe(page);
+    coverage.capabilitiesObserved(result);
+    return result;
   }
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {
     const { page } = sessionFor(args);
@@ -360,6 +353,7 @@ async function call(name, args) {
     if (name === "browser_type") await locator.fill(args.text);
     if (name === "browser_select") await locator.selectOption(args.value);
     if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+    coverage.action(name, args);
     return observe(args);
   }
   if (name === "browser_key") {
@@ -370,6 +364,7 @@ async function call(name, args) {
   if (name === "browser_reload") {
     const { page } = sessionFor(args);
     await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    coverage.action(name, args);
     return observe(args);
   }
   if (name === "browser_back" || name === "browser_forward") {
@@ -380,6 +375,7 @@ async function call(name, args) {
   if (name === "browser_resize") {
     const { page } = sessionFor(args);
     await page.setViewportSize({ width: args.width, height: args.height });
+    coverage.action(name, args);
     return observe(args);
   }
   if (name === "browser_wait_for") {
@@ -404,10 +400,14 @@ async function call(name, args) {
     const { tab } = sessionFor(args);
     return { console: tab.console.slice(-20), network: tab.network.slice(-20) };
   }
-  if (name === "mailbox_create") return mailbox.create();
+  if (name === "mailbox_create") {
+    const result = await mailbox.create();
+    coverage.mailboxCreated(result.mailbox_id);
+    return result;
+  }
   if (name === "mailbox_search") {
     const result = await mailbox.search(args);
-    searchedMailboxIds.add(args.mailbox_id);
+    coverage.mailboxSearched(args.mailbox_id);
     return result;
   }
   if (name === "mailbox_read") return mailbox.read(args);
@@ -419,6 +419,7 @@ async function call(name, args) {
     } catch {
       throw new Error("Mailbox link navigation failed");
     }
+    coverage.linkOpened(args.kind);
     return observe(args);
   }
   if (name === "qa_record_finding") {
@@ -436,19 +437,18 @@ async function call(name, args) {
     return { id: finding.id, blocking: finding.blocking, finding_count: findings.length };
   }
   if (name === "qa_finish") {
-    if (["full", "nightly"].includes(process.env.QA_BUDGET || "full") && args.status !== "BLOCKED") {
-      const emailCoverageReady = [...emailMailboxIds].some((mailboxId) => searchedMailboxIds.has(mailboxId));
-      if (!emailCoverageReady) {
-        throw new Error("Full and nightly QA runs must create an email-backed account and search its mailbox; finish BLOCKED if the mailbox journey cannot be exercised");
-      }
-    }
+    const coverageReport = coverage.snapshot(process.env.QA_BUDGET || "full");
+    const limitations = [...(args.limitations || [])];
+    const missing = coverageReport.missing.map(({ label }) => `Required coverage not evidenced: ${label}`);
+    const status = coverageReport.missing.length && ["full", "nightly"].includes(process.env.QA_BUDGET || "full") ? "BLOCKED" : args.status;
+    if (status === "BLOCKED") limitations.push(...missing);
     finished = true;
-    return writeReport(args);
+    return writeReport({ ...args, status, limitations, journeys_not_exercised: [...(args.journeys_not_exercised || []), ...coverageReport.missing.map(({ label }) => label)], coverage: coverageReport });
   }
   throw new Error(`Unknown tool: ${name}`);
 }
 async function close() {
-  if (!finished) await writeReport();
+  if (!finished) await writeReport({ coverage: coverage.snapshot(process.env.QA_BUDGET || "full") });
   for (const session of sessions.values()) await session.context.close().catch(() => {});
   await browser?.close().catch(() => {});
   linkTransfers.clear();

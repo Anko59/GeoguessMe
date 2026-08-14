@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 
 const pageServer = createServer((request, response) => {
@@ -9,7 +10,7 @@ const pageServer = createServer((request, response) => {
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
 const child = spawn(process.execPath, ["/workspace/tools/qa/browser-mcp.mjs"], {
-  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract", QA_ACCOUNT_PASSWORD: "contract-password", QA_BUDGET: "fast" },
+  env: { ...process.env, QA_BASE_URL: pageUrl, QA_ARTIFACT_DIR: "/tmp/qa-contract", QA_ACCOUNT_PASSWORD: "contract-password", QA_BUDGET: "full" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 child.stderr.on("data", (chunk) => process.stderr.write(chunk));
@@ -99,6 +100,10 @@ try {
   await request(12, "tools/call", { name: "session_close", arguments: { session_id: memberId } });
   const report = await request(15, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });
   if (!report.structuredContent?.report_path) throw new Error("qa_finish returned no report path");
+  const evidence = JSON.parse(await readFile("/tmp/qa-contract/qa-report.json", "utf8"));
+  if (evidence.status !== "BLOCKED" || evidence.coverage?.release_ready !== false) {
+    throw new Error("full-run coverage gate allowed an incomplete PASS");
+  }
   child.stdin.end();
   await once(child, "close");
   pageServer.close();
