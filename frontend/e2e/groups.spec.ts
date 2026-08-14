@@ -133,7 +133,7 @@ test.describe('Group operations', () => {
             const outsiderPage = await outsiderContext.newPage();
             await signupViaUI(outsiderPage);
             await outsiderPage.goto(`/group/${owner.groupID}`);
-            await expect(outsiderPage.locator('[role="alert"]')).toContainText('You are not a member of this group');
+            await expect(outsiderPage.locator('[role="alert"]')).toContainText('You do not have access to this group.');
         } finally {
             await outsiderContext.close();
             await owner.context.close();
