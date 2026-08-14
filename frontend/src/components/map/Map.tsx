@@ -94,40 +94,42 @@ function FitBoundsToMarkers({
 
 export default function Map({ onLocationSelect, selectedLocation, actualLocation, guesses }: MapProps) {
     return (
-        <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <FitBoundsToMarkers guesses={guesses} actualLocation={actualLocation} />
-            <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />
-
-            {/* Actual Location (Flag/Green Marker) */}
-            {actualLocation && (
-                <Marker
-                    position={[actualLocation.lat, actualLocation.long]}
-                    opacity={1}
-                    icon={L.icon({
-                        iconUrl: icon,
-                        shadowUrl: iconShadow,
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34],
-                        shadowSize: [41, 41],
-                    })}
+        <div role="application" aria-label="Guess map" style={{ height: '100%', width: '100%' }}>
+            <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-            )}
+                <FitBoundsToMarkers guesses={guesses} actualLocation={actualLocation} />
+                <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />
 
-            {/* User Guesses (only guesses with returned coordinates render; a
-                hidden-location challenge sends just the viewer's own point) */}
-            {guesses?.filter(hasCoordinates).map((guess) => (
-                <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
-                    <Popup>
-                        <strong>{guess.username}</strong>
-                        <span className="guess-popup-score">{guess.score} pts</span>
-                    </Popup>
-                </Marker>
-            ))}
-        </MapContainer>
+                {/* Actual Location (Flag/Green Marker) */}
+                {actualLocation && (
+                    <Marker
+                        position={[actualLocation.lat, actualLocation.long]}
+                        opacity={1}
+                        icon={L.icon({
+                            iconUrl: icon,
+                            shadowUrl: iconShadow,
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41],
+                            popupAnchor: [1, -34],
+                            shadowSize: [41, 41],
+                        })}
+                    />
+                )}
+
+                {/* User Guesses (only guesses with returned coordinates render; a
+                    hidden-location challenge sends just the viewer's own point) */}
+                {guesses?.filter(hasCoordinates).map((guess) => (
+                    <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
+                        <Popup>
+                            <strong>{guess.username}</strong>
+                            <span className="guess-popup-score">{guess.score} pts</span>
+                        </Popup>
+                    </Marker>
+                ))}
+            </MapContainer>
+        </div>
     );
 }

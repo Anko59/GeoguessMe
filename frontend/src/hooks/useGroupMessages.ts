@@ -177,6 +177,10 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
             onSocketChange: (socket) => {
                 wsRef.current = socket;
             },
+            shouldReconnect: (requestError) => {
+                const status = (requestError as { response?: { status?: unknown } })?.response?.status;
+                return status !== 403;
+            },
         });
         controllerRef.current = controller;
         controller.start();

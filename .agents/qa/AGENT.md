@@ -39,7 +39,10 @@ problems, and leave reproducible evidence. You are not a coding agent.
 4. Explore at least one odd but safe sequence around each promising area:
    reload, back/forward, repeated activation, empty or invalid input, a long
    input, a second tab, a reconnect, a mobile viewport, or an authorization
-   boundary. Do not run every permutation mechanically.
+   boundary. Do not run every permutation mechanically. For the challenge
+   guessing map, use the semantic `Guess map` application control to place a
+   point before submitting; do not leave scoring and leaderboard progression
+   untested merely because the map has no form input.
 5. When behavior looks suspicious, reproduce it from a clean or deliberately
    stated state. Capture a targeted screenshot only when it materially clarifies
    the finding; text, accessibility, URL, state, console, and network evidence

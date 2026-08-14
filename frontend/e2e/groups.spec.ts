@@ -51,6 +51,17 @@ test.describe('Group operations', () => {
         }
     });
 
+    test('owner can open the profile from a group without a full reload', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            await owner.page.getByRole('link', { name: 'Open your profile' }).click();
+            await expect(owner.page).toHaveURL(/\/profile$/);
+            await expect(owner.page.getByText('Adventurer card')).toBeVisible();
+        } finally {
+            await owner.context.close();
+        }
+    });
+
     test('uploaded group photo appears in groups list', async ({ browser, contextOptions }) => {
         const owner = await createOwnerScenario(browser, contextOptions);
         try {

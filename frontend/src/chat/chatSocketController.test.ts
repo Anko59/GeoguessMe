@@ -13,8 +13,6 @@ import {
     type ChatSocketFetchQuery,
 } from './chatSocketController';
 
-// A controllable WebSocket double; tests dispatch open/message/close/error
-// events in any order to reproduce reconnect races deterministically.
 type SocketHandler = (() => void) | null;
 type MessageHandler = ((event: { data: string }) => void) | null;
 
@@ -96,8 +94,6 @@ interface Harness {
     toErrorMessage: ReturnType<typeof vi.fn>;
 }
 
-// Overrides apply on top of defaults; the returned mocks are the exact
-// callbacks the controller was built with.
 function harness(overrides: Partial<ChatSocketControllerOptions> = {}): Harness {
     const delivered: Message[] = [];
     const errors: string[] = [];
@@ -131,8 +127,6 @@ function harness(overrides: Partial<ChatSocketControllerOptions> = {}): Harness 
         onSocketChange: vi.fn((socket: WebSocket | null) => {
             socketEvents.push(socket ? 'socket:set' : 'socket:null');
         }),
-        // The controller only contributes the fallback string; formatting the
-        // caught error is the host's job (getAPIErrorMessage).
         toErrorMessage: vi.fn((_error: unknown, fallback: string) => fallback),
         ...overrides,
     };
@@ -157,7 +151,6 @@ function harness(overrides: Partial<ChatSocketControllerOptions> = {}): Harness 
     };
 }
 
-// Microtasks are not faked, so plain promise hops flush async controller work.
 const flush = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
@@ -205,7 +198,6 @@ describe('connect sequence', () => {
         h.sockets[0].fireOpen();
         await flush();
         expect(h.phases).toContain('connected');
-        // First sync fetches the latest page (no anchor, no cursor).
         expect(h.fetchPage).toHaveBeenCalledWith({ limit: PAGE_SIZE });
         expect(h.firstPages).toHaveLength(1);
         expect(h.firstPages[0]).toEqual([]);
@@ -272,11 +264,27 @@ describe('connect sequence', () => {
         expect(h.sockets).toHaveLength(0);
         expect(h.fetchTicket).toHaveBeenCalledTimes(1);
 
-        // The first reconnect fires after the base backoff (jitter pinned to 0)
-        // and attempts a renewed ticket.
         await vi.advanceTimersByTimeAsync(BASE_RECONNECT_DELAY_MS + 1);
         await flush();
         expect(h.fetchTicket).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a terminal authorization failure while fetching a ticket', async () => {
+        vi.useFakeTimers();
+        const authorizationError = Object.assign(new Error('forbidden'), { response: { status: 403 } });
+        const h = harness({
+            fetchTicket: vi.fn(async () => {
+                throw authorizationError;
+            }),
+            shouldReconnect: (error) => (error as { response?: { status?: number } }).response?.status !== 403,
+        });
+        h.controller.start();
+        await flush();
+
+        expect(h.errors).toEqual(['Unable to open chat connection']);
+        expect(h.phases).toContain('offline');
+        await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY_MS);
+        expect(h.fetchTicket).toHaveBeenCalledTimes(1);
     });
 
     it('surfaces the invalid-chat-message error for malformed live payloads', async () => {
@@ -347,8 +355,6 @@ describe('reconnect and generation invalidation', () => {
         await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY_MS);
         await flush();
         expect(h.sockets).toHaveLength(2);
-        // The renewed connect has claimed a new generation, so the old
-        // socket's events must be dropped.
         first.fireMessage(message('stale', '2026-01-01T00:00:00Z'));
         expect(deliveredIds(h.delivered)).not.toContain('stale');
 
@@ -373,13 +379,11 @@ describe('reconnect and generation invalidation', () => {
         h.controller.start();
         await flush();
         h.sockets[0].fireOpen();
-        // Catch-up is pending (resolvePage held) when the socket drops.
         await flush();
         h.sockets[0].fireClose();
         await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY_MS);
         await flush();
         expect(h.sockets).toHaveLength(2);
-        // Releasing the abandoned page must not deliver its items.
         resolvePage({ items: [message('abandoned', '2026-01-01T00:00:00Z')] });
         await flush();
         expect(deliveredIds(h.delivered)).toEqual([]);
@@ -400,10 +404,7 @@ describe('reconnect and generation invalidation', () => {
         await flush();
         h.sockets[0].fireOpen();
         await flush();
-        // Live event arrives while catch-up is stalled...
         h.sockets[0].fireMessage(message('x', '2026-01-01T00:00:00Z'));
-        // ...and catch-up later repeats the same message. The controller
-        // delivers both; mergeMessages in the host is the dedup point.
         resolvePage({ items: [message('x', '2026-01-01T00:00:00Z')] });
         await flush();
         expect(deliveredIds(h.delivered)).toEqual(['x', 'x']);
@@ -427,11 +428,9 @@ describe('stop', () => {
         expect(h.phases).toContain('stopped');
         expect(h.controller.getPhase()).toBe('stopped');
 
-        // Late events on the detached socket must be ignored.
         socket.fireMessage(message('late', '2026-01-01T00:00:00Z'));
         expect(deliveredIds(h.delivered)).not.toContain('late');
 
-        // No reconnect may be scheduled after stop.
         await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY_MS);
         expect(h.sockets).toHaveLength(1);
     });
@@ -447,9 +446,6 @@ describe('stop', () => {
         socket.fireClose();
         expect(socket.close).not.toHaveBeenCalled();
 
-        // Stopping after the socket already closed must not call close again
-        // (the controller already dropped its reference) and must still stop
-        // the phase machine.
         h.controller.stop();
         expect(socket.close).not.toHaveBeenCalled();
         expect(h.controller.getPhase()).toBe('stopped');
