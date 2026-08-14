@@ -15,7 +15,12 @@ rg -q 'source_blind: true' "$root_dir/.agents/qa/policy.yaml"
 rg -q 'provider_neutral: true' "$root_dir/.agents/qa/tools.yaml"
 rg -qi 'do not use shell, filesystem, source' "$root_dir/.agents/qa/AGENT.md"
 rg -q 'no-builtin-tools' "$root_dir/tools/qa/pi-adapter.sh"
-rg -q -- '--sandbox read-only' "$root_dir/tools/qa/codex-adapter.sh"
+rg -q -- '--approve-for-me' "$root_dir/tools/qa/codex-adapter.sh"
+if rg -q -- '--sandbox read-only' "$root_dir/tools/qa/codex-adapter.sh"; then exit 1; fi
+rg -q 'mcp_env_file' "$root_dir/tools/qa/codex-adapter.sh"
+rg -q 'chmod 600' "$root_dir/tools/qa/codex-adapter.sh"
+if rg -q 'mcp_servers\.qa_browser\.env\.' "$root_dir/tools/qa/codex-adapter.sh"; then exit 1; fi
+if rg -q 'env_vars' "$root_dir/tools/qa/codex-adapter.sh"; then exit 1; fi
 rg -q 'qa-browser-mcp' "$root_dir/tools/make/tests.mk"
 rg -q 'mailbox_open_link' "$root_dir/.agents/qa/tools.yaml"
 rg -q 'browser_transfer_link' "$root_dir/.agents/qa/tools.yaml"
