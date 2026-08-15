@@ -241,8 +241,8 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(-time.Minute)))
-	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
-		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(handlerConfig().ViewWindow)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds()), int64(handlerConfig().GuessWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at", "guess_expires_at"}).AddRow(now.Add(handlerConfig().ViewWindow), now.Add(handlerConfig().ViewWindow+handlerConfig().GuessWindow)))
 	if recorder := serve(t); recorder.Code != http.StatusOK {
 		t.Fatalf("never-delivered media = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -262,8 +262,8 @@ func TestChallengeMediaViewWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(now.Add(-time.Minute), now.Add(time.Hour)))
-	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
-		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(time.Hour)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds()), int64(handlerConfig().GuessWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at", "guess_expires_at"}).AddRow(now.Add(time.Hour), now.Add(time.Hour+handlerConfig().GuessWindow)))
 	if recorder := serve(t); recorder.Code != http.StatusOK {
 		t.Fatalf("within-window re-fetch = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -274,14 +274,15 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	gameAPI := newGameAPI(t, mock)
 	photoID := "00000000-0000-0000-0000-000000000002"
 	expiresAt := time.Now().UTC().Add(handlerConfig().ViewWindow)
+	guessExpiresAt := expiresAt.Add(handlerConfig().GuessWindow)
 	mock.ExpectQuery("UPDATE challenge_views").
-		WithArgs(photoID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
-		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(expiresAt))
+		WithArgs(photoID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds()), int64(handlerConfig().GuessWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at", "guess_expires_at"}).AddRow(expiresAt, guessExpiresAt))
 	request := requestWithUser(http.MethodPost, "/", "", "user-1")
 	request.SetPathValue("photoID", photoID)
 	recorder := httptest.NewRecorder()
 	gameAPI.ConfirmChallengeMediaDelivered(recorder, request)
-	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) {
+	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) || !bytes.Contains(recorder.Body.Bytes(), []byte("guess_expires_at")) {
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 }
@@ -370,7 +371,7 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
-		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at FROM challenge_views").
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectRollback()
 		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusForbidden)
@@ -385,12 +386,36 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
-		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at FROM challenge_views").
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
 			WithArgs(photoID, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).
-				AddRow(time.Now(), now.Add(time.Hour)))
+			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).
+				AddRow(time.Now(), now.Add(time.Hour), now.Add(2*time.Hour)))
 		mock.ExpectRollback()
 		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusConflict)
+	})
+
+	t.Run("guess window expired is 410", func(t *testing.T) {
+		mock := newMockPool(t)
+		gameAPI := newGameAPI(t, mock)
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
+			WithArgs(photoID, "user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).
+				AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(-time.Second)))
+		mock.ExpectRollback()
+		recorder := httptest.NewRecorder()
+		gameAPI.SubmitChallengeGuess(recorder, guessRequest(`{"lat":48.8,"long":2.3}`))
+		if recorder.Code != http.StatusGone {
+			t.Fatalf("guess after deadline status = %d (%s)", recorder.Code, recorder.Body.String())
+		}
+		if !strings.Contains(recorder.Body.String(), "guess_time_expired") {
+			t.Fatalf("guess after deadline body missing error code: %s", recorder.Body.String())
+		}
 	})
 
 	t.Run("duplicate guess returns 200 without a new broadcast", func(t *testing.T) {

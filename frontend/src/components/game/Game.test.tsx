@@ -113,12 +113,14 @@ describe('Game', () => {
                     media_type: 'image/jpeg',
                     accepted_at: new Date(serverTime - 10000).toISOString(),
                     view_expires_at: new Date(serverTime).toISOString(),
+                    guess_expires_at: new Date(serverTime + 120000).toISOString(),
                     server_time: new Date(serverTime).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(serverTime + 10000).toISOString(),
+                    guess_expires_at: new Date(serverTime + 130000).toISOString(),
                     server_time: new Date(serverTime).toISOString(),
                 },
             });
@@ -279,11 +281,13 @@ describe('Game', () => {
                     media_url: 'https://example.test/photo.jpg',
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });
@@ -318,6 +322,7 @@ describe('Game', () => {
                     accepted_at: new Date(Date.now() - 11000).toISOString(),
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() - 1000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 119000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
@@ -382,12 +387,14 @@ describe('Game', () => {
                     media_type: 'image/jpeg',
                     accepted_at: new Date(Date.now() - 5000).toISOString(),
                     view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 125000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 125000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });
@@ -447,11 +454,13 @@ describe('Game', () => {
                     media_type: 'video/webm',
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });

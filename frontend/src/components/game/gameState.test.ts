@@ -52,6 +52,7 @@ describe('gameReducer', () => {
                 mediaUrl: 'blob:viewing',
                 mediaType: 'image/jpeg',
                 deadline: 5000,
+                guessDeadline: 125000,
                 serverOffset: 10,
             });
             expect(next).toEqual({
@@ -60,6 +61,7 @@ describe('gameReducer', () => {
                 mediaUrl: 'blob:viewing',
                 mediaType: 'image/jpeg',
                 deadline: 5000,
+                guessDeadline: 125000,
                 serverOffset: 10,
             });
         });
@@ -70,9 +72,16 @@ describe('gameReducer', () => {
                 type: 'media-unavailable',
                 photoId: 'photo-1',
                 deadline: 1000,
+                guessDeadline: 121000,
                 serverOffset: 5,
             });
-            expect(next).toEqual({ status: 'guessing', photoId: 'photo-1', deadline: 1000, serverOffset: 5 });
+            expect(next).toEqual({
+                status: 'guessing',
+                photoId: 'photo-1',
+                deadline: 1000,
+                guessDeadline: 121000,
+                serverOffset: 5,
+            });
         });
 
         it('failure actions move accepting to error with the message', () => {
@@ -127,9 +136,15 @@ describe('gameReducer', () => {
                 photoId: 'photo-1',
                 mediaUrl: 'blob:viewing',
                 deadline: 0,
+                guessDeadline: 120000,
                 serverOffset: 5,
             });
             expect(reduce(waiting, { type: 'guess-now' })).toEqual({ ...waiting, status: 'guessing' });
+        });
+
+        it('guess-timeout moves guessing to missed when the server deadline elapses', () => {
+            const guessing = at('guessing', { photoId: 'photo-1', deadline: 0, guessDeadline: 120000 });
+            expect(reduce(guessing, { type: 'guess-timeout' })).toEqual({ ...guessing, status: 'missed' });
         });
 
         it('select-location pins the map on the guessing phase', () => {
@@ -163,8 +178,8 @@ describe('gameReducer', () => {
             });
         });
 
-        it('close returns results, error, and expired to idle', () => {
-            for (const status of ['results', 'error', 'expired'] as const) {
+        it('close returns results, error, expired, and missed to idle', () => {
+            for (const status of ['results', 'error', 'expired', 'missed'] as const) {
                 const state = at(status, { photoId: 'photo-1', message: 'x' });
                 expect(reduce(state, { type: 'close' })).toEqual({ status: 'idle', serverOffset: 0 });
             }
@@ -180,6 +195,7 @@ describe('gameReducer', () => {
                 'results',
                 'error',
                 'expired',
+                'missed',
             ] as const) {
                 const state = at(status, { photoId: 'photo-1', serverOffset: 3 });
                 expect(reduce(state, { type: 'reset' })).toEqual({ status: 'idle', serverOffset: 0 });
@@ -219,20 +235,48 @@ describe('gameReducer', () => {
                 // Phase-only actions fired from the wrong phase.
                 [
                     at('viewing'),
-                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                    {
+                        type: 'media-ready',
+                        photoId: 'photo-1',
+                        mediaUrl: 'blob:x',
+                        deadline: 1000,
+                        guessDeadline: 121000,
+                        serverOffset: 0,
+                    },
                 ],
-                [at('viewing'), { type: 'media-unavailable', photoId: 'photo-1', deadline: 1000, serverOffset: 0 }],
+                [
+                    at('viewing'),
+                    {
+                        type: 'media-unavailable',
+                        photoId: 'photo-1',
+                        deadline: 1000,
+                        guessDeadline: 121000,
+                        serverOffset: 0,
+                    },
+                ],
                 [at('viewing'), { type: 'results-ready', photoId: 'photo-1', serverOffset: 0, results }],
                 [at('accepting'), { type: 'view-expired' }],
                 [at('waiting'), { type: 'view-expired' }],
                 [at('guessing'), { type: 'guess-now' }],
                 [at('viewing'), { type: 'guess-now' }],
+                [at('viewing'), { type: 'guess-timeout' }],
+                [at('waiting'), { type: 'guess-timeout' }],
+                [at('submitting'), { type: 'guess-timeout' }],
+                [at('results'), { type: 'guess-timeout' }],
+                [at('missed'), { type: 'guess-start' }],
                 [at('submitting'), { type: 'guess-start' }],
                 [at('submitting'), { type: 'select-location', lat: 1, long: 2 }],
                 [at('results'), { type: 'guess-start' }],
                 [
                     at('error'),
-                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                    {
+                        type: 'media-ready',
+                        photoId: 'photo-1',
+                        mediaUrl: 'blob:x',
+                        deadline: 1000,
+                        guessDeadline: 121000,
+                        serverOffset: 0,
+                    },
                 ],
                 // A guess cannot start without a map pin.
                 [at('guessing', { photoId: 'photo-1' }), { type: 'guess-start' }],
@@ -244,10 +288,18 @@ describe('gameReducer', () => {
                 // Phase-only actions are rejected from idle.
                 [
                     at('idle'),
-                    { type: 'media-ready', photoId: 'photo-1', mediaUrl: 'blob:x', deadline: 1000, serverOffset: 0 },
+                    {
+                        type: 'media-ready',
+                        photoId: 'photo-1',
+                        mediaUrl: 'blob:x',
+                        deadline: 1000,
+                        guessDeadline: 121000,
+                        serverOffset: 0,
+                    },
                 ],
                 [at('idle'), { type: 'select-location', lat: 1, long: 2 }],
                 [at('idle'), { type: 'view-expired' }],
+                [at('idle'), { type: 'guess-timeout' }],
             ];
             for (const [state, action] of cases) {
                 expect(reduce(state, action), JSON.stringify({ state, action })).toBe(state);

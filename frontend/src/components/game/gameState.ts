@@ -5,9 +5,20 @@ import { feedbackForScore, type GuessFeedback } from './guessFeedback';
  *  phase for both challenge acceptance and results loading (matching the
  *  pre-refactor UI). `expired` is preserved as a display-only state that no
  *  transition produces today; it renders like `error` but with a distinct
- *  heading, so it stays in the union for parity. */
+ *  heading, so it stays in the union for parity. `missed` is the terminal
+ *  state after the server-authoritative guess window elapses without a
+ *  guess. */
 export type GameStatus =
-    'idle' | 'accepting' | 'viewing' | 'waiting' | 'guessing' | 'submitting' | 'results' | 'expired' | 'error';
+    | 'idle'
+    | 'accepting'
+    | 'viewing'
+    | 'waiting'
+    | 'guessing'
+    | 'submitting'
+    | 'results'
+    | 'expired'
+    | 'error'
+    | 'missed';
 
 export interface GamePosition {
     lat: number;
@@ -25,7 +36,12 @@ export interface GameState {
     photoId?: string;
     mediaUrl?: string;
     mediaType?: string;
+    /** End of the private viewing window (drives the photo countdown). */
     deadline?: number;
+    /** Server-authoritative end of the guessing window; the map phase
+     *  countdown and the timeout transition are derived from it. The timer
+     *  therefore keeps running even when the app is closed. */
+    guessDeadline?: number;
     serverOffset: number;
     results?: ChallengeResults;
     message?: string;
@@ -44,13 +60,15 @@ export type GameAction =
           mediaUrl: string;
           mediaType?: string;
           deadline: number;
+          guessDeadline: number;
           serverOffset: number;
       }
-    | { type: 'media-unavailable'; photoId: string; deadline: number; serverOffset: number }
+    | { type: 'media-unavailable'; photoId: string; deadline: number; guessDeadline: number; serverOffset: number }
     | { type: 'accept-failed'; photoId: string; message: string }
     | { type: 'media-failed'; photoId: string; message: string }
     | { type: 'view-expired' }
     | { type: 'guess-now' }
+    | { type: 'guess-timeout' }
     | { type: 'select-location'; lat: number; long: number }
     | { type: 'guess-start' }
     | { type: 'guess-failed'; message: string }
@@ -86,11 +104,12 @@ const withStatus = (state: GameState, status: GameStatus): GameState => ({ ...st
  *   accepting             --results-failed-->   error
  *   viewing               --view-expired-->     waiting
  *   waiting               --guess-now-->        guessing
+ *   guessing              --guess-timeout-->    missed   (server guess deadline elapsed)
  *   guessing              --select-location-->  guessing  (map pin updated)
  *   guessing (pinned)     --guess-start-->      submitting
  *   submitting            --loading-->          accepting (results load after a guess)
  *   submitting            --guess-failed-->     error
- *   results | error | expired --close-->        idle
+ *   results | error | expired | missed --close-->        idle
  *   any                   --reset-->            idle      (challenge dismissed externally)
  *
  * `show-feedback` and `clear-feedback` are overlay-only actions: they mutate
@@ -114,6 +133,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                       mediaUrl: action.mediaUrl,
                       mediaType: action.mediaType,
                       deadline: action.deadline,
+                      guessDeadline: action.guessDeadline,
                       serverOffset: action.serverOffset,
                   }
                 : state;
@@ -123,6 +143,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                       status: 'guessing',
                       photoId: state.photoId,
                       deadline: action.deadline,
+                      guessDeadline: action.guessDeadline,
                       serverOffset: action.serverOffset,
                   }
                 : state;
@@ -150,6 +171,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             return state.status === 'viewing' ? withStatus(state, 'waiting') : state;
         case 'guess-now':
             return state.status === 'waiting' ? withStatus(state, 'guessing') : state;
+        case 'guess-timeout':
+            // The server deadline has elapsed without a submitted guess: the
+            // challenge is lost (0 points) and the player must close the view.
+            return state.status === 'guessing' ? withStatus(state, 'missed') : state;
         case 'select-location':
             return state.status === 'guessing'
                 ? { ...state, selectedLocation: { lat: action.lat, long: action.long } }
@@ -165,7 +190,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 ? { status: 'error', photoId: state.photoId, message: action.message, serverOffset: 0 }
                 : state;
         case 'close':
-            return state.status === 'results' || state.status === 'error' || state.status === 'expired'
+            return state.status === 'results' ||
+                state.status === 'error' ||
+                state.status === 'expired' ||
+                state.status === 'missed'
                 ? freshIdle()
                 : state;
         case 'reset':

@@ -43,6 +43,24 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         [clock, state.deadline, state.serverOffset],
     );
 
+    // The guessing-phase countdown derives from the server-published guess
+    // deadline, so it survives app restarts: reopening a challenge whose
+    // deadline already passed falls straight into the missed view.
+    const guessRemaining = useMemo(
+        () =>
+            state.guessDeadline
+                ? Math.max(0, Math.ceil((state.guessDeadline - (clock + state.serverOffset)) / 1000))
+                : 0,
+        [clock, state.guessDeadline, state.serverOffset],
+    );
+
+    // Full guess-window length (view end to guess deadline) for the timer
+    // bar fill ratio; the window is the delta the API already publishes.
+    const guessTotalSeconds = useMemo(() => {
+        if (!state.guessDeadline || !state.deadline) return 0;
+        return Math.max(0, Math.round((state.guessDeadline - state.deadline) / 1000));
+    }, [state.deadline, state.guessDeadline]);
+
     // Object-URL lifecycle: the committed media URL has a single owner that
     // revokes it exactly once — when it is replaced or dropped by a state
     // transition, and when the component unmounts (previously leaked).
@@ -92,6 +110,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 const data = response.data;
                 const serverOffset = Date.parse(data.server_time) - Date.now();
                 const serverDeadline = Date.parse(data.view_expires_at);
+                const serverGuessDeadline = Date.parse(data.guess_expires_at);
                 let mediaUrl: string | undefined;
                 let mediaError: unknown;
                 try {
@@ -111,6 +130,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         mediaUrl,
                         mediaType: data.media_type,
                         deadline: Date.parse(delivered.data.view_expires_at),
+                        guessDeadline: Date.parse(delivered.data.guess_expires_at),
                         serverOffset: Date.parse(delivered.data.server_time) - Date.now(),
                     });
                     onChallengeStatusChange?.(photoId, 'accepted');
@@ -138,7 +158,13 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 // already elapsed (e.g. the player already viewed this
                 // challenge), they may still submit a guess.
                 if (serverDeadline <= Date.now() + serverOffset) {
-                    dispatch({ type: 'media-unavailable', photoId, deadline: serverDeadline, serverOffset });
+                    dispatch({
+                        type: 'media-unavailable',
+                        photoId,
+                        deadline: serverDeadline,
+                        guessDeadline: serverGuessDeadline,
+                        serverOffset,
+                    });
                     return;
                 }
                 dispatch({
@@ -224,10 +250,12 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     }, [onClose]);
 
     useEffect(() => {
-        if (!state.deadline || !['viewing', 'waiting'].includes(state.status)) return undefined;
+        const viewingPhase = state.deadline !== undefined && ['viewing', 'waiting'].includes(state.status);
+        const guessingPhase = state.status === 'guessing' && state.guessDeadline !== undefined;
+        if (!viewingPhase && !guessingPhase) return undefined;
         const timer = window.setInterval(() => setClock(Date.now()), 200);
         return () => window.clearInterval(timer);
-    }, [state.deadline, state.status]);
+    }, [state.deadline, state.guessDeadline, state.status]);
 
     useEffect(() => {
         if (state.status === 'viewing' && remaining <= 0) dispatch({ type: 'view-expired' });
@@ -236,6 +264,15 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     useEffect(() => {
         if (state.status === 'waiting' && remaining <= 0) dispatch({ type: 'guess-now' });
     }, [remaining, state.status]);
+
+    useEffect(() => {
+        // The guess deadline is server-authoritative; once it passes, the
+        // player cannot guess anymore (the server refuses late submissions
+        // with guess_time_expired) and the challenge counts as 0 points.
+        if (state.status === 'guessing' && state.guessDeadline !== undefined && guessRemaining <= 0) {
+            dispatch({ type: 'guess-timeout' });
+        }
+    }, [guessRemaining, state.guessDeadline, state.status]);
 
     useEffect(() => {
         const photoId = gameMessage?.photo_id;
@@ -276,6 +313,8 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             state={state}
             loadingMedia={loadingMediaPhotoId === gameMessage?.photo_id}
             remaining={remaining}
+            guessRemaining={guessRemaining}
+            guessTotalSeconds={guessTotalSeconds}
             serverNowMs={clock + state.serverOffset}
             feedback={feedbackOverlay}
             currentUserId={user?.id}

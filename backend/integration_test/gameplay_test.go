@@ -61,6 +61,54 @@ func TestConcurrentMediaDeliveryConfirmation(t *testing.T) {
 	}
 }
 
+// TestGuessRejectedAfterGuessWindowExpiry pins the server-authoritative guess
+// deadline end-to-end: accept and delivery publish guess_expires_at (view end
+// + GUESS_WINDOW), and a guess submitted after it is refused with 410
+// guess_time_expired without creating a guess row (the challenge counts as 0
+// points for that member). The recorded deadline is pushed into the past
+// directly so the test does not wait for the configured GUESS_WINDOW.
+func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
+	alice := signup(t, unique("gwalice"), unique("gwalice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("gwbob"), unique("gwbob")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Guess Window Group")
+	joinGroup(t, bob.access, code)
+	photoID := uploadPhoto(t, alice.access, groupID)
+
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
+	require.True(t, strings.HasPrefix(acc.MediaURL, "/api/v1/challenges/"), "media must be same-origin, got %q", acc.MediaURL)
+	// The guess deadline is the view end plus the default GUESS_WINDOW (2m),
+	// published by both the accept and the delivery responses.
+	require.False(t, acc.GuessExpiresAt.IsZero(), "accept/delivery must publish guess_expires_at")
+	require.WithinDuration(t, acc.ViewExpiresAt.Add(2*time.Minute), acc.GuessExpiresAt, time.Second,
+		"guess deadline must be view end + GUESS_WINDOW")
+
+	waitUntilViewExpires(t, acc.ViewExpiresAt)
+
+	// A guess inside the window is accepted...
+	require.Equal(t, http.StatusCreated, guess(t, bob.access, photoID, 51.505, -0.09))
+
+	// ...and after the (moved) deadline the same challenge refuses a second
+	// guess outright: idempotency reads the existing row, so the refusal must
+	// be tested with a fresh challenge that never got a guess.
+	photoID2 := uploadPhoto(t, alice.access, groupID)
+	acc2 := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID2))
+	waitUntilViewExpires(t, acc2.ViewExpiresAt)
+	db := testDB(t)
+	_, err := db.Exec(t.Context(),
+		`UPDATE challenge_views SET guess_expires_at = NOW() - interval '1 second' WHERE photo_id = $1 AND user_id = $2`,
+		photoID2, bob.userID)
+	require.NoError(t, err)
+
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID2+"/guess",
+		map[string]float64{"lat": 51.505, "long": -0.09}, bob.access, nil)
+	require.Equal(t, http.StatusGone, resp.StatusCode)
+	require.Contains(t, string(data), "guess_time_expired")
+	var count int
+	require.NoError(t, db.QueryRow(t.Context(),
+		`SELECT count(*) FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID2, bob.userID).Scan(&count))
+	require.Zero(t, count, "a refused late guess must not create a guess row")
+}
+
 // TestLeaderboardRankingDeterminism pins ranking determinism: reading the same
 // group leaderboard twice must produce a byte-identical response, and the Elo
 // ordering must follow guess quality (a closer guess ranks above a farther
