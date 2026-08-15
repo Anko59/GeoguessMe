@@ -28,6 +28,10 @@ override with `QA_FAKE_LATITUDE`, `QA_FAKE_LONGITUDE`, and
 camera/location probe so the report can distinguish an unexercised journey from
 a missing test capability.
 
+Same-origin link clicks wait for a destination change before returning their
+observation, so a transient pre-navigation page cannot be mistaken for a failed
+product link.
+
 The same MCP server exposes a high-level disposable mailbox contract:
 `mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
 default provider is Mail.tm, which requires no operator mailbox credential; the
