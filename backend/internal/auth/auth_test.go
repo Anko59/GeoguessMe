@@ -29,14 +29,15 @@ func TestPasswordHashing(t *testing.T) {
 
 func TestTokenGeneration(t *testing.T) {
 	userID := "user123"
+	service := NewService("a-test-secret-that-is-longer-than-32-bytes", "issuer", "audience", 15*time.Minute)
 
 	// Generate Token
-	token, err := GenerateToken(userID)
+	token, err := service.GenerateToken(userID)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
 	// Validate Token
-	claims, err := ValidateToken(token)
+	claims, err := service.ValidateToken(token)
 	assert.NoError(t, err)
 	assert.Equal(t, userID, claims.UserID)
 

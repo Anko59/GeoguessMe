@@ -14,10 +14,12 @@ export default function Signup() {
     const navigate = useNavigate();
     const location = useLocation();
     const { login } = useAuth();
-    const returnTo =
-        typeof location.state?.from === 'string' && /^\/group\/join(?:\?code=|$)/.test(location.state.from)
-            ? location.state.from
-            : '/groups';
+    const rawFrom = typeof location.state?.from === 'string' ? location.state.from : '';
+    // Strip any query string or fragment: the invite token never travels in a
+    // URL query. GroupJoin reads it from sessionStorage after signup, so only a
+    // bare /group/join is a valid post-auth target.
+    const fromPath = rawFrom.split('?')[0].split('#')[0];
+    const returnTo = fromPath === '/group/join' ? '/group/join' : '/groups';
 
     const handleSubmit = async (event: React.FormEvent): Promise<void> => {
         event.preventDefault();
@@ -53,15 +55,18 @@ export default function Signup() {
                         required
                         autoComplete="username"
                     />
-                    <label htmlFor="signup-email">Email</label>
+                    <label htmlFor="signup-email">Recovery email (optional)</label>
                     <input
                         id="signup-email"
                         type="email"
-                        placeholder="Email"
+                        placeholder="Email — verify to enable account recovery"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
                         autoComplete="email"
                     />
+                    <p className="auth-hint">
+                        Email is a recovery/contact channel, not an identity — an optional address you can verify later.
+                    </p>
                     <label htmlFor="signup-password">Password</label>
                     <input
                         id="signup-password"

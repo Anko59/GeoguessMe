@@ -168,8 +168,11 @@ record the infrastructure failure separately from application test failures.
 
 **Symptom**: Requests return 429 with `Retry-After` header.
 
-- Default rate limit is 10 requests per minute per identity
-- The `Retry-After` value equals `RATE_LIMIT_WINDOW` in seconds
-- Increase `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW` for testing
-- Rate limiting is only applied to auth endpoints (signup, login, refresh,
-  verify, forgot/reset password)
+- Limits are policy-specific and may combine identity, trusted-client-IP,
+  authenticated-user, route, and process-global buckets
+- `Retry-After` is the number of seconds until every exhausted bucket for the
+  request has reset
+- Adjust the relevant `RATE_LIMIT_<POLICY>` value only in non-production test
+  configuration; keep the mandated production defaults
+- Rate limiting covers authentication and push-subscription endpoints; see
+  [configuration](configuration.md) for the policy map

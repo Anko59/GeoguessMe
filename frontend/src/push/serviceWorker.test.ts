@@ -37,3 +37,41 @@ describe('service worker registration', () => {
         await expect(registerServiceWorker()).resolves.toBe('error');
     });
 });
+
+describe('public service worker notification navigation', () => {
+    it('replaces an external notification target with the safe groups route', async () => {
+        type WorkerEvent = {
+            notification: { close: () => void; data: { url: string } };
+            waitUntil: (promise: Promise<unknown>) => void;
+        };
+        const listeners = new Map<string, (event: WorkerEvent) => void>();
+        const openWindow = vi.fn().mockResolvedValue(null);
+        const worker = {
+            location: { origin: 'https://app.example' },
+            clients: { matchAll: vi.fn().mockResolvedValue([]), openWindow, claim: vi.fn() },
+            registration: { showNotification: vi.fn() },
+            addEventListener: (name: string, listener: (event: WorkerEvent) => void) => listeners.set(name, listener),
+            skipWaiting: vi.fn(),
+        };
+        const cacheStorage = { keys: vi.fn().mockResolvedValue([]), delete: vi.fn() };
+        const nodeProcess = (
+            globalThis as unknown as {
+                process: { getBuiltinModule(name: string): { readFileSync(path: string, encoding: string): string } };
+            }
+        ).process;
+        const source = nodeProcess.getBuiltinModule('fs').readFileSync('/workspace/frontend/public/sw.js', 'utf8');
+        new Function('self', 'caches', source)(worker, cacheStorage);
+
+        let navigation: Promise<unknown> | undefined;
+        listeners.get('notificationclick')?.({
+            notification: { close: vi.fn(), data: { url: 'https://evil.example/phish' } },
+            waitUntil: (promise: Promise<unknown>) => {
+                navigation = promise;
+            },
+        });
+        await navigation;
+
+        expect(openWindow).toHaveBeenCalledWith('/groups');
+        expect(openWindow).not.toHaveBeenCalledWith(expect.stringContaining('evil.example'));
+    });
+});

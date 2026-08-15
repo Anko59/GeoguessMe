@@ -115,7 +115,7 @@ beforeEach(() => {
         error: '',
     });
     mocks.get.mockResolvedValue({
-        data: { id: 'group-1', name: 'Test Group', code: 'ABC123', created_at: '2026-01-01T00:00:00Z' },
+        data: { id: 'group-1', name: 'Test Group', created_at: '2026-01-01T00:00:00Z' },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (Element.prototype as any).scrollIntoView = vi.fn();
@@ -144,6 +144,21 @@ describe('GroupView', () => {
         mocks.get.mockRejectedValue(new Error('group unavailable'));
         renderGroupView('group-1');
         expect(await screen.findByRole('alert')).toHaveTextContent('group unavailable');
+        expect(screen.queryByRole('button', { name: 'Open group settings' })).toBeNull();
+        expect(screen.queryByTestId('chat')).toBeNull();
+    });
+
+    it('shows a clear access-denied state for an unauthorized group', async () => {
+        mocks.get.mockRejectedValue({ response: { status: 403 } });
+        renderGroupView('group-1');
+
+        expect(
+            await screen.findByRole('heading', { name: 'You do not have access to this group.' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Back to groups' })).toHaveAttribute('href', '/groups');
+        expect(screen.queryByText('Connecting…')).toBeNull();
+        expect(screen.queryByTestId('chat')).toBeNull();
+        expect(screen.queryByTestId('tab-bar')).toBeNull();
     });
 
     it('shows messages error when useGroupMessages reports an error', async () => {

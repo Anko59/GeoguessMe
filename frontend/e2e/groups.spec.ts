@@ -1,12 +1,20 @@
 import { test, expect } from './fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
-import { newAuthContext, signupViaUI, uniqueEmail, uniqueGroup, uniqueUsername } from './helpers';
+import {
+    createInviteFromSettings,
+    joinGroupViaInvite,
+    newAuthContext,
+    signupViaUI,
+    uniqueEmail,
+    uniqueGroup,
+    uniqueUsername,
+} from './helpers';
 
 interface OwnerScenario {
     context: BrowserContext;
     page: Page;
     groupID: string;
-    groupCode: string;
+    inviteUrl: string;
 }
 
 async function createOwnerScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<OwnerScenario> {
@@ -20,10 +28,9 @@ async function createOwnerScenario(browser: Browser, contextOptions: BrowserCont
     const groupID = page.url().split('/group/')[1];
 
     await page.getByRole('button', { name: 'Open group settings' }).click();
-    const settings = page.getByRole('dialog');
-    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-    await settings.getByRole('button', { name: 'Close settings' }).click();
-    return { context, page, groupID, groupCode };
+    const inviteUrl = await createInviteFromSettings(page);
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    return { context, page, groupID, inviteUrl };
 }
 
 test.describe('Group operations', () => {
@@ -36,6 +43,20 @@ test.describe('Group operations', () => {
             // mobile layout must not collapse both into a generic label).
             await expect(owner.page.getByRole('link', { name: 'Profile' })).toBeVisible();
             await expect(owner.page.getByRole('link', { name: 'Settings' })).toBeVisible();
+            await owner.page.getByRole('link', { name: 'Settings' }).click();
+            await expect(owner.page).toHaveURL(/\/settings$/);
+            await expect(owner.page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+        } finally {
+            await owner.context.close();
+        }
+    });
+
+    test('owner can open the profile from a group without a full reload', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            await owner.page.getByRole('link', { name: 'Open your profile' }).click();
+            await expect(owner.page).toHaveURL(/\/profile$/);
+            await expect(owner.page.getByText('Adventurer card')).toBeVisible();
         } finally {
             await owner.context.close();
         }
@@ -67,16 +88,13 @@ test.describe('Group operations', () => {
         }
     });
 
-    test('second user can join the group via code and see it', async ({ browser, contextOptions }) => {
+    test('second user can join the group via invite link and see it', async ({ browser, contextOptions }) => {
         const owner = await createOwnerScenario(browser, contextOptions);
         const joinerContext = await newAuthContext(browser, contextOptions);
         try {
             const joinerPage = await joinerContext.newPage();
             await signupViaUI(joinerPage);
-            await joinerPage.goto('/group/join');
-            await joinerPage.getByPlaceholder('6-character code').fill(owner.groupCode);
-            await joinerPage.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-            await joinerPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await joinGroupViaInvite(joinerPage, owner.inviteUrl, owner.groupID);
             await joinerPage.goto('/groups');
             await expect(joinerPage.locator('.groups-grid')).toBeVisible();
         } finally {
@@ -90,13 +108,17 @@ test.describe('Group operations', () => {
         const inviteContext = await newAuthContext(browser, contextOptions);
         try {
             const invitePage = await inviteContext.newPage();
-            await invitePage.goto(`/group/join?code=${owner.groupCode}`);
+            await invitePage.goto(owner.inviteUrl);
             await expect(invitePage).toHaveURL(/\/login/);
             await invitePage.getByRole('link', { name: 'Sign up' }).click();
             await invitePage.fill('#signup-username', uniqueUsername());
             await invitePage.fill('#signup-email', uniqueEmail());
             await invitePage.fill('#signup-password', 'TestPass123');
             await invitePage.locator('button.btn-primary[type="submit"]').click();
+            // The token survives in sessionStorage; the preview resolves and the
+            // join button appears before the group page is reached.
+            await expect(invitePage.getByTestId('join-btn')).toBeVisible({ timeout: 10000 });
+            await invitePage.getByTestId('join-btn').click();
             await invitePage.waitForURL(new RegExp(`/group/${owner.groupID}$`));
         } finally {
             await inviteContext.close();
@@ -111,7 +133,7 @@ test.describe('Group operations', () => {
             const outsiderPage = await outsiderContext.newPage();
             await signupViaUI(outsiderPage);
             await outsiderPage.goto(`/group/${owner.groupID}`);
-            await expect(outsiderPage.locator('[role="alert"]')).toContainText('You are not a member of this group');
+            await expect(outsiderPage.locator('[role="alert"]')).toContainText('You do not have access to this group.');
         } finally {
             await outsiderContext.close();
             await owner.context.close();
@@ -120,29 +142,25 @@ test.describe('Group operations', () => {
 });
 
 test.describe('Group validation', () => {
-    test('join form shows error for a non-existent group code', async ({ browser, contextOptions }) => {
+    test('join page shows an invalid state for a non-existent invite token', async ({ browser, contextOptions }) => {
         const context = await newAuthContext(browser, contextOptions);
         try {
             const page = await context.newPage();
             await signupViaUI(page);
-            await page.goto('/group/join');
-            await page.getByPlaceholder('6-character code').fill('ZZZZZZ');
-            await page.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-            await expect(page.locator('.error-message')).toBeVisible();
+            await page.goto('/group/join#invite=definitely-not-a-real-token');
+            await expect(page.locator('[role="alert"]')).toContainText('invalid or has expired');
         } finally {
             await context.close();
         }
     });
 
-    test('join form requires a code before submission', async ({ browser, contextOptions }) => {
+    test('join page shows a no-invite state when no token is present', async ({ browser, contextOptions }) => {
         const context = await newAuthContext(browser, contextOptions);
         try {
             const page = await context.newPage();
             await signupViaUI(page);
             await page.goto('/group/join');
-            const input = page.getByPlaceholder('6-character code');
-            await expect(input).toHaveAttribute('required', '');
-            await expect(input).toHaveAttribute('maxLength', '6');
+            await expect(page.locator('[role="alert"]')).toContainText('No invite link found');
         } finally {
             await context.close();
         }
@@ -161,17 +179,29 @@ test.describe('Group validation', () => {
         }
     });
 
-    test('join form code input uppercases on entry', async ({ browser, contextOptions }) => {
+    test('a revoked invite link shows an invalid state', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
         const context = await newAuthContext(browser, contextOptions);
         try {
+            // The owner revokes the invite they created.
+            await owner.page.getByRole('button', { name: 'Open group settings' }).click();
+            const settings = owner.page.getByRole('dialog');
+            await settings
+                .locator('.invites-list .invite-item')
+                .first()
+                .getByRole('button', { name: 'Revoke' })
+                .click();
+            await expect(settings.locator('.invite-state-label.revoked')).toContainText('Revoked');
+            await settings.getByRole('button', { name: 'Close settings' }).click();
+
+            // A joiner opening the revoked invite sees the generic invalid state.
             const page = await context.newPage();
             await signupViaUI(page);
-            await page.goto('/group/join');
-            const input = page.getByPlaceholder('6-character code');
-            await input.fill('abcdef');
-            await expect(input).toHaveValue('ABCDEF');
+            await page.goto(owner.inviteUrl);
+            await expect(page.locator('[role="alert"]')).toContainText('invalid or has expired');
         } finally {
             await context.close();
+            await owner.context.close();
         }
     });
 });
@@ -306,10 +336,7 @@ test.describe('Membership changes', () => {
         try {
             const joinerPage = await joinerContext.newPage();
             await signupViaUI(joinerPage);
-            await joinerPage.goto('/group/join');
-            await joinerPage.getByPlaceholder('6-character code').fill(owner.groupCode);
-            await joinerPage.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-            await joinerPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+            await joinGroupViaInvite(joinerPage, owner.inviteUrl, owner.groupID);
 
             // Owner opens settings and expands members.
             await owner.page.goto(`/group/${owner.groupID}`);

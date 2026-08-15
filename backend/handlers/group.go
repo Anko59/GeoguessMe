@@ -2,21 +2,19 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
-	"html"
 	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
-	"time"
 
 	"geoguessme/internal/auth"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
-	"geoguessme/internal/repository"
+	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
 
@@ -27,6 +25,10 @@ type CreateGroupRequest struct {
 	Name string `json:"name"`
 }
 type JoinGroupRequest struct {
+	InviteToken string `json:"invite_token"`
+	// Code is the legacy typed group code (F-06). It is accepted by the
+	// decoder only so the handler can reject it with a dedicated 410 instead
+	// of a generic body-validation error; typed-code joins are disabled.
 	Code string `json:"code"`
 }
 
@@ -43,18 +45,18 @@ func generateGroupCode() (string, error) {
 	return string(b), nil
 }
 
-func CreateGroup(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	var req CreateGroupRequest
-	if !decodeJSON(w, r, &req) {
+	if !DecodeJSON(w, r, &req) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if err := validation.ValidateGroupName(req.Name); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_group_name", err.Error())
+		WriteError(w, http.StatusBadRequest, "invalid_group_name", err.Error())
 		return
 	}
 	var code string
@@ -62,12 +64,12 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 	for attempt := 0; attempt < 8; attempt++ {
 		code, err = generateGroupCode()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 			return
 		}
-		group, lookupErr := repository.GetGroupByCodeContext(r.Context(), code)
+		group, lookupErr := a.groups.ByCode(r.Context(), code)
 		if lookupErr != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 			return
 		}
 		if group == nil {
@@ -75,297 +77,318 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if code == "" {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to create group")
 		return
 	}
-	now := time.Now()
+	now := a.clock()
 	group := &models.Group{ID: uuid.NewString(), Name: req.Name, Code: code, CreatedAt: now}
-	if err := repository.CreateGroupAndMembership(r.Context(), group, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusConflict, "group_exists", "Unable to create group")
+	if err := a.groups.Create(r.Context(), group, GetUserIDFromContext(r)); err != nil {
+		WriteError(w, http.StatusConflict, "group_exists", "Unable to create group")
 		return
 	}
-	writeJSON(w, http.StatusCreated, group)
+	WriteJSON(w, http.StatusCreated, group)
 }
 
-func JoinGroup(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) JoinGroup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	var req JoinGroupRequest
-	if !decodeJSON(w, r, &req) {
+	if !DecodeJSON(w, r, &req) {
 		return
 	}
-	req.Code = strings.ToUpper(strings.TrimSpace(req.Code))
-	if err := validation.ValidateGroupCode(req.Code); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_group_code", err.Error())
+	if strings.TrimSpace(req.Code) != "" {
+		// Legacy typed group codes were removed (F-06); the only accepted
+		// join credential is a bearer invite token.
+		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
 		return
 	}
-	group, err := repository.GetGroupByCodeContext(r.Context(), req.Code)
+	token := req.InviteToken
+	if token == "" {
+		// No bearer invite token: the join credential is absent. Legacy
+		// typed-group-code joins were removed (F-06).
+		WriteError(w, http.StatusGone, "legacy_group_code_disabled", "Group codes are no longer supported; use an invite link")
+		return
+	}
+	if !validInviteToken(token) {
+		WriteError(w, http.StatusBadRequest, "invalid_invite_token", "invite_token must be a valid invite token")
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	group, err := a.groups.JoinByInviteTokenHash(r.Context(), auth.HashToken(token), userID, a.clock())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
 		return
 	}
 	if group == nil {
-		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
+		WriteError(w, http.StatusNotFound, "invite_not_found", "Invite not found or expired")
 		return
 	}
-	if isMember, err := repository.IsGroupMemberContext(r.Context(), group.ID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
-		return
-	} else if isMember {
-		// Invite links are intentionally idempotent: completing authentication
-		// and replaying an invite must still open the existing group.
-		writeJSON(w, http.StatusOK, group)
-		return
-	}
-	if err := repository.AddGroupMemberContext(r.Context(), &models.GroupMember{GroupID: group.ID, UserID: GetUserIDFromContext(r), JoinedAt: time.Now()}); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to join group")
-		return
-	}
-	writeJSON(w, http.StatusOK, group)
+	WriteJSON(w, http.StatusOK, group)
 }
 
-func GetLeaderboard(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) GetLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	groupID := r.URL.Query().Get("group_id")
 	if groupID == "" {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
-	period, validPeriod := repository.ParseLeaderboardPeriod(r.URL.Query().Get("period"))
+	userID := GetUserIDFromContext(r)
+	period, validPeriod := groups.ParseLeaderboardPeriod(r.URL.Query().Get("period"))
 	if r.URL.Query().Get("period") == "" {
-		period = repository.LeaderboardAllTime
+		period = groups.LeaderboardAllTime
 		validPeriod = true
 	}
 	if !validPeriod {
-		writeError(w, http.StatusBadRequest, "invalid_period", "period must be week, month, or all")
+		WriteError(w, http.StatusBadRequest, "invalid_period", "period must be week, month, or all")
 		return
 	}
-	metric, validMetric := repository.ParseLeaderboardMetric(r.URL.Query().Get("metric"))
+	metric, validMetric := groups.ParseLeaderboardMetric(r.URL.Query().Get("metric"))
 	if r.URL.Query().Get("metric") == "" {
-		metric = repository.LeaderboardMetricTotal
+		metric = groups.LeaderboardMetricTotal
 		validMetric = true
 	}
 	if !validMetric {
-		writeError(w, http.StatusBadRequest, "invalid_metric", "metric must be total, average, or elo")
+		WriteError(w, http.StatusBadRequest, "invalid_metric", "metric must be total, average, or elo")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	entries, err := repository.GetGroupLeaderboardForPeriodContext(r.Context(), groupID, period)
+	entries, err := a.groups.LeaderboardForPeriod(r.Context(), groupID, period)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load leaderboard")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load leaderboard")
 		return
 	}
 	if entries == nil {
-		entries = []repository.LeaderboardEntry{}
+		entries = []groups.LeaderboardEntry{}
 	}
-	repository.SortLeaderboard(entries, metric)
-	writeJSON(w, http.StatusOK, entries)
+	groups.SortLeaderboard(entries, metric)
+	WriteJSON(w, http.StatusOK, entries)
 }
 
-func GetGroupDetails(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) GetGroupDetails(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	userID := GetUserIDFromContext(r)
 	groupID := r.URL.Query().Get("id")
 	if groupID == "" {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "id is required")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	group, err := repository.GetGroupByID(groupID)
+	group, err := a.groups.ByID(r.Context(), groupID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
+		WriteError(w, http.StatusNotFound, "group_not_found", "Group not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, group)
+	WriteJSON(w, http.StatusOK, group)
 }
 
-func GetGroupMembers(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	userID := GetUserIDFromContext(r)
 	groupID := r.URL.Query().Get("id")
 	if groupID == "" {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "id is required")
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "id is required")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, userID); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	members, err := repository.GetGroupMembers(groupID)
+	members, err := a.groups.Members(r.Context(), groupID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load members")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load members")
 		return
 	}
-	writeJSON(w, http.StatusOK, members)
+	WriteJSON(w, http.StatusOK, members)
 }
 
-func GetUserGroups(w http.ResponseWriter, r *http.Request) {
+// GroupReader is the narrow persistence contract the migrated group read
+// handlers need. It is defined at the handler boundary so handler tests can
+// substitute a fake instead of swapping the database.DB package global (PR 4
+// pilot slice). The concrete *repository.Repository satisfies it.
+type GroupReader interface {
+	UserGroups(ctx context.Context, userID string) ([]models.Group, error)
+}
+
+// GroupAPI serves group read endpoints from injected dependencies. It is the
+// target pattern for removing handler package globals: each migrated endpoint
+// becomes a method here and the application composition root holds a
+// *GroupAPI.
+type GroupAPI struct {
+	groups GroupReader
+}
+
+// NewGroupAPI constructs the migrated group read API with its reader.
+func NewGroupAPI(groups GroupReader) *GroupAPI {
+	return &GroupAPI{groups: groups}
+}
+
+// GetUserGroups lists the groups the authenticated user belongs to, newest
+// first. It was migrated in PR 4 onto the injected GroupReader; the response
+// shape, status codes, and error envelope are unchanged.
+func (a *GroupAPI) GetUserGroups(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		MethodNotAllowed(w)
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	groups, err := repository.GetUserGroups(userID)
+	groups, err := a.groups.UserGroups(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load groups")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load groups")
 		return
 	}
-	writeJSON(w, http.StatusOK, groups)
+	WriteJSON(w, http.StatusOK, groups)
 }
 
 type groupNotificationRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
-func GroupNotifications(w http.ResponseWriter, r *http.Request) {
+func (a *GameAPI) GroupNotifications(w http.ResponseWriter, r *http.Request) {
 	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
-	if err := validateID(groupID, "group_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
-		return
-	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
 	userID := GetUserIDFromContext(r)
-	switch r.Method {
-	case http.MethodGet:
-		enabled, err := repository.GetGroupNotificationPreferenceContext(r.Context(), groupID, userID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to load notification settings")
-			return
-		}
-		writeJSON(w, http.StatusOK, groupNotificationRequest{Enabled: enabled})
-	case http.MethodPut:
-		var req groupNotificationRequest
-		if !decodeJSON(w, r, &req) {
-			return
-		}
-		if err := repository.SetGroupNotificationPreferenceContext(r.Context(), groupID, userID, req.Enabled); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save notification settings")
-			return
-		}
-		writeJSON(w, http.StatusOK, req)
-	default:
-		methodNotAllowed(w)
-	}
-}
-
-func GroupPhoto(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		serveGroupPhoto(w, r)
-	case http.MethodPost:
-		uploadGroupPhoto(w, r)
-	default:
-		methodNotAllowed(w)
-	}
-}
-
-func uploadGroupPhoto(w http.ResponseWriter, r *http.Request) {
-	if MediaStore == nil || RuntimeConfig == nil {
-		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	maxBytes := RuntimeConfig.UploadMaxBytes
+	switch r.Method {
+	case http.MethodGet:
+		enabled, err := a.groups.NotificationPreference(r.Context(), groupID, userID)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load notification settings")
+			return
+		}
+		WriteJSON(w, http.StatusOK, groupNotificationRequest{Enabled: enabled})
+	case http.MethodPut:
+		var req groupNotificationRequest
+		if !DecodeJSON(w, r, &req) {
+			return
+		}
+		if err := a.groups.SetNotificationPreference(r.Context(), groupID, userID, req.Enabled); err != nil {
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to save notification settings")
+			return
+		}
+		WriteJSON(w, http.StatusOK, req)
+	default:
+		MethodNotAllowed(w)
+	}
+}
+
+func (a *GameAPI) GroupPhoto(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		a.serveGroupPhoto(w, r)
+	case http.MethodPost:
+		a.uploadGroupPhoto(w, r)
+	default:
+		MethodNotAllowed(w)
+	}
+}
+
+func (a *GameAPI) uploadGroupPhoto(w http.ResponseWriter, r *http.Request) {
+	if a.store == nil || a.cfg == nil {
+		WriteError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
+		return
+	}
+	maxBytes := a.cfg.UploadMaxBytes
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1024*1024)
 	if err := r.ParseMultipartForm(maxBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
+		WriteError(w, http.StatusBadRequest, "invalid_upload", "Upload is too large or malformed")
 		return
 	}
 	groupID := strings.TrimSpace(r.FormValue("group_id"))
-	if err := validateID(groupID, "group_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	userID := GetUserIDFromContext(r)
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing_photo", "A photo is required")
+		WriteError(w, http.StatusBadRequest, "missing_photo", "A photo is required")
 		return
 	}
 	defer file.Close()
-	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes, RuntimeConfig.UploadMaxPixels)
+	normalized, err := media.NormalizeAvatar(file, header.Size, maxBytes, a.cfg.UploadMaxPixels)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_photo", err.Error())
+		WriteError(w, http.StatusBadRequest, "invalid_photo", err.Error())
 		return
 	}
 	key := "groups/" + groupID + "/photo/" + uuid.NewString()
-	if err := MediaStore.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to store group photo")
+	if err := a.store.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to store group photo")
 		return
 	}
-	photo := &models.GroupPhoto{GroupID: groupID, StorageKey: key, MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: time.Now()}
-	previousKey, err := repository.SetGroupPhotoContext(r.Context(), photo)
+	photo := &models.GroupPhoto{GroupID: groupID, StorageKey: key, MIMEType: normalized.MIMEType, ByteSize: int64(len(normalized.Data)), CreatedAt: a.clock()}
+	previousKey, err := a.groups.SetGroupPhoto(r.Context(), photo)
 	if err != nil {
-		cleanupGroupPhoto(r, key)
-		writeError(w, http.StatusInternalServerError, "internal_error", "Unable to save group photo")
+		a.cleanupGroupPhoto(r, key)
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to save group photo")
 		return
 	}
 	if previousKey != "" && previousKey != key {
-		if err := MediaStore.Delete(r.Context(), previousKey); err != nil {
-			if enqueueErr := repository.EnqueueMediaDeletion(r.Context(), "group-photo-replacement", []string{previousKey}); enqueueErr != nil {
+		if err := a.store.Delete(r.Context(), previousKey); err != nil {
+			if enqueueErr := a.media.EnqueueMediaDeletion(r.Context(), "group-photo-replacement", []string{previousKey}); enqueueErr != nil {
 				slog.Error("failed to queue replaced group photo", "storage_key", previousKey, "delete_error", err, "enqueue_error", enqueueErr)
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"group_id": photo.GroupID, "mime_type": photo.MIMEType, "byte_size": photo.ByteSize, "created_at": photo.CreatedAt})
+	WriteJSON(w, http.StatusOK, map[string]any{"group_id": photo.GroupID, "mime_type": photo.MIMEType, "byte_size": photo.ByteSize, "created_at": photo.CreatedAt})
 }
 
-func cleanupGroupPhoto(r *http.Request, key string) {
-	if err := MediaStore.Delete(r.Context(), key); err != nil {
-		if enqueueErr := repository.EnqueueMediaDeletion(r.Context(), "group-photo-compensation", []string{key}); enqueueErr != nil {
+func (a *GameAPI) cleanupGroupPhoto(r *http.Request, key string) {
+	if err := a.store.Delete(r.Context(), key); err != nil {
+		if enqueueErr := a.media.EnqueueMediaDeletion(r.Context(), "group-photo-compensation", []string{key}); enqueueErr != nil {
 			slog.Error("failed to queue group photo compensation", "storage_key", key, "delete_error", err, "enqueue_error", enqueueErr)
 		}
 	}
 }
 
-func serveGroupPhoto(w http.ResponseWriter, r *http.Request) {
-	if MediaStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
+func (a *GameAPI) serveGroupPhoto(w http.ResponseWriter, r *http.Request) {
+	if a.store == nil {
+		WriteError(w, http.StatusServiceUnavailable, "storage_unavailable", "Group photo storage is unavailable")
 		return
 	}
 	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
-	if err := validateID(groupID, "group_id"); err != nil {
-		writeError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
 		return
 	}
-	if err := auth.VerifyGroupMembership(r.Context(), groupID, GetUserIDFromContext(r)); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+	userID := GetUserIDFromContext(r)
+	if !a.requireMember(w, r, groupID, userID) {
 		return
 	}
-	photo, err := repository.GetGroupPhotoContext(r.Context(), groupID)
+	photo, err := a.groups.GroupPhoto(r.Context(), groupID)
 	if err != nil || photo == nil {
-		writeError(w, http.StatusNotFound, "not_found", "No group photo")
+		WriteError(w, http.StatusNotFound, "not_found", "No group photo")
 		return
 	}
-	object, err := MediaStore.Get(r.Context(), photo.StorageKey)
+	object, err := a.store.Get(r.Context(), photo.StorageKey)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "No group photo")
+			WriteError(w, http.StatusNotFound, "not_found", "No group photo")
 			return
 		}
-		writeError(w, http.StatusBadGateway, "storage_error", "Unable to read group photo")
+		WriteError(w, http.StatusBadGateway, "storage_error", "Unable to read group photo")
 		return
 	}
 	defer object.Close()
@@ -373,63 +396,4 @@ func serveGroupPhoto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, object)
-}
-
-// invitePageTemplate is a minimal HTML shell with Open Graph meta tags so
-// messengers render a rich preview when someone shares an invite link. It also
-// includes a meta refresh that redirects the browser to the join page.
-const invitePageTemplate = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta property="og:title" content="%s">
-<meta property="og:description" content="%s">
-<meta property="og:image" content="%s/logo.png">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="GeoGuessMe">
-<meta http-equiv="refresh" content="0;url=%s">
-<title>%s</title>
-</head>
-<body></body>
-</html>`
-
-// HandleInvitePreview renders Open Graph link preview metadata for group
-// invite links. Messengers and social platforms request the URL to produce a
-// rich card; browsers are redirected to the actual join page via meta refresh.
-// The route is unauthenticated so previews work even when the recipient is not
-// logged in.
-func HandleInvitePreview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
-	code := strings.ToUpper(strings.TrimSpace(r.PathValue("code")))
-	if code == "" {
-		writeError(w, http.StatusBadRequest, "missing_code", "Group code is required")
-		return
-	}
-	group, err := repository.GetGroupByCodeContext(r.Context(), code)
-	if err != nil || group == nil {
-		writeError(w, http.StatusNotFound, "group_not_found", "Group not found")
-		return
-	}
-	inviterName := r.URL.Query().Get("from")
-	if inviterName != "" {
-		inviterName = html.EscapeString(inviterName)
-	}
-	groupName := html.EscapeString(group.Name)
-	title := fmt.Sprintf("Join %s on GeoGuessMe", groupName)
-	description := fmt.Sprintf("%s invites you to join the group %s on GeoGuessMe!", inviterName, groupName)
-	if inviterName == "" {
-		description = fmt.Sprintf("Join the group %s on GeoGuessMe!", groupName)
-	}
-	publicURL := ""
-	if RuntimeConfig != nil {
-		publicURL = strings.TrimRight(RuntimeConfig.PublicURL, "/")
-	}
-	redirectURL := fmt.Sprintf("%s/group/join?code=%s", publicURL, code)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write([]byte(fmt.Sprintf(invitePageTemplate, html.EscapeString(title), html.EscapeString(description), publicURL, redirectURL, html.EscapeString(title))))
 }

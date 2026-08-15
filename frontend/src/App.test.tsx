@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthResponse } from './types';
@@ -39,6 +39,7 @@ const authResponse: AuthResponse = {
 beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     routeRef.current = '/';
     window.history.pushState({}, '', '/');
     apiMocks.get.mockReset();
@@ -123,7 +124,7 @@ describe('App shell — public routes', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByPlaceholderText('Email')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Email — verify to enable account recovery')).toBeInTheDocument();
         expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
     });
 
@@ -216,7 +217,30 @@ describe('App shell — protected routes with authentication', () => {
         routeRef.current = '/group/join';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('6-character code')).toBeInTheDocument();
+        // No pending invite token: the join flow shows the missing-invite state.
+        expect(await screen.findByText('No invite link found')).toBeInTheDocument();
+    });
+
+    it('captures an invite fragment to sessionStorage and strips it from the URL', async () => {
+        apiMocks.post.mockReset();
+        apiMocks.get.mockReset();
+        apiMocks.post.mockImplementation((url: string) => {
+            if (url === '/auth/refresh') return Promise.resolve({ data: authResponse });
+            if (url === '/group/invites/preview') {
+                return Promise.resolve({ data: { group_name: 'Friends', member_count: 3 } });
+            }
+            return Promise.reject(new Error('unexpected POST ' + url));
+        });
+        apiMocks.get.mockResolvedValue({ data: [] });
+        const inviteToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+        routeRef.current = `/group/join#invite=${inviteToken}`;
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        // GroupJoin previews the invite token it read from sessionStorage.
+        expect(await screen.findByText('Join Friends?')).toBeInTheDocument();
+        expect(sessionStorage.getItem('pending_invite_token')).toBe(inviteToken);
+        // The fragment is stripped from the address bar; the token stays in sessionStorage.
+        expect(window.location.hash).toBe('');
     });
 
     it('renders settings at /settings', async () => {
@@ -224,6 +248,31 @@ describe('App shell — protected routes with authentication', () => {
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
         expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    });
+
+    it('renders the settings route when reached through authenticated navigation', async () => {
+        routeRef.current = '/groups';
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        expect(await screen.findByRole('heading', { name: 'My Groups' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('link', { name: 'Settings' }));
+
+        expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+        expect(window.location.pathname).toBe('/settings');
+    });
+
+    it('renders the public landing page immediately after logout', async () => {
+        routeRef.current = '/settings';
+        window.history.pushState({}, '', routeRef.current);
+        render(<App />);
+        expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
+
+        expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(window.location.pathname).toBe('/');
     });
 });
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -16,88 +17,15 @@ import (
 	"geoguessme/internal/chat"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
+	chatrepo "geoguessme/internal/repository/chat"
+	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/storage"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg=="
-
-func TestProfileUpdateAndPasswordChange(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash), Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
-	updated := &models.User{ID: user.ID, Username: "alice-new", Email: "alice-new@example.test", Password: string(hash), Avatar: "avatar2.png", CreatedAt: now, UpdatedAt: now}
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs(updated.Username).WillReturnRows(handlerUserRows(updated))
-	mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs(updated.Email).WillReturnRows(handlerUserRows(updated))
-	mock.ExpectExec("UPDATE users SET username").WithArgs(updated.Username, updated.Email, updated.Email, updated.Avatar, user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
-	recorder := httptest.NewRecorder()
-	UpdateProfile(recorder, requestWithUser(http.MethodPatch, "/", `{"username":"alice-new","email":"alice-new@example.test","avatar":"avatar2.png","current_password":"Password123"}`, user.ID))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("profile update status = %d (%s)", recorder.Code, recorder.Body.String())
-	}
-
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(updated))
-	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE users SET password").WithArgs(pgxmock.AnyArg(), user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectCommit()
-	recorder = httptest.NewRecorder()
-	ChangePassword(recorder, requestWithUser(http.MethodPost, "/", `{"current_password":"Password123","new_password":"NewPassword123"}`, user.ID))
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("password change status = %d (%s)", recorder.Code, recorder.Body.String())
-	}
-}
-
-func TestProfileValidationBranches(t *testing.T) {
-	setupHandlers(t)
-	recorder := httptest.NewRecorder()
-	UpdateProfile(recorder, requestWithUser(http.MethodPost, "/", "{}", "user-1"))
-	if recorder.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("profile method status = %d", recorder.Code)
-	}
-	mock := handlerMock(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash)}
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	requireStatus(t, UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"alice@example.test","avatar":"nope.png","current_password":"Password123"}`, user.ID), http.StatusBadRequest)
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	requireStatus(t, ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"Password123","new_password":"weak"}`, user.ID), http.StatusBadRequest)
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	requireStatus(t, UpdateProfile, requestWithUser(http.MethodPatch, "/", `{"username":"alice","email":"alice@example.test","avatar":"avatar.png","current_password":"WrongPassword123"}`, user.ID), http.StatusUnauthorized)
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	requireStatus(t, ChangePassword, requestWithUser(http.MethodPost, "/", `{"current_password":"WrongPassword123","new_password":"NewPassword123"}`, user.ID), http.StatusUnauthorized)
-}
-
-func TestProfileReturnsLifetimeProgression(t *testing.T) {
-	setupHandlers(t)
-	mock := handlerMock(t)
-	now := time.Now().UTC()
-	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(int64(7600), int64(3), 2533.33))
-	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
-	mock.ExpectQuery("WITH scores AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(7), int64(1943)))
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
-		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
-	recorder := httptest.NewRecorder()
-	GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"average_score":2533.33`) || !strings.Contains(recorder.Body.String(), `"global_average_rank":{"rank":7,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"elo":0`) {
-		t.Fatalf("profile response = %d (%s)", recorder.Code, recorder.Body.String())
-	}
-}
 
 func handlerPhotoRows(photo *models.Photo) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{"id", "user_id", "group_id", "url", "storage_key", "mime_type", "byte_size", "lat", "long", "lifecycle_status", "hide_location", "created_at", "expires_at", "retention_at"}).
@@ -112,7 +40,7 @@ func multipartMediaUpload(t *testing.T, groupID, filename string, payload []byte
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	_ = writer.WriteField("group_id", groupID)
+	_ = writer.WriteField("group_ids", groupID)
 	_ = writer.WriteField("lat", "48.8566")
 	_ = writer.WriteField("long", "2.3522")
 	part, err := writer.CreateFormFile("photo", filename)
@@ -165,14 +93,43 @@ func mustDecodeBase64(value string) []byte {
 	return decoded
 }
 
+func TestUploadRejectsLegacySingularGroupID(t *testing.T) {
+	// The legacy singular group_id form field was removed (PR 12): an upload
+	// without the repeated group_ids field is rejected instead of falling back
+	// to the removed compatibility input.
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, mustTestStore(t), handlerConfig(), nil, nil, time.Now)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("group_id", "00000000-0000-0000-0000-000000000001")
+	_ = writer.WriteField("lat", "48.8566")
+	_ = writer.WriteField("long", "2.3522")
+	part, err := writer.CreateFormFile("photo", "photo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(mustDecodeBase64(onePixelPNG)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := requestWithUser(http.MethodPost, "/", "", "user-1")
+	request.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	requireStatus(t, gameAPI.UploadPhoto, request, http.StatusBadRequest)
+}
+
 func TestUploadAcceptAndServeMedia(t *testing.T) {
-	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
-	mock := handlerMock(t)
+	countedStore := &countingStore{ObjectStore: store}
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, countedStore, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectBegin()
@@ -183,7 +140,7 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, request)
+	gameAPI.UploadPhoto(recorder, request)
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -199,12 +156,10 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-1").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
-	countedStore := &countingStore{ObjectStore: store}
-	MediaStore = countedStore
 	recorder = httptest.NewRecorder()
 	acceptRequest := requestWithUser(http.MethodPost, "/", "", "user-1")
 	acceptRequest.SetPathValue("photoID", photo.ID)
-	AcceptChallenge(recorder, acceptRequest)
+	gameAPI.AcceptChallenge(recorder, acceptRequest)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("accept status = %d", recorder.Code)
 	}
@@ -213,12 +168,12 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(time.Hour)))
-	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(RuntimeConfig.ViewWindow.Seconds())).
-		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(RuntimeConfig.ViewWindow)))
+	mock.ExpectQuery("UPDATE challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), int64(handlerConfig().ViewWindow.Seconds())).
+		WillReturnRows(pgxmock.NewRows([]string{"view_expires_at"}).AddRow(now.Add(handlerConfig().ViewWindow)))
 	recorder = httptest.NewRecorder()
 	mediaRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	mediaRequest.SetPathValue("photoID", photo.ID)
-	ServeChallengeMedia(recorder, mediaRequest)
+	gameAPI.ServeChallengeMedia(recorder, mediaRequest)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "data" {
 		t.Fatalf("media response = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -227,36 +182,57 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	}
 }
 
-func TestUploadRecordedVideo(t *testing.T) {
-	setupHandlers(t)
+func TestUploadRecordedVideoQueuesProcessingJob(t *testing.T) {
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
-	mock := handlerMock(t)
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO photos").WithArgs(pgxmock.AnyArg(), "user-1", groupID, "", pgxmock.AnyArg(), "video/webm", pgxmock.AnyArg(), 48.8566, 2.3522, "ready", false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
-	mock.ExpectCommit()
+	// The video branch must not create challenge rows synchronously: the only
+	// database write is the queued processing job.
+	mock.ExpectExec("INSERT INTO media_processing_jobs").WithArgs(pgxmock.AnyArg(), "user-1", models.MediaProcessingKindChallenge, pgxmock.AnyArg(), groupID, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	webm := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}
 	request, err := multipartMediaUpload(t, groupID, "capture.webm", webm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, request)
-	if recorder.Code != http.StatusCreated {
+	gameAPI.UploadPhoto(recorder, request)
+	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("video upload status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	// The response is the queued job DTO; the raw source lives under a private
+	// quarantine key, never under a served prefix.
+	var job models.MediaProcessingJobResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != models.MediaProcessingStatusQueued || job.Kind != models.MediaProcessingKindChallenge {
+		t.Fatalf("job DTO = %+v", job)
+	}
+	if job.Result != nil || job.ErrorCode != "" {
+		t.Fatalf("queued job leaked result or error code = %+v", job)
+	}
+	raw, err := store.Get(context.Background(), storage.QuarantineKey(job.ID))
+	if err != nil {
+		t.Fatalf("quarantine object missing: %v", err)
+	}
+	defer raw.Close()
+	if got, _ := io.ReadAll(raw); !bytes.Equal(got, webm) {
+		t.Fatalf("quarantine bytes differ: got %d bytes, want %d", len(got), len(webm))
 	}
 }
 
 func TestSetAndRemoveMessageReaction(t *testing.T) {
-	setupHandlers(t)
-	InitChat()
-	t.Cleanup(HubInstance.Stop)
-	mock := handlerMock(t)
+	mock := newMockPool(t)
+	hub := chat.NewHub(nil, nil)
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+	chatAPI := newChatAPI(t, mock, nil, hub)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	messageID := "00000000-0000-0000-0000-000000000002"
 	messageRows := func() *pgxmock.Rows {
@@ -269,8 +245,6 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT 1 FROM messages").WithArgs(messageID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(1))
 		if method == http.MethodPut {
 			mock.ExpectExec("INSERT INTO message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("INSERT", 1))
@@ -283,22 +257,21 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		request := requestWithUser(method, "/", `{"reaction":"like"}`, "user-1")
 		request.SetPathValue("messageID", messageID)
-		requireStatus(t, SetMessageReaction, request, http.StatusOK)
+		requireStatus(t, chatAPI.SetMessageReaction, request, http.StatusOK)
 	}
 }
 
 func TestUploadAndServeChatMedia(t *testing.T) {
-	setupHandlers(t)
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
-	HubInstance = chat.NewHub(nil, nil)
-	go HubInstance.Run()
-	t.Cleanup(HubInstance.Stop)
+	hub := chat.NewHub(nil, nil)
+	go hub.Run()
+	t.Cleanup(hub.Stop)
 	groupID := "00000000-0000-0000-0000-000000000001"
-	mock := handlerMock(t)
+	mock := newMockPool(t)
+	chatAPI := newChatAPI(t, mock, store, hub)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
@@ -306,7 +279,7 @@ func TestUploadAndServeChatMedia(t *testing.T) {
 	mock.ExpectExec("INSERT INTO messages").WithArgs(pgxmock.AnyArg(), groupID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg(), "look at this", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	UploadChatMedia(recorder, multipartChatMediaUpload(t, groupID, "chat.png", mustDecodeBase64(onePixelPNG)))
+	chatAPI.UploadChatMedia(recorder, multipartChatMediaUpload(t, groupID, "chat.png", mustDecodeBase64(onePixelPNG)))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("chat upload status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -323,7 +296,7 @@ func TestUploadAndServeChatMedia(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	request := requestWithUser(http.MethodGet, "/", "", "user-1")
 	request.SetPathValue("mediaID", assetID)
-	ServeChatMedia(recorder, request)
+	chatAPI.ServeChatMedia(recorder, request)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "data" {
 		t.Fatalf("chat media response = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -334,27 +307,29 @@ func TestUploadAndServeChatMedia(t *testing.T) {
 		t.Fatalf("chat media type = %q", got)
 	}
 
-	requireStatus(t, UploadChatMedia, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusMethodNotAllowed)
-	requireStatus(t, ServeChatMedia, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusMethodNotAllowed)
+	requireStatus(t, chatAPI.UploadChatMedia, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusMethodNotAllowed)
+	requireStatus(t, chatAPI.ServeChatMedia, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusMethodNotAllowed)
 }
 
 func TestChatMediaFailureResponses(t *testing.T) {
-	setupHandlers(t)
 	groupID := "00000000-0000-0000-0000-000000000001"
 	payload := mustDecodeBase64(onePixelPNG)
-	requireStatus(t, UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusServiceUnavailable)
+	mock := newMockPool(t)
+	// A ChatAPI without an object store reports chat media unavailable before
+	// touching any persistence.
+	nilStoreAPI := NewChatAPI(chatrepo.NewRepository(mock), repository.NewRepository(mock).Groups, nil, handlerConfig(), nil, time.Now, repository.NewRepository(mock))
+	requireStatus(t, nilStoreAPI.UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusServiceUnavailable)
 
 	store, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	MediaStore = store
-	HubInstance = chat.NewHub(nil, nil)
-	go HubInstance.Run()
-	t.Cleanup(HubInstance.Stop)
-	mock := handlerMock(t)
+	hub := chat.NewHub(nil, nil)
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+	chatAPI := newChatAPI(t, mock, store, hub)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusForbidden)
+	requireStatus(t, chatAPI.UploadChatMedia, multipartChatMediaUpload(t, groupID, "chat.png", payload), http.StatusForbidden)
 
 	mediaID := "00000000-0000-0000-0000-000000000002"
 	serve := func() *http.Request {
@@ -363,7 +338,7 @@ func TestChatMediaFailureResponses(t *testing.T) {
 		return request
 	}
 	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnError(pgx.ErrNoRows)
-	requireStatus(t, ServeChatMedia, serve(), http.StatusNotFound)
+	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusNotFound)
 
 	asset := &models.ChatMedia{ID: mediaID, GroupID: groupID, UserID: "user-2", StorageKey: "chat-media/missing", MIMEType: "image/png", ByteSize: 4, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
 	assetRows := func() *pgxmock.Rows {
@@ -371,11 +346,11 @@ func TestChatMediaFailureResponses(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-	requireStatus(t, ServeChatMedia, serve(), http.StatusForbidden)
+	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusForbidden)
 
 	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	requireStatus(t, ServeChatMedia, serve(), http.StatusGone)
+	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusGone)
 }
 
 type countingStore struct {
@@ -407,20 +382,20 @@ func (s failingStore) Stat(context.Context, string) (int64, error) {
 func (s failingStore) Health(context.Context) error { return s.err }
 
 func TestUploadStorageFailureAndChallengeErrors(t *testing.T) {
-	setupHandlers(t)
-	MediaStore = failingStore{err: errors.New("storage down")}
-	mock := handlerMock(t)
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, failingStore{err: errors.New("storage down")}, handlerConfig(), nil, nil, time.Now)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("00000000-0000-0000-0000-000000000001", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	request, err := multipartUpload(t, "00000000-0000-0000-0000-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	UploadPhoto(recorder, request)
+	gameAPI.UploadPhoto(recorder, request)
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("storage failure status = %d", recorder.Code)
 	}
-	for _, expected := range []error{repository.ErrForbidden, repository.ErrOwnPhoto, repository.ErrNotFound, repository.ErrChallengeExpired, errors.New("other")} {
+	for _, expected := range []error{groups.ErrForbidden, groups.ErrOwnPhoto, groups.ErrNotFound, groups.ErrChallengeExpired, errors.New("other")} {
 		recorder = httptest.NewRecorder()
 		challengeError(recorder, expected)
 		if recorder.Code == http.StatusOK {
@@ -429,47 +404,52 @@ func TestUploadStorageFailureAndChallengeErrors(t *testing.T) {
 	}
 }
 
-func TestHandleInvitePreview(t *testing.T) {
-	setupHandlers(t)
-	RuntimeConfig = handlerConfig()
-	RuntimeConfig.PublicURL = "https://geoguessme.com"
-	mock := handlerMock(t)
-	now := time.Now().UTC()
-	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "ABC123", CreatedAt: now}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
+func TestPreviewInviteReturnsNonSensitiveData(t *testing.T) {
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
+	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}).AddRow("Paris", 3))
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/invite/ABC123?from=Alice", nil)
-	req.SetPathValue("code", "ABC123")
-	HandleInvitePreview(rec, req)
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("invite preview status = %d", rec.Code)
+		t.Fatalf("preview status = %d (%s)", rec.Code, rec.Body.String())
 	}
-	body := rec.Body.String()
-	if rec.Header().Get("Content-Type") != "text/html; charset=utf-8" {
-		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
+	var body struct {
+		GroupName   string `json:"group_name"`
+		MemberCount int    `json:"member_count"`
 	}
-	mustContain := []string{"og:title", "og:description", "Join Paris on GeoGuessMe", "Alice invites you", "og:image", "https://geoguessme.com/logo.png", "/group/join?code=ABC123"}
-	for _, want := range mustContain {
-		if !strings.Contains(body, want) {
-			t.Fatalf("expected body to contain %q, got:\n%s", want, body)
-		}
+	if err := decodeJSONBody(rec, &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if body.GroupName != "Paris" || body.MemberCount != 3 {
+		t.Fatalf("preview body = %+v", body)
 	}
 }
 
-func TestHandleInvitePreviewWithoutInviter(t *testing.T) {
-	setupHandlers(t)
-	RuntimeConfig = handlerConfig()
-	mock := handlerMock(t)
-	group := &models.Group{ID: "00000000-0000-0000-0000-000000000001", Name: "Paris", Code: "DEF456", CreatedAt: time.Now().UTC()}
-	mock.ExpectQuery("SELECT id, name, code, created_at FROM groups WHERE code").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "code", "created_at"}).AddRow(group.ID, group.Name, group.Code, group.CreatedAt))
+func TestPreviewInviteGenericNotFound(t *testing.T) {
+	mock := newMockPool(t)
+	repos := repository.NewRepository(mock)
+	gameAPI := NewGameAPI(repos.Groups, repos.Chat, repos, nil, handlerConfig(), nil, nil, time.Now)
+
+	// Unknown token hash: generic 404, no group data leaked.
+	mock.ExpectQuery("SELECT g.name, \\(SELECT COUNT\\(\\*\\) FROM group_members gm WHERE gm.group_id = g.id\\)").
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"name", "count"}))
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/invite/DEF456", nil)
-	req.SetPathValue("code", "DEF456")
-	HandleInvitePreview(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("invite preview status = %d", rec.Code)
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{"invite_token":"`+testInviteToken+`"}`, ""))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown preview status = %d, want 404", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Join the group Paris on GeoGuessMe!") {
-		t.Fatalf("expected fallback message, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "invite_not_found") {
+		t.Fatalf("unknown preview body = %q", rec.Body.String())
+	}
+
+	// Missing token: 400.
+	rec = httptest.NewRecorder()
+	gameAPI.PreviewInvite(rec, requestWithUser(http.MethodPost, "/", `{}`, ""))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing token status = %d, want 400", rec.Code)
 	}
 }

@@ -1,0 +1,216 @@
+.camera-filter-rail {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.camera-filter-arrow {
+    width: 2.1rem;
+    height: 3.55rem;
+    display: grid;
+    place-items: center;
+    color: white;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 50%;
+    font: inherit;
+    font-size: 1.65rem;
+    line-height: 1;
+    transition:
+        background var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+.camera-filter-arrow:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: scale(1.04);
+}
+
+.camera-filter-options {
+    width: 100%;
+    padding: 0.08rem 0.05rem 0.18rem;
+    min-width: 0;
+    display: flex;
+    gap: 0.48rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x mandatory;
+    cursor: grab;
+    user-select: none;
+}
+
+.camera-filter-options.dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+}
+
+.camera-filter-options.dragging .camera-filter-option {
+    pointer-events: none;
+}
+
+.camera-filter-icon {
+    width: 3.55rem;
+    height: 3.55rem;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.42), transparent 34%),
+        linear-gradient(145deg, color-mix(in srgb, var(--lens-accent) 72%, white), var(--lens-accent));
+    border: 1px solid color-mix(in srgb, var(--lens-accent) 55%, white);
+    border-radius: 50%;
+    box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.32),
+        0 8px 18px color-mix(in srgb, var(--lens-accent) 22%, transparent);
+    font-size: 1.65rem;
+    line-height: 1;
+}
+
+.camera-filter-icon.has-preview {
+    background-image:
+        var(--lens-preview), radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.42), transparent 34%),
+        linear-gradient(145deg, color-mix(in srgb, var(--lens-accent) 72%, white), var(--lens-accent));
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain, auto, auto;
+}
+
+.camera-filter-picker {
+    width: min(calc(100% - 1rem), 46rem);
+    padding: 0.38rem 0.48rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.34rem;
+    color: var(--surface);
+    background: linear-gradient(180deg, rgba(8, 10, 24, 0.42), rgba(5, 7, 18, 0.78));
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 1.1rem;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.camera-filter-heading {
+    min-height: 1.45rem;
+    padding: 0 0.12rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-filter-label,
+.camera-filter-current {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.camera-filter-label {
+    display: none;
+}
+
+.camera-filter-current {
+    max-width: min(80vw, 17rem);
+    padding: 0.18rem 0.55rem;
+    overflow: hidden;
+    color: white;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.camera-filter-options::-webkit-scrollbar {
+    display: none;
+}
+
+.camera-filter-option {
+    --lens-accent: #7a7e91;
+
+    width: 4.15rem;
+    min-width: 4.15rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.24rem;
+    color: rgba(255, 255, 255, 0.74);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    font: inherit;
+    font-size: 0.66rem;
+    line-height: 1.05;
+    scroll-snap-align: center;
+    transition:
+        transform var(--duration-fast) var(--ease-out),
+        background var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out);
+}
+
+.camera-filter-option:hover {
+    color: white;
+    background: transparent;
+    border-color: transparent;
+    transform: translateY(-1px);
+}
+
+.camera-filter-option-label {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.camera-filter-option.selected {
+    color: white;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    transform: translateY(-2px);
+}
+
+.camera-filter-option.selected .camera-filter-icon {
+    border-color: white;
+    box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.45),
+        0 0 0 3px color-mix(in srgb, var(--lens-accent) 56%, transparent),
+        0 8px 20px color-mix(in srgb, var(--lens-accent) 38%, transparent);
+    transform: scale(1.06);
+}
+
+.camera-filter-icon-img {
+    width: 2rem;
+    height: 2rem;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.camera-filter-picker small {
+    max-width: 28rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.camera-filter-picker .camera-filter-status {
+    color: #fff0b8;
+}
+
+@media (pointer: coarse), (max-width: 40rem) {
+    .camera-filter-rail {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .camera-filter-arrow {
+        display: none;
+    }
+
+    .camera-filter-picker {
+        width: calc(100% - 0.7rem);
+    }
+}

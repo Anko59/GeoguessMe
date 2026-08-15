@@ -21,6 +21,17 @@ services:
         required: true
     volumes:
       - database:/var/lib/postgresql/data
+    read_only: true
+    tmpfs: ["/tmp", "/var/run/postgresql"]
+    # The official entrypoint runs as root and drops to postgres: it must chown
+    # and re-stat the data directory and create the Unix socket, so keep the
+    # minimal ownership/drop-privilege capabilities. Do NOT set user here; the
+    # image manages its own uid/gid and the entrypoint requires root to chown.
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    networks: [app]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -32,6 +43,7 @@ services:
         limits:
           cpus: ${GEOGUESSME_DATABASE_CPUS:-1.0}
           memory: ${GEOGUESSME_DATABASE_MEMORY:-1G}
+          pids: 256
 
 volumes:
   database:

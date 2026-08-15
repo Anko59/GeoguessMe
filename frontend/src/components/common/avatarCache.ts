@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import api from '../../api';
+import { createObjectUrlStore } from '../../utils/objectUrlCache';
 
-// In-memory cache of resolved custom-avatar object URLs, keyed by user id. The
-// cache is intentionally module-scoped so avatars are fetched at most once per
-// session no matter how many components render them.
-const cache = new Map<string, string>();
-const inflight = new Map<string, Promise<string | undefined>>();
+// Session-scoped cache of resolved custom-avatar object URLs, keyed by user
+// id. The store is intentionally module-scoped so avatars are fetched at most
+// once per session no matter how many components render them.
+const store = createObjectUrlStore();
 const fallbackAvatarPath = '/avatars/avatar.png';
 
 /** Whether the avatar string represents a user-uploaded photo. */
@@ -15,22 +15,13 @@ export function isCustomAvatar(avatar?: string): boolean {
 
 /** Drop the cached object URL so a fresh upload is reflected immediately. */
 export function bustAvatarCache(userID: string): void {
-    const url = cache.get(userID);
-    if (url) {
-        URL.revokeObjectURL(url);
-        cache.delete(userID);
-    }
-    inflight.delete(userID);
+    store.bust(userID);
 }
 
-function fetchAvatar(userID: string): Promise<string | undefined> {
+function fetchAvatar(userID: string): Promise<string> {
     return api
         .get(`/users/${userID}/avatar`, { responseType: 'blob' })
-        .then((res) => {
-            const objectURL = URL.createObjectURL(res.data as Blob);
-            cache.set(userID, objectURL);
-            return objectURL;
-        })
+        .then((res) => URL.createObjectURL(res.data as Blob))
         .catch(() => fallbackAvatarPath);
 }
 
@@ -40,30 +31,27 @@ function fetchAvatar(userID: string): Promise<string | undefined> {
  * authenticated blob and reused for the rest of the session.
  */
 export function useAvatarUrl(userID: string, avatar?: string): string | undefined {
-    const [url, setUrl] = useState<string | undefined>(() => cache.get(userID));
+    const [url, setUrl] = useState<string | undefined>(() => store.get(userID));
     // Adjust cached state when the user id changes without a remount, using the
     // React-recommended store-previous-value pattern (no effect setState).
     const [prevUserID, setPrevUserID] = useState(userID);
     if (userID !== prevUserID) {
         setPrevUserID(userID);
-        setUrl(cache.get(userID));
+        setUrl(store.get(userID));
     }
 
     useEffect(() => {
-        if (!isCustomAvatar(avatar) || cache.get(userID)) {
+        if (!isCustomAvatar(avatar) || store.get(userID)) {
             return;
         }
         let cancelled = false;
-        const promise = inflight.get(userID) ?? fetchAvatar(userID);
-        if (!inflight.has(userID)) {
-            inflight.set(userID, promise);
-        }
-        promise.then((result) => {
-            inflight.delete(userID);
-            if (!cancelled) {
-                setUrl(result);
-            }
-        });
+        store
+            .getOrFetch(userID, () => fetchAvatar(userID))
+            .then((result) => {
+                if (!cancelled && result) {
+                    setUrl(result);
+                }
+            });
         return () => {
             cancelled = true;
         };

@@ -46,7 +46,7 @@ export default function TextBannerEditor({ banner, onChange }: TextBannerEditorP
             {open && (
                 <div id="camera-text-banner-controls" className="text-banner-controls">
                     <label>
-                        <span className="sr-only">Photo banner text</span>
+                        <span className="visually-hidden">Photo banner text</span>
                         <input
                             type="text"
                             value={banner.text}

@@ -6,25 +6,35 @@ test.describe('Email flows via Mailpit', () => {
         const email = uniqueEmail();
         await signupViaUI(page, { email });
 
-        // Navigate to settings to see verification status
+        // Navigate to settings to see the pending-claim verification status.
+        // F-09: a fresh signup holds a pending contact claim, not a verified email.
         await page.goto('/settings');
-        await expect(page.locator('text=Email not verified')).toBeVisible();
+        await expect(page.locator('text=No verified email')).toBeVisible();
+        await expect(page.locator('text=Pending verification')).toBeVisible();
+        await expect(page.getByText(`Verification was requested for ${email}.`)).toBeVisible();
 
         // Get the verification link from Mailpit
-        const verifyUrl = await getMailpitLink(email, '/verify-email');
+        const verifyUrl = await getMailpitLink('Verify your GeoGuessMe email', '/verify-email');
         await page.goto(verifyUrl);
 
         // Should show success message
         await expect(page.locator('text=Email verified')).toBeVisible({ timeout: 10000 });
 
-        // Navigate back to settings - should now show verified
+        // Navigate back to settings - the pending claim is now the verified recovery email
         await page.goto('/settings');
-        await expect(page.locator('text=Email verified')).toBeVisible();
+        await expect(page.locator('text=Verified recovery email')).toBeVisible();
+        await expect(page.locator('text=Pending verification')).not.toBeVisible();
     });
 
     test('password reset via Mailpit link allows new login', async ({ page }) => {
         const email = uniqueEmail();
         const creds = await signupViaUI(page, { email });
+
+        // F-09: recovery only ever acts on a VERIFIED address. Confirm the
+        // email via Mailpit first so the reset mail is actually delivered.
+        const verifyUrl = await getMailpitLink('Verify your GeoGuessMe email', '/verify-email');
+        await page.goto(verifyUrl);
+        await expect(page.locator('text=Email verified')).toBeVisible({ timeout: 10000 });
 
         // Logout
         await page.goto('/settings');
@@ -41,7 +51,7 @@ test.describe('Email flows via Mailpit', () => {
         await expect(page.locator('.auth-success')).toBeVisible({ timeout: 10000 });
 
         // Get the reset link from Mailpit
-        const resetUrl = await getMailpitLink(email, '/reset-password');
+        const resetUrl = await getMailpitLink('Reset your GeoGuessMe password', '/reset-password');
         await page.goto(resetUrl);
 
         // Set new password

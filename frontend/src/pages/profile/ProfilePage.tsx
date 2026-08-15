@@ -7,30 +7,15 @@ import RankBadge from '../../components/progression/RankBadge';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
-import type { GlobalRank, ProgressionRank } from '../../types';
+import type { Profile, PublicProfile } from '../../types';
 import './ProfilePage.css';
-
-interface ProfileViewData {
-    id: string;
-    username: string;
-    avatar: string;
-    email?: string;
-    total_points: number;
-    guess_count: number;
-    average_score: number;
-    elo: number;
-    rank: ProgressionRank;
-    global_rank: GlobalRank;
-    global_average_rank: GlobalRank;
-    global_elo_rank: GlobalRank;
-}
 
 export default function ProfilePage() {
     const { userId } = useParams();
     const { user } = useAuth();
     const isOwnProfile = !userId;
     const isSelf = isOwnProfile || user?.id === userId;
-    const [profile, setProfile] = useState<ProfileViewData | null>(null);
+    const [profile, setProfile] = useState<Profile | PublicProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     // Resolved once per profile so the hero avatar can open full screen; the
@@ -42,9 +27,13 @@ export default function ProfilePage() {
         setError('');
         setLoading(true);
         try {
-            const endpoint = isOwnProfile ? '/auth/profile' : `/user/profile/${userId}`;
-            const response = await api.get<ProfileViewData>(endpoint);
-            setProfile(response.data);
+            if (isOwnProfile) {
+                const response = await api.get<Profile>('/auth/profile');
+                setProfile(response.data);
+            } else {
+                const response = await api.get<PublicProfile>(`/user/profile/${userId}`);
+                setProfile(response.data);
+            }
         } catch (requestError: unknown) {
             setError(
                 getAPIErrorMessage(
@@ -58,7 +47,8 @@ export default function ProfilePage() {
     }, [isOwnProfile, userId]);
 
     useEffect(() => {
-        queueMicrotask(() => void loadProfile());
+        const task = window.setTimeout(() => void loadProfile(), 0);
+        return () => window.clearTimeout(task);
     }, [loadProfile]);
 
     if (loading) {
@@ -118,7 +108,9 @@ export default function ProfilePage() {
                     <div>
                         <p className="profile-eyebrow">Adventurer card</p>
                         <h1 id="profile-title">{profile.username}</h1>
-                        {isOwnProfile && profile.email && <p className="profile-email">{profile.email}</p>}
+                        {isOwnProfile && 'email' in profile && profile.email_verified_at && profile.email && (
+                            <p className="profile-email">{profile.email}</p>
+                        )}
                         <p className="profile-rank-name">
                             <RankBadge rank={rank} />
                             {rank.name}

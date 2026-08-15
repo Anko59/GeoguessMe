@@ -1,3 +1,7 @@
+---
+status: archival
+---
+
 # July 2026 release recovery
 
 ## Purpose and scope
@@ -51,8 +55,10 @@ route using a short-lived service-token policy and the existing operator key.
 The repair created `/etc/tmpfiles.d/geoguessme.conf`, which recreates
 `/run/lock/geoguessme` as `deploy:deploy` with mode `0750` at every boot. The
 bootstrap template and Terraform test now enforce the same rule for new hosts.
-The CI deploy key remains restricted to the four-field `deploy` command; it is
-not broadened into a general-purpose server shell merely to repair host state.
+The CI deploy key remains restricted to the fixed `deploy` command protocol; it
+is not broadened into a general-purpose server shell merely to repair host
+state. Hosted backup and restore operations use the digest-pinned Restic image
+from the root-owned runtime script.
 
 ## Access credential recovery
 
@@ -80,8 +86,8 @@ resources, but it cannot recover an already-issued service-token secret.
    hand-copy changes.
 4. Merge only after the release PR confirms tree equality and required checks.
    The `main` workflow promotes the exact development image digests, signs them
-   for production, creates the patch tag/release, and deploys production through
-   Cloudflare Access.
+   for production, creates the version declared in `.release-version`, and
+   deploys production through Cloudflare Access.
 5. Confirm production health, active-release metadata, backup freshness,
    WebSocket connectivity, and the intended Push state. For 0.2.3, Push remains
    intentionally disabled until stable VAPID values are added to the encrypted

@@ -33,11 +33,11 @@ func newLocalStore(t *testing.T) storage.ObjectStore {
 	return store
 }
 
-func serveSystem(t *testing.T, cfg *config.Config, store storage.ObjectStore, method, target string, auth string) *httptest.ResponseRecorder {
+func serveSystem(t *testing.T, cfg *config.Config, pool database.Pool, store storage.ObjectStore, method, target string, auth string) *httptest.ResponseRecorder {
 	t.Helper()
 	metrics := newTestMetrics()
 	mux := http.NewServeMux()
-	registerSystemRoutes(mux, cfg, metrics, store)
+	registerSystemRoutes(mux, cfg, pool, metrics, store)
 
 	request := httptest.NewRequest(method, target, nil)
 	if auth != "" {
@@ -50,7 +50,7 @@ func serveSystem(t *testing.T, cfg *config.Config, store storage.ObjectStore, me
 
 func TestRouteMetricsOpenInDevelopment(t *testing.T) {
 	cfg := &config.Config{Environment: config.EnvDevelopment}
-	recorder := serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/metrics", "")
+	recorder := serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/metrics", "")
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("development /metrics status = %d, want 200", recorder.Code)
@@ -72,7 +72,7 @@ func TestRouteMetricsOpenInDevelopment(t *testing.T) {
 
 func TestRouteMetricsOpenInTest(t *testing.T) {
 	cfg := &config.Config{Environment: config.EnvTest}
-	recorder := serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/metrics", "")
+	recorder := serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/metrics", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("test /metrics status = %d, want 200", recorder.Code)
 	}
@@ -82,7 +82,7 @@ func TestRouteMetricsRequiresBearerInProduction(t *testing.T) {
 	cfg := &config.Config{Environment: config.EnvProduction, MetricsToken: routeTestMetricsToken}
 
 	// Missing token: 401 with protection headers.
-	recorder := serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/metrics", "")
+	recorder := serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/metrics", "")
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("production /metrics without token status = %d, want 401", recorder.Code)
 	}
@@ -97,7 +97,7 @@ func TestRouteMetricsRequiresBearerInProduction(t *testing.T) {
 	}
 
 	// Wrong token (same length, different content): still 401.
-	recorder = serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/metrics", "Bearer "+strings.Repeat("z", len(routeTestMetricsToken)))
+	recorder = serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/metrics", "Bearer "+strings.Repeat("z", len(routeTestMetricsToken)))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("production /metrics with wrong token status = %d, want 401", recorder.Code)
 	}
@@ -106,7 +106,7 @@ func TestRouteMetricsRequiresBearerInProduction(t *testing.T) {
 	}
 
 	// Correct token: metrics served.
-	recorder = serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/metrics", "Bearer "+routeTestMetricsToken)
+	recorder = serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/metrics", "Bearer "+routeTestMetricsToken)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("production /metrics with token status = %d, want 200", recorder.Code)
 	}
@@ -117,7 +117,7 @@ func TestRouteMetricsRequiresBearerInProduction(t *testing.T) {
 
 func TestRouteHealthLiveAlwaysOK(t *testing.T) {
 	cfg := &config.Config{Environment: config.EnvDevelopment}
-	recorder := serveSystem(t, cfg, newLocalStore(t), http.MethodGet, "/health/live", "")
+	recorder := serveSystem(t, cfg, nil, newLocalStore(t), http.MethodGet, "/health/live", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("/health/live status = %d, want 200", recorder.Code)
 	}
@@ -130,10 +130,8 @@ func TestRouteHealthReadyReportsAvailability(t *testing.T) {
 	store := newLocalStore(t)
 	cfg := &config.Config{Environment: config.EnvDevelopment}
 
-	// No database connection registered: readiness fails.
-	previousDB := database.DB
-	database.DB = nil
-	recorder := serveSystem(t, cfg, store, http.MethodGet, "/health/ready", "")
+	// No database pool registered: readiness fails.
+	recorder := serveSystem(t, cfg, nil, store, http.MethodGet, "/health/ready", "")
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("/health/ready without database status = %d, want 503", recorder.Code)
 	}
@@ -146,14 +144,12 @@ func TestRouteHealthReadyReportsAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create mock pool: %v", err)
 	}
-	database.DB = mock
 	t.Cleanup(func() {
 		_ = mock.ExpectationsWereMet()
 		mock.Close()
-		database.DB = previousDB
 	})
 	mock.ExpectPing()
-	recorder = serveSystem(t, cfg, store, http.MethodGet, "/health/ready", "")
+	recorder = serveSystem(t, cfg, mock, store, http.MethodGet, "/health/ready", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("/health/ready with healthy deps status = %d, want 200", recorder.Code)
 	}
@@ -169,7 +165,7 @@ func TestRouteTestControlsGatedByEnvironment(t *testing.T) {
 	cfg := &config.Config{Environment: config.EnvDevelopment}
 	metrics := newTestMetrics()
 	mux := http.NewServeMux()
-	registerSystemRoutes(mux, cfg, metrics, store)
+	registerSystemRoutes(mux, cfg, nil, metrics, store)
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
 	if recorder.Code != http.StatusNotFound {
@@ -179,7 +175,7 @@ func TestRouteTestControlsGatedByEnvironment(t *testing.T) {
 	// Test environment registers the control route and clears the limiter.
 	testCfg := &config.Config{Environment: config.EnvTest}
 	testMux := http.NewServeMux()
-	registerSystemRoutes(testMux, testCfg, newTestMetrics(), store)
+	registerSystemRoutes(testMux, testCfg, nil, newTestMetrics(), store)
 	recorder = httptest.NewRecorder()
 	testMux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
 	if recorder.Code != http.StatusOK {

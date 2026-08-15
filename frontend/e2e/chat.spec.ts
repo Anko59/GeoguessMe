@@ -1,12 +1,20 @@
 import { test, expect } from './fixtures';
-import { expectConnected, seedChatMessages, signupViaUI, signupWithToken, uniqueGroup } from './helpers';
+import {
+    createInviteFromSettings,
+    expectConnected,
+    joinGroupViaInvite,
+    seedChatMessages,
+    signupViaUI,
+    signupWithToken,
+    uniqueGroup,
+} from './helpers';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 
 interface ChatScenario {
     ownerContext: BrowserContext;
     owner: Page;
     groupId: string;
-    groupCode: string;
+    inviteUrl: string;
 }
 
 async function createScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<ChatScenario> {
@@ -20,12 +28,11 @@ async function createScenario(browser: Browser, contextOptions: BrowserContextOp
 
     const groupId = owner.url().split('/group/')[1];
     await owner.getByRole('button', { name: 'Open group settings' }).click();
-    const settings = owner.getByRole('dialog');
-    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-    await settings.getByRole('button', { name: 'Close settings' }).click();
+    const inviteUrl = await createInviteFromSettings(owner);
+    await owner.getByRole('button', { name: 'Close settings' }).click();
     await expectConnected(owner);
 
-    return { ownerContext, owner, groupId, groupCode };
+    return { ownerContext, owner, groupId, inviteUrl };
 }
 
 async function addMember(
@@ -36,10 +43,7 @@ async function addMember(
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     await signupViaUI(page);
-    await page.goto('/group/join');
-    await page.getByPlaceholder('6-character code').fill(scenario.groupCode);
-    await page.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-    await page.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+    await joinGroupViaInvite(page, scenario.inviteUrl, scenario.groupId);
     await page.goto(`/group/${scenario.groupId}`);
     await expectConnected(page);
     return { context, page };
@@ -150,6 +154,10 @@ test.describe('Chat via WebSocket', () => {
                 .filter({ hasText: caption })
                 .locator('img.chat-attachment');
             await expect(memberAttachment).toBeVisible();
+            // Targeted visual assertions: chat rows keep their bottom-aligned
+            // flex layout regardless of message kind.
+            await expect(scenario.owner.locator('.message-container').first()).toHaveCSS('display', 'flex');
+            await expect(scenario.owner.locator('.message-container').first()).toHaveCSS('align-items', 'flex-end');
 
             // Clicking the shared photo opens it full screen, like the
             // challenge photo on the results page; closing restores the chat.
@@ -157,6 +165,11 @@ test.describe('Chat via WebSocket', () => {
             const fullScreen = member.page.getByRole('dialog', { name: 'Shared photo full screen' });
             await expect(fullScreen).toBeVisible();
             await expect(fullScreen.locator('img')).toHaveAttribute('src', /^blob:/);
+            // Targeted visual assertions: the shared full-screen dialog keeps
+            // its fixed, top-of-stack, dark presentation across surfaces.
+            await expect(fullScreen).toHaveCSS('position', 'fixed');
+            await expect(fullScreen).toHaveCSS('z-index', '2100');
+            await expect(fullScreen).toHaveCSS('background-color', 'rgba(5, 7, 18, 0.98)');
             await member.page.getByRole('button', { name: 'Close full-screen photo' }).click();
             await expect(fullScreen).not.toBeVisible();
         } finally {
@@ -290,9 +303,8 @@ test.describe('Chat via WebSocket', () => {
         const memberCtx = await controlledContext();
         const memberPage = await memberCtx.newPage();
         await signupViaUI(memberPage);
-        await memberPage.goto('/group/join');
-        await memberPage.getByPlaceholder('6-character code').fill(scenario.groupCode);
-        await memberPage.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
+        await memberPage.goto(scenario.inviteUrl);
+        await memberPage.getByTestId('join-btn').click();
         await memberPage.waitForURL(/\/group\/[0-9a-f-]{36}$/);
         await memberPage.goto(`/group/${scenario.groupId}`);
         await expectConnected(memberPage);
@@ -370,10 +382,10 @@ test.describe('Chat via WebSocket', () => {
             let releaseCatchUp!: () => void;
             await memberPage.route('**/api/v1/group/messages*', async (route) => {
                 const url = route.request().url();
-                // Only delay catch-up calls that carry an after_id (cursor).
-                // The initial load fetches without after_id and must not be
-                // delayed, or the page would stay empty forever.
-                if (url.includes('after_id=')) {
+                // Only delay catch-up calls that carry a cursor. The initial
+                // load fetches without cursor and must not be delayed, or the
+                // page would stay empty forever.
+                if (url.includes('cursor=')) {
                     await new Promise<void>((resolve) => {
                         releaseCatchUp = resolve;
                     });

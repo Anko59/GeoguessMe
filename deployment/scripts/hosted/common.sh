@@ -13,11 +13,14 @@ readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
 readonly SECRET_ROOT="${GEOGUESSME_SECRET_ROOT:-/etc/geoguessme}"
 # shellcheck disable=SC2034
 readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
-readonly RESTIC_IMAGE='restic/restic:0.18.0@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120'
+# This is the exact signed Restic image published and scanned with the
+# currently deployed development revision. Keep the reference immutable; the
+# release workflow scans this exact value before production promotion.
+readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-87223cc2a6ac4077fb13179ba6d2771f3290052d@sha256:9b28fb7a410705e63f5b5f741c9510b20a6f99b86e18be34019a280f52071213'
 # shellcheck disable=SC2034
-readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.5.3@sha256:f1946d0f30fc8e3777b02f2201e02efdba9fe38f4918162f937052fac98e083f'
+readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
 # shellcheck disable=SC2034
-readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.10.2@sha256:42514a95c2758596864ee0f2cbf463f140e905a04c127c940e1eec558415466c'
+readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2

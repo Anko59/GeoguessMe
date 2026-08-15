@@ -1,0 +1,55 @@
+import assert from "node:assert/strict";
+import { CoverageTracker } from "./coverage.mjs";
+
+const incomplete = new CoverageTracker();
+const blocked = incomplete.snapshot("full");
+assert.equal(blocked.release_ready, false);
+assert.equal(blocked.missing.length, 10);
+
+const complete = new CoverageTracker();
+complete.role("owner-session", "owner");
+complete.role("member-session", "member");
+complete.role("outsider-session", "outsider");
+complete.emailAccount();
+complete.mailboxCreated("mailbox-1");
+complete.mailboxSearched("mailbox-1");
+complete.linkOpened("verification");
+complete.linkOpened("password-reset");
+complete.transferCaptured();
+complete.transferOpened();
+complete.capabilitiesObserved({ camera: { usable: true }, geolocation: { usable: true } });
+complete.mediaAction();
+complete.challengeObserved = true;
+complete.challengeAccepted = true;
+complete.guessPlaced = true;
+complete.guessSubmitted = true;
+complete.chatAction = true;
+complete.chatObservationSessions.add("owner-session");
+complete.chatObservationSessions.add("member-session");
+complete.leaderboardObserved = true;
+complete.profileVisited = true;
+complete.settingsVisited = true;
+complete.refreshed = true;
+complete.mobile = true;
+complete.outsiderGroupAttempt = true;
+const ready = complete.snapshot("full");
+assert.equal(ready.release_ready, true);
+assert.deepEqual(ready.missing, []);
+
+const toolEvidence = new CoverageTracker();
+toolEvidence.role("owner-session", "owner");
+toolEvidence.role("member-session", "member");
+toolEvidence.role("outsider-session", "outsider");
+toolEvidence.capabilitiesObserved({ camera: { usable: true }, geolocation: { usable: true } });
+toolEvidence.viewportObserved(390, 844);
+toolEvidence.observed("owner-session", "https://dev.example/challenge/1", "Photo challenge Accept challenge");
+toolEvidence.action("browser_click", { target: { role: "button", name: "Take photo" } });
+toolEvidence.action("browser_click", { target: { role: "button", name: "Accept" } });
+toolEvidence.action("browser_click", { target: { role: "button", name: "Guess map" } });
+toolEvidence.action("browser_click", { target: { role: "button", name: "Submit guess" } });
+const toolReady = toolEvidence.snapshot("full");
+assert.equal(toolReady.missing.some(({ id }) => id === "photo-challenge-game"), false);
+assert.equal(toolReady.missing.some(({ id }) => id === "camera-location-media"), false);
+assert.equal(toolReady.missing.some(({ id }) => id === "responsive-mobile"), false);
+
+console.log("QA coverage gate contract PASSED");

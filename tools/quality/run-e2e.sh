@@ -11,6 +11,16 @@ PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
 COMPOSE_FILE="deployment/compose.test.yaml"
 STAGING_DIR="$REPO/frontend/.playwright-run"
 
+# shellcheck disable=SC1091 # Repository-relative helper resolved after cd above.
+source "$REPO/tools/quality/e2e/arguments.sh"
+
+test_args=()
+build_e2e_test_args test_args \
+    "${GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile}" \
+    "${GEOGUESSME_E2E_SHARD:-}" \
+    "${GEOGUESSME_E2E_SPEC:-}" \
+    "${1:-}"
+
 # Clear stale artifacts so only the current invocation's output is retained.
 if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-report" ]; then
     rm -rf "$REPO/frontend/test-results" "$REPO/frontend/playwright-report" || {
@@ -37,24 +47,6 @@ export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:
 
 docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --wait
 "$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
-
-IFS=',' read -r -a selected_projects <<<"${GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile}"
-test_args=(test)
-for project in "${selected_projects[@]}"; do
-    case "$project" in
-        desktop | firefox | mobile) test_args+=("--project=$project") ;;
-        *)
-            echo "unsupported Playwright project: $project" >&2
-            exit 2
-            ;;
-    esac
-done
-if [ "${1:-}" = "--ui" ]; then
-    test_args+=(--ui)
-fi
-if [ -n "${GEOGUESSME_E2E_SPEC:-}" ]; then
-    test_args+=("${GEOGUESSME_E2E_SPEC}")
-fi
 
 # Run Playwright inside the pinned image without unsafe sh -c interpolation.
 # Environment variables and arguments are passed directly; output directories

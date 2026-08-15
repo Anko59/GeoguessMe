@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api';
+import type { MediaProcessingJob } from '../../types';
 
-export const LOCATION_OPTIONS: PositionOptions = {
+const LOCATION_OPTIONS: PositionOptions = {
     enableHighAccuracy: false,
     timeout: 10_000,
     maximumAge: 60_000,
@@ -32,13 +33,28 @@ export function getCurrentPosition(options: PositionOptions = LOCATION_OPTIONS):
     });
 }
 
+/** True when a response body is the asynchronous media-processing job reference. */
+export function isProcessingJob(value: unknown): value is MediaProcessingJob {
+    if (typeof value !== 'object' || value === null) return false;
+    const candidate = value as { id?: unknown; kind?: unknown; status?: unknown; queued_at?: unknown };
+    return (
+        typeof candidate.id === 'string' &&
+        typeof candidate.queued_at === 'string' &&
+        (candidate.kind === 'challenge' || candidate.kind === 'chat') &&
+        (candidate.status === 'queued' ||
+            candidate.status === 'processing' ||
+            candidate.status === 'ready' ||
+            candidate.status === 'failed')
+    );
+}
+
 export async function uploadPhoto(
     blob: Blob,
     filename: string,
     groupIDs: string[],
     position: GeolocationPosition,
     hideLocation = false,
-): Promise<void> {
+): Promise<MediaProcessingJob | null> {
     const formData = new FormData();
     formData.append('photo', blob, filename);
     for (const groupID of groupIDs) {
@@ -47,7 +63,10 @@ export async function uploadPhoto(
     formData.append('hide_location', hideLocation ? 'true' : 'false');
     formData.append('lat', position.coords.latitude.toString());
     formData.append('long', position.coords.longitude.toString());
-    await api.post('/photo/upload', formData);
+    const response = await api.post('/photo/upload', formData);
+    // Images complete synchronously (201, no body shape match); videos return
+    // a processing-job reference (202) that the caller polls to completion.
+    return isProcessingJob(response.data) ? response.data : null;
 }
 
 const FILTERABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);

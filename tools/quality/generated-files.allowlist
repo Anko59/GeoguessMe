@@ -9,3 +9,4 @@
 #   .ini .conf .env Dockerfile Makefile Caddyfile  # GENERATED FILE
 #   .json                    {"_generated": "GENERATED FILE"}
 #   other (non-code)         GENERATED FILE  (bare, backward compatible)
+frontend/src/types/openapi.generated.ts

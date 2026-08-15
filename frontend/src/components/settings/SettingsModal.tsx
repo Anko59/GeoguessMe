@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
-import type { Member } from '../../types';
+import type { InviteCreateResponse, InviteListItem, Member } from '../../types';
 import Avatar from '../common/Avatar';
 import LogoutButton from '../navigation/LogoutButton';
 import Icon from '../ui/Icon';
@@ -10,23 +10,25 @@ import './SettingsModal.css';
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    groupCode: string;
     groupName: string;
     groupId: string;
-    currentUserName: string;
     onGroupPhotoUpdated?: () => void;
+}
+
+function formatDate(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function SettingsModal({
     isOpen,
     onClose,
-    groupCode,
     groupName,
     groupId,
-    currentUserName,
     onGroupPhotoUpdated,
 }: SettingsModalProps) {
-    const [copiedItem, setCopiedItem] = useState<'link' | 'code' | null>(null);
+    const [copied, setCopied] = useState(false);
     const [membersExpanded, setMembersExpanded] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [loadingMembers, setLoadingMembers] = useState(false);
@@ -36,6 +38,15 @@ export default function SettingsModal({
     const [notificationError, setNotificationError] = useState('');
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [photoError, setPhotoError] = useState('');
+    const [invites, setInvites] = useState<InviteListItem[]>([]);
+    // Tracks the group whose invites have finished loading so the loading
+    // indicator can be derived in render instead of a setState-in-effect
+    // round trip (react-hooks lint).
+    const [invitesLoadedGroupId, setInvitesLoadedGroupId] = useState<string | null>(null);
+    const [inviteListError, setInviteListError] = useState('');
+    const [createdInvite, setCreatedInvite] = useState<InviteCreateResponse | null>(null);
+    const [creatingInvite, setCreatingInvite] = useState(false);
+    const [inviteError, setInviteError] = useState('');
 
     useEffect(() => {
         if (!isOpen) return;
@@ -62,6 +73,52 @@ export default function SettingsModal({
         };
     }, [groupId, isOpen]);
 
+    useEffect(() => {
+        let active = true;
+        // A raw invite is intentionally ephemeral. Clear it whenever the modal
+        // opens, closes, or moves to another group so it cannot reappear later.
+        queueMicrotask(() => {
+            if (active) {
+                setCreatedInvite(null);
+                setCopied(false);
+                setInviteError('');
+            }
+        });
+        if (!isOpen) {
+            return () => {
+                active = false;
+            };
+        }
+        void api
+            .get<InviteListItem[]>('/group/invites', { params: { group_id: groupId } })
+            .then((response) => {
+                if (active) {
+                    setInvites(response.data || []);
+                    setInviteListError('');
+                    setInvitesLoadedGroupId(groupId);
+                }
+            })
+            .catch(() => {
+                if (active) {
+                    setInviteListError('Unable to load invites. Try again.');
+                    setInvitesLoadedGroupId(groupId);
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [groupId, isOpen]);
+
+    const refreshInvites = useCallback(async () => {
+        try {
+            const res = await api.get<InviteListItem[]>('/group/invites', { params: { group_id: groupId } });
+            setInvites(res.data || []);
+            setInviteListError('');
+        } catch {
+            setInviteListError('Unable to load invites. Try again.');
+        }
+    }, [groupId]);
+
     const fetchMembers = useCallback(async () => {
         setLoadingMembers(true);
         setMemberError('');
@@ -83,18 +140,42 @@ export default function SettingsModal({
 
     if (!isOpen) return null;
 
-    const inviteLink = `${window.location.origin}/invite/${groupCode}?from=${encodeURIComponent(currentUserName)}`;
-
-    const copyInviteLink = () => {
-        navigator.clipboard.writeText(inviteLink);
-        setCopiedItem('link');
-        setTimeout(() => setCopiedItem(null), 2000);
+    const createInvite = () => {
+        if (creatingInvite) return;
+        setCreatingInvite(true);
+        setInviteError('');
+        void api
+            .post<InviteCreateResponse>('/group/invites', { group_id: groupId })
+            .then((response) => {
+                setCreatedInvite(response.data);
+                void refreshInvites();
+            })
+            .catch(() => setInviteError('Unable to create an invite. Try again.'))
+            .finally(() => setCreatingInvite(false));
     };
 
-    const copyCode = () => {
-        navigator.clipboard.writeText(groupCode);
-        setCopiedItem('code');
-        setTimeout(() => setCopiedItem(null), 2000);
+    const revokeInvite = (inviteID: string) => {
+        void api
+            .delete(`/group/invites/${inviteID}`)
+            .then(() => void refreshInvites())
+            .catch(() => setInviteError('Unable to revoke that invite. Try again.'));
+    };
+
+    const inviteLink = createdInvite ? `${window.location.origin}${createdInvite.invite_url}` : '';
+    const copyInvite = () => {
+        if (!createdInvite) return;
+        if (!navigator.clipboard) {
+            setInviteError('Clipboard access is unavailable. Select and copy the link manually.');
+            return;
+        }
+        setInviteError('');
+        void navigator.clipboard
+            .writeText(inviteLink)
+            .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            })
+            .catch(() => setInviteError('Unable to copy the invite. Select and copy the link manually.'));
     };
 
     const toggleNotifications = () => {
@@ -189,53 +270,89 @@ export default function SettingsModal({
                 <div className="settings-section">
                     <h4 className="section-title">
                         <img src="/invite_link_icon.png" alt="" className="section-icon" />
-                        Invite Link
+                        Invites
                     </h4>
-                    <div className="invite-box">
-                        <input
-                            type="text"
-                            value={inviteLink}
-                            readOnly
-                            className="invite-input"
-                            aria-label="Invite link"
-                        />
-                        <button onClick={copyInviteLink} className="copy-btn">
-                            {copiedItem === 'link' ? (
-                                <>
-                                    <img src="/check.png" alt="" className="copy-icon" />
-                                    Copied!
-                                </>
-                            ) : (
-                                <>
-                                    <img src="/copy_text_icon.png" alt="" className="copy-icon" />
-                                    Copy
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                <div className="settings-section">
-                    <h4 className="section-title">
-                        <img src="/group_code_icon.png" alt="" className="section-icon" />
-                        Group Code
-                    </h4>
-                    <div className="code-box">
-                        <span className="group-code">{groupCode}</span>
-                        <button onClick={copyCode} className="copy-btn">
-                            {copiedItem === 'code' ? (
-                                <>
-                                    <img src="/check.png" alt="" className="copy-icon" />
-                                    Copied!
-                                </>
-                            ) : (
-                                <>
-                                    <img src="/copy_text_icon.png" alt="" className="copy-icon" />
-                                    Copy
-                                </>
-                            )}
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={createInvite}
+                        disabled={creatingInvite}
+                        data-testid="create-invite-btn"
+                    >
+                        {creatingInvite ? 'Creating…' : 'Create invite link'}
+                    </button>
+                    {inviteError && (
+                        <div className="settings-error" role="alert">
+                            {inviteError}
+                        </div>
+                    )}
+                    {createdInvite && (
+                        <div className="invite-box">
+                            <p className="invite-once-notice">
+                                This invite link is shown only once. Copy and share it.
+                            </p>
+                            <input
+                                type="text"
+                                value={inviteLink}
+                                readOnly
+                                className="invite-input"
+                                aria-label="Invite link"
+                                data-testid="invite-url"
+                            />
+                            <button onClick={copyInvite} className="copy-btn">
+                                {copied ? (
+                                    <>
+                                        <img src="/check.png" alt="" className="copy-icon" />
+                                        Copied!
+                                    </>
+                                ) : (
+                                    <>
+                                        <img src="/copy_text_icon.png" alt="" className="copy-icon" />
+                                        Copy
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    )}
+                    {invitesLoadedGroupId !== groupId ? (
+                        <div className="invites-loading">Loading invites...</div>
+                    ) : inviteListError ? (
+                        <div className="invites-empty" role="alert">
+                            {inviteListError}
+                        </div>
+                    ) : invites.length === 0 ? (
+                        <div className="invites-empty">No active invites yet.</div>
+                    ) : (
+                        <ul className="invites-list">
+                            {invites.map((invite) => (
+                                <li key={invite.id} className="invite-item">
+                                    <span className="invite-meta">
+                                        <span
+                                            className={
+                                                invite.revoked
+                                                    ? 'invite-state-label revoked'
+                                                    : 'invite-state-label active'
+                                            }
+                                        >
+                                            {invite.revoked ? 'Revoked' : 'Active'}
+                                        </span>
+                                        <span className="invite-dates">
+                                            {invite.id} · by {invite.creator_user_id} · created{' '}
+                                            {formatDate(invite.created_at)}· expires {formatDate(invite.expires_at)}
+                                        </span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="copy-btn"
+                                        onClick={() => revokeInvite(invite.id)}
+                                        disabled={Boolean(invite.revoked)}
+                                    >
+                                        Revoke
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
 
                 <div className="settings-section">

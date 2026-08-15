@@ -49,15 +49,4 @@
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     --duration-fast: 160ms;
     --duration: 220ms;
-    /* Compatibility aliases for existing components. */
-    --bg-color: var(--surface);
-    --bg-dark: var(--surface-soft);
-    --text-color: var(--ink);
-    --text-light: var(--ink-muted);
-    --primary-orange: var(--brand-orange);
-    --primary-yellow: var(--brand-yellow);
-    --primary-blue: var(--brand-blue-accessible);
-    --primary-green: var(--brand-green);
-    --accent-dark: var(--brand-navy);
-    --accent-red: var(--danger);
 }

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMetricsAndRequestID(t *testing.T) {
@@ -41,6 +42,40 @@ func TestMetricsAndRequestID(t *testing.T) {
 	RequestID(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(recorder, request)
 	if recorder.Header().Get("X-Request-ID") == "" {
 		t.Fatal("generated request ID is empty")
+	}
+}
+
+func TestMetricsIncludesLimiterRejectionsAndExtra(t *testing.T) {
+	ResetRateLimiter()
+	metrics := &Metrics{ExtraMetrics: func() string { return "push_queue_depth 0\n" }}
+	metrics.Observe(http.StatusOK)
+	recorder := httptest.NewRecorder()
+	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := recorder.Body.String()
+	for _, want := range []string{"geoguessme_limiter_rejections_total 0", "push_queue_depth 0"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics missing %q in %q", want, body)
+		}
+	}
+
+	// A real rejection must surface its per-policy line.
+	policy := Policy{Name: "login", Buckets: []BucketSpec{{Type: BucketIdentity, Limit: 1, Window: time.Minute}}}
+	mw := PolicyMiddleware(policy, PolicyOptions{Identity: func(r *http.Request) string { return "alice" }})
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	req := httptest.NewRequest(http.MethodPost, "/login", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req) // first request is allowed
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req) // second request is rejected
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("rejection status = %d, want 429", rr.Code)
+	}
+	recorder = httptest.NewRecorder()
+	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body = recorder.Body.String()
+	if !strings.Contains(body, `geoguessme_limiter_rejections_total{policy="login"} 1`) {
+		t.Errorf("metrics missing per-policy line in %q", body)
 	}
 }
 

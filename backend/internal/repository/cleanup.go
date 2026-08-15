@@ -6,15 +6,17 @@ import (
 	"log/slog"
 	"time"
 
-	"geoguessme/internal/database"
+	"geoguessme/internal/mediaprocessing"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type RetainedMedia struct{ ID, StorageKey string }
 
-func FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
-	rows, err := database.DB.Query(ctx, `SELECT id, storage_key FROM photos WHERE lifecycle_status <> 'removed' AND retention_at < CURRENT_TIMESTAMP ORDER BY retention_at LIMIT $1`, limit)
+// FindExpiredMedia returns retained photos whose retention window has ended,
+// oldest retention first, up to limit records.
+func (r *Repository) FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, storage_key FROM photos WHERE lifecycle_status <> 'removed' AND retention_at < CURRENT_TIMESTAMP ORDER BY retention_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +32,18 @@ func FindExpiredMedia(ctx context.Context, limit int) ([]RetainedMedia, error) {
 	return result, rows.Err()
 }
 
-func ExpireChallengeViews(ctx context.Context) error {
-	_, err := database.DB.Exec(ctx, `DELETE FROM challenge_views WHERE view_expires_at < CURRENT_TIMESTAMP - interval '1 day'`)
+// ExpireChallengeViews removes stale challenge-view rows kept for audit.
+func (r *Repository) ExpireChallengeViews(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM challenge_views WHERE view_expires_at < CURRENT_TIMESTAMP - interval '1 day'`)
+	return err
+}
+
+// ExpirePushSubscriptions removes push subscriptions that have not been used
+// for maxAge. The idle window is measured from last_used_at (refreshed on
+// every successful delivery) or created_at when a subscription was never used.
+// The expression index from migration 016 keeps this delete cheap.
+func (r *Repository) ExpirePushSubscriptions(ctx context.Context, maxAge time.Duration) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE COALESCE(last_used_at, created_at) < $1`, time.Now().UTC().Add(-maxAge))
 	return err
 }
 
@@ -41,15 +53,21 @@ type Deleter interface {
 }
 
 // CleanupRunner drives token cleanup, challenge-view expiry, retention media
-// deletion, and the durable object-deletion queue. It runs once immediately on
-// start so a freshly booting worker clears any backlog before waiting on its
-// interval.
+// deletion, push-subscription expiry, and the durable object-deletion queue. It
+// runs once immediately on start so a freshly booting worker clears any backlog
+// before waiting on its interval. Persistence is reached through the injected
+// Repos dependency; the worker never touches a package global.
 type CleanupRunner struct {
 	Store            Deleter
+	Repos            *Repository
 	Interval         time.Duration
 	Logger           *slog.Logger
 	Backlog          func(pending int)
 	BacklogRemaining bool
+	// PushSubscriptionExpiry is the idle window after which unused push
+	// subscriptions are deleted. A non-positive value disables the sweep so
+	// existing test constructions without the field stay unchanged.
+	PushSubscriptionExpiry time.Duration
 }
 
 func (r CleanupRunner) Run(ctx context.Context) {
@@ -75,24 +93,79 @@ func (r CleanupRunner) Run(ctx context.Context) {
 	}
 }
 
+// staleProcessingInterval is how long a claimed media-processing job may stay
+// in the processing state before the cleanup runner assumes its worker died
+// and returns it to the queue.
+const staleProcessingInterval = 5 * time.Minute
+
+// abandonedProcessingInterval is how long a media-processing job may stay
+// incomplete before the cleanup runner deletes its raw quarantine object and
+// fails it. Quarantined uploads are purged after one hour (F-10 criterion).
+const abandonedProcessingInterval = time.Hour
+
 func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
-	if err := CleanupAuthTokens(ctx); err != nil {
+	if err := r.Repos.CleanupAuthTokens(ctx); err != nil {
 		logger.Warn("auth token cleanup failed", "error", err)
 	}
-	if err := ExpireChallengeViews(ctx); err != nil {
+	if err := r.Repos.ExpireChallengeViews(ctx); err != nil {
 		logger.Warn("challenge view expiry failed", "error", err)
 	}
 	if err := r.sweepRetainedMedia(ctx, logger); err != nil {
 		logger.Warn("retention media sweep failed", "error", err)
 	}
+	if r.PushSubscriptionExpiry > 0 {
+		if err := r.Repos.ExpirePushSubscriptions(ctx, r.PushSubscriptionExpiry); err != nil {
+			logger.Warn("push subscription expiry failed", "error", err)
+		}
+	}
+	// Media-processing jobs: release jobs whose worker died, fail quarantined
+	// uploads abandoned for over an hour, then drop finished jobs past their
+	// 24-hour retention window.
+	if count, err := r.Repos.RequeueStaleProcessingJobs(ctx, staleProcessingInterval); err != nil {
+		logger.Warn("media processing requeue failed", "error", err)
+	} else if count > 0 {
+		logger.Info("released stale media processing jobs", "count", count)
+	}
+	if err := r.sweepAbandonedProcessing(ctx, logger); err != nil {
+		logger.Warn("abandoned quarantine sweep failed", "error", err)
+	}
+	if count, err := r.Repos.PurgeExpiredProcessingJobs(ctx); err != nil {
+		logger.Warn("expired media processing job purge failed", "error", err)
+	} else if count > 0 {
+		logger.Info("purged expired media processing jobs", "count", count)
+	}
 	r.drainDeletionQueue(ctx, logger)
 	if r.Backlog != nil {
-		if count, err := CountDeletionBacklog(ctx); err != nil {
+		if count, err := r.Repos.CountDeletionBacklog(ctx); err != nil {
 			logger.Warn("deletion backlog count failed", "error", err)
 		} else {
 			r.Backlog(count)
 		}
 	}
+}
+
+// sweepAbandonedProcessing deletes the raw quarantine objects of media
+// processing jobs that never reached ready within the abandoned interval and
+// marks those jobs failed with a stable, owner-facing code. An object that
+// refuses immediate deletion becomes a durable deletion job so no raw bytes
+// are ever orphaned.
+func (r CleanupRunner) sweepAbandonedProcessing(ctx context.Context, logger *slog.Logger) error {
+	items, err := r.Repos.AbandonQueuedProcessingJobs(ctx, abandonedProcessingInterval, mediaprocessing.ErrorTimeout)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, item := range items {
+		if err := r.Store.Delete(ctx, item.QuarantineKey); err != nil {
+			if enqueueErr := r.Repos.EnqueueMediaDeletion(ctx, "media-processing-abandoned", []string{item.QuarantineKey}); enqueueErr != nil {
+				logger.Error("persisting abandoned quarantine deletion failed", "job_id", item.JobID, "storage_key", item.QuarantineKey, "error", enqueueErr)
+				if firstErr == nil {
+					firstErr = enqueueErr
+				}
+			}
+		}
+	}
+	return firstErr
 }
 
 // RetireRetainedMedia atomically marks a retained media record removed and
@@ -108,8 +181,8 @@ func (r CleanupRunner) runOnce(ctx context.Context, logger *slog.Logger) {
 // transaction is rolled back, leaving no committed partial state. A record
 // already marked removed (or one that no longer exists) is an idempotent success
 // and creates no new deletion job.
-func RetireRetainedMedia(ctx context.Context, id string) error {
-	tx, err := database.DB.Begin(ctx)
+func (r *Repository) RetireRetainedMedia(ctx context.Context, id string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -153,13 +226,13 @@ func RetireRetainedMedia(ctx context.Context, id string) error {
 // while the remaining records are still processed; the first error propagates
 // so the caller can observe partial failures.
 func (r CleanupRunner) sweepRetainedMedia(ctx context.Context, logger *slog.Logger) error {
-	items, err := FindExpiredMedia(ctx, 100)
+	items, err := r.Repos.FindExpiredMedia(ctx, 100)
 	if err != nil {
 		return err
 	}
 	var firstErr error
 	for _, item := range items {
-		if err := RetireRetainedMedia(ctx, item.ID); err != nil {
+		if err := r.Repos.RetireRetainedMedia(ctx, item.ID); err != nil {
 			logger.Error("retiring retained media failed", "photo_id", item.ID, "key", item.StorageKey, "error", err)
 			if firstErr == nil {
 				firstErr = err
@@ -195,7 +268,7 @@ func (r CleanupRunner) DrainDeletionQueue(ctx context.Context) {
 
 func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logger) {
 	for {
-		jobs, err := ClaimDeletionJobs(ctx, 25, 15*time.Minute)
+		jobs, err := r.Repos.ClaimDeletionJobs(ctx, 25, 15*time.Minute)
 		if err != nil {
 			logger.Warn("claiming deletion jobs failed", "error", err)
 			return
@@ -206,10 +279,10 @@ func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logg
 		for _, job := range jobs {
 			if err := r.Store.Delete(ctx, job.StorageKey); err != nil {
 				logger.Warn("object deletion failed", "job_id", job.ID, "key", job.StorageKey, "attempt", job.Attempts, "error", err)
-				_ = FailDeletionJob(ctx, job.ID, err.Error())
+				_ = r.Repos.FailDeletionJob(ctx, job.ID, err.Error())
 				continue
 			}
-			if err := CompleteDeletionJob(ctx, job.ID); err != nil {
+			if err := r.Repos.CompleteDeletionJob(ctx, job.ID); err != nil {
 				logger.Warn("marking deletion job complete failed", "job_id", job.ID, "error", err)
 			}
 		}

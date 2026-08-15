@@ -58,7 +58,9 @@ describe('Signup Page', () => {
         );
 
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
-        fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'new@example.com' } });
+        fireEvent.change(screen.getByPlaceholderText('Email — verify to enable account recovery'), {
+            target: { value: 'new@example.com' },
+        });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
 
@@ -69,6 +71,28 @@ describe('Signup Page', () => {
                 password: 'StrongPass123',
             });
         });
+    });
+
+    it('creates an account without a recovery email', async () => {
+        mockPost.mockResolvedValue({
+            data: { token: 'fake-token', user: { id: '1', username: 'emailfree' } },
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'emailfree' } });
+        fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+        await waitFor(() =>
+            expect(mockPost).toHaveBeenCalledWith('/auth/signup', {
+                username: 'emailfree',
+                password: 'StrongPass123',
+            }),
+        );
     });
 
     it('displays error on failed signup', async () => {

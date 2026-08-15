@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,20 +39,29 @@ type HTTPDoer interface {
 
 // Sender encrypts and delivers push messages to a single push service endpoint
 // using VAPID (RFC 8292) authentication. It holds no per-subscription state.
+// When a guard is provided, Send refuses endpoints outside the provider
+// allowlist and the default client goes through the hardened transport.
 type Sender struct {
 	keys    *KeyPair
 	subject string
 	client  HTTPDoer
+	guard   *EndpointGuard
 	now     func() time.Time
 }
 
-// NewSender constructs a Sender. client may be nil, in which case a default
-// bounded-timeout http.Client is used.
-func NewSender(keys *KeyPair, subject string, client HTTPDoer) *Sender {
+// NewSender constructs a Sender. guard may be nil to keep legacy validation
+// (used by unit tests); when non-nil, Send rejects endpoints the guard does
+// not allow and a nil client resolves to the guard's hardened client. A client
+// passed explicitly bypasses the guarded transport but never the allowlist.
+func NewSender(keys *KeyPair, subject string, guard *EndpointGuard, client HTTPDoer) *Sender {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		if guard != nil {
+			client = guard.Client()
+		} else {
+			client = &http.Client{Timeout: 10 * time.Second}
+		}
 	}
-	return &Sender{keys: keys, subject: subject, client: client, now: time.Now}
+	return &Sender{keys: keys, subject: subject, client: client, guard: guard, now: time.Now}
 }
 
 // Send encrypts payload for the subscription's credentials and POSTs it to the
@@ -61,6 +69,14 @@ func NewSender(keys *KeyPair, subject string, client HTTPDoer) *Sender {
 // the subscription must be deleted; any other error is transient/retryable and
 // leaves the subscription intact.
 func (s *Sender) Send(ctx context.Context, sub *Subscription, payload []byte) error {
+	// The endpoint host is validated against the provider allowlist before any
+	// crypto or network work. A subscription outside the allowlist is permanent
+	// invalid: it must be dropped, never retried against an arbitrary host.
+	if s.guard != nil {
+		if err := s.guard.ValidateEndpoint(sub.Endpoint); err != nil {
+			return fmt.Errorf("%w: %v", ErrSubscriptionGone, err)
+		}
+	}
 	receiverBytes, err := decodeReceiverKey(sub.P256DH)
 	if err != nil || len(receiverBytes) != 65 || receiverBytes[0] != 0x04 {
 		return fmt.Errorf("%w: invalid p256dh key", ErrSubscriptionGone)
@@ -97,8 +113,11 @@ func (s *Sender) Send(ctx context.Context, sub *Subscription, payload []byte) er
 	if err != nil {
 		return fmt.Errorf("push request failed: %w", err)
 	}
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
-	return classifyStatus(resp)
+	statusErr := classifyStatus(resp)
+	if closeErr := resp.Body.Close(); statusErr == nil && closeErr != nil {
+		return fmt.Errorf("close push response: %w", closeErr)
+	}
+	return statusErr
 }
 
 // classifyStatus maps push-service response codes to permanent vs. transient

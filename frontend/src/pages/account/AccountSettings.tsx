@@ -13,7 +13,7 @@ export default function AccountSettings() {
     const { user, refresh, logout } = useAuth();
     const navigate = useNavigate();
     const [username, setUsername] = useState(user?.username ?? '');
-    const [email, setEmail] = useState(user?.email ?? '');
+    const [email, setEmail] = useState(user?.pending_email ?? user?.email ?? '');
     const [avatar, setAvatar] = useState(user?.avatar ?? 'avatar.png');
     const [avatarVersion, setAvatarVersion] = useState(0);
     const [uploading, setUploading] = useState(false);
@@ -63,11 +63,38 @@ export default function AccountSettings() {
     const saveProfile = async (): Promise<void> => {
         clearNotice();
         setSaving(true);
+        const submittedEmail = email.trim();
+        const currentTarget = user?.pending_email ?? user?.email ?? '';
+        const wasVerified = Boolean(user?.email_verified_at && user?.email);
         try {
-            await api.patch('/auth/profile', { username, email, avatar, current_password: profilePassword });
+            const payload: { username: string; avatar: string; current_password: string; email?: string } = {
+                username,
+                avatar,
+                current_password: profilePassword,
+            };
+            if (submittedEmail) payload.email = submittedEmail;
+            await api.patch('/auth/profile', payload);
             setProfilePassword('');
             await refresh();
-            setMessage('Profile updated.');
+            // A changed address becomes a pending claim, not a replacement
+            // verified email: the verified recovery address stays active until
+            // the new claim is promoted by a successful verification.
+            if (submittedEmail && submittedEmail !== currentTarget) {
+                try {
+                    await api.post('/auth/verify/request');
+                    setMessage(
+                        wasVerified
+                            ? `Verification sent to ${submittedEmail}. Your verified email (${user?.email ?? ''}) stays active until the new address is verified.`
+                            : `Verification sent to ${submittedEmail}. Your recovery email activates once verified.`,
+                    );
+                } catch {
+                    setMessage(
+                        'Profile updated. The verification email could not be sent — use “Resend verification email” below.',
+                    );
+                }
+            } else {
+                setMessage('Profile updated.');
+            }
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Unable to update profile'));
         } finally {
@@ -175,13 +202,17 @@ export default function AccountSettings() {
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
                     />
-                    <label htmlFor="settings-email">Email address</label>
+                    <label htmlFor="settings-email">Recovery email</label>
                     <input
                         id="settings-email"
                         type="email"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
                     />
+                    <p className="account-help">
+                        Email is a recovery/contact channel, not an identity. A new address is verified before it
+                        becomes active.
+                    </p>
                     <label htmlFor="profile-current-password">Current password to save profile changes</label>
                     <input
                         id="profile-current-password"
@@ -226,14 +257,29 @@ export default function AccountSettings() {
                 )}
                 <div className="account-verification">
                     <div>
-                        <strong>{user?.email_verified_at ? 'Email verified' : 'Email not verified'}</strong>
-                        <span>
-                            {user?.email_verified_at
-                                ? 'Your account recovery address is confirmed.'
-                                : 'Verify your address to secure account recovery.'}
-                        </span>
+                        {user?.email_verified_at && user?.email ? (
+                            <>
+                                <strong>Verified recovery email</strong>
+                                <span>{user.email} is confirmed and stays active until a replacement is verified.</span>
+                            </>
+                        ) : (
+                            <strong>No verified email</strong>
+                        )}
+                        {user?.pending_email ? (
+                            <>
+                                <strong className="verification-pending-title">Pending verification</strong>
+                                <span>Verification was requested for {user.pending_email}.</span>
+                            </>
+                        ) : (
+                            !user?.email_verified_at && (
+                                <span>
+                                    Email is a recovery/contact channel, not an identity. Add an email to enable account
+                                    recovery.
+                                </span>
+                            )
+                        )}
                     </div>
-                    {!user?.email_verified_at && (
+                    {user?.pending_email && (
                         <button className="btn btn-secondary" onClick={() => void resend()}>
                             Resend verification email
                         </button>

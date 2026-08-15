@@ -1,5 +1,9 @@
 # Security and privacy
 
+This document describes the technical security, privacy, and operational
+controls. The public-facing data and retention summary is maintained in
+[PRIVACY.md](../PRIVACY.md).
+
 ## Authorization model
 
 ### Authentication

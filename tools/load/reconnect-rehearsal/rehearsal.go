@@ -67,7 +67,7 @@ func main() {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			if err := joinGroup(creds[idx].Access, group.Code); err != nil {
+			if err := joinGroup(creds[idx].Access, group.InviteToken); err != nil {
 				fmt.Fprintf(os.Stderr, "join %d failed: %v\n", idx, err)
 				res.addError()
 			}
@@ -257,7 +257,7 @@ func anchorFromSuffix(suffix string) credentials {
 
 func runDisconnectedSend(suffix string, concurrent int, group groupRef, res *result) (string, credentials) {
 	anchor := anchorFromSuffix(suffix)
-	mustOK(joinGroup(anchor.Access, group.Code))
+	mustOK(joinGroup(anchor.Access, group.InviteToken))
 	anchorTicket := mustVal(getWSTicket(anchor.Access, group.ID))
 	anchorConn := mustVal(dialWS(group.ID, anchorTicket))
 	preCursor := mustVal(getLatestCursor(anchor.Access, group.ID))

@@ -117,7 +117,7 @@ git commit -q -m "quote fixture"
 
 result=$(git ls-files -z '*.sh' | xargs -0 -r echo 2>/dev/null) || true
 assert_pass "git-ls-quote" "git ls-files -z handles single-quote filenames" \
-    "$(echo "$result" | grep -q "it's" && echo 0 || echo 1)"
+    "$(grep -q "it's" <<<"$result" && echo 0 || echo 1)"
 
 # ── Test: filenames with newlines would be pathological but NUL protects ────
 # We test that the xargs -0 delimiter works by checking a space vs NUL scenario.

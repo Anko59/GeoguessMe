@@ -48,7 +48,8 @@ check_env() {
 
 check_makefile_ref() {
     local pattern="$1" desc="$2"
-    if grep -q "$pattern" Makefile; then
+    # Search the public Makefile and its responsibility fragments.
+    if grep -q "$pattern" Makefile tools/make/*.mk; then
         pass "$desc"
     else
         fail "$desc"
@@ -57,7 +58,7 @@ check_makefile_ref() {
 
 check_makefile_no_ref() {
     local pattern="$1" desc="$2"
-    if grep "$pattern" Makefile >/dev/null 2>&1; then
+    if grep "$pattern" Makefile tools/make/*.mk >/dev/null 2>&1; then
         fail "$desc"
     else
         pass "$desc"

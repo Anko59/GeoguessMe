@@ -118,7 +118,9 @@ export function CameraOptionsMenu({
                 </span>
                 <span className="camera-options-hide-text">
                     <strong>Hide my location</strong>
-                    <small>Guessers see only distances; the spot is revealed after 48 hours.</small>
+                    <small>
+                        Guessers see only distances; the exact spot stays hidden for the configured reveal period.
+                    </small>
                 </span>
             </label>
             <button type="button" className="camera-options-done" onClick={onClose}>

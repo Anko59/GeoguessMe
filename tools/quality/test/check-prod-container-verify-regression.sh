@@ -38,6 +38,7 @@ phases=(
     "Image hardening"
     "Compose configuration validation"
     "Start production-like local stack"
+    "Effective runtime hardening"
     "Health, readiness, and HTTP verification"
 )
 for phase in "${phases[@]}"; do
@@ -190,10 +191,8 @@ fi
 
 # ── Test 13: Container runtime security invariants ───────────────────────────
 echo "--- Test 13: Runtime security checks ---"
-# The script must verify the production compose has read_only and healthcheck
-# settings, but these are validated structurally via compose validation.
-# The script already validates compose config --quiet which catches missing
-# service-level properties. Verify the compose production file still has them.
+# Compose schema validation cannot require our security policy, so verify the
+# policy markers and the migration dependency explicitly.
 COMPOSE_PROD="$(cd "$(dirname "$0")/../../.." && pwd)/deployment/compose.production.yaml"
 if [ -f "$COMPOSE_PROD" ]; then
     if grep -q 'read_only: true' "$COMPOSE_PROD"; then
@@ -209,7 +208,12 @@ if [ -f "$COMPOSE_PROD" ]; then
     # Migration must wait for healthy database when local-db profile is active.
     # The depends_on uses required: false so production deploys without local-db
     # are unaffected.
-    if grep -A 10 '^  migration:' "$COMPOSE_PROD" | grep -q 'service_healthy'; then
+    migration_block=$(awk '
+        /^  migration:$/ { inside = 1; next }
+        inside && /^  [[:alnum:]_-]+:$/ { exit }
+        inside { print }
+    ' "$COMPOSE_PROD")
+    if grep -q 'condition: service_healthy' <<<"$migration_block"; then
         pass "migration service depends on healthy database"
     else
         fail "migration service missing db health dependency"
@@ -230,26 +234,26 @@ echo "--- Test 14: No contradictory SMTP environment ---"
 prod_env_block=$(sed -n '/^cat.*production.env/,/^ENVEOF$/p' "$SCRIPT")
 
 # SMTP_USERNAME and SMTP_PASSWORD must not appear (unauthenticated fixture).
-if echo "$prod_env_block" | grep -qE '^SMTP_USERNAME='; then
+if grep -qE '^SMTP_USERNAME=' <<<"$prod_env_block"; then
     fail "production.env must not set SMTP_USERNAME (unauthenticated fixture)"
 else
     pass "no SMTP_USERNAME in production.env fixture"
 fi
-if echo "$prod_env_block" | grep -qE '^SMTP_PASSWORD='; then
+if grep -qE '^SMTP_PASSWORD=' <<<"$prod_env_block"; then
     fail "production.env must not set SMTP_PASSWORD (unauthenticated fixture)"
 else
     pass "no SMTP_PASSWORD in production.env fixture"
 fi
 
 # SMTP_TLS must not be "off" in production (would fail validation).
-if echo "$prod_env_block" | grep -qE '^SMTP_TLS=off'; then
+if grep -qE '^SMTP_TLS=off' <<<"$prod_env_block"; then
     fail "SMTP_TLS=off in production.env would be rejected by production validation"
 else
     pass "SMTP_TLS is not off (passes production validation)"
 fi
 
 # Verify SMTP_TLS is set to a valid non-off mode.
-if echo "$prod_env_block" | grep -qE '^SMTP_TLS=(starttls|tls)'; then
+if grep -qE '^SMTP_TLS=(starttls|tls)' <<<"$prod_env_block"; then
     pass "SMTP_TLS is set to a valid production mode (starttls or tls)"
 else
     fail "SMTP_TLS must be starttls or tls for production validation"

@@ -1,29 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { ChallengeAcceptance, ChallengeMediaDelivered, ChallengeResults, GuessResult, Message } from '../../types';
-import Map from '../map/Map';
-import Icon from '../ui/Icon';
-import './Game.css';
+import { gameReducer, initialGameState } from './gameState';
+import GameView from './GameViews';
 import GuessScoreFeedback from './GuessScoreFeedback';
-import { feedbackForScore } from './guessFeedback';
-
-type Status =
-    'idle' | 'accepting' | 'viewing' | 'waiting' | 'guessing' | 'submitting' | 'results' | 'expired' | 'error';
-interface Position {
-    lat: number;
-    long: number;
-}
-interface GameState {
-    status: Status;
-    photoId?: string;
-    mediaUrl?: string;
-    mediaType?: string;
-    deadline?: number;
-    serverOffset: number;
-    results?: ChallengeResults;
-    message?: string;
-}
+import './Game.css';
 
 interface GameProps {
     gameMessage: Message | null;
@@ -33,46 +15,98 @@ interface GameProps {
 
 export default function Game({ gameMessage, onChallengeStatusChange, onClose }: GameProps) {
     const { user } = useAuth();
-    const [state, setState] = useState<GameState>({ status: 'idle', serverOffset: 0 });
-    const [selectedLocation, setSelectedLocation] = useState<Position | null>(null);
+    const [state, dispatch] = useReducer(gameReducer, initialGameState);
     const [clock, setClock] = useState(() => Date.now());
-    const [loadingMedia, setLoadingMedia] = useState(false);
-    const [expandedResultImage, setExpandedResultImage] = useState<string | null>(null);
-    const [guessFeedback, setGuessFeedback] = useState<ReturnType<typeof feedbackForScore> | null>(null);
-    const [guessFeedbackScore, setGuessFeedbackScore] = useState<number | null>(null);
+    const [loadingMediaPhotoId, setLoadingMediaPhotoId] = useState<string>();
+    const activePhotoIdRef = useRef(gameMessage?.photo_id);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        activePhotoIdRef.current = gameMessage?.photo_id;
+    }, [gameMessage?.photo_id]);
+
+    useEffect(
+        () => () => {
+            mountedRef.current = false;
+        },
+        [],
+    );
+
+    const isCurrentPhoto = useCallback(
+        (photoId: string, signal?: AbortSignal): boolean =>
+            mountedRef.current && !signal?.aborted && activePhotoIdRef.current === photoId,
+        [],
+    );
 
     const remaining = useMemo(
         () => (state.deadline ? Math.max(0, Math.ceil((state.deadline - (clock + state.serverOffset)) / 1000)) : 0),
         [clock, state.deadline, state.serverOffset],
     );
 
-    const loadMedia = useCallback(async (url: string): Promise<string> => {
-        if (url.startsWith('http://') || url.startsWith('https://')) return url;
-        setLoadingMedia(true);
-        try {
-            const apiPath = url.startsWith('/api/v1/') ? url.slice('/api/v1'.length) : url;
-            const response = await api.get<Blob>(apiPath, { responseType: 'blob' });
-            return URL.createObjectURL(response.data);
-        } finally {
-            setLoadingMedia(false);
-        }
-    }, []);
+    // Object-URL lifecycle: the committed media URL has a single owner that
+    // revokes it exactly once — when it is replaced or dropped by a state
+    // transition, and when the component unmounts (previously leaked).
+    const mediaUrlRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        const previous = mediaUrlRef.current;
+        if (previous?.startsWith('blob:') && previous !== state.mediaUrl) URL.revokeObjectURL(previous);
+        mediaUrlRef.current = state.mediaUrl;
+    }, [state.mediaUrl]);
+    useEffect(
+        () => () => {
+            const current = mediaUrlRef.current;
+            if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+        },
+        [],
+    );
+
+    const loadMedia = useCallback(
+        async (url: string, photoId: string, signal?: AbortSignal): Promise<string> => {
+            if (!isCurrentPhoto(photoId, signal)) throw new DOMException('Stale challenge operation', 'AbortError');
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            setLoadingMediaPhotoId(photoId);
+            try {
+                const apiPath = url.startsWith('/api/v1/') ? url.slice('/api/v1'.length) : url;
+                const response = await api.get<Blob>(apiPath, { responseType: 'blob', signal });
+                const objectUrl = URL.createObjectURL(response.data);
+                if (!isCurrentPhoto(photoId, signal)) {
+                    URL.revokeObjectURL(objectUrl);
+                    throw new DOMException('Stale challenge operation', 'AbortError');
+                }
+                return objectUrl;
+            } finally {
+                if (isCurrentPhoto(photoId, signal)) setLoadingMediaPhotoId(undefined);
+            }
+        },
+        [isCurrentPhoto],
+    );
 
     const acceptChallenge = useCallback(
-        async (photoId: string): Promise<void> => {
-            setState({ status: 'accepting', photoId, serverOffset: 0 });
+        async (photoId: string, signal?: AbortSignal): Promise<void> => {
+            dispatch({ type: 'loading', photoId });
             try {
-                const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`);
+                const response = await api.post<ChallengeAcceptance>(`/challenges/${photoId}/accept`, undefined, {
+                    signal,
+                });
+                if (!isCurrentPhoto(photoId, signal)) return;
                 const data = response.data;
                 const serverOffset = Date.parse(data.server_time) - Date.now();
                 const serverDeadline = Date.parse(data.view_expires_at);
                 let mediaUrl: string | undefined;
                 let mediaError: unknown;
                 try {
-                    mediaUrl = await loadMedia(data.media_url);
-                    const delivered = await api.post<ChallengeMediaDelivered>(`/challenges/${photoId}/media-delivered`);
-                    setState({
-                        status: 'viewing',
+                    mediaUrl = await loadMedia(data.media_url, photoId, signal);
+                    const delivered = await api.post<ChallengeMediaDelivered>(
+                        `/challenges/${photoId}/media-delivered`,
+                        undefined,
+                        { signal },
+                    );
+                    if (!isCurrentPhoto(photoId, signal)) {
+                        if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                        return;
+                    }
+                    dispatch({
+                        type: 'media-ready',
                         photoId,
                         mediaUrl,
                         mediaType: data.media_type,
@@ -84,105 +118,110 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                 } catch (loadError: unknown) {
                     mediaError = loadError;
                     if (mediaUrl) {
-                        URL.revokeObjectURL(mediaUrl);
-                        setState({
-                            status: 'error',
-                            photoId,
-                            serverOffset: 0,
-                            message: getAPIErrorMessage(
-                                mediaError,
-                                'The viewing window could not be started. Reopen the challenge to try again.',
-                            ),
-                        });
+                        // The blob URL never entered state; revoke it directly.
+                        if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                        if (isCurrentPhoto(photoId, signal)) {
+                            dispatch({
+                                type: 'media-failed',
+                                photoId,
+                                message: getAPIErrorMessage(
+                                    mediaError,
+                                    'The viewing window could not be started. Reopen the challenge to try again.',
+                                ),
+                            });
+                        }
                         return;
                     }
                 }
+                if (!isCurrentPhoto(photoId, signal)) return;
                 // The media could not be loaded. If the viewing window has
                 // already elapsed (e.g. the player already viewed this
                 // challenge), they may still submit a guess.
                 if (serverDeadline <= Date.now() + serverOffset) {
-                    setState({ status: 'guessing', photoId, deadline: serverDeadline, serverOffset });
+                    dispatch({ type: 'media-unavailable', photoId, deadline: serverDeadline, serverOffset });
                     return;
                 }
-                setState({
-                    status: 'error',
+                dispatch({
+                    type: 'accept-failed',
                     photoId,
-                    serverOffset: 0,
                     message: getAPIErrorMessage(mediaError, 'This challenge is no longer available.'),
                 });
             } catch (requestError: unknown) {
-                setState({
-                    status: 'error',
+                if (!isCurrentPhoto(photoId, signal)) return;
+                dispatch({
+                    type: 'accept-failed',
                     photoId,
-                    serverOffset: 0,
                     message: getAPIErrorMessage(requestError, 'This challenge is no longer available.'),
                 });
             }
         },
-        [loadMedia, onChallengeStatusChange],
+        [isCurrentPhoto, loadMedia, onChallengeStatusChange],
     );
 
     const loadResults = useCallback(
-        async (photoId: string, showError = true): Promise<boolean> => {
-            setState({ status: 'accepting', photoId, serverOffset: 0 });
+        async (photoId: string, showError = true, signal?: AbortSignal): Promise<boolean> => {
+            dispatch({ type: 'loading', photoId });
             try {
-                const response = await api.get<ChallengeResults>(`/challenges/${photoId}/results`);
+                const response = await api.get<ChallengeResults>(`/challenges/${photoId}/results`, { signal });
+                if (!isCurrentPhoto(photoId, signal)) return false;
                 const results = response.data;
                 let mediaUrl: string | undefined;
-                if (results.media_available && results.media_url) mediaUrl = await loadMedia(results.media_url);
-                setState({
-                    status: 'results',
+                if (results.media_available && results.media_url)
+                    mediaUrl = await loadMedia(results.media_url, photoId, signal);
+                if (!isCurrentPhoto(photoId, signal)) {
+                    if (mediaUrl?.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                    return false;
+                }
+                dispatch({
+                    type: 'results-ready',
                     photoId,
                     mediaUrl,
-                    mediaType: results.media_type,
+                    mediaType: results.media_type ?? undefined,
                     serverOffset: Date.parse(results.server_time) - Date.now(),
                     results,
                 });
                 onChallengeStatusChange?.(photoId, 'results');
                 return true;
             } catch (requestError: unknown) {
-                if (showError) {
-                    setState({
-                        status: 'error',
+                if (showError && isCurrentPhoto(photoId, signal)) {
+                    dispatch({
+                        type: 'results-failed',
                         photoId,
-                        serverOffset: 0,
                         message: getAPIErrorMessage(requestError, 'Results are not available yet.'),
                     });
                 }
                 return false;
             }
         },
-        [loadMedia, onChallengeStatusChange],
+        [isCurrentPhoto, loadMedia, onChallengeStatusChange],
     );
 
     const submitGuess = useCallback(async (): Promise<void> => {
-        if (!state.photoId || !selectedLocation) return;
-        setState((current) => ({ ...current, status: 'submitting' }));
+        if (!state.selectedLocation || !state.photoId) return;
+        const { photoId } = state;
+        const guess = state.selectedLocation;
+        dispatch({ type: 'guess-start' });
         try {
-            const response = await api.post<GuessResult>(`/challenges/${state.photoId}/guess`, selectedLocation);
-            if (!response.data.duplicate) {
-                setGuessFeedbackScore(response.data.score);
-                setGuessFeedback(feedbackForScore(response.data.score));
-            }
-            onChallengeStatusChange?.(state.photoId, 'guessed');
-            await loadResults(state.photoId);
+            const response = await api.post<GuessResult>(`/challenges/${photoId}/guess`, guess);
+            // Start the results load first: its `loading` action clears the
+            // overlay, so the celebration is dispatched afterwards and shows
+            // during the loading phase and the results view.
+            const resultsPromise = loadResults(photoId);
+            if (!response.data.duplicate) dispatch({ type: 'show-feedback', score: response.data.score });
+            onChallengeStatusChange?.(photoId, 'guessed');
+            await resultsPromise;
         } catch (requestError: unknown) {
-            setState((current) => ({
-                ...current,
-                status: 'error',
+            dispatch({
+                type: 'guess-failed',
                 message: getAPIErrorMessage(requestError, 'Your guess could not be submitted.'),
-            }));
+            });
         }
-    }, [loadResults, onChallengeStatusChange, selectedLocation, state.photoId]);
+    }, [loadResults, onChallengeStatusChange, state]);
 
     const close = useCallback((): void => {
-        if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
-        setState({ status: 'idle', serverOffset: 0 });
-        setSelectedLocation(null);
-        setGuessFeedback(null);
-        setGuessFeedbackScore(null);
+        dispatch({ type: 'close' });
         onClose();
-    }, [onClose, state.mediaUrl]);
+    }, [onClose]);
 
     useEffect(() => {
         if (!state.deadline || !['viewing', 'waiting'].includes(state.status)) return undefined;
@@ -191,248 +230,60 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
     }, [state.deadline, state.status]);
 
     useEffect(() => {
-        if (state.status === 'viewing' && remaining <= 0) setState((current) => ({ ...current, status: 'waiting' }));
-        if (state.status === 'waiting' && remaining <= 0) setState((current) => ({ ...current, status: 'guessing' }));
+        if (state.status === 'viewing' && remaining <= 0) dispatch({ type: 'view-expired' });
+    }, [remaining, state.status]);
+
+    useEffect(() => {
+        if (state.status === 'waiting' && remaining <= 0) dispatch({ type: 'guess-now' });
     }, [remaining, state.status]);
 
     useEffect(() => {
         const photoId = gameMessage?.photo_id;
         if (!gameMessage || !photoId || !user) {
             if (!gameMessage) {
-                setState({ status: 'idle', serverOffset: 0 });
-                setGuessFeedback(null);
-                setGuessFeedbackScore(null);
+                dispatch({ type: 'reset' });
             }
             return;
         }
-        setSelectedLocation(null);
-        setGuessFeedback(null);
-        setGuessFeedbackScore(null);
+        // The `loading` action resets the celebration overlay and map pin for
+        // the incoming challenge, exactly like the pre-refactor effect did.
+        const controller = new AbortController();
         if (gameMessage.user_id === user.id) {
-            void loadResults(photoId);
-            return;
+            void (async () => {
+                await loadResults(photoId, true, controller.signal);
+            })();
+            return () => controller.abort();
         }
         void (async () => {
-            const resultsAvailable = await loadResults(photoId, false);
-            if (!resultsAvailable) await acceptChallenge(photoId);
+            const resultsAvailable = await loadResults(photoId, false, controller.signal);
+            if (!resultsAvailable && isCurrentPhoto(photoId, controller.signal)) {
+                await acceptChallenge(photoId, controller.signal);
+            }
         })();
-    }, [acceptChallenge, gameMessage, loadResults, user]);
+        return () => controller.abort();
+    }, [acceptChallenge, gameMessage, isCurrentPhoto, loadResults, user]);
 
-    useEffect(() => {
-        if (!expandedResultImage) return undefined;
-        const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setExpandedResultImage(null);
-        };
-        window.addEventListener('keydown', closeOnEscape);
-        return () => window.removeEventListener('keydown', closeOnEscape);
-    }, [expandedResultImage]);
-    const feedbackOverlay = guessFeedback ? (
+    const feedbackOverlay = state.feedback ? (
         <GuessScoreFeedback
-            feedback={guessFeedback}
-            score={guessFeedbackScore ?? 0}
-            onDismiss={() => {
-                setGuessFeedback(null);
-                setGuessFeedbackScore(null);
-            }}
+            feedback={state.feedback.feedback}
+            score={state.feedback.score}
+            onDismiss={() => dispatch({ type: 'clear-feedback' })}
         />
     ) : null;
-    const renderWithFeedback = (content: ReactNode) => (
-        <>
-            {content}
-            {feedbackOverlay}
-        </>
+
+    return (
+        <GameView
+            state={state}
+            loadingMedia={loadingMediaPhotoId === gameMessage?.photo_id}
+            remaining={remaining}
+            serverNowMs={clock + state.serverOffset}
+            feedback={feedbackOverlay}
+            currentUserId={user?.id}
+            onSelectLocation={(position) =>
+                dispatch({ type: 'select-location', lat: position.lat, long: position.long })
+            }
+            onSubmitGuess={() => void submitGuess()}
+            onClose={close}
+        />
     );
-    if (state.status === 'idle') return null;
-    if (state.status === 'accepting')
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="loading-container fade-in">
-                    <div className="loading-spinner" />
-                    <p>{loadingMedia ? 'Loading private photo…' : 'Loading challenge…'}</p>
-                </div>
-            </div>,
-        );
-    if (state.status === 'error' || state.status === 'expired')
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="result-view scale-in">
-                    <h2>{state.status === 'expired' ? 'Challenge expired' : 'Challenge unavailable'}</h2>
-                    <p>{state.message ?? 'This challenge is no longer available.'}</p>
-                    <button className="next-button btn btn-primary" onClick={close}>
-                        Close
-                    </button>
-                </div>
-            </div>,
-        );
-    if (state.status === 'viewing')
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="photo-view scale-in">
-                    {state.mediaType?.startsWith('video/') ? (
-                        <video
-                            src={state.mediaUrl}
-                            className="game-photo"
-                            controls
-                            playsInline
-                            aria-label="Challenge video"
-                        />
-                    ) : (
-                        <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
-                    )}
-                    <div className="timer-overlay">
-                        <div className="timer-container">
-                            <img src="/timer_icon.png" alt="" className="timer-icon" />
-                            <div className="timer-text">{remaining}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>,
-        );
-    if (state.status === 'waiting')
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="skipped-message fade-in">
-                    <img src="/timer_icon.png" alt="" className="skip-icon" />
-                    <p>Photo hidden</p>
-                    <p className="skip-subtitle">Guessing opens in {remaining} seconds.</p>
-                </div>
-            </div>,
-        );
-    if (state.status === 'guessing' || state.status === 'submitting')
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="guessing-view fade-in">
-                    <div className="guessing-header">
-                        <h3>Where was this taken?</h3>
-                        <p>Tap the map to place your guess.</p>
-                    </div>
-                    <Map
-                        onLocationSelect={(lat, long) => setSelectedLocation({ lat, long })}
-                        selectedLocation={selectedLocation}
-                    />
-                    <button
-                        onClick={() => void submitGuess()}
-                        disabled={!selectedLocation || state.status === 'submitting'}
-                        className="guess-button btn btn-primary"
-                    >
-                        {state.status === 'submitting' ? (
-                            'Submitting…'
-                        ) : selectedLocation ? (
-                            <>
-                                Submit guess <Icon name="check" />
-                            </>
-                        ) : (
-                            'Select a location…'
-                        )}
-                    </button>
-                </div>
-            </div>,
-        );
-    if (expandedResultImage)
-        return renderWithFeedback(
-            <div className="game-image-dialog" role="dialog" aria-modal="true" aria-label="Challenge photo full screen">
-                <button
-                    type="button"
-                    className="game-image-dialog-close"
-                    onClick={() => setExpandedResultImage(null)}
-                    aria-label="Close full-screen photo"
-                >
-                    <Icon name="close" />
-                </button>
-                <img
-                    src={expandedResultImage}
-                    alt="Challenge location full screen"
-                    className="game-image-dialog-photo"
-                />
-            </div>,
-        );
-    if (state.status === 'results' && state.results)
-        return renderWithFeedback(
-            <div className="game-overlay">
-                <div className="result-view scale-in">
-                    <div className="result-header">
-                        <h2>Challenge results</h2>
-                        {state.results.guesses.length > 0 ? (
-                            <p>
-                                {state.results.guesses.length} submitted score
-                                {state.results.guesses.length === 1 ? '' : 's'}
-                            </p>
-                        ) : (
-                            <p>No guesses have been submitted yet.</p>
-                        )}
-                    </div>
-                    <div className="result-content">
-                        <div className="result-details">
-                            {state.mediaUrl && state.mediaType?.startsWith('video/') && (
-                                <video
-                                    src={state.mediaUrl}
-                                    className="result-image"
-                                    controls
-                                    playsInline
-                                    aria-label="Challenge result video"
-                                />
-                            )}
-                            {state.mediaUrl && !state.mediaType?.startsWith('video/') && (
-                                <button
-                                    type="button"
-                                    className="result-image-button"
-                                    onClick={() => setExpandedResultImage(state.mediaUrl ?? null)}
-                                    aria-label="View challenge photo full screen"
-                                >
-                                    <img src={state.mediaUrl} alt="Challenge location" className="result-image" />
-                                </button>
-                            )}
-                            {!state.results.media_available && (
-                                <p className="result-notice">
-                                    The original media has been removed; scores remain available.
-                                </p>
-                            )}
-                            <div className="score-list" aria-label="Submitted scores">
-                                {state.results.guesses.map((guess) => (
-                                    <div
-                                        key={guess.id}
-                                        className={`score-card ${guess.user_id === user?.id ? 'current-player' : ''}`}
-                                    >
-                                        <div>
-                                            <strong>{guess.user_id === user?.id ? 'You' : guess.username}</strong>
-                                            {guess.distance !== undefined && (
-                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
-                                            )}
-                                        </div>
-                                        <b>{guess.score} pts</b>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="result-map" aria-label="Challenge map">
-                            {state.results.location_hidden && (
-                                <div className="result-location-hidden" role="note">
-                                    <strong>The poster hasn’t revealed this location yet</strong>
-                                    <span>
-                                        Only your own guess is shown on the map. The exact spot and everyone else’s
-                                        guesses will appear here after 48 hours.
-                                    </span>
-                                </div>
-                            )}
-                            <Map
-                                onLocationSelect={() => undefined}
-                                selectedLocation={null}
-                                actualLocation={
-                                    state.results.actual_lat !== undefined &&
-                                    state.results.actual_long !== undefined &&
-                                    !state.results.location_hidden
-                                        ? { lat: state.results.actual_lat, long: state.results.actual_long }
-                                        : null
-                                }
-                                guesses={state.results.guesses}
-                            />
-                        </div>
-                    </div>
-                    <button onClick={close} className="next-button btn btn-primary">
-                        Close
-                    </button>
-                </div>
-            </div>,
-        );
-    return null;
 }

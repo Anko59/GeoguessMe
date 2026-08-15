@@ -10,10 +10,10 @@ signup:
         application/json:
           schema:
             type: object
-            required: [username, email, password]
+            required: [username, password]
             properties:
               username: { type: string, minLength: 3, maxLength: 30, pattern: "^[a-zA-Z0-9_-]+$" }
-              email: { type: string, format: email }
+              email: { type: string, format: email, description: Optional recovery/contact claim. }
               password: { type: string, minLength: 8, maxLength: 128 }
     responses:
       "200":
@@ -171,10 +171,15 @@ profile:
         application/json:
           schema:
             type: object
-            required: [username, email, avatar, current_password]
+            required: [username, avatar, current_password]
             properties:
               username: { type: string, minLength: 3, maxLength: 30 }
-              email: { type: string, format: email }
+              email:
+                type: string
+                format: email
+                description: >
+                  Optional replacement contact claim; omission cancels a pending
+                  replacement without removing the verified address.
               avatar:
                 {
                   type: string,
