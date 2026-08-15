@@ -45,12 +45,17 @@ user mail. The provider's public API is documented at
 For hosted mail providers that do not deliver to disposable domains, the gateway
 also supports an Access-protected HTTP mailbox relay with
 `QA_MAILBOX_PROVIDER=cloudflare`, `QA_MAILBOX_API_URL`, and
-`QA_MAILBOX_ADDRESS`. The relay address must be dedicated to the QA run and the
-relay must retain only short-lived test messages. Access credentials are passed
-to the mailbox gateway from the existing short-lived QA Access session; they are
-never placed in the prompt, report, or mailbox output. A hosted run must not
-claim email coverage until `mailbox_search`, `mailbox_read`, and
-`mailbox_open_link` succeed through the configured provider.
+`QA_MAILBOX_ADDRESS`. For a release run, also provide the relay zone and the
+dedicated seed rule through `QA_MAILBOX_ZONE_ID` and
+`QA_MAILBOX_ROUTING_RULE_ID`. The local runner creates a temporary literal Email
+Routing rule with a unique address derived from the seed, then removes that rule
+on exit. This prevents a previously verified QA address from making a fresh run
+appear to be an application verification failure. The relay must retain only
+short-lived test messages. Access credentials are passed to the mailbox gateway
+from the existing short-lived QA Access session; they are never placed in the
+prompt, report, or mailbox output. A hosted run must not claim email coverage
+until `mailbox_search`, `mailbox_read`, and `mailbox_open_link` succeed through
+the configured provider.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the

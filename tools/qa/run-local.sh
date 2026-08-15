@@ -48,7 +48,9 @@ export QA_RUNTIME="$runtime"
 # short-lived dev-scoped Access credential from the existing Cloudflare API
 # token and clean it up when this local run exits.
 source "$root_dir/tools/qa/cloudflare-access.sh"
+source "$root_dir/tools/qa/cloudflare-mailbox.sh"
 qa_access_provision
+qa_mailbox_provision
 
 case "$runtime" in
     codex) "$root_dir/tools/qa/codex-adapter.sh" "$root_dir" ;;
