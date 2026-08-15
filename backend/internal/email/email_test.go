@@ -202,9 +202,9 @@ func TestSMTPImplicitTLSDelivery(t *testing.T) {
 
 func TestSMTPMessageHeadersAreUTF8Capable(t *testing.T) {
 	sender := SMTP{Host: "127.0.0.1", Port: 1, From: "from@example.test", TLSMode: ModeOff}
-	raw := sender.message("from@example.test", "Verify your account ✓", "secret")
+	raw := sender.message("from@example.test", "to@example.test", "Verify your account ✓", "secret")
 	text := string(raw)
-	for _, want := range []string{"MIME-Version: 1.0", "To: undisclosed-recipients:;", "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "Subject: =?utf-8?"} {
+	for _, want := range []string{"MIME-Version: 1.0", "To: to@example.test", "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "Subject: =?utf-8?"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing header %q in message:\n%s", want, text)
 		}
