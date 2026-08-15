@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { AuthResponse, OIDCConfig } from '../../types';
+import OIDCOptions from './OIDCOptions';
 import './Auth.css';
 
 export default function Login({ migrationMode = false }: { migrationMode?: boolean }) {
@@ -20,7 +21,9 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
     // bare /group/join is a valid post-auth target.
     const fromPath = rawFrom.split('?')[0].split('#')[0];
     const returnTo = migrationMode ? '/settings' : fromPath === '/group/join' ? '/group/join' : '/groups';
-    const activeOIDCConfig = migrationMode ? { enabled: false, login_path: '/oauth2/start' } : oidcConfig;
+    const activeOIDCConfig = migrationMode
+        ? { enabled: false, login_path: '/oauth2/start', social_providers: [] }
+        : oidcConfig;
 
     useEffect(() => {
         if (migrationMode) {
@@ -70,22 +73,16 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
                 {migrationMode && (
                     <p className="auth-migration-notice" role="note">
                         This legacy session is read-only. Your groups and scores stay on the same account, and normal
-                        access returns as soon as you connect Google, Apple, or GitHub in Settings.
+                        access returns as soon as you connect an email, Google, Apple, or GitHub login in Settings.
                     </p>
                 )}
                 {activeOIDCConfig?.enabled ? (
-                    <>
-                        <a
-                            className="btn btn-social"
-                            href={`${activeOIDCConfig.login_path}?rd=${encodeURIComponent('/auth/oidc/callback')}`}
-                            onClick={rememberSocialReturn}
-                        >
-                            Continue with Google, Apple, or GitHub
-                        </a>
-                        <p className="auth-provider-note">
-                            GeoGuessMe uses Keycloak for sign-in. Two-factor authentication and passkeys stay optional.
-                        </p>
-                    </>
+                    <OIDCOptions
+                        loginPath={activeOIDCConfig.login_path}
+                        intent="login"
+                        onStart={rememberSocialReturn}
+                        socialProviders={activeOIDCConfig.social_providers}
+                    />
                 ) : activeOIDCConfig ? (
                     <>
                         <form onSubmit={handleSubmit} className="auth-form">

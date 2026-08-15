@@ -334,6 +334,23 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
 		return
 	}
+	if user.OIDCLinked {
+		if a.oidcAdmin == nil {
+			handlers.WriteError(w, http.StatusServiceUnavailable, "identity_deletion_unavailable", "Unable to delete the Keycloak account right now")
+			return
+		}
+		identities, identityErr := a.repos.OIDCIdentitiesByUserID(r.Context(), userID)
+		if identityErr != nil || len(identities) == 0 {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
+			return
+		}
+		for _, identity := range identities {
+			if identityErr := a.oidcAdmin.DeleteIdentity(r.Context(), identity.Issuer, identity.Subject); identityErr != nil {
+				handlers.WriteError(w, http.StatusBadGateway, "identity_deletion_failed", "Keycloak could not delete the identity; no GeoGuessMe data was removed")
+				return
+			}
+		}
+	}
 	if _, err := a.repos.DeleteUserCascade(r.Context(), userID); err != nil {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
 		return

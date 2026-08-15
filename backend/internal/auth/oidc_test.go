@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,55 @@ func TestOIDCVerifierRequiresSignedAudienceBoundVerifiedEmail(t *testing.T) {
 				t.Fatal("invalid identity was accepted")
 			}
 		})
+	}
+}
+
+func TestOIDCVerifierDeletesOnlyMatchingKeycloakIdentity(t *testing.T) {
+	var issuer string
+	var tokenRequested, identityDeleted bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/realms/geoguessme/protocol/openid-connect/token":
+			tokenRequested = true
+			if err := r.ParseForm(); err != nil || r.Form.Get("grant_type") != "client_credentials" || r.Form.Get("client_id") != "geoguessme-dev" || r.Form.Get("client_secret") != "client-secret" {
+				t.Errorf("unexpected service token request: %v %v", err, r.Form)
+			}
+			writeOIDCTestJSON(t, w, map[string]string{"access_token": "service-token"})
+		case "/admin/realms/geoguessme/users/keycloak-user-1":
+			identityDeleted = true
+			if r.Method != http.MethodDelete || r.Header.Get("Authorization") != "Bearer service-token" {
+				t.Errorf("unexpected identity deletion request: %s %q", r.Method, r.Header.Get("Authorization"))
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	issuer = server.URL + "/realms/geoguessme"
+	verifier := &OIDCVerifier{
+		issuer: issuer, clientID: "geoguessme-dev", clientSecret: "client-secret", httpClient: server.Client(),
+	}
+	if err := verifier.DeleteIdentity(context.Background(), issuer, "keycloak-user-1"); err != nil {
+		t.Fatalf("DeleteIdentity: %v", err)
+	}
+	if !tokenRequested || !identityDeleted {
+		t.Fatalf("token requested = %v, identity deleted = %v", tokenRequested, identityDeleted)
+	}
+
+	tokenRequested = false
+	if err := verifier.DeleteIdentity(context.Background(), issuer+"-other", "keycloak-user-1"); err == nil || !strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("issuer mismatch = %v, want configuration error", err)
+	}
+	if tokenRequested {
+		t.Fatal("issuer mismatch reached Keycloak")
+	}
+}
+
+func TestKeycloakAdminUserURLPreservesContextPath(t *testing.T) {
+	got, err := keycloakAdminUserURL("https://login.example.test/auth/realms/geoguessme", "subject-1")
+	if err != nil || got != "https://login.example.test/auth/admin/realms/geoguessme/users/subject-1" {
+		t.Fatalf("keycloakAdminUserURL = %q, %v", got, err)
 	}
 }
 

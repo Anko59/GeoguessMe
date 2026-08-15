@@ -1,0 +1,24 @@
+# Local HTTPS entrypoint. The browser sees only the two stable .localhost
+# origins; Vite, OAuth2 Proxy, and Keycloak stay on the Compose network.
+{
+	auto_https off
+}
+
+http://geoguessme.localhost, http://auth.geoguessme.localhost, http://auth-dev.geoguessme.com {
+	redir https://{host}{uri} permanent
+}
+
+https://geoguessme.localhost {
+	tls /etc/caddy/local-tls/local-cert.pem /etc/caddy/local-tls/local-key.pem
+	reverse_proxy frontend:5173
+}
+
+https://auth.geoguessme.localhost {
+	tls /etc/caddy/local-tls/local-cert.pem /etc/caddy/local-tls/local-key.pem
+	redir https://auth-dev.geoguessme.com{uri} permanent
+}
+
+https://auth-dev.geoguessme.com {
+	tls /etc/caddy/local-tls/local-cert.pem /etc/caddy/local-tls/local-key.pem
+	reverse_proxy local-keycloak:8083
+}

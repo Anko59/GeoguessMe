@@ -53,7 +53,7 @@ while IFS= read -r line || [ -n "$line" ]; do
                 "$postgres_password"
             ;;
         JWT_SECRET=*) printf 'JWT_SECRET=%s\n' "$jwt_secret" ;;
-        OAUTH2_PROXY_CLIENT_SECRET=*) printf 'OAUTH2_PROXY_CLIENT_SECRET=%s\n' "$KEYCLOAK_CLIENT_SECRET" ;;
+        OIDC_CLIENT_SECRET=*) printf 'OIDC_CLIENT_SECRET=%s\n' "$KEYCLOAK_CLIENT_SECRET" ;;
         OAUTH2_PROXY_COOKIE_SECRET=*) printf 'OAUTH2_PROXY_COOKIE_SECRET=%s\n' "$oauth_cookie_secret" ;;
         S3_ENDPOINT=*)
             printf 'S3_ENDPOINT=https://%s.r2.cloudflarestorage.com\n' \

@@ -143,7 +143,7 @@ func main() {
 	var identityVerifiers []authsvc.IdentityVerifier
 	if cfg.OIDCEnabled {
 		oidcContext, oidcCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		verifier, err := authsvc.NewOIDCVerifier(oidcContext, cfg.OIDCIssuerURL, cfg.OIDCClientID)
+		verifier, err := authsvc.NewOIDCVerifier(oidcContext, cfg.OIDCIssuerURL, cfg.OIDCClientID, cfg.OIDCClientSecret)
 		oidcCancel()
 		if err != nil {
 			logger.Error("Keycloak OIDC initialization failed", "error", err)

@@ -84,12 +84,13 @@ services:
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
     profiles: [social]
-    command: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg"]
+    command: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg", "--alpha-config=/etc/oauth2-proxy/oauth2-proxy-alpha.yaml"]
     env_file:
       - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
         required: false
     volumes:
       - ./deployment/oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg:ro
+      - ./deployment/oauth2-proxy/oauth2-proxy-alpha.yaml:/etc/oauth2-proxy/oauth2-proxy-alpha.yaml:ro
     read_only: true
     tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
     user: "65532:65532"

@@ -50,7 +50,7 @@ login:
 oidcConfig:
   get:
     operationId: getOIDCConfig
-    summary: Report whether Keycloak social login is enabled.
+    summary: Report whether Keycloak sign-in is enabled.
     tags: [Authentication]
     security: []
     responses:
@@ -63,12 +63,24 @@ oidcSession:
   post:
     operationId: exchangeOIDCSession
     summary: Exchange the OAuth2 Proxy Keycloak session for an application session.
-    description: Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript.
+    description: Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript. A genuinely new identity receives username_required until it submits an explicit GeoGuessMe username; existing identities and verified-email migrations do not need one.
     tags: [Authentication]
     security: [{ oidcProxyAuth: [] }]
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              username:
+                type: string
+                minLength: 3
+                maxLength: 30
+                pattern: "^[A-Za-z0-9_-]+$"
     responses:
       "200":
-        description: Existing identity resolved, verified-email account linked, or new account provisioned.
+        description: Existing identity resolved, verified-email account linked, or new account provisioned with its chosen username.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }

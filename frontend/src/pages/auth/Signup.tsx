@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { AuthResponse, OIDCConfig } from '../../types';
+import OIDCOptions from './OIDCOptions';
 import './Auth.css';
 
 export default function Signup() {
@@ -63,19 +64,12 @@ export default function Signup() {
                 <h2 className="auth-title gradient-text">Join the Fun!</h2>
                 <p className="auth-subtitle">Create your secure account to start</p>
                 {oidcConfig?.enabled ? (
-                    <>
-                        <a
-                            className="btn btn-social"
-                            href={`${oidcConfig.login_path}?rd=${encodeURIComponent('/auth/oidc/callback')}`}
-                            onClick={rememberSocialReturn}
-                        >
-                            Sign up with Google, Apple, or GitHub
-                        </a>
-                        <p className="auth-provider-note">
-                            Keycloak creates your GeoGuessMe account after your provider verifies you. Two-factor
-                            authentication and passkeys stay optional.
-                        </p>
-                    </>
+                    <OIDCOptions
+                        loginPath={oidcConfig.login_path}
+                        intent="signup"
+                        onStart={rememberSocialReturn}
+                        socialProviders={oidcConfig.social_providers}
+                    />
                 ) : oidcConfig ? (
                     <form onSubmit={handleSubmit} className="auth-form">
                         <label htmlFor="signup-username">Username</label>

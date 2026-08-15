@@ -51,12 +51,24 @@ validator_output() {
     IMAGE_SCAN_EXCEPTIONS="$file" bash "$SCRIPT" "$@" 2>&1
 }
 
+date_utc_days_from_today() {
+    local days=$1
+    if date -u -d "$days days" +%F 2>/dev/null; then
+        return
+    fi
+    if [ "$days" -ge 0 ]; then
+        date -u -v+"${days}"d +%F
+    else
+        date -u -v"${days}"d +%F
+    fi
+}
+
 TMP="$(mktemp -d)"
 DIGEST="$(printf 'a%.0s' {1..64})"
 IMAGE="postgres:15-alpine@sha256:${DIGEST}"
-VALID_EXPIRY="$(date -u -d "+7 days" +%F)"
-PAST_EXPIRY="$(date -u -d "-1 day" +%F)"
-FAR_EXPIRY="$(date -u -d "+31 days" +%F)"
+VALID_EXPIRY="$(date_utc_days_from_today 7)"
+PAST_EXPIRY="$(date_utc_days_from_today -1)"
+FAR_EXPIRY="$(date_utc_days_from_today 31)"
 
 echo "image-scan exceptions regression tests:"
 

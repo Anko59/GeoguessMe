@@ -22,7 +22,7 @@ include tools/make/docs-agent-config.mk
 include tools/make/openapi-contract.mk
 
 .PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-self-test tools-clean \
-	dev up dev-social dev-social-down down restart status logs logs-backend logs-frontend identity-config identity-up identity-down identity-logs \
+	dev-local-state dev up dev-social-init dev-social dev-social-down down restart status logs logs-backend logs-frontend identity-config identity-up identity-down identity-logs \
 	format format-check fmt fmt-check mod-tidy lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \

@@ -295,7 +295,7 @@ describe('AccountSettings', () => {
         expect(screen.getByText('No verified email')).toBeInTheDocument();
     });
 
-    it('supports profile and deletion confirmation for a passwordless social account', async () => {
+    it('supports profile and deletion confirmation for a Keycloak account', async () => {
         const socialUser: User = {
             ...user,
             pending_email: undefined,
@@ -304,6 +304,14 @@ describe('AccountSettings', () => {
             oidc_linked: true,
             migration_required: false,
         };
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                enabled: true,
+                login_path: '/oauth2/start',
+                social_providers: ['google'],
+                account_url: 'https://auth-dev.geoguessme.com/realms/geoguessme/account/',
+            },
+        });
         mocks.patch.mockResolvedValueOnce({ data: socialUser });
         mocks.delete.mockResolvedValueOnce({ data: {} });
         vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
@@ -316,10 +324,10 @@ describe('AccountSettings', () => {
         );
 
         expect(screen.queryByLabelText('Current password to save profile changes')).not.toBeInTheDocument();
-        expect(screen.getByText('Social login is connected.')).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Manage 2FA and passkeys' })).toHaveAttribute(
+        expect(screen.getByText('Keycloak login is connected.')).toBeInTheDocument();
+        expect(await screen.findByRole('link', { name: 'Manage 2FA and passkeys' })).toHaveAttribute(
             'href',
-            'https://auth.geoguessme.com/realms/geoguessme/account/',
+            'https://auth-dev.geoguessme.com/realms/geoguessme/account/',
         );
         fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
         await waitFor(() =>
@@ -372,7 +380,7 @@ describe('AccountSettings', () => {
         );
 
         expect(screen.getByRole('heading', { name: 'Finish account migration' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Connect Google, Apple, or GitHub' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Connect a Keycloak login' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Change password' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Resend verification email' })).not.toBeInTheDocument();

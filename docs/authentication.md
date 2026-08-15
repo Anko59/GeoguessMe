@@ -53,16 +53,30 @@ the refresh cookie is still checked in the background before new requests are
 authorized. A failed refresh or logout removes the hint and that user's cached
 chat records.
 
-## Keycloak and social authentication
+## Keycloak login, signup, and social providers
 
-When `OIDC_ENABLED=true`, both normal login and signup use Keycloak exclusively
-and offer Google, Apple, or GitHub through the GeoGuessMe realm. No legacy
-credential fields or password-recovery links are rendered on those pages. OAuth2
-Proxy completes the authorization-code flow and keeps its encrypted session out
-of frontend JavaScript. The backend independently verifies the Keycloak token
-forwarded to the exact OIDC session-exchange route, resolves the application
-account, and then issues the normal GeoGuessMe access/refresh session described
-above.
+When `OIDC_ENABLED=true`, both normal login and signup use Keycloak exclusively.
+Each application page renders separate Google, Apple, and GitHub buttons plus an
+email form. A provider button starts a fresh authorization request with an
+allow-listed `kc_idp_hint`. The email path carries only `login_hint`; Keycloak's
+branded page collects the password, so the application never receives or relays
+a Keycloak password. Signup also sends the standard `prompt=create` parameter
+and requires Keycloak email verification before a session is issued.
+
+`OIDC_SOCIAL_PROVIDERS` is the application's explicit availability contract.
+Buttons remain visible but disabled when their provider has no credentials in
+the current environment. Keycloak independently disables providers backed by
+placeholder values and keeps every broker hidden on its native email/password
+screen. A player therefore chooses Google, Apple, GitHub, or email exactly once;
+the Keycloak continuation never repeats the social-provider menu.
+
+No legacy credential fields or application password-recovery links are rendered
+on the normal pages. OAuth2 Proxy completes the authorization-code flow and
+keeps its encrypted session out of frontend JavaScript. It forwards only the
+three provider aliases, `prompt=create`, and a validated email-shaped
+`login_hint`. The backend independently verifies the Keycloak token forwarded to
+the exact OIDC session-exchange route, resolves the application account, and
+then issues the normal GeoGuessMe access/refresh session described above.
 
 `user_identities` stores the durable `(issuer, subject) -> users.id` mapping.
 The existing `users.id` always remains canonical, so linking a social identity
@@ -77,8 +91,11 @@ The first verified OIDC session resolves as follows:
    callback reveals the dedicated migration route. The player uses the old
    username/password there once and starts the link from Settings; an email
    claim alone never controls an account.
-4. With no match, social signup creates a new passwordless application user and
-   its identity in one transaction.
+4. With no match, the callback returns `username_required`. The verified player
+   explicitly chooses an available GeoGuessMe username; no provider username is
+   prefilled or silently suffixed. Native email and social signup then create
+   the new application user and identity in one transaction. Any password
+   belongs only to Keycloak.
 
 An unmigrated legacy session can read its groups and history, start the OIDC
 link, request recovery mail, or delete the account. Every other write is
@@ -87,9 +104,9 @@ Keycloak subject to the same `users.id`, revokes old sessions, and restores full
 access through the newly issued social session. Password login is rejected after
 linking.
 
-Keycloak may offer TOTP, recovery codes, and passkeys from account settings, but
-none is a required action. Provider MFA remains opt-in for this social game. The
-staged release and read-only policy are owned by the
+Keycloak offers TOTP, recovery codes, and passkeys from account settings, but
+none is a default action. MFA remains opt-in for this social game. The staged
+release and read-only policy are owned by the
 [social-auth rollout runbook](runbooks/social-auth-rollout.md).
 
 ## Verification
@@ -161,13 +178,19 @@ for a legacy-password account. A passwordless social account instead requires
 exact username confirmation.
 
 1. Verifies the password.
-2. Calls `DeleteUserCascade` which removes:
+2. For an OIDC-linked user, obtains a short-lived Keycloak service-account token
+   and deletes the exact stored issuer/subject first. If upstream deletion
+   fails, the request returns 502 and no GeoGuessMe row is removed.
+3. Calls `DeleteUserCascade` which removes:
     - All owned media (queues durable deletion jobs for S3 objects)
     - All refresh sessions, verification tokens, password-reset tokens,
       WebSocket tickets
     - Cascade-deletes memberships, messages, guesses, challenge_views
-3. Deletes the user row entirely (not a soft-delete), releasing the username and
+4. Deletes the user row entirely (not a soft-delete), releasing the username and
    email for reuse.
+
+The frontend also clears the OAuth2 Proxy cookie after success, so a stale
+Keycloak session cannot silently recreate the just-deleted application account.
 
 Returns 204 on success.
 

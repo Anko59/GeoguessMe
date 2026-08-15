@@ -39,6 +39,12 @@ signup and login. This Compose topology deliberately has no Traefik layer:
 Cloudflare Tunnel provides ingress and Caddy provides the one same-origin
 application gateway.
 
+Local social-auth development also uses Caddy, but with a dedicated
+`Caddyfile.dev`: `mkcert` supplies a locally trusted certificate and Caddy maps
+`https://geoguessme.localhost` to Vite plus `https://auth-dev.geoguessme.com` to
+Keycloak. This keeps local callbacks and secure cookies production-shaped
+without adding Traefik.
+
 Terraform in `infra/terraform` provisions the server, backups, deletion
 protection, deny-inbound firewall, tunnel routes, DNS, Access applications, and
 private R2 buckets. State belongs in the private R2 state bucket with an S3
@@ -76,10 +82,12 @@ stored values whenever an environment's secret is regenerated.
 
 The shared `identity.env.enc` must be encrypted for both host age recipients.
 Before generating it, export the dedicated dev and production OIDC client
-secrets plus the Google, GitHub, and Apple credentials documented in
-`deployment/env/identity.env.example`. Apple's client secret is a signed JWT
-with a finite lifetime; rotate only that provider secret before expiry and keep
-the Keycloak database, realm, and application client secrets stable. Follow the
+secrets, Keycloak SMTP credentials, and the Google, GitHub, and Apple
+credentials documented in `deployment/env/identity.env.example`. Register the
+three exact `auth.geoguessme.com` broker callback URLs documented in the rollout
+runbook before testing providers. Apple's client secret is a signed JWT with a
+finite lifetime; rotate only that provider secret before expiry and keep the
+Keycloak database, realm, and application client secrets stable. Follow the
 ordered migration and provider checks in
 [`docs/runbooks/social-auth-rollout.md`](../docs/runbooks/social-auth-rollout.md).
 

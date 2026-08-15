@@ -21,17 +21,47 @@ available to Vite without deleting persistent application data.
 To launch the complete identity path instead, use:
 
 ```text
+mkcert -install
 make dev-social
 ```
 
-This adds local Keycloak, its separate PostgreSQL database, and OAuth2 Proxy.
-Open `http://geoguessme.localhost:5173`; Keycloak is at
-`http://auth.geoguessme.localhost:8083`. The imported realm displays Google,
-Apple, and GitHub with placeholder provider credentials, so provider buttons are
-visually testable while a local Keycloak user exercises the complete app
-signup/login flow. Normal `/login` and `/signup` contain no application password
-fields in this mode. `make dev-social-down` stops the stack but keeps the named
-application and identity volumes.
+This adds Caddy, local Keycloak, its separate PostgreSQL database, and OAuth2
+Proxy. `mkcert -install` is a one-time host setup; the target then generates an
+ignored certificate for the local application and identity names. Map
+`auth-dev.geoguessme.com` to `127.0.0.1` in `/etc/hosts`, then open
+`https://geoguessme.localhost`; Keycloak is at
+`https://auth-dev.geoguessme.com`, and verification mail is visible in Mailpit
+at `http://localhost:8025`. Caddy is the only browser-facing entrypoint for the
+identity path and redirects the matching HTTP names to HTTPS.
+
+Login and signup each display three distinct provider buttons and one email
+path. After email is selected, Keycloak owns only the password or registration
+form; it does not repeat the social providers. Registration and reset mail stays
+fully local in Mailpit. Normal pages never render the hidden legacy credential
+form while OIDC is enabled.
+
+The checked-in Google, Apple, and GitHub values are deliberate placeholders;
+Keycloak disables them and the application renders their buttons unavailable. To
+activate the downloaded Google Web OAuth client without copying its secret into
+the repository, pass its ignored JSON file to the target:
+
+```text
+GEOGUESSME_GOOGLE_CLIENT_JSON=/absolute/path/to/client_secret.json make dev-social
+```
+
+The target reads the ID and secret with `jq`, enables the Google alias for that
+run, and never prints either value. Other providers can use the matching
+exported credentials and `GEOGUESSME_OIDC_SOCIAL_PROVIDERS`. Their local broker
+callback is
+`https://auth-dev.geoguessme.com/realms/geoguessme/broker/{alias}/endpoint`.
+Apple still rejects `.localhost` even with a locally trusted certificate; use
+the hosted HTTPS dev domain or a registered public HTTPS tunnel for Apple.
+`make dev-social-down` stops the stack but keeps the named application and
+identity volumes.
+
+A genuinely new Google, social, or Keycloak email identity must choose an
+empty-by-default GeoGuessMe username after verification. Keycloak's provider
+username is never silently copied into the public player profile.
 
 ## Useful targets
 

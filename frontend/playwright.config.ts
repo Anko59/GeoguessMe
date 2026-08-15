@@ -6,6 +6,7 @@ const REPORT_DIR = process.env.PLAYWRIGHT_REPORT_DIR || 'playwright-report';
 const baseOrigin = new URL(BASE_URL).origin;
 const launchArgs = baseOrigin.startsWith('http://') ? [`--unsafely-treat-insecure-origin-as-secure=${baseOrigin}`] : [];
 const lightweightBrowserRun = process.env.PLAYWRIGHT_LIGHTWEIGHT === 'true';
+const ignoreHTTPSErrors = process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === 'true';
 if (process.env.PLAYWRIGHT_HOST_RESOLVER_RULES) {
     launchArgs.push(`--host-resolver-rules=${process.env.PLAYWRIGHT_HOST_RESOLVER_RULES}`);
 }
@@ -23,6 +24,7 @@ export default defineConfig({
     ],
     use: {
         baseURL: BASE_URL,
+        ignoreHTTPSErrors,
         trace: lightweightBrowserRun ? 'off' : 'retain-on-first-failure',
         screenshot: 'only-on-failure',
         video: lightweightBrowserRun ? 'off' : 'retain-on-failure',

@@ -27,11 +27,13 @@ const authValue = {
 describe('Signup Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start' } });
+        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
     });
 
-    it('offers social signup when Keycloak is enabled', async () => {
-        mockGet.mockResolvedValueOnce({ data: { enabled: true, login_path: '/oauth2/start' } });
+    it('offers distinct social and native email signup when Keycloak is enabled', async () => {
+        mockGet.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google', 'apple', 'github'] },
+        });
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -40,11 +42,21 @@ describe('Signup Page', () => {
             </AuthContext.Provider>,
         );
 
-        const link = await screen.findByRole('link', { name: 'Sign up with Google, Apple, or GitHub' });
-        expect(link).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
+        const google = await screen.findByRole('link', { name: 'Sign up with Google' });
+        const apple = screen.getByRole('link', { name: 'Sign up with Apple' });
+        const github = screen.getByRole('link', { name: 'Sign up with GitHub' });
+        expect(google).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=google');
+        expect(apple).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=apple');
+        expect(github).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=github');
+        expect(google.querySelector('.auth-provider-logo-google')).toBeInTheDocument();
+        expect(apple.querySelector('.auth-provider-logo-apple')).toBeInTheDocument();
+        expect(github.querySelector('.auth-provider-logo-github')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
+        expect(screen.getByDisplayValue('create')).toHaveAttribute('name', 'prompt');
+        expect(screen.getByRole('button', { name: 'Continue to create account' })).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
-        fireEvent.click(link);
+        fireEvent.click(google);
         expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
     });
 

@@ -87,7 +87,7 @@ if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$registry_secret"; then
         dev) identity_client_key=GEOGUESSME_DEV_OIDC_CLIENT_SECRET ;;
         production) identity_client_key=GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET ;;
     esac
-    app_client_secret=$(sed -n 's/^OAUTH2_PROXY_CLIENT_SECRET=//p' "$registry_secret" | tail -1)
+    app_client_secret=$(sed -n 's/^OIDC_CLIENT_SECRET=//p' "$registry_secret" | tail -1)
     identity_client_secret=$(sed -n "s/^$identity_client_key=//p" "$identity_temporary" | tail -1)
     if [ -z "$app_client_secret" ] || [ "$app_client_secret" != "$identity_client_secret" ]; then
         die "$environment OAuth2 Proxy client secret does not match the shared Keycloak realm"
@@ -183,6 +183,7 @@ if [ "$oidc_enabled" = true ]; then
     fi
     compose_identity "$release" pull keycloak keycloak-db
     compose_identity "$release" up -d --wait keycloak-db keycloak
+    compose_identity "$release" run --rm --no-deps keycloak-config
 fi
 
 export BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image"

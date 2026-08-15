@@ -17,6 +17,9 @@ RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
 IDENTITY_SECRET_GENERATOR="$ROOT/deployment/scripts/hosted/generate-identity-secret.sh"
 IDENTITY_COMPOSE="$ROOT/deployment/compose.identity.yaml"
+KEYCLOAK_CONFIG="$ROOT/deployment/keycloak/apply-realm-config.sh"
+KEYCLOAK_REALM="$ROOT/deployment/keycloak/realm-geoguessme.json"
+OAUTH2_PROXY_ALPHA="$ROOT/deployment/oauth2-proxy/oauth2-proxy-alpha.yaml"
 
 fail() {
     printf 'contract test failed: %s\n' "$1" >&2
@@ -36,8 +39,35 @@ assert_contains "$COMPOSE" 'name: ${COMPOSE_PROJECT_NAME:-geoguessme-prod}'
 assert_contains "$COMPOSE" '127.0.0.1:${GEOGUESSME_WEB_PORT:-8081}:80'
 assert_contains "$IDENTITY_COMPOSE" '127.0.0.1:${GEOGUESSME_IDENTITY_PORT:-8083}:8080'
 assert_contains "$IDENTITY_COMPOSE" 'realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro'
+assert_contains "$IDENTITY_COMPOSE" 'keycloak-config:'
 assert_contains "$HOSTED" 'database:/var/lib/postgresql/data'
 assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}'
+
+# OIDC start parameters are forwarded only through explicit allowlists, and
+# existing Keycloak realms are reconciled instead of relying on import-once.
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: kc_idp_hint'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: google'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: apple'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: github'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: prompt'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: create'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: login_hint'
+assert_contains "$KEYCLOAK_REALM" '"registrationAllowed": true'
+assert_contains "$KEYCLOAK_REALM" '"verifyEmail": true'
+assert_contains "$KEYCLOAK_REALM" '"providerId": "VERIFY_EMAIL"'
+assert_contains "$KEYCLOAK_REALM" '"hideOnLogin": true'
+assert_contains "$KEYCLOAK_CONFIG" '-s hideOnLogin=true'
+assert_contains "$KEYCLOAK_CONFIG" 'has_real_credentials'
+assert_contains "$KEYCLOAK_CONFIG" 'configure_client geoguessme-production'
+assert_contains "$KEYCLOAK_CONFIG" 'configure_client geoguessme-dev'
+assert_contains "$KEYCLOAK_CONFIG" 'ensure_required_action VERIFY_EMAIL "Verify Email" 50'
+assert_contains "$KEYCLOAK_CONFIG" 'update users/profile'
+
+# BuildKit target-platform arguments must be declared inside the build stage;
+# otherwise TARGETARCH is empty and the shell fallback always emits amd64.
+assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETOS'
+assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETARCH'
+assert_contains "$BACKEND_DOCKERFILE" 'GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}'
 
 # Forced commands cannot select another environment or obtain a shell.
 assert_contains "$FORCED" '[ "$#" -eq 4 ]'
@@ -170,7 +200,7 @@ printf '%s\n' "$generated" | grep -Fq 'geoguessme-database-backups/dev' ||
     fail 'generated secret payload omitted the isolated backup prefix'
 printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
     fail 'generated secret payload omitted the supplied Web Push keypair'
-printf '%s\n' "$generated" | grep -Fq 'OAUTH2_PROXY_CLIENT_SECRET=keycloak-client-secret' ||
+printf '%s\n' "$generated" | grep -Fq 'OIDC_CLIENT_SECRET=keycloak-client-secret' ||
     fail 'generated secret payload omitted the selected Keycloak client secret'
 printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
     fail 'generated secret payload omitted a random OAuth2 Proxy cookie secret'
@@ -179,6 +209,7 @@ identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
     GOOGLE_OAUTH_CLIENT_SECRET=google-secret \
     GITHUB_OAUTH_CLIENT_ID=github-id GITHUB_OAUTH_CLIENT_SECRET=github-secret \
     APPLE_OAUTH_CLIENT_ID=apple-id APPLE_OAUTH_CLIENT_SECRET=apple-secret \
+    KEYCLOAK_SMTP_USERNAME=smtp-user KEYCLOAK_SMTP_PASSWORD=smtp-password \
     PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret \
     DEV_OIDC_CLIENT_SECRET=dev-oidc-secret "$IDENTITY_SECRET_GENERATOR")
 case "$identity_generated" in *replace-*) fail 'generated identity payload contains a template placeholder' ;; esac
@@ -192,7 +223,10 @@ printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_ID=apple
     fail 'generated identity payload omitted the Apple provider client ID'
 printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_SECRET=apple-secret' ||
     fail 'generated identity payload omitted the Apple provider secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_KEYCLOAK_SMTP_PASSWORD=smtp-password' ||
+    fail 'generated identity payload omitted the Keycloak SMTP secret'
 assert_contains "$ROOT/tools/make/deployment.mk" 'generate-identity-secret.sh |'
+assert_contains "$ROOT/tools/make/deployment.mk" '-e KEYCLOAK_SMTP_USERNAME -e KEYCLOAK_SMTP_PASSWORD'
 
 # A missing Web Push key must stop generation rather than emit the template
 # placeholder, which is non-empty and so would satisfy the backend's production

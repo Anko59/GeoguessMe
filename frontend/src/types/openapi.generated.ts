@@ -52,7 +52,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Report whether Keycloak social login is enabled. */
+        /** Report whether Keycloak sign-in is enabled. */
         get: operations['getOIDCConfig'];
         put?: never;
         post?: never;
@@ -73,7 +73,7 @@ export interface paths {
         put?: never;
         /**
          * Exchange the OAuth2 Proxy Keycloak session for an application session.
-         * @description Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript.
+         * @description Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript. A genuinely new identity receives username_required until it submits an explicit GeoGuessMe username; existing identities and verified-email migrations do not need one.
          */
         post: operations['exchangeOIDCSession'];
         delete?: never;
@@ -806,6 +806,13 @@ export interface components {
         OIDCConfig: {
             enabled: boolean;
             login_path: string;
+            /**
+             * Format: uri
+             * @description Runtime-specific Keycloak account console used for optional 2FA, recovery codes, and passkeys.
+             */
+            account_url?: string;
+            /** @description Social brokers configured in this environment; email/password is always handled by Keycloak. */
+            social_providers: ('google' | 'apple' | 'github')[];
         };
         ProgressionRank: {
             level: number;
@@ -1265,9 +1272,15 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                'application/json': {
+                    username?: string;
+                };
+            };
+        };
         responses: {
-            /** @description Existing identity resolved, verified-email account linked, or new account provisioned. */
+            /** @description Existing identity resolved, verified-email account linked, or new account provisioned with its chosen username. */
             200: {
                 headers: {
                     [name: string]: unknown;

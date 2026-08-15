@@ -36,6 +36,14 @@ players), but every step treats the mapping as durable production data.
 5. Configure the production and dev clients separately. Production callbacks and
    origins use `https://geoguessme.com`; the issuer uses
    `https://auth.geoguessme.com/realms/geoguessme`.
+6. Before deploying this configuration over an existing hosted installation,
+   update both encrypted application environments without rotating their stable
+   database, JWT, cookie, backup, or Web Push secrets. Preserve the existing
+   Keycloak application-client secret, rename its key from
+   `OAUTH2_PROXY_CLIENT_SECRET` to `OIDC_CLIENT_SECRET`, and remove the old
+   `OAUTH2_PROXY_CLIENT_ID` and `OAUTH2_PROXY_OIDC_ISSUER_URL` duplicates. The
+   shared encrypted identity environment is generated separately as documented
+   in the hosted-deployment runbook.
 
 Suggested inventory queries (do not publish email or subject values in release
 logs):
@@ -63,14 +71,16 @@ ORDER BY u.created_at, u.id;
 If the deployed schema uses a renamed membership table, adapt only that
 read-only evidence query; never change production schema to fit the example.
 
-## Phase 1: Keycloak-only launch and required migration
+## Phase 1: Keycloak-only launch and read-only legacy accounts
 
 Enable OIDC only after the local and dev flows are green. During this phase:
 
-- Normal login and signup use Keycloak exclusively and offer Google, Apple, and
-  GitHub. The application does not display legacy credential forms.
-- A brand-new verified social identity creates a new GeoGuessMe user and its
-  identity mapping atomically.
+- Normal login and signup use Keycloak exclusively. Both pages offer distinct
+  Google, Apple, and GitHub actions plus native email/password. The application
+  does not display legacy credential forms, and passwords are entered only on
+  the branded Keycloak origin.
+- A brand-new verified native or social identity creates a new GeoGuessMe user
+  and its identity mapping atomically.
 - An exact verified recovery-email match may link automatically. A pending or
   unverified match returns `account_link_required`, which is the only normal UI
   path that reveals `/migrate-account`.
@@ -81,6 +91,10 @@ Enable OIDC only after the local and dev flows are green. During this phase:
   rejected for the linked account.
 - TOTP, recovery codes, and passkeys are offered in Keycloak account settings
   but are never mandatory.
+
+At this point every unmigrated legacy account becomes read-only under the matrix
+below. It is not silently converted, and its password remains available only
+through the hidden migration route.
 
 Monitor migration progress without exposing identity subjects:
 
@@ -100,6 +114,21 @@ ORDER BY u.created_at, u.id;
 For each of the known legacy players, compare the post-link ID and ownership
 counts with the Phase 0 export. Any changed ID or missing history blocks the
 rollout.
+
+## Phase 2: required legacy-account migration
+
+In the second phase, each existing player must connect a Keycloak email, Google,
+Apple, or GitHub identity before normal write access is restored. Contact the
+approximately 11 known players directly, keep the migration support path
+available, and track only aggregate migrated/unmigrated counts in routine
+operations. A player may still read existing history before migrating; do not
+delete, duplicate, or reassign that player's application row.
+
+Close the phase only after every active legacy player is linked or has been
+handled through the documented support process, and after IDs and ownership
+counts match the Phase 0 evidence. Retiring legacy password material is a later,
+separately reviewed cleanup after the rollback observation window; it is not
+part of this rollout.
 
 ### Read-only legacy-session matrix
 
@@ -137,6 +166,48 @@ Before enabling OIDC, require all of the following:
 - an operator-visible count of migrated and unmigrated active users;
 - direct notice to the small known legacy population and a tested support path;
 - a fresh backup and a rehearsed rollback that disables only the policy.
+
+## Provider registration and callback contract
+
+Provider credentials are not interchangeable with the GeoGuessMe application
+client secret. Create one credential in each provider console for the hosted
+Keycloak broker and register these exact HTTPS values:
+
+| Provider | Provider-side identifier    | Callback / return URL                                                  |
+| -------- | --------------------------- | ---------------------------------------------------------------------- |
+| Google   | OAuth 2.0 web client        | `https://auth.geoguessme.com/realms/geoguessme/broker/google/endpoint` |
+| Apple    | Services ID for web sign-in | `https://auth.geoguessme.com/realms/geoguessme/broker/apple/endpoint`  |
+| GitHub   | OAuth App                   | `https://auth.geoguessme.com/realms/geoguessme/broker/github/endpoint` |
+
+For Google, also configure the consent screen and use the web client ID and
+secret. For Apple, associate `auth.geoguessme.com` with the Services ID, keep
+the Services ID as the Keycloak client ID, and generate its signed client-secret
+JWT from the Apple team/key material. For GitHub, use the OAuth App client ID
+and secret; the callback URL must include the broker alias exactly as shown.
+
+Put those values in the shared encrypted identity environment, run
+`make identity-up` so the realm reconciler applies configuration to an existing
+realm, and then test each button in hosted dev. A correct provider callback
+returns first to `auth.geoguessme.com`; Keycloak then returns to
+`https://dev.geoguessme.com/oauth2/callback` or
+`https://geoguessme.com/oauth2/callback` through its separate application
+client. Do not register either application callback in a social-provider
+console.
+
+The local stack intentionally uses placeholder provider credentials. Keycloak
+keeps those brokers disabled and the application presents their buttons as
+unavailable instead of sending a player into an `invalid_client` response.
+Google and GitHub can be activated locally with dedicated credentials and the
+HTTPS callback
+`https://auth-dev.geoguessme.com/realms/geoguessme/broker/{alias}/endpoint`.
+Apple rejects `.localhost` even when its certificate is trusted locally, so its
+provider acceptance runs on hosted dev or a registered public HTTPS tunnel.
+Native email/password, verification mail, callback exchange, and the branded
+Keycloak pages run entirely locally.
+
+An expired Keycloak page after returning from a provider means its one-time
+browser state is stale or was already consumed. Restart from the corresponding
+GeoGuessMe provider button; never bookmark or retry a broker callback URL.
 
 ## Identity-conflict handling
 

@@ -39,6 +39,13 @@ type Config struct {
 	OIDCEnabled   bool
 	OIDCIssuerURL string
 	OIDCClientID  string
+	// OIDCClientSecret also lets the backend delete the matching Keycloak user
+	// before it removes an OIDC-linked GeoGuessMe account.
+	OIDCClientSecret string
+	// OIDCSocialProviders lists the Keycloak broker aliases that are actually
+	// configured in this environment. Email/password remains available through
+	// Keycloak even when this list is empty.
+	OIDCSocialProviders []string
 
 	SMTPHost        string
 	SMTPPort        int
@@ -196,9 +203,24 @@ func (c *Config) Validate() error {
 		if strings.TrimSpace(c.OIDCClientID) == "" {
 			problems = append(problems, "OIDC_CLIENT_ID is required when OIDC is enabled")
 		}
+		if strings.TrimSpace(c.OIDCClientSecret) == "" {
+			problems = append(problems, "OIDC_CLIENT_SECRET is required when OIDC is enabled")
+		}
 		if c.Environment == EnvProduction && (issuer == nil || issuer.Scheme != "https") {
 			problems = append(problems, "OIDC_ISSUER_URL must use HTTPS in production")
 		}
+	}
+	seenSocialProviders := make(map[string]bool, len(c.OIDCSocialProviders))
+	for _, provider := range c.OIDCSocialProviders {
+		switch provider {
+		case "google", "apple", "github":
+		default:
+			problems = append(problems, fmt.Sprintf("OIDC_SOCIAL_PROVIDERS contains unsupported provider %q", provider))
+		}
+		if seenSocialProviders[provider] {
+			problems = append(problems, fmt.Sprintf("OIDC_SOCIAL_PROVIDERS contains duplicate provider %q", provider))
+		}
+		seenSocialProviders[provider] = true
 	}
 	if c.DatabaseMinConns < 0 {
 		problems = append(problems, "DB_MIN_CONNS must not be negative")

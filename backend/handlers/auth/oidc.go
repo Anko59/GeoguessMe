@@ -27,10 +27,19 @@ func (a *AuthAPI) OIDCConfig(w http.ResponseWriter, r *http.Request) {
 		handlers.MethodNotAllowed(w)
 		return
 	}
-	handlers.WriteJSON(w, http.StatusOK, map[string]any{
-		"enabled":    a.cfg.OIDCEnabled,
-		"login_path": "/oauth2/start",
-	})
+	providers := a.cfg.OIDCSocialProviders
+	if providers == nil {
+		providers = []string{}
+	}
+	response := map[string]any{
+		"enabled":          a.cfg.OIDCEnabled,
+		"login_path":       "/oauth2/start",
+		"social_providers": providers,
+	}
+	if issuer := strings.TrimRight(strings.TrimSpace(a.cfg.OIDCIssuerURL), "/"); issuer != "" {
+		response["account_url"] = issuer + "/account/"
+	}
+	handlers.WriteJSON(w, http.StatusOK, response)
 }
 
 // StartOIDCLink binds a short-lived opaque cookie to the already-authenticated
@@ -71,6 +80,19 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusServiceUnavailable, "oidc_unavailable", "Social login is unavailable")
 		return
 	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if r.ContentLength != 0 && !handlers.DecodeJSON(w, r, &req) {
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username != "" {
+		if err := validation.ValidateUsername(req.Username); err != nil {
+			handlers.WriteError(w, http.StatusBadRequest, "invalid_username", err.Error())
+			return
+		}
+	}
 	identity, err := a.oidc.VerifyIdentity(r.Context(), r.Header.Get("Authorization"))
 	if err != nil || validation.ValidateEmail(identity.Email) != nil || !identity.EmailVerified {
 		handlers.WriteError(w, http.StatusUnauthorized, "oidc_authentication_failed", "Social login could not be verified")
@@ -85,9 +107,15 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 		a.clearOIDCLinkCookie(w)
 		user, userErr = a.repos.LinkOIDCIdentity(r.Context(), authsvc.HashToken(cookie.Value), persisted, now)
 	} else {
-		user, userErr = a.repos.ResolveOIDCIdentity(r.Context(), persisted, userID, oidcUsername(identity), a.randomAvatar(), now)
+		user, userErr = a.repos.ResolveOIDCIdentity(r.Context(), persisted, userID, req.Username, a.randomAvatar(), now)
 	}
 	switch {
+	case errors.Is(userErr, repository.ErrOIDCUsernameRequired):
+		handlers.WriteError(w, http.StatusConflict, "username_required", "Choose your GeoGuessMe username to finish creating your account")
+		return
+	case errors.Is(userErr, repository.ErrUsernameConflict):
+		handlers.WriteError(w, http.StatusConflict, "username_taken", "Username is already in use")
+		return
 	case errors.Is(userErr, repository.ErrOIDCAccountLinkRequired):
 		handlers.WriteError(w, http.StatusConflict, "account_link_required", "Use the account migration page once, then connect Keycloak from Settings")
 		return
@@ -117,31 +145,4 @@ func (a *AuthAPI) clearOIDCLinkCookie(w http.ResponseWriter) {
 		Name: oidcLinkCookie, Value: "", Path: "/api/v1/auth/oidc/session",
 		MaxAge: -1, HttpOnly: true, Secure: a.cfg.Environment == "production", SameSite: http.SameSiteLaxMode,
 	})
-}
-
-func oidcUsername(identity authsvc.ExternalIdentity) string {
-	source := identity.PreferredUsername
-	if source == "" {
-		source = identity.Name
-	}
-	if source == "" {
-		source, _, _ = strings.Cut(identity.Email, "@")
-	}
-	var out strings.Builder
-	for _, char := range strings.ToLower(source) {
-		valid := char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-'
-		if valid {
-			out.WriteRune(char)
-		} else if out.Len() > 0 && !strings.HasSuffix(out.String(), "-") {
-			out.WriteByte('-')
-		}
-		if out.Len() >= 30 {
-			break
-		}
-	}
-	username := strings.Trim(out.String(), "-_")
-	if len(username) < 3 {
-		return "player"
-	}
-	return username
 }

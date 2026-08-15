@@ -27,11 +27,13 @@ const authValue = {
 describe('Login Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start' } });
+        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
     });
 
-    it('offers Keycloak social login when enabled', async () => {
-        mockGet.mockResolvedValueOnce({ data: { enabled: true, login_path: '/oauth2/start' } });
+    it('offers distinct Keycloak social and native email login when enabled', async () => {
+        mockGet.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google', 'apple', 'github'] },
+        });
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -40,12 +42,37 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        const link = await screen.findByRole('link', { name: 'Continue with Google, Apple, or GitHub' });
-        expect(link).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
+        const google = await screen.findByRole('link', { name: 'Continue with Google' });
+        const apple = screen.getByRole('link', { name: 'Continue with Apple' });
+        const github = screen.getByRole('link', { name: 'Continue with GitHub' });
+        expect(google).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=google');
+        expect(apple).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=apple');
+        expect(github).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=github');
+        expect(google.querySelector('.auth-provider-logo-google')).toBeInTheDocument();
+        expect(apple.querySelector('.auth-provider-logo-apple')).toBeInTheDocument();
+        expect(github.querySelector('.auth-provider-logo-github')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
+        expect(screen.getByRole('button', { name: 'Continue to password' })).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
-        fireEvent.click(link);
+        fireEvent.click(google);
         expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
+    });
+
+    it('keeps unconfigured social providers visible but unavailable', async () => {
+        mockGet.mockResolvedValueOnce({ data: { enabled: true, login_path: '/oauth2/start', social_providers: [] } });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Continue with Apple' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeDisabled();
+        expect(screen.getByText(/Social sign-in is not configured in this environment/)).toBeInTheDocument();
     });
 
     it('only exposes legacy credentials on the dedicated migration page', async () => {

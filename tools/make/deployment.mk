@@ -262,6 +262,7 @@ identity-secrets-generate: ## Generate shared Keycloak secrets and encrypt them 
 		-e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
 		-e GITHUB_OAUTH_CLIENT_ID -e GITHUB_OAUTH_CLIENT_SECRET \
 		-e APPLE_OAUTH_CLIENT_ID -e APPLE_OAUTH_CLIENT_SECRET \
+		-e KEYCLOAK_SMTP_USERNAME -e KEYCLOAK_SMTP_PASSWORD \
 		-e PRODUCTION_OIDC_CLIENT_SECRET -e DEV_OIDC_CLIENT_SECRET \
 		go-tools sh /workspace/deployment/scripts/hosted/generate-identity-secret.sh | \
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \

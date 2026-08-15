@@ -22,6 +22,9 @@ var (
 	ErrOIDCIdentityConflict = errors.New("OIDC identity is already linked")
 	// ErrOIDCLinkIntentInvalid covers missing, expired, and consumed intents.
 	ErrOIDCLinkIntentInvalid = errors.New("OIDC link intent is invalid")
+	// ErrOIDCUsernameRequired keeps identity verification separate from the
+	// public game profile: every genuinely new player chooses their username.
+	ErrOIDCUsernameRequired = errors.New("username is required for a new OIDC account")
 )
 
 // OIDCIdentity is the verified, minimal identity projection accepted by the
@@ -31,6 +34,25 @@ type OIDCIdentity struct {
 	Issuer  string
 	Subject string
 	Email   string
+}
+
+// OIDCIdentitiesByUserID returns the upstream subjects that must be removed
+// before an OIDC-linked application account can be deleted.
+func (r *Repository) OIDCIdentitiesByUserID(ctx context.Context, userID string) ([]OIDCIdentity, error) {
+	rows, err := r.pool.Query(ctx, `SELECT issuer, subject, email_at_link FROM user_identities WHERE user_id = $1 ORDER BY issuer, subject`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	identities := make([]OIDCIdentity, 0)
+	for rows.Next() {
+		var identity OIDCIdentity
+		if err := rows.Scan(&identity.Issuer, &identity.Subject, &identity.Email); err != nil {
+			return nil, err
+		}
+		identities = append(identities, identity)
+	}
+	return identities, rows.Err()
 }
 
 // CreateOIDCLinkIntent records a short-lived, single-use proof that a legacy
@@ -105,20 +127,16 @@ func (r *Repository) ResolveOIDCIdentity(ctx context.Context, identity OIDCIdent
 	if pendingMatch {
 		return nil, ErrOIDCAccountLinkRequired
 	}
+	if strings.TrimSpace(username) == "" {
+		return nil, ErrOIDCUsernameRequired
+	}
 
 	inserted, err := insertOIDCUser(ctx, tx, userID, username, identity.Email, normalizedEmail, avatar, now)
 	if err != nil {
 		return nil, err
 	}
 	if !inserted {
-		fallback := fallbackOIDCUsername(username, userID)
-		inserted, err = insertOIDCUser(ctx, tx, userID, fallback, identity.Email, normalizedEmail, avatar, now)
-		if err != nil {
-			return nil, err
-		}
-		if !inserted {
-			return nil, ErrUsernameConflict
-		}
+		return nil, ErrUsernameConflict
 	}
 	if err := insertOIDCIdentity(ctx, tx, identity, userID, now); err != nil {
 		return nil, err
@@ -205,18 +223,6 @@ func insertOIDCIdentity(ctx context.Context, tx pgx.Tx, identity OIDCIdentity, u
 func insertOIDCUser(ctx context.Context, tx pgx.Tx, userID, username, email, normalizedEmail, avatar string, now time.Time) (bool, error) {
 	tag, err := tx.Exec(ctx, `INSERT INTO users (id, username, email, email_normalized, email_verified_at, pending_email, pending_email_normalized, password, legacy_password_enabled, avatar, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NULL, NULL, '!', FALSE, $6, $5, $5) ON CONFLICT (username) DO NOTHING`, userID, username, email, normalizedEmail, now, avatar)
 	return err == nil && tag.RowsAffected() == 1, err
-}
-
-func fallbackOIDCUsername(base, userID string) string {
-	base = strings.Trim(base, "-_")
-	if len(base) > 21 {
-		base = base[:21]
-	}
-	suffix := strings.ReplaceAll(userID, "-", "")
-	if len(suffix) > 8 {
-		suffix = suffix[:8]
-	}
-	return base + "-" + suffix
 }
 
 func commitLoadedUser(ctx context.Context, tx pgx.Tx, userID string) (*models.User, error) {

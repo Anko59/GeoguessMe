@@ -103,14 +103,32 @@ tools-clean: ## Remove only project-specific tool containers, networks, and cach
 	$(COMPOSE_TOOLS) down --volumes --remove-orphans
 
 ##@ Development
-dev: ## Start the Docker development stack.
+
+dev-local-state: ## Create ignored local runtime directories used by Compose bind mounts.
+	mkdir -p .local/caddy
+
+dev: dev-local-state ## Start the Docker development stack.
 	$(COMPOSE_DEV) up -d --build --renew-anon-volumes
 
 up: dev ## Alias for dev.
 
-dev-social: ## Start dev with local Keycloak and OAuth2 Proxy.
-	OIDC_ENABLED=true GEOGUESSME_DEV_PUBLIC_URL=http://geoguessme.localhost:5173 $(COMPOSE_DEV) --profile social up -d --wait --wait-timeout 180 local-keycloak
-	OIDC_ENABLED=true GEOGUESSME_DEV_PUBLIC_URL=http://geoguessme.localhost:5173 $(COMPOSE_DEV) --profile social up -d --build --renew-anon-volumes
+dev-social-init: ## Generate the trusted local certificate used by Caddy.
+	./deployment/caddy/init-local-tls.sh
+
+dev-social: dev-social-init ## Start dev with local HTTPS, Keycloak, and OAuth2 Proxy.
+	@set -eu; \
+	if [ -n "$${GEOGUESSME_GOOGLE_CLIENT_JSON:-}" ]; then \
+		test -r "$${GEOGUESSME_GOOGLE_CLIENT_JSON}" || { echo 'GEOGUESSME_GOOGLE_CLIENT_JSON is not readable' >&2; exit 2; }; \
+		command -v jq >/dev/null || { echo 'jq is required to read the Google OAuth client JSON' >&2; exit 2; }; \
+		export GEOGUESSME_GOOGLE_CLIENT_ID="$$(jq -er '.web.client_id' "$${GEOGUESSME_GOOGLE_CLIENT_JSON}")"; \
+		export GEOGUESSME_GOOGLE_CLIENT_SECRET="$$(jq -er '.web.client_secret' "$${GEOGUESSME_GOOGLE_CLIENT_JSON}")"; \
+		case ",$${GEOGUESSME_OIDC_SOCIAL_PROVIDERS:-}," in *,google,*) ;; *) export GEOGUESSME_OIDC_SOCIAL_PROVIDERS="$${GEOGUESSME_OIDC_SOCIAL_PROVIDERS:+$${GEOGUESSME_OIDC_SOCIAL_PROVIDERS},}google" ;; esac; \
+	fi; \
+	export OIDC_ENABLED=true GEOGUESSME_DEV_PUBLIC_URL=https://geoguessme.localhost; \
+	$(COMPOSE_DEV) --profile social up -d --wait --wait-timeout 180 local-keycloak local-caddy; \
+	$(COMPOSE_DEV) --profile social run --rm --no-deps local-keycloak-config; \
+	$(COMPOSE_DEV) --profile social up -d --build --renew-anon-volumes --wait --wait-timeout 180 backend; \
+	$(COMPOSE_DEV) --profile social up -d --build --renew-anon-volumes --no-deps frontend oauth2-proxy
 
 dev-social-down: ## Stop the local social-auth development stack.
 	$(COMPOSE_DEV) --profile social down
@@ -138,7 +156,8 @@ identity-config: ## Validate the shared auth.geoguessme.com identity stack.
 	$(COMPOSE_IDENTITY) config --quiet
 
 identity-up: identity-config ## Start shared Keycloak and its database.
-	$(COMPOSE_IDENTITY) up -d --wait
+	$(COMPOSE_IDENTITY) up -d --wait keycloak-db keycloak
+	$(COMPOSE_IDENTITY) run --rm --no-deps keycloak-config
 
 identity-down: ## Stop shared Keycloak while retaining its database volume.
 	$(COMPOSE_IDENTITY) down

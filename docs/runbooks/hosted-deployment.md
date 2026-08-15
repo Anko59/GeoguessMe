@@ -102,15 +102,19 @@ export DEV_OIDC_CLIENT_SECRET=...
 export GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=...
 export GITHUB_OAUTH_CLIENT_ID=... GITHUB_OAUTH_CLIENT_SECRET=...
 export APPLE_OAUTH_CLIENT_ID=... APPLE_OAUTH_CLIENT_SECRET=...
+export KEYCLOAK_SMTP_USERNAME=... KEYCLOAK_SMTP_PASSWORD=...
 make identity-secrets-generate RECIPIENT=age1...,age1...
 ```
 
-The production and dev `OAUTH2_PROXY_CLIENT_SECRET` values must respectively
-match the two Keycloak client secrets above. Commit only the three encrypted
-dotenv files. Follow the [social-auth rollout runbook](social-auth-rollout.md)
-before enabling OIDC; it defines the legacy read-only migration phase and the
-provider-specific checks. Apple's JWT expires and must be replaced before its
-configured expiry without regenerating the other identity secrets.
+The production and dev `OIDC_CLIENT_SECRET` values must respectively match the
+two Keycloak client secrets above. The shared SMTP credential lets Keycloak send
+native-account verification and password-reset mail; it may use the same Brevo
+account as the application while remaining independently configured. Commit only
+the three encrypted dotenv files. Follow the
+[social-auth rollout runbook](social-auth-rollout.md) before enabling OIDC; it
+defines the exact provider callbacks, the legacy read-only migration phase, and
+the provider-specific checks. Apple's JWT expires and must be replaced before
+its configured expiry without regenerating the other identity secrets.
 
 Both environments set `APP_ENV=production`. The backend disables Push when all
 three VAPID variables are absent, but rejects a partial keypair or invalid

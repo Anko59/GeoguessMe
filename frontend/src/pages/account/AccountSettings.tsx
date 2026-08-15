@@ -1,10 +1,11 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
+import type { OIDCConfig } from '../../types';
 import './AccountSettings.css';
 
 const avatars = Array.from({ length: 10 }, (_, index) => (index === 0 ? 'avatar.png' : `avatar${index + 1}.png`));
@@ -26,7 +27,22 @@ export default function AccountSettings() {
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
     const [linking, setLinking] = useState(false);
+    const [keycloakAccountURL, setKeycloakAccountURL] = useState('');
     const migrationRequired = Boolean(user?.migration_required);
+
+    useEffect(() => {
+        let active = true;
+        if (!user?.oidc_linked) return () => undefined;
+        void api
+            .get<OIDCConfig>('/auth/oidc/config')
+            .then((response) => {
+                if (active) setKeycloakAccountURL(response.data.account_url ?? '');
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, [user?.oidc_linked]);
 
     const clearNotice = () => {
         setMessage('');
@@ -136,7 +152,7 @@ export default function AccountSettings() {
             sessionStorage.setItem('geoguessme_oidc_return_to', '/settings');
             window.location.assign('/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
         } catch (requestError: unknown) {
-            setError(getAPIErrorMessage(requestError, 'Unable to start social login setup'));
+            setError(getAPIErrorMessage(requestError, 'Unable to start Keycloak login setup'));
             setLinking(false);
         }
     };
@@ -147,7 +163,11 @@ export default function AccountSettings() {
         try {
             const data = user?.password_login_enabled ? { password } : { confirmation: password };
             await api.delete('/auth/account', { data });
+            if (typeof fetch === 'function') {
+                await fetch('/oauth2/sign_out', { credentials: 'include', redirect: 'manual' }).catch(() => undefined);
+            }
             await refresh();
+            navigate('/', { replace: true });
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Unable to delete account'));
         }
@@ -175,7 +195,7 @@ export default function AccountSettings() {
                             </p>
                         </div>
                         <button className="btn btn-primary" disabled={linking} onClick={() => void linkSocialLogin()}>
-                            {linking ? 'Opening secure login…' : 'Connect Google, Apple, or GitHub'}
+                            {linking ? 'Opening secure login…' : 'Connect a Keycloak login'}
                         </button>
                     </div>
                 )}
@@ -265,31 +285,33 @@ export default function AccountSettings() {
                     <div className="account-section-heading">
                         <h2>Sign-in methods</h2>
                         <p>
-                            Google, Apple, and GitHub sign-in are managed through Keycloak while GeoGuessMe keeps the
-                            same player ID and game history.
+                            Email, Google, Apple, and GitHub sign-in are managed through Keycloak while GeoGuessMe keeps
+                            the same player ID and game history.
                         </p>
                     </div>
                     {user?.oidc_linked ? (
                         <>
                             <p className="account-identity-status" role="status">
-                                Social login is connected.
+                                Keycloak login is connected.
                             </p>
                             <p className="account-help">
                                 Two-factor authentication, recovery codes, and passkeys are optional. You can add or
                                 remove them in your Keycloak account.
                             </p>
-                            <a
-                                className="btn btn-secondary"
-                                href="https://auth.geoguessme.com/realms/geoguessme/account/"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                Manage 2FA and passkeys
-                            </a>
+                            {keycloakAccountURL && (
+                                <a
+                                    className="btn btn-secondary"
+                                    href={keycloakAccountURL}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    Manage 2FA and passkeys
+                                </a>
+                            )}
                         </>
                     ) : (
                         <button className="btn btn-secondary" disabled={linking} onClick={() => void linkSocialLogin()}>
-                            {linking ? 'Opening secure login…' : 'Connect Google, Apple, or GitHub'}
+                            {linking ? 'Opening secure login…' : 'Connect a Keycloak login'}
                         </button>
                     )}
                     {!user?.oidc_linked && user?.password_login_enabled ? (

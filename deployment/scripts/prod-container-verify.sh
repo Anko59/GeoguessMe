@@ -56,6 +56,30 @@ for image in "$backend_image" "$web_image"; do
     echo "  ok   $image healthcheck=$health"
 done
 
+# The backend build uses BuildKit's target-platform arguments. Verify that the
+# ELF executable agrees with the image manifest so an undeclared TARGETARCH
+# cannot silently place an emulated amd64 binary in an arm64 runtime image.
+backend_arch="$(docker image inspect --format '{{.Architecture}}' "$backend_image")"
+case "$backend_arch" in
+    amd64) expected_machine="62 0" ;;
+    arm64) expected_machine="183 0" ;;
+    *)
+        echo "$backend_image has unsupported architecture $backend_arch" >&2
+        exit 1
+        ;;
+esac
+binary_machine="$(
+    docker run --rm --network none --read-only --cap-drop ALL \
+        --security-opt no-new-privileges --entrypoint od "$backend_image" \
+        -An -t u1 -j 18 -N 2 /usr/local/bin/geoguessme |
+        awk '{$1=$1; print}'
+)"
+test "$binary_machine" = "$expected_machine" || {
+    echo "$backend_image binary architecture mismatch: image=$backend_arch ELF-machine-bytes=$binary_machine" >&2
+    exit 1
+}
+echo "  ok   $backend_image binary architecture=$backend_arch"
+
 # ---------------------------------------------------------------------------
 # Phase 2: Validate production Compose configuration
 # ---------------------------------------------------------------------------
@@ -149,6 +173,11 @@ services:
       - --provider=github
       - --client-id=prod-verify
       - --client-secret=prod-verify-secret
+      - --upstream=http://backend:8080/
+      - --http-address=0.0.0.0:4180
+      - --pass-host-header=true
+      - --pass-authorization-header=true
+      - --skip-auth-strip-headers=false
       - --cookie-secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       - --redirect-url=https://localhost/oauth2/callback
     env_file:

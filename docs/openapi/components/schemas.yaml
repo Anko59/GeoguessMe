@@ -42,10 +42,19 @@ AuthUser:
 
 OIDCConfig:
   type: object
-  required: [enabled, login_path]
+  required: [enabled, login_path, social_providers]
   properties:
     enabled: { type: boolean }
     login_path: { type: string, pattern: "^/oauth2/start$" }
+    account_url:
+      type: string
+      format: uri
+      description: Runtime-specific Keycloak account console used for optional 2FA, recovery codes, and passkeys.
+    social_providers:
+      type: array
+      uniqueItems: true
+      items: { type: string, enum: [google, apple, github] }
+      description: Social brokers configured in this environment; email/password is always handled by Keycloak.
 
 AuthResponse:
   type: object

@@ -41,6 +41,7 @@ services:
     volumes:
       - ./deployment/keycloak/realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro
       - ./deployment/keycloak/themes:/opt/keycloak/themes:ro
+      - ./frontend/public:/opt/keycloak/themes/geoguessme/login/resources/app:ro
     tmpfs: ["/tmp:size=64m,noexec,nosuid,nodev"]
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
@@ -65,6 +66,27 @@ services:
           cpus: ${GEOGUESSME_KEYCLOAK_CPUS:-1.0}
           memory: ${GEOGUESSME_KEYCLOAK_MEMORY:-768M}
           pids: 256
+
+  keycloak-config:
+    image: quay.io/keycloak/keycloak:26.4.0@sha256:5f3fb534cde6bf006d79f5912473e5d2c828c707cdfc52e16972803aca9d43dd
+    entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
+    env_file:
+      - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
+        required: true
+    environment:
+      KEYCLOAK_CONFIG_SERVER: http://keycloak:8080
+    volumes:
+      - ./deployment/keycloak/apply-realm-config.sh:/opt/geoguessme/keycloak/apply-realm-config.sh:ro
+      - ./deployment/keycloak/user-profile.json:/opt/geoguessme/keycloak/user-profile.json:ro
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    restart: "no"
+    networks: [identity]
+    depends_on:
+      keycloak: { condition: service_healthy }
 
 networks:
   identity: {}

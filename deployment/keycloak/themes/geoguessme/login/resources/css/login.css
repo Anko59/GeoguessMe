@@ -1,70 +1,214 @@
 :root {
-    --pf-v5-global--primary-color--100: #0077b6;
-    --pf-v5-global--primary-color--200: #023e8a;
+    --geoguessme-navy: #111a4d;
+    --geoguessme-blue: #0077b6;
+    --geoguessme-blue-dark: #023e8a;
+    --geoguessme-muted: #526080;
+    --geoguessme-line: #dce4f0;
+    --pf-v5-global--primary-color--100: var(--geoguessme-blue);
+    --pf-v5-global--primary-color--200: var(--geoguessme-blue-dark);
     --pf-v5-global--link--Color: #006ba3;
+}
+
+html,
+body,
+.login-pf body {
+    min-height: 100%;
 }
 
 body,
 .login-pf body {
     background:
-        radial-gradient(circle at 85% 5%, rgb(72 202 228 / 28%), transparent 32rem),
-        linear-gradient(145deg, #f6f8fc, #eaf7fb);
-    color: #111a4d;
+        radial-gradient(circle at 92% -8%, rgb(72 202 228 / 32%), transparent 32rem),
+        linear-gradient(rgb(246 248 252 / 91%), rgb(246 248 252 / 95%)),
+        url('../app/app_background.png') center / 640px;
+    color: var(--geoguessme-navy);
+}
+
+.pf-v5-c-login {
+    min-height: 100dvh;
+}
+
+.pf-v5-c-login__container {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    padding: clamp(1rem, 4vw, 3rem);
+    display: grid;
+    grid-template-areas: 'main';
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+}
+
+.pf-v5-c-login__header,
+#kc-header {
+    display: none;
 }
 
 .login-pf-page .card-pf,
 .pf-v5-c-login__main {
+    width: 100%;
+    max-width: 29rem;
+    min-width: 0;
+    margin: 0;
+    grid-area: main;
+    background: rgb(255 255 255 / 97%);
     border: 1px solid rgb(255 255 255 / 90%);
     border-radius: 24px;
     box-shadow: 0 24px 70px rgb(17 26 77 / 16%);
+    overflow: hidden;
 }
 
-#kc-header-wrapper {
-    color: #111a4d;
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer {
+    padding-inline: clamp(1.4rem, 5vw, 2.5rem);
+}
+
+.pf-v5-c-login__main-header {
+    padding-top: 2.25rem;
+}
+
+.pf-v5-c-login__main-body {
+    padding-bottom: 2.25rem;
+}
+
+#kc-page-title {
+    margin: 0 0 1.5rem;
+    color: var(--geoguessme-navy);
+    font-size: clamp(1.75rem, 5vw, 2.15rem);
     font-weight: 850;
-    letter-spacing: -0.04em;
-    text-transform: none;
+    letter-spacing: -0.035em;
+    line-height: 1.15;
+    text-align: center;
 }
 
-#kc-header-wrapper::before {
+#kc-page-title::before {
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0 auto 1.15rem;
     display: block;
-    margin-bottom: 0.5rem;
-    color: #0077b6;
-    content: '🌍';
-    font-size: 3rem;
+    background: url('../app/logo.png') center / contain no-repeat;
+    content: '';
+    filter: drop-shadow(0 8px 12px rgb(17 26 77 / 12%));
+}
+
+#kc-page-title::after {
+    margin-top: 0.55rem;
+    display: block;
+    color: var(--geoguessme-muted);
+    content: 'Sign in securely to continue guessing';
+    font-size: 0.94rem;
+    font-weight: 400;
+    letter-spacing: normal;
+    line-height: 1.45;
+}
+
+.pf-v5-c-login__main:has(#kc-register-form) #kc-page-title::after {
+    content: 'Create your secure account to start';
+}
+
+.pf-v5-c-login__main:has(#kc-reset-password-form) #kc-page-title::after {
+    content: 'We will email you a secure reset link';
+}
+
+.pf-v5-c-form__label-text,
+label {
+    color: var(--geoguessme-navy);
+    font-weight: 700;
+}
+
+.pf-v5-c-form-control,
+input[type='text'],
+input[type='email'],
+input[type='password'] {
+    min-height: 46px;
+    border: 1px solid var(--geoguessme-line);
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+.pf-v5-c-input-group .pf-v5-c-form-control,
+.pf-v5-c-input-group .pf-v5-c-button {
+    border-color: var(--geoguessme-line);
+}
+
+.pf-v5-c-input-group .pf-v5-c-form-control {
+    border-radius: 12px 0 0 12px;
+}
+
+.pf-v5-c-input-group .pf-v5-c-button {
+    border-radius: 0 12px 12px 0;
 }
 
 .pf-v5-c-button.pf-m-primary,
-#kc-login {
+#kc-login,
+#kc-register {
+    min-height: 46px;
+    border: 0;
     border-radius: 999px;
-    background: linear-gradient(135deg, #0077b6, #023e8a);
+    background: linear-gradient(135deg, var(--geoguessme-blue), var(--geoguessme-blue-dark));
+    box-shadow: 0 8px 18px rgb(0 119 182 / 18%);
     font-weight: 750;
 }
 
-.kc-social-item,
 .pf-v5-c-button.pf-m-control {
-    border-radius: 14px;
+    min-height: 46px;
+    justify-content: flex-start;
+    color: var(--geoguessme-navy);
+    background: #fff;
+    border: 1px solid var(--geoguessme-line);
+    border-radius: 12px;
+    box-shadow: none;
+    font-weight: 700;
 }
 
-#kc-social-providers img,
-#kc-social-providers svg,
-.kc-social-provider-logo {
-    width: 1.25rem;
-    max-width: 1.25rem;
-    height: 1.25rem;
-    max-height: 1.25rem;
-    flex: 0 0 1.25rem;
-    object-fit: contain;
+.pf-v5-c-button.pf-m-control:hover {
+    background: #f7fbfd;
+    border-color: rgb(0 119 182 / 45%);
 }
 
-#social-apple svg {
-    display: none;
+#kc-registration,
+#kc-info-wrapper,
+.pf-v5-c-login__main-footer-band {
+    color: var(--geoguessme-muted);
+    background: #f7fbfd;
+    text-align: center;
 }
 
-#social-apple::before {
-    width: 1.25rem;
-    height: 1.25rem;
-    flex: 0 0 1.25rem;
-    background: url('../img/apple.svg') center / contain no-repeat;
-    content: '';
+a {
+    color: #006ba3;
+    font-weight: 700;
+}
+
+.pf-v5-c-alert {
+    border-radius: 12px;
+}
+
+@media (max-width: 480px) {
+    .pf-v5-c-login__container {
+        padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+            max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pf-v5-c-login__main {
+        width: calc(100vw - 1.5rem);
+        max-width: calc(100vw - 1.5rem);
+    }
+
+    .pf-v5-c-login__main-header {
+        padding-top: 1.5rem;
+    }
+
+    .pf-v5-c-login__main-body {
+        padding-bottom: 1.5rem;
+    }
+
+    #kc-page-title::before {
+        width: 3.75rem;
+        height: 3.75rem;
+        margin-bottom: 0.8rem;
+    }
 }

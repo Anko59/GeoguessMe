@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -35,6 +36,7 @@ func newOIDCTestAPI(t *testing.T, mock pgxmock.PgxPoolIface) *AuthAPI {
 	t.Helper()
 	api := newAuthAPI(t, mock, nil)
 	api.cfg.OIDCEnabled = true
+	api.cfg.OIDCIssuerURL = oidcFixture().Issuer
 	api.oidc = fakeIdentityVerifier{identity: oidcFixture()}
 	return api
 }
@@ -42,10 +44,11 @@ func newOIDCTestAPI(t *testing.T, mock pgxmock.PgxPoolIface) *AuthAPI {
 func TestOIDCConfigAndExistingIdentityExchange(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newOIDCTestAPI(t, mock)
+	api.cfg.OIDCSocialProviders = []string{"google", "apple", "github"}
 
 	configRecorder := httptest.NewRecorder()
 	api.OIDCConfig(configRecorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	if configRecorder.Code != http.StatusOK || configRecorder.Body.String() != "{\"enabled\":true,\"login_path\":\"/oauth2/start\"}\n" {
+	if configRecorder.Code != http.StatusOK || configRecorder.Body.String() != "{\"account_url\":\"https://login.example.test/realms/geoguessme/account/\",\"enabled\":true,\"login_path\":\"/oauth2/start\",\"social_providers\":[\"google\",\"apple\",\"github\"]}\n" {
 		t.Fatalf("OIDC config = %d %q", configRecorder.Code, configRecorder.Body.String())
 	}
 
@@ -66,6 +69,54 @@ func TestOIDCConfigAndExistingIdentityExchange(t *testing.T) {
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Set-Cookie") == "" {
 		t.Fatalf("exchange = %d %q", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestOIDCExchangeRequiresAndAcceptsChosenUsername(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newOIDCTestAPI(t, mock)
+	expectNewOIDCIdentityLookup(mock, false)
+	mock.ExpectRollback()
+
+	recorder := httptest.NewRecorder()
+	api.ExchangeOIDCSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"username_required"`) {
+		t.Fatalf("missing username exchange = %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	now := time.Now().UTC()
+	user := &models.User{ID: "new-user", Username: "map-master", Email: oidcFixture().Email, Password: "!", Avatar: "avatar.png", OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+	expectNewOIDCIdentityLookup(mock, false)
+	mock.ExpectExec("INSERT INTO users").WithArgs(pgxmock.AnyArg(), user.Username, user.Email, user.Email, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO user_identities").WithArgs(oidcFixture().Issuer, oidcFixture().Subject, pgxmock.AnyArg(), oidcFixture().Email, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(pgxmock.AnyArg()).WillReturnRows(handlerUserRows(user))
+	mock.ExpectCommit()
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	recorder = httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":" map-master "}`))
+	api.ExchangeOIDCSession(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"username":"map-master"`) {
+		t.Fatalf("chosen username exchange = %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestOIDCExchangeRejectsInvalidUsernameBeforeIdentityLookup(t *testing.T) {
+	api := newOIDCTestAPI(t, newAuthMockPool(t))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"not valid"}`))
+	api.ExchangeOIDCSession(recorder, request)
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"invalid_username"`) {
+		t.Fatalf("invalid username exchange = %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func expectNewOIDCIdentityLookup(mock pgxmock.PgxPoolIface, pending bool) {
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(oidcFixture().Issuer, oidcFixture().Subject).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("email:alice@example.test").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT id FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(pending))
 }
 
 func TestOIDCExchangeRequiresExplicitLinkForPendingEmail(t *testing.T) {

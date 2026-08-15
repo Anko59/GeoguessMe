@@ -1,0 +1,75 @@
+injectRequestHeaders:
+  - name: X-Forwarded-Groups
+    preserveRequestValue: false
+    values:
+      - claimSource:
+          claim: groups
+  - name: X-Forwarded-User
+    preserveRequestValue: false
+    values:
+      - claimSource:
+          claim: user
+  - name: X-Forwarded-Email
+    preserveRequestValue: false
+    values:
+      - claimSource:
+          claim: email
+  - name: X-Forwarded-Preferred-Username
+    preserveRequestValue: false
+    values:
+      - claimSource:
+          claim: preferred_username
+  - name: Authorization
+    preserveRequestValue: false
+    values:
+      - claimSource:
+          claim: id_token
+          prefix: "Bearer "
+
+providers:
+  - id: keycloak-oidc=${OIDC_CLIENT_ID}
+    provider: keycloak-oidc
+    clientID: ${OIDC_CLIENT_ID}
+    clientSecret: ${OIDC_CLIENT_SECRET}
+    scope: openid email profile
+    code_challenge_method: S256
+    oidcConfig:
+      issuerURL: ${OIDC_ISSUER_URL}
+      insecureAllowUnverifiedEmail: false
+      insecureSkipIssuerVerification: false
+      insecureSkipNonce: false
+      skipDiscovery: false
+      emailClaim: email
+      groupsClaim: groups
+      userIDClaim: email
+      audienceClaims:
+        - aud
+    loginURLParameters:
+      - name: kc_idp_hint
+        allow:
+          - value: google
+          - value: apple
+          - value: github
+      - name: prompt
+        allow:
+          - value: create
+      - name: login_hint
+        allow:
+          - pattern: '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+
+server:
+  bindAddress: 0.0.0.0:4180
+
+upstreamConfig:
+  proxyRawPath: false
+  upstreams:
+    - id: backend
+      path: /
+      uri: http://backend:8080/
+      insecureSkipTLSVerify: false
+      static: false
+      flushInterval: 1s
+      passHostHeader: true
+      proxyWebSockets: true
+      timeout: 30s
+      disableKeepAlives: false

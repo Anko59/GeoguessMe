@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
-import api, { getAPIErrorMessage, getAccessToken, setAccessToken } from './api';
+import api, { getAPIErrorCode, getAPIErrorMessage, getAccessToken, setAccessToken } from './api';
 
 describe('api client', () => {
     it('stores tokens and exposes secure defaults', () => {
@@ -70,6 +70,10 @@ describe('api client', () => {
     });
 
     it('returns useful error messages', () => {
+        expect(getAPIErrorCode({ response: { data: { error: { code: 'username_required' } } } })).toBe(
+            'username_required',
+        );
+        expect(getAPIErrorCode(null)).toBeUndefined();
         expect(getAPIErrorMessage(new Error('plain'), 'fallback')).toBe('plain');
         expect(getAPIErrorMessage(new AxiosError('request failed'), 'fallback')).toBe('fallback');
         expect(getAPIErrorMessage({ response: { data: { error: { message: 'api error' } } } }, 'fallback')).toBe(

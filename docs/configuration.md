@@ -22,6 +22,7 @@ validated. Never commit a real `.env` or production secret.
 | `OIDC_ENABLED`                    | bool     | `false`                                        | All        | Enables Keycloak-only normal login/signup plus the read-only legacy migration policy                                                                                                                                                                                                              |
 | `OIDC_ISSUER_URL`                 | URL      | —                                              | OIDC       | Required when OIDC is enabled; must use HTTPS in production                                                                                                                                                                                                                                       |
 | `OIDC_CLIENT_ID`                  | string   | —                                              | OIDC       | Required when OIDC is enabled; must match the Keycloak audience                                                                                                                                                                                                                                   |
+| `OIDC_SOCIAL_PROVIDERS`           | list     | —                                              | OIDC       | Configured broker aliases exposed by the UI; accepts only `google`, `apple`, and `github`, without duplicates. Email/password remains available through Keycloak when empty                                                                                                                       |
 | `SMTP_HOST`                       | string   | — (empty)                                      | All        | Required in production                                                                                                                                                                                                                                                                            |
 | `SMTP_PORT`                       | int      | `1025`                                         | All        | Must be 1–65535 if host is set                                                                                                                                                                                                                                                                    |
 | `SMTP_USERNAME`                   | string   | —                                              | All        | Optional, but must be supplied together with `SMTP_PASSWORD`; authenticated SMTP requires TLS                                                                                                                                                                                                     |
@@ -110,13 +111,19 @@ to the private backup bucket. Both remote environments deliberately use
 `APP_ENV=production`; dev is distinguished by its URL, project, port, bucket,
 credentials, and tighter resource limits.
 
-The application environment also carries the matching `OAUTH2_PROXY_*` issuer,
-client, client-secret, cookie-secret, and callback values. Shared Keycloak
-values live separately in the encrypted identity environment described by
-`deployment/env/identity.env.example`: its own PostgreSQL/admin credentials, the
-production/dev client secrets, and Google, GitHub, and Apple provider
-credentials. Apple's provider secret is a signed client-secret JWT with a
-recorded expiry; rotate only that provider value as described in the
+The application environment carries the matching `OIDC_ISSUER_URL`,
+`OIDC_CLIENT_ID`, `OIDC_SOCIAL_PROVIDERS`, and `OIDC_CLIENT_SECRET`; OAuth2
+Proxy reads those same values through its alpha provider configuration. The
+backend uses the client secret only to obtain a short-lived service-account
+token when an OIDC-linked player deletes their account, allowing the matching
+Keycloak subject to be removed before local data. Its cookie secret and callback
+remain `OAUTH2_PROXY_COOKIE_SECRET` and `OAUTH2_PROXY_REDIRECT_URL`. Shared
+Keycloak values live separately in the encrypted identity environment described
+by `deployment/env/identity.env.example`: its own PostgreSQL/admin credentials,
+SMTP credentials for native-account verification/reset mail, the production/dev
+client secrets, and Google, GitHub, and Apple provider credentials. Apple's
+provider secret is a signed client-secret JWT with a recorded expiry; rotate
+only that provider value as described in the
 [social-auth rollout runbook](runbooks/social-auth-rollout.md).
 
 ## Example `.env` for development

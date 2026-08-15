@@ -57,7 +57,7 @@ beforeEach(() => {
     // By default, fail auth refresh so the shell is in an unauthenticated state.
     apiMocks.post.mockRejectedValue(new Error('no session'));
     // Public route tests exercise the intentionally supported OIDC-off mode.
-    apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start' } });
+    apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
 });
 
 describe('Home Page', () => {

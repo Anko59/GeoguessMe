@@ -200,6 +200,33 @@ func TestSMTPImplicitTLSDelivery(t *testing.T) {
 	}
 }
 
+func TestSMTPConcurrentDelivery(t *testing.T) {
+	port, _ := startTestSMTPServer(t, false, false, false)
+	sender := SMTP{Host: "127.0.0.1", Port: atoi(port), From: "from@example.test", TLSMode: ModeOff, DialTimeout: 2 * time.Second, Timeout: 2 * time.Second}
+
+	const deliveries = 32
+	start := make(chan struct{})
+	errs := make(chan error, deliveries)
+	var wg sync.WaitGroup
+	for i := 0; i < deliveries; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- sender.Send("to@example.test", "Verify", "body")
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Errorf("concurrent send: %v", err)
+		}
+	}
+}
+
 func TestSMTPMessageHeadersAreUTF8Capable(t *testing.T) {
 	sender := SMTP{Host: "127.0.0.1", Port: 1, From: "from@example.test", TLSMode: ModeOff}
 	raw := sender.message("from@example.test", "to@example.test", "Verify your account ✓", "secret")

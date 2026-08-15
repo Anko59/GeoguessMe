@@ -22,13 +22,14 @@ import (
 // AuthAPI values backed by separate repositories, stores, mailers, and token
 // services, so no handler state is shared.
 type AuthAPI struct {
-	repos  *repository.Repository
-	cfg    *config.Config
-	store  storage.ObjectStore
-	mailer email.Sender
-	svc    *authsvc.Service
-	kicker chatHub.SocketKicker
-	oidc   authsvc.IdentityVerifier
+	repos     *repository.Repository
+	cfg       *config.Config
+	store     storage.ObjectStore
+	mailer    email.Sender
+	svc       *authsvc.Service
+	kicker    chatHub.SocketKicker
+	oidc      authsvc.IdentityVerifier
+	oidcAdmin authsvc.IdentityAdmin
 }
 
 // NewAuthAPI constructs the auth transport with its explicit dependencies.
@@ -39,6 +40,9 @@ func NewAuthAPI(repos *repository.Repository, cfg *config.Config, store storage.
 	api := &AuthAPI{repos: repos, cfg: cfg, store: store, mailer: mailer, svc: svc, kicker: kicker}
 	if len(verifiers) > 0 {
 		api.oidc = verifiers[0]
+		if admin, ok := verifiers[0].(authsvc.IdentityAdmin); ok {
+			api.oidcAdmin = admin
+		}
 	}
 	return api
 }

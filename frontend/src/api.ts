@@ -51,10 +51,12 @@ export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     return refreshPromise;
 };
 
-export const exchangeOIDCSession = async (): Promise<AuthResponse> => {
+export const exchangeOIDCSession = async (username?: string): Promise<AuthResponse> => {
     if (!oidcExchangePromise) {
         oidcExchangePromise = axios
-            .post<AuthResponse>('/api/v1/auth/oidc/session', undefined, { withCredentials: true })
+            .post<AuthResponse>('/api/v1/auth/oidc/session', username ? { username } : undefined, {
+                withCredentials: true,
+            })
             .then((response) => {
                 setAccessToken(response.data.access_token);
                 return response.data;
@@ -64,6 +66,12 @@ export const exchangeOIDCSession = async (): Promise<AuthResponse> => {
             });
     }
     return oidcExchangePromise;
+};
+
+export const getAPIErrorCode = (error: unknown): string | undefined => {
+    if (typeof error !== 'object' || error === null) return undefined;
+    const data = (error as { response?: { data?: APIErrorBody } }).response?.data;
+    return data?.error?.code;
 };
 
 const refreshAccessToken = async (): Promise<string | null> => {

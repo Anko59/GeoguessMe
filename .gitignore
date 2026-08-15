@@ -43,6 +43,7 @@ dist/
 # Legacy migration fixture for deterministic migration testing.
 !deployment/scripts/legacy-migration-fixture.sql
 /backups/
+/.local/
 
 # --- Docker / Compose local overrides ---
 docker-compose.override.yml
