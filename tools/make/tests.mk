@@ -72,6 +72,7 @@ test-qa-agent: ## Validate the provider-neutral QA contract and MCP lifecycle in
 	bash tools/qa/test-agent.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser-mcp.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-account-pool.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-coverage.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mcp.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mailbox.mjs
 
@@ -79,6 +80,7 @@ test-qa-mailbox-live: ## Verify the disposable QA mailbox provider from the Play
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps -e QA_LIVE_MAILBOX=1 playwright node /workspace/tools/qa/test-mcp.mjs
 
 qa-agent: ## Run the local LLM-driven source-blind QA agent against deployed dev.
+	$(MAKE) bootstrap-e2e
 	@QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" QA_MAILBOX_PROVIDER="$(QA_MAILBOX_PROVIDER)" QA_ACCOUNT_PASSWORD="$(QA_ACCOUNT_PASSWORD)" QA_ACCOUNT_OWNER_USERNAME="$(QA_ACCOUNT_OWNER_USERNAME)" QA_ACCOUNT_MEMBER_USERNAME="$(QA_ACCOUNT_MEMBER_USERNAME)" QA_ACCOUNT_OUTSIDER_USERNAME="$(QA_ACCOUNT_OUTSIDER_USERNAME)" \
 		bash tools/qa/run-local.sh
 

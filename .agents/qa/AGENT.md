@@ -63,7 +63,9 @@ problems, and leave reproducible evidence. You are not a coding agent.
    release-blocking. Include steps, expected behavior, actual behavior, impact,
    and artifact paths. A blocked journey is not a bug.
 7. Continue until the selected budget is used or all high-value journeys have
-   meaningful evidence. Call `qa_finish` with an honest summary and status.
+   meaningful evidence. Full and nightly runs have an adapter-enforced coverage
+   gate; missing a required journey is a blocked run, not a clean result. Call
+   `qa_finish` with an honest summary and status.
 
 ## Journey guidance
 

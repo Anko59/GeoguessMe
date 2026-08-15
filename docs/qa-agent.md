@@ -108,6 +108,14 @@ finding category; `UX_DEBT`, `VISUAL`, and `PERFORMANCE` remain explicitly
 non-blocking. A clean report is not evidence that omitted journeys passed: the
 report lists both exercised and unexercised areas.
 
+Full and nightly runs also have an evidence-backed coverage gate. The browser
+adapter records successful account-role sessions, mailbox link openings, invite
+handoff, multi-session chat observations, challenge submission, camera/location
+probes, leaderboard and profile/settings visits, refresh, and mobile viewport
+evidence. If any required area is missing, `qa_finish` converts the result to
+`BLOCKED` and lists the missing coverage in the report; a model-supplied `PASS`
+or `FINDINGS` status cannot override that gate.
+
 ## Release evidence
 
 Run the agent after the development deployment is healthy, with `QA_BUILD_SHA`

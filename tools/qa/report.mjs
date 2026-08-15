@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 
-export async function writeQaReport({ artifactDir, hostArtifactDir, startedAt, baseUrl, runtime, budget, buildSha, mailboxProvider, geolocation, mailboxCount, summary, findings, artifacts }) {
+export async function writeQaReport({ artifactDir, hostArtifactDir, startedAt, baseUrl, runtime, budget, buildSha, mailboxProvider, geolocation, mailboxCount, summary, findings, artifacts, coverage }) {
   await mkdir(artifactDir, { recursive: true });
   const report = {
     schema_version: 1,
@@ -15,6 +15,7 @@ export async function writeQaReport({ artifactDir, hostArtifactDir, startedAt, b
     journeys_not_exercised: summary.journeys_not_exercised || [],
     limitations: summary.limitations || [],
     capabilities: { camera_mock: true, geolocation_mock: geolocation, mailbox_provider: mailboxProvider, mailboxes_created: mailboxCount },
+    ...(coverage ? { coverage } : {}),
     findings,
     artifacts,
   };

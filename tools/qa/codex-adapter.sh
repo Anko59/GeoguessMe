@@ -17,6 +17,9 @@ mcp_tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/geoguessme-qa-mcp.XXXXXX")
 chmod 700 "$mcp_tmp_dir"
 mcp_env_file="$mcp_tmp_dir/env"
 mcp_wrapper="$mcp_tmp_dir/run-mcp.sh"
+agent_output="$mcp_tmp_dir/last-message"
+mcp_events="$mcp_tmp_dir/events.jsonl"
+mcp_log="$mcp_tmp_dir/mcp-stderr.log"
 
 mcp_cleanup() {
     if [[ -d "$mcp_tmp_dir" ]]; then
@@ -51,7 +54,7 @@ printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
     "source \"\$1\"" \
-    "exec make --no-print-directory -C \"\$2\" qa-browser-mcp" \
+    "exec make --no-print-directory -C \"\$2\" qa-browser-mcp 2>\"$mcp_log\"" \
     >"$mcp_wrapper"
 chmod 700 "$mcp_wrapper"
 
@@ -59,8 +62,8 @@ mcp_command=$(jq -Rn --arg value "$mcp_wrapper" '$value')
 mcp_args=$(jq -cn --arg env_file "$mcp_env_file" --arg root "$root_dir" '[$env_file, $root]')
 
 codex exec \
-    --ephemeral \
     --json \
+    --output-last-message "$agent_output" \
     --approve-for-me \
     --skip-git-repo-check \
     --ignore-user-config \
@@ -69,6 +72,25 @@ codex exec \
     -c "mcp_servers.qa_browser.command=$mcp_command" \
     -c "mcp_servers.qa_browser.args=$mcp_args" \
     -c 'mcp_servers.qa_browser.cwd="'"$root_dir"'"' \
-    - <<EOF >/dev/null
+    - <<EOF >"$mcp_events"
 $prompt
 EOF
+
+if [[ ! -s "$QA_REPORT_DIR/qa-report.json" ]]; then
+    if [[ "${QA_DEBUG:-}" == 1 && -s "$agent_output" ]]; then
+        cp -- "$agent_output" "$QA_REPORT_DIR/qa-agent-last-message.txt"
+    fi
+    if [[ "${QA_DEBUG:-}" == 1 && -s "$mcp_log" ]]; then
+        cp -- "$mcp_log" "$QA_REPORT_DIR/qa-mcp-stderr.log"
+    fi
+    echo 'QA agent did not produce qa-report.json; treating the run as a harness failure.' >&2
+    exit 1
+fi
+
+if jq -e '.summary == "The runtime ended before qa_finish was called."' "$QA_REPORT_DIR/qa-report.json" >/dev/null; then
+    if [[ "${QA_DEBUG:-}" == 1 && -s "$mcp_events" ]]; then
+        cp -- "$mcp_events" "$QA_REPORT_DIR/qa-agent-events.jsonl"
+    fi
+    echo 'QA agent ended without calling qa_finish; treating the run as a harness failure.' >&2
+    exit 1
+fi
