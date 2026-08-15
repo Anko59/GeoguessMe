@@ -10,6 +10,9 @@ qa_access_token_id=''
 qa_access_policy_id=''
 
 qa_access_cleanup() {
+    if declare -F qa_mailbox_cleanup >/dev/null 2>&1; then
+        qa_mailbox_cleanup
+    fi
     if [[ -n "$qa_access_policy_id" ]]; then
         local policy_response
         policy_response=$(curl --config "$qa_access_scratch/curl.conf" --request DELETE \
