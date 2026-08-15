@@ -7,6 +7,7 @@ test -f "$root_dir/.agents/qa/policy.yaml"
 test -f "$root_dir/.agents/qa/tools.yaml"
 test -f "$root_dir/.agents/qa/mcp.json"
 test -x "$root_dir/tools/qa/cloudflare-access.sh"
+test -x "$root_dir/tools/qa/cloudflare-mailbox.sh"
 test -f "$root_dir/tools/qa/browser-capabilities.mjs"
 test -f "$root_dir/tools/qa/coverage.mjs"
 test -f "$root_dir/tools/qa/mcp-schemas.mjs"
@@ -39,6 +40,8 @@ rg -q 'provision' "$root_dir/.agents/qa/AGENT.md"
 rg -q 'three distinct dedicated accounts' "$root_dir/.agents/qa/AGENT.md"
 rg -q 'CLOUDFLARE_API_TOKEN' "$root_dir/tools/qa/cloudflare-access.sh"
 rg -q 'qa_access_cleanup_on_exit' "$root_dir/tools/qa/cloudflare-access.sh"
+rg -q 'qa_mailbox_provision' "$root_dir/tools/qa/run-local.sh"
+rg -q 'temporary literal Email Routing rule' "$root_dir/tools/qa/cloudflare-mailbox.sh"
 if rg -n 'playwright test|actions/workflows/qa.yml|QA_PASSWORD|QA_USERNAME' "$root_dir/tools/qa" "$root_dir/.agents/qa" --glob '!test-agent.sh'; then
     echo 'deterministic QA or committed QA credentials found' >&2
     exit 1

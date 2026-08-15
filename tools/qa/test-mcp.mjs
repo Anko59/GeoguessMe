@@ -5,7 +5,12 @@ import { createServer } from "node:http";
 
 const pageServer = createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");
-  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <form action="/groups" method="get"><label>Username <input aria-label="Username"></label><label>Password <input aria-label="Password" type="password"></label><button type="submit">Login</button></form><label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
+  const pathname = new URL(request.url || "/", "http://qa-contract.test").pathname;
+  if (pathname === "/forgot-password") {
+    response.end(`<!doctype html><title>QA MCP contract</title><main><h1>Reset password</h1><label>Email <input aria-label="Email"></label><button>Send reset link</button></main>`);
+    return;
+  }
+  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <form action="/groups" method="get"><label>Username <input aria-label="Username"></label><label>Password <input aria-label="Password" type="password"></label><button type="submit">Login</button></form><a href="/forgot-password">Forgot your password?</a><label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
 });
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
@@ -75,6 +80,9 @@ try {
   await request(4, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const observed = await request(5, "tools/call", { name: "browser_observe", arguments: { session_id: sessionId } });
   if (JSON.stringify(observed).includes("secret-invite")) throw new Error("safe browser output leaked an invite token");
+  const forgotPage = await request(13, "tools/call", { name: "browser_click", arguments: { session_id: sessionId, target: { role: "link", name: "Forgot your password?" } } });
+  if (!JSON.stringify(forgotPage).includes("Reset password")) throw new Error("browser_click did not await same-origin link navigation");
+  await request(16, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const transfer = await request(6, "tools/call", { name: "browser_transfer_link", arguments: { session_id: sessionId, target: { label: "Invite link" }, kind: "group-invite" } });
   if (!transfer.structuredContent?.transfer_id || JSON.stringify(transfer).includes("secret-invite")) throw new Error("invite transfer leaked a link or returned no opaque id");
   const member = await request(7, "tools/call", { name: "session_create", arguments: { width: 800, height: 600 } });

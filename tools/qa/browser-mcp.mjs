@@ -9,6 +9,7 @@ import { signUpEmailAccount } from "./email-account.mjs";
 import { writeQaReport } from "./report.mjs";
 import { CoverageTracker } from "./coverage.mjs";
 import { actionSchema, pageSchema, tool } from "./mcp-schemas.mjs";
+import { clickAndWaitForNavigation } from "./navigation.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -350,7 +351,7 @@ async function call(name, args) {
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {
     const { page } = sessionFor(args);
     const locator = await locate(page, args.target);
-    if (name === "browser_click") await locator.click({ timeout: 10000 });
+    if (name === "browser_click") await clickAndWaitForNavigation(page, locator, baseUrl);
     if (name === "browser_type") await locator.fill(args.text);
     if (name === "browser_select") await locator.selectOption(args.value);
     if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
