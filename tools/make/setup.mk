@@ -103,7 +103,7 @@ tools-clean: ## Remove only project-specific tool containers, networks, and cach
 
 ##@ Development
 dev: ## Start the Docker development stack.
-	$(COMPOSE_DEV) up -d --build --renew-anon-volumes
+	$(COMPOSE_DEV) up -d --build
 
 up: dev ## Alias for dev.
 

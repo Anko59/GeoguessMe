@@ -44,7 +44,7 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
 
-test-dev-workflow-regression: ## Verify dev rebuilds refresh anonymous dependency volumes.
+test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
