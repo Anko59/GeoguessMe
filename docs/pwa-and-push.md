@@ -110,11 +110,11 @@ network/service failure and never presents either as a successful subscription.
 
 ### Endpoints
 
-| Method   | Path                            | Auth     | Description                                                                                   |
-| -------- | ------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `GET`    | `/api/v1/push/vapid-public-key` | required | Returns `{"public_key":"<base64url>"}` so the frontend can subscribe without a hardcoded key. |
-| `POST`   | `/api/v1/push/subscribe`        | required | Stores `{endpoint, keys: {p256dh, auth}}`. Re-Upserts on matching `user_id` + `endpoint`.     |
-| `DELETE` | `/api/v1/push/unsubscribe`      | required | Removes the subscription for the given endpoint, or all of them when `endpoint` is omitted.   |
+| Method   | Path                            | Auth     | Description                                                                                                             |
+| -------- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/push/vapid-public-key` | required | Returns `{"public_key":"<base64url>"}` so the frontend can subscribe without a hardcoded key.                           |
+| `POST`   | `/api/v1/push/subscribe`        | required | Stores `{endpoint, keys: {p256dh, auth}}`. An existing browser endpoint transfers atomically to the authenticated user. |
+| `DELETE` | `/api/v1/push/unsubscribe`      | required | Removes the subscription for the given endpoint, or all of them when `endpoint` is omitted.                             |
 
 ### Notification triggers
 
@@ -146,6 +146,9 @@ is full, the message is dropped and logged. Permanently invalid subscriptions
   `GET /push/vapid-public-key` + `POST /push/subscribe`.
 - **Unsubscribe**: the app calls `PushSubscription.unsubscribe()` locally and
   DELETEs the endpoint from the backend.
+- **Account changes**: an endpoint is globally unique. If the same browser
+  subscribes after switching accounts, ownership moves to the current account;
+  the former account can no longer target that browser.
 - **Stale cleanup**: the first failed delivery to a dead endpoint removes it
   from the database, so no further attempts are made.
 

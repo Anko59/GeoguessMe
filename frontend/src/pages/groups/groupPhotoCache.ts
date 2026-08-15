@@ -1,40 +1,30 @@
 import { useEffect, useState } from 'react';
 import api from '../../api';
+import { createObjectUrlStore } from '../../utils/objectUrlCache';
 
-const cache = new Map<string, string>();
-const inflight = new Map<string, Promise<string>>();
+// Session-scoped cache of private group-photo URLs, keyed by group id, so the
+// photo is fetched at most once per session.
+const store = createObjectUrlStore();
 const fallbackGroupPhoto = '/logo.png';
 
 function fetchGroupPhoto(groupID: string): Promise<string> {
     return api
         .get('/group/photo', { params: { group_id: groupID }, responseType: 'blob' })
-        .then((response) => {
-            const objectURL = URL.createObjectURL(response.data as Blob);
-            cache.set(groupID, objectURL);
-            return objectURL;
-        })
-        .catch(() => {
-            cache.set(groupID, fallbackGroupPhoto);
-            return fallbackGroupPhoto;
-        });
+        .then((response) => URL.createObjectURL(response.data as Blob))
+        .catch(() => fallbackGroupPhoto);
 }
 
 export function bustGroupPhotoCache(groupID: string): void {
-    const url = cache.get(groupID);
-    if (url?.startsWith('blob:')) {
-        URL.revokeObjectURL(url);
-    }
-    cache.delete(groupID);
-    inflight.delete(groupID);
+    store.bust(groupID);
 }
 
 /** Resolve a private group photo, falling back to the app logo when unset. */
 export function useGroupPhotoUrl(groupID: string, refreshKey = 0): string {
-    const [url, setUrl] = useState(() => cache.get(groupID) ?? fallbackGroupPhoto);
+    const [url, setUrl] = useState(() => store.get(groupID) ?? fallbackGroupPhoto);
     const [previousGroupID, setPreviousGroupID] = useState(groupID);
     if (groupID !== previousGroupID) {
         setPreviousGroupID(groupID);
-        setUrl(cache.get(groupID) ?? fallbackGroupPhoto);
+        setUrl(store.get(groupID) ?? fallbackGroupPhoto);
     }
 
     useEffect(() => {
@@ -44,18 +34,16 @@ export function useGroupPhotoUrl(groupID: string, refreshKey = 0): string {
                 cancelled = true;
             };
         }
-        const cached = cache.get(groupID);
-        if (cached) {
+        if (store.get(groupID)) {
             return () => {
                 cancelled = true;
             };
         }
-        const promise = inflight.get(groupID) ?? fetchGroupPhoto(groupID);
-        inflight.set(groupID, promise);
-        promise.then((result) => {
-            inflight.delete(groupID);
-            if (!cancelled) setUrl(result);
-        });
+        store
+            .getOrFetch(groupID, () => fetchGroupPhoto(groupID))
+            .then((result) => {
+                if (!cancelled && result) setUrl(result);
+            });
         return () => {
             cancelled = true;
         };

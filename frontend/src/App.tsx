@@ -14,9 +14,13 @@ import AccountSettings from './pages/account/AccountSettings';
 import ProfilePage from './pages/profile/ProfilePage';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import { usePushBootstrap } from './push/usePushBootstrap';
+import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
 
 function AppChrome() {
     usePushBootstrap();
+    // Captures #invite=TOKEN fragments into sessionStorage before any auth
+    // redirect so the token survives the login/signup hop.
+    useInviteFragmentCapture();
     return (
         <div className="app-root">
             <Routes>

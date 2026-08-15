@@ -120,21 +120,29 @@ func signup(t *testing.T, username, email, password string) tokenPair {
 	return tokenPair{access: result.AccessToken, refresh: refresh, userID: result.User.ID}
 }
 
-func createGroup(t *testing.T, bearer string, name string) (id, code string) {
+func createGroup(t *testing.T, bearer string, name string) (id, inviteToken string) {
 	t.Helper()
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/create", map[string]string{"name": name}, bearer, nil)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode, "create group %d: %s", resp.StatusCode, data)
 	var result struct {
-		ID   string `json:"id"`
-		Code string `json:"code"`
+		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(data, &result))
-	return result.ID, result.Code
+	require.NotEmpty(t, result.ID, "create group returned no id")
+	// Issue an invite so callers can join through the new token contract.
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/invites", map[string]string{"group_id": result.ID}, bearer, nil)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "create invite %d: %s", resp.StatusCode, data)
+	var invite struct {
+		Token string `json:"token"`
+	}
+	require.NoError(t, json.Unmarshal(data, &invite))
+	require.NotEmpty(t, invite.Token, "create invite returned no token")
+	return result.ID, invite.Token
 }
 
-func joinGroup(t *testing.T, bearer, code string) {
+func joinGroup(t *testing.T, bearer, inviteToken string) {
 	t.Helper()
-	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/join", map[string]string{"code": code}, bearer, nil)
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/group/join", map[string]string{"invite_token": inviteToken}, bearer, nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "join group %d: %s", resp.StatusCode, data)
 }
 
@@ -151,7 +159,7 @@ func uploadPhoto(t *testing.T, bearer, groupID string) string {
 	require.NoError(t, err)
 	require.NoError(t, writer.WriteField("lat", "51.505"))
 	require.NoError(t, writer.WriteField("long", "-0.09"))
-	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("group_ids", groupID))
 	require.NoError(t, writer.Close())
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/photo/upload", body)
@@ -313,9 +321,9 @@ func mailpitBase() string {
 	return "http://localhost:8025"
 }
 
-// tokenFromMailpit reads the most recent message to an address and extracts the
-// last path token from the link embedded in the body.
-func tokenFromMailpit(t *testing.T, email, linkPath string) string {
+// tokenFromMailpit reads the most recent transactional message with the given
+// fixed subject and extracts the token from the link embedded in the body.
+func tokenFromMailpit(t *testing.T, subject, linkPath string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -323,7 +331,7 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 	searchURL := mailpitBase() + "/api/v1/search"
 	queryURL, _ := url.Parse(searchURL)
 	queryVals := queryURL.Query()
-	queryVals.Set("query", "to:"+email)
+	queryVals.Set("query", `subject:"`+subject+`"`)
 	queryURL.RawQuery = queryVals.Encode()
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, queryURL.String(), nil)
@@ -354,7 +362,7 @@ func tokenFromMailpit(t *testing.T, email, linkPath string) string {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	t.Fatalf("no mailpit message for %s containing %s", email, linkPath)
+	t.Fatalf("no mailpit message with subject %q containing %s", subject, linkPath)
 	return ""
 }
 

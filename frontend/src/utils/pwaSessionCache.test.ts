@@ -43,4 +43,20 @@ describe('pwaSessionCache', () => {
         expect(readCachedMessages(user.id, 'group-1')).toEqual([]);
         expect(readCachedMessages('user-2', 'group-1')).toHaveLength(1);
     });
+
+    it('round-trips an unverified account that has no email address', () => {
+        const unverified: User = { id: 'user-2', username: 'bob', avatar: 'avatar.png' };
+
+        saveSessionHint(unverified);
+
+        expect(readSessionHint()).toEqual(unverified);
+    });
+
+    it('rejects malformed pending contact data', () => {
+        localStorage.setItem(
+            'geoguessme:pwa-session:v1',
+            JSON.stringify({ id: 'user-2', username: 'bob', avatar: 'avatar.png', pending_email: 42 }),
+        );
+        expect(readSessionHint()).toBeNull();
+    });
 });

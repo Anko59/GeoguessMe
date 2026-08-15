@@ -1,192 +1,87 @@
-export interface User {
-    id: string;
-    username: string;
-    email: string;
-    email_verified_at?: string | null;
-    avatar: string;
-}
+// Wire types for the GeoGuessMe API.
+//
+// Wire-level request/response/schema types are generated from the OpenAPI
+// contract (docs/openapi.yaml) into ./openapi.generated.ts and re-exported
+// here under the names the frontend already uses. The OpenAPI spec is the
+// single source of truth for wire shapes; this module never restates them.
+//
+// Hand-written types in this module are limited to narrow view-model aliases
+// (a wire shape plus a client invariant) and client-only types that have no
+// OpenAPI schema: leaderboard query-parameter literals and the tolerant API
+// error parse shape. Regenerate the contract with `make openapi-generate`; the
+// drift gate is `make openapi-check`.
 
-export interface ProgressionRank {
-    level: number;
-    name: string;
-    min_points: number;
-    next_points?: number;
-    points_in_rank: number;
-    points_to_next: number;
-    progress_percent: number;
-    trophy_key: string;
-    next_rank?: ProgressionRank;
-}
+import type { components } from './openapi.generated';
 
-export interface GlobalRank {
-    rank: number;
-    total_players: number;
-}
+// --- Wire types (generated from docs/openapi.yaml) ---
 
-export interface Profile extends User {
-    total_points: number;
-    guess_count: number;
-    average_score: number;
-    elo: number;
-    rank: ProgressionRank;
-    global_rank: GlobalRank;
-    global_average_rank: GlobalRank;
-    global_elo_rank: GlobalRank;
-}
+export type User = components['schemas']['AuthUser'];
+export type ProgressionRank = components['schemas']['ProgressionRank'];
+export type GlobalRank = components['schemas']['GlobalRank'];
+export type Profile = components['schemas']['Profile'];
+export type PublicProfile = components['schemas']['PublicProfile'];
+export type AuthResponse = components['schemas']['AuthResponse'];
+export type Group = components['schemas']['Group'];
+export type Member = components['schemas']['Member'];
+export type LeaderboardEntry = components['schemas']['LeaderboardEntry'];
+export type ChallengeAcceptance = components['schemas']['ChallengeAccepted'];
+export type ChallengeMediaDelivered = components['schemas']['ChallengeMediaDelivered'];
+export type GuessResult = components['schemas']['GuessResponse'];
+export type MessagesPage = components['schemas']['MessagesPage'];
+export type PushSubscriptionRequest = components['schemas']['PushSubscriptionRequest'];
+export type InviteCreateRequest = components['schemas']['InviteCreateRequest'];
+export type InviteCreateResponse = components['schemas']['InviteCreateResponse'];
+export type InvitePreviewRequest = components['schemas']['InvitePreviewRequest'];
+export type InvitePreview = components['schemas']['InvitePreview'];
+export type InviteListItem = components['schemas']['InviteListItem'];
+export type MediaProcessingJob = components['schemas']['MediaProcessingJob'];
 
-/** Another player's profile: identity and progression, never email. */
-export interface PublicProfile {
-    id: string;
-    username: string;
-    avatar: string;
-    total_points: number;
-    guess_count: number;
-    average_score: number;
-    elo: number;
-    rank: ProgressionRank;
-    global_rank: GlobalRank;
-    global_average_rank: GlobalRank;
-    global_elo_rank: GlobalRank;
-}
+// --- Narrow view-model aliases (wire shape plus client invariants) ---
 
-export interface AuthResponse {
-    access_token: string;
-    expires_in: number;
-    user: User;
-}
-
-export interface Message {
-    id: string;
-    group_id: string;
-    user_id: string;
-    username?: string;
-    avatar?: string;
-    kind: 'text' | 'challenge' | 'media' | 'system';
-    photo_id?: string;
-    media_id?: string;
-    media_type?: 'image/jpeg' | 'image/png' | 'video/mp4' | 'video/webm';
-    reply_to_id?: string;
-    error_code?: string;
-    content: string;
-    created_at: string;
-    challenge_status?: 'available' | 'accepted' | 'guessed' | 'results' | 'expired';
-    challenge_resolved?: boolean;
-    challenge_expires_at?: string;
-    challenge_ttl_seconds?: number;
-    reactions?: Reaction[];
-    reaction_update?: {
-        user_id: string;
-        reaction: string;
-        active: boolean;
-    };
-}
-
-export interface Reaction {
-    reaction: string;
-    count: number;
-    reacted: boolean;
+/** A reaction aggregate as rendered by the client. The deprecated `emoji`
+ *  alias was removed by the compatibility-removal PR, so the wire type only
+ *  carries `reaction`. `usernames` is treated as optional defensively.
+ *  Everything else comes from the generated wire type. */
+export type Reaction = Omit<components['schemas']['MessageReaction'], 'usernames'> & {
     usernames?: string[];
-}
+};
 
-export interface Group {
-    id: string;
-    name: string;
-    code: string;
-    created_at?: string;
-}
+/** WebSocket reaction mutation metadata from the generated contract. */
+export type ReactionUpdate = components['schemas']['MessageReactionUpdate'];
 
-export interface LeaderboardEntry {
-    user_id: string;
+/** A chat message with the reaction fields narrowed to the client's view
+ *  model. All other wire fields, including `content` being optional, come
+ *  from the generated contract. */
+export type Message = Omit<components['schemas']['Message'], 'reactions' | 'reaction_update'> & {
+    reactions?: Reaction[];
+    reaction_update?: ReactionUpdate;
+};
+
+/** A challenge guess as rendered by the client. The wire contract marks
+ *  username/avatar optional, but every guess returned on a resolved
+ *  challenge includes them and the map and score cards require them. */
+export type ChallengeGuess = Omit<components['schemas']['Guess'], 'username' | 'avatar'> & {
     username: string;
     avatar: string;
-    score: number;
-    guess_count: number;
-    average_score: number;
-    total_points: number;
-    elo: number;
-    rank: ProgressionRank;
-}
+};
 
-export type LeaderboardPeriod = 'week' | 'month' | 'all';
-
-export type LeaderboardMetric = 'total' | 'average' | 'elo';
-
-export interface Member {
-    id: string;
-    username: string;
-    avatar: string;
-}
-
-export interface ChallengeNotice {
-    id: string;
-    photo_id: string;
-    uploader_id?: string;
-    expires_at: string;
-}
-
-export interface ChallengeAcceptance {
-    photo_id: string;
-    media_url: string;
-    media_type: string;
-    accepted_at: string;
-    view_expires_at: string;
-    guess_after: string;
-    challenge_expires_at: string;
-    server_time: string;
-}
-
-export interface ChallengeMediaDelivered {
-    view_expires_at: string;
-    guess_after: string;
-    server_time: string;
-}
-
-export interface GuessResult {
-    guess_id: string;
-    photo_id: string;
-    score: number;
-    distance: number;
-    created_at: string;
-    duplicate: boolean;
-}
-
-export interface ChallengeGuess {
-    id: string;
-    photo_id: string;
-    user_id: string;
-    username: string;
-    avatar: string;
-    /** Omitted for other players' guesses while a hidden-location challenge is
-     *  still hidden: only the viewer's own guessed point is returned. */
-    lat?: number;
-    long?: number;
-    score: number;
-    /** Omitted alongside the coordinates while the location is hidden. */
-    distance?: number;
-    created_at: string;
-}
-
-export interface ChallengeResults {
-    photo_id: string;
-    group_id: string;
-    actual_lat?: number;
-    actual_long?: number;
-    location_hidden?: boolean;
-    location_reveals_at?: string;
+/** Challenge results with the guesses narrowed to the client's render model. */
+export type ChallengeResults = Omit<components['schemas']['ChallengeResults'], 'guesses'> & {
     guesses: ChallengeGuess[];
-    media_available: boolean;
-    media_url?: string;
-    media_type?: string;
-    server_time: string;
-}
+};
 
+// --- Client-only types (not OpenAPI schemas) ---
+
+/** Tolerant client parse shape for API error responses. The OpenAPI contract
+ *  documents `{ error: { code, message } }`; the client additionally tolerates
+ *  a flat `{ code?, message? }` envelope defensively. */
 export interface APIErrorBody {
     error?: { code: string; message: string };
     code?: string;
     message?: string;
 }
 
-export interface MessagesPage {
-    items: Message[];
-    next_cursor: string;
-}
+/** Leaderboard query-parameter literals (documented inline in the OpenAPI
+ *  paths, not as reusable schemas). */
+export type LeaderboardPeriod = 'week' | 'month' | 'all';
+export type LeaderboardMetric = 'total' | 'average' | 'elo';

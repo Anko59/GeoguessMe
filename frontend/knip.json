@@ -1,0 +1,5 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "project": ["src/**/*.{ts,tsx}", "e2e/**/*.ts", "*.{ts,js}"],
+  "ignoreDependencies": ["@redocly/cli", "markdownlint-cli", "openapi-typescript", "prettier"]
+}

@@ -19,7 +19,7 @@ services:
       retries: 30
 
   minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z@sha256:9535594ad4122b7a78c6632788a989b96d9199b483d3bd71a5ceae73a922cdfa # MinIO release
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # MinIO release
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -32,7 +32,7 @@ services:
       retries: 30
 
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:2.11.0@sha256:cfdb2ca7ac7131a650d09db49782cc33e5c5d97fd3be5b3a6e27cd13d0ee8d57 # Toxiproxy 2.11.0
+    image: ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e # Toxiproxy 2.12.0
     command: -host 0.0.0.0 -config /config/toxiproxy.json
     ports: ["${GEOGUESSME_TEST_TOXIPROXY_PORT:-8474}:8474"]
     volumes:
@@ -41,7 +41,7 @@ services:
       minio: { condition: service_healthy }
 
   mailpit:
-    image: axllent/mailpit:v1.21@sha256:81370195cd4a0eab9604d17c2617a7525b0486f9365555253b6c5376c6350f1a # Mailpit 1.21
+    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a # Mailpit 1.30.7
     ports: ["${GEOGUESSME_TEST_MAILPIT_PORT:-8025}:8025"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8025/"]
@@ -87,8 +87,15 @@ services:
       SMTP_FROM: no-reply@test.local
       SMTP_TLS: "off"
       PHOTO_VIEW_WINDOW: 1s
-      RATE_LIMIT_REQUESTS: "3"
-      RATE_LIMIT_WINDOW: 10s
+      # Rate-limit policies (F-04). Identity and global buckets keep the
+      # mandated limits; the trusted-IP buckets are relaxed because the whole
+      # suite shares one client address behind the test gateway. Reset and
+      # push stay at the mandated defaults.
+      RATE_LIMIT_LOGIN: "identity:10/1m,trustedIP:50000/1m,global:300/1m"
+      RATE_LIMIT_SIGNUP: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
+      RATE_LIMIT_EMAIL: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
+      RATE_LIMIT_DEFAULT: "identity:10/1m,trustedIP:50000/1m"
+      MEDIA_PROCESSING_WORKER: "true"
     depends_on:
       migration: { condition: service_completed_successfully }
       toxiproxy: { condition: service_started }

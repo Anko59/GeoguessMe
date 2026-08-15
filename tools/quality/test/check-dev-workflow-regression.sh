@@ -2,7 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/../../.." && pwd)
-makefile="$repo_root/Makefile"
+# Aggregate the public Makefile and its responsibility fragments so target
+# recipes remain findable.
+makefile_agg=$(mktemp)
+trap 'rm -f "$makefile_agg"' EXIT
+cat "$repo_root"/Makefile "$repo_root"/tools/make/*.mk >"$makefile_agg"
+makefile="$makefile_agg"
 compose_file="$repo_root/deployment/compose.dev.yaml"
 failures=0
 

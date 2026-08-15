@@ -86,7 +86,13 @@ jobs:
       - name: Check out pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Bootstrap pinned tools
-        run: make bootstrap
+        env:
+          FULL_SCOPE: ${{ needs.classify.outputs.full }}
+        run: |
+          make bootstrap-preflight
+          if [[ "$FULL_SCOPE" == true ]]; then
+            make tools-self-test
+          fi
       - name: Run selected fast gate
         env:
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
@@ -147,11 +153,19 @@ jobs:
           fi
 
   frontend:
-    name: Chromium end-to-end
+    name: Chromium end-to-end (${{ matrix.shard }})
     if: github.base_ref != 'main' && needs.classify.outputs.frontend == 'true'
     needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1/2
+            shard_id: 1-of-2
+          - shard: 2/2
+            shard_id: 2-of-2
     steps:
       - name: Check out pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -167,13 +181,15 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: /tmp/.buildx-cache
-          key: docker-${{ runner.os }}-pr-frontend-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          key: docker-${{ runner.os }}-pr-frontend-${{ matrix.shard_id }}-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
           restore-keys: docker-${{ runner.os }}-pr-frontend-
       - name: Bootstrap E2E tools
         run: make bootstrap-e2e
       - name: Run Chromium E2E
         env:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+          GEOGUESSME_E2E_SHARD: ${{ matrix.shard }}
+          GEOGUESSME_TEST_PROJECT: geoguessme-e2e-${{ github.run_id }}-${{ matrix.shard_id }}
         run: |
           make pr-frontend \
             DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
@@ -188,7 +204,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: geoguessme-e2e-${{ github.run_id }}
+          name: geoguessme-e2e-${{ github.run_id }}-${{ matrix.shard_id }}
           retention-days: 7
           if-no-files-found: ignore
           path: |
@@ -202,6 +218,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Publish gate timing summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100"); then
+            echo "Gate timing unavailable from the Actions API." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Gate timing"
+            echo "| Job | Result | Duration |"
+            echo "| --- | --- | ---: |"
+            jq -r '.jobs[] | select(.name != "Dockerized verification gate") |
+              [.name, (.conclusion // .status),
+               (if .started_at and .completed_at then
+                  (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) | tostring) + "s"
+                else "-" end)] | "| \(.[0]) | \(.[1]) | \(.[2]) |"' <<<"$jobs"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Require every selected check
         env:
           POLICY: ${{ needs.policy.result }}

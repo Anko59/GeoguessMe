@@ -1,8 +1,11 @@
 package integration_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +16,39 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
+
+type processingJobResponse struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Status    string `json:"status"`
+	ErrorCode string `json:"error_code"`
+}
+
+func uploadChatMediaJob(t *testing.T, bearer, groupID, content string) processingJobResponse {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("media", "clip.webm")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("group_id", groupID))
+	require.NoError(t, writer.WriteField("content", content))
+	require.NoError(t, writer.Close())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/group/messages/media", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equalf(t, http.StatusAccepted, resp.StatusCode, "chat video upload %d: %s", resp.StatusCode, data)
+	var job processingJobResponse
+	require.NoError(t, json.Unmarshal(data, &job))
+	return job
+}
 
 func wsBase() string {
 	u, err := url.Parse(baseURL)
@@ -343,4 +379,59 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	for _, item := range page.Items {
 		require.True(t, sentinels[item.Content], "unexpected persisted message: %s", item.Content)
 	}
+}
+
+func TestChatMediaIsPersistedBroadcastAndPrivate(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	outsider := signup(t, unique("outsider"), unique("outsider")+"@example.test", "StrongPassword123")
+	groupID, code := createGroup(t, alice.access, "Chat Media Group")
+	joinGroup(t, bob.access, code)
+
+	bobConn := mustDialWS(t, groupID, wsTicket(t, bob.access, groupID), baseURL)
+	defer bobConn.Close()
+	sent := uploadChatMedia(t, alice.access, groupID, "Look at this")
+	require.Equal(t, "media", sent.Kind)
+	require.NotEmpty(t, sent.ID)
+	require.NotEmpty(t, sent.MediaID)
+	require.Equal(t, "image/png", sent.MediaType)
+
+	require.NoError(t, bobConn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	var broadcast chatMediaMessage
+	require.NoError(t, bobConn.ReadJSON(&broadcast))
+	require.Equal(t, sent.ID, broadcast.ID)
+	require.Equal(t, sent.MediaID, broadcast.MediaID)
+
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID, nil, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), sent.MediaID, "media message must survive reconnect/history load")
+
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+sent.MediaID, nil, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "image/png", resp.Header.Get("Content-Type"))
+	require.Equal(t, "private, no-store", resp.Header.Get("Cache-Control"))
+	require.NotEmpty(t, data)
+
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+sent.MediaID, nil, outsider.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode, "non-members must never read chat attachments")
+
+	video := uploadChatMediaJob(t, alice.access, groupID, "A short clip")
+	require.Equal(t, "chat", video.Kind)
+	require.Equal(t, "queued", video.Status)
+	require.NotEmpty(t, video.ID)
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/messages/media/"+video.ID, nil, bob.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	statusURL := "/api/v1/media-processing/" + video.ID
+	resp, _ = doJSON(t, http.MethodGet, statusURL, nil, outsider.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	var job processingJobResponse
+	require.Eventually(t, func() bool {
+		resp, data = doJSON(t, http.MethodGet, statusURL, nil, alice.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.NoError(t, json.Unmarshal(data, &job))
+		return job.Status == "failed" || job.Status == "ready"
+	}, 20*time.Second, 500*time.Millisecond)
+	require.Equal(t, "failed", job.Status)
+	require.Equal(t, "invalid_video", job.ErrorCode)
 }

@@ -5,13 +5,11 @@
  * and delivered via standard push services.
  */
 import api from '../api';
+import type { components } from '../types/openapi.generated';
 
 export type PushSubscriptionState = 'unsupported' | 'denied' | 'default' | 'granted';
 
-interface BackendSubscription {
-    endpoint: string;
-    keys: { p256dh: string; auth: string };
-}
+type BackendSubscription = components['schemas']['PushSubscriptionRequest'];
 
 interface VapidKeyResponse {
     public_key: string;

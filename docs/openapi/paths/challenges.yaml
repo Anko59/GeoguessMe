@@ -14,12 +14,7 @@ upload:
             properties:
               photo: { type: string, format: binary }
               group_ids:
-                {
-                  type: array,
-                  items: { type: string, format: uuid },
-                  description: Target groups (repeated form field); the legacy single group_id is still accepted,
-                }
-              group_id: { type: string, format: uuid, description: Legacy single-group field }
+                { type: array, items: { type: string, format: uuid }, description: Target groups (repeated form field) }
               hide_location:
                 {
                   type: boolean,
@@ -32,6 +27,11 @@ upload:
         {
           description: Challenge created.,
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeCreated" } } },
+        }
+      "202":
+        {
+          description: "Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}.",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
         }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
@@ -139,4 +139,21 @@ results:
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeResults" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+mediaProcessing:
+  get:
+    operationId: getMediaProcessingJob
+    summary: Get the owner-only status of an asynchronous media-processing job.
+    tags: [Media]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: jobID, in: path, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200":
+        {
+          description: "Job status; the result is present when ready, the error_code only when failed. Storage keys and upload metadata are never exposed.",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
+        }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

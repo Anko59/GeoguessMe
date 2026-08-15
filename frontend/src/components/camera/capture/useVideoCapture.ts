@@ -12,6 +12,13 @@ interface MirroredCanvasSource {
     stop: () => void;
 }
 
+const VIDEO_CAPTURE_FPS = 30;
+const VIDEO_CAPTURE_FRAME_INTERVAL_MS = 1000 / VIDEO_CAPTURE_FPS;
+
+type CanvasCaptureTrack = MediaStreamTrack & {
+    requestFrame?: () => void;
+};
+
 /** Mirrors a live camera feed horizontally into a canvas and captures that
  *  canvas, so front-camera clips come out exactly like the mirrored preview
  *  instead of the raw sensor feed. The video element keeps playing normally;
@@ -24,12 +31,31 @@ function createMirroredCanvasSource(video: HTMLVideoElement): MirroredCanvasSour
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     const context = canvas.getContext('2d');
-    const stream = canvas.captureStream(30);
+    // Manual frame requests keep the mirrored canvas below the backend's hard
+    // 30 fps input bound even when a browser's automatic canvas capture emits
+    // more frames than the requested rate. Fall back to the automatic API for
+    // browsers that do not expose requestFrame().
+    let stream = canvas.captureStream(0);
+    let videoTrack = stream.getVideoTracks()[0] as CanvasCaptureTrack | undefined;
+    const manualCapture = typeof videoTrack?.requestFrame === 'function';
+    if (!manualCapture) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = canvas.captureStream(VIDEO_CAPTURE_FPS);
+        videoTrack = stream.getVideoTracks()[0] as CanvasCaptureTrack | undefined;
+    }
     let frameID = 0;
-    const drawFrame = () => {
-        if (context && video.readyState >= 2 && video.videoWidth > 0) {
+    let lastFrameAt = Number.NEGATIVE_INFINITY;
+    const drawFrame = (timestamp: number) => {
+        if (
+            context &&
+            video.readyState >= 2 &&
+            video.videoWidth > 0 &&
+            timestamp - lastFrameAt >= VIDEO_CAPTURE_FRAME_INTERVAL_MS
+        ) {
             context.setTransform(-1, 0, 0, 1, canvas.width, 0);
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            lastFrameAt = timestamp;
+            videoTrack?.requestFrame?.();
         }
         frameID = requestAnimationFrame(drawFrame);
     };

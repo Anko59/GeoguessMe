@@ -11,19 +11,25 @@ import (
 	"syscall"
 	"time"
 
-	"geoguessme/handlers"
-	"geoguessme/internal/auth"
+	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
-	"geoguessme/internal/middleware"
+	"geoguessme/internal/mediaprocessing"
+	"geoguessme/internal/models"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 )
 
 func main() {
-	cfg := config.Load()
+	// The media-processing worker re-execs this binary as an rlimit trampoline
+	// before running ffprobe/ffmpeg (see internal/mediaprocessing). A re-exec'd
+	// copy must route into the trampoline before any other logic; a normal
+	// start returns immediately.
+	if mediaprocessing.HandleRlimitHelperInvocation() {
+		return
+	}
 	command := "serve"
 	if len(os.Args) > 1 {
 		command = os.Args[1]
@@ -34,30 +40,31 @@ func main() {
 		printVapidKeys()
 		return
 	}
-	if err := cfg.Validate(); err != nil {
+	cfg, err := config.LoadValidated()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := database.ConnectWithLimits(cfg.DatabaseURL, cfg.DatabaseMinConns, cfg.DatabaseMaxConns); err != nil {
+	pool, err := database.ConnectWithLimits(cfg.DatabaseURL, cfg.DatabaseMinConns, cfg.DatabaseMaxConns)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "database error: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer pool.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
-	auth.InitWithSettings(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL)
 	switch command {
 	case "migrate":
 		if len(os.Args) < 3 || os.Args[2] == "up" {
-			if err := database.MigrateUp(ctx, logger); err != nil {
+			if err := database.MigrateUp(ctx, pool, logger); err != nil {
 				logger.Error("migration failed", "error", err)
 				os.Exit(1)
 			}
 			return
 		}
 		if os.Args[2] == "status" {
-			statuses, err := database.MigrationStatus(ctx)
+			statuses, err := database.MigrationStatus(ctx, pool)
 			if err != nil {
 				logger.Error("migration status failed", "error", err)
 				os.Exit(1)
@@ -73,7 +80,7 @@ func main() {
 		// Schema changes are intentionally not run here. Deployments execute the
 		// migration job before starting the API process.
 	case "healthcheck":
-		if err := database.DB.Ping(ctx); err != nil {
+		if err := pool.Ping(ctx); err != nil {
 			logger.Error("healthcheck failed", "error", err)
 			os.Exit(1)
 		}
@@ -93,75 +100,75 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	handlers.Configure(cfg, store, email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout})
-	handlers.InitChat()
-	metrics := &middleware.Metrics{}
+	mailer := email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLSMode: cfg.SMTPTLS, DialTimeout: cfg.SMTPDialTimeout, Timeout: cfg.SMTPTimeout}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
-	go (repository.CleanupRunner{Store: store, Interval: time.Hour, Logger: logger, Backlog: metrics.SetCleanupBacklog}).Run(workerCtx)
-	pushSvc := configurePush(cfg, logger)
-	pushSvc.Start(workerCtx, 2)
-	handlers.Push = pushSvc
-	pushHTTP := push.NewHTTP(pushSvc)
+	pushSvc := configurePush(cfg, logger, pool)
+	pushSvc.Start(workerCtx, cfg.PushDeliveryWorkers)
 
-	mux := http.NewServeMux()
-	authLimit := middleware.RateLimitByIdentity(cfg.RateLimitRequests, cfg.RateLimitWindow, cfg.TrustedProxyCIDRs)
-	protected := func(handler http.HandlerFunc) http.Handler { return http.HandlerFunc(handlers.AuthMiddleware(handler)) }
+	// The realtime hub is constructed by the composition root with its
+	// persistence and push callbacks injected: message persistence goes
+	// through the chat repository, and push fan-out through the push service.
+	repos := repository.NewRepository(pool)
+	hub := chat.NewHub(
+		func(ctx context.Context, msg *models.Message) error {
+			return repos.Chat.SaveMessage(ctx, msg)
+		},
+		func(ctx context.Context, msg *models.Message) {
+			if msg.Kind == "text" {
+				pushSvc.NotifyNewMessage(ctx, msg.GroupID, msg.UserID, msg.Content)
+			}
+		},
+	)
+	// F-03: live sockets are revalidated periodically (and again before each
+	// incoming message is accepted) against the user's current auth status and
+	// group membership, so revocation that never passes through a handler
+	// still closes stale sockets within the sweep interval. Every check is
+	// bounded so a hung database cannot wedge the single-threaded hub past the
+	// deadline: on timeout, error, or any negative answer the socket is
+	// treated as invalid and closed (fail-closed).
+	hub.Revalidate = func(userID, groupID string) bool {
+		ctx, cancel := context.WithTimeout(context.Background(), revalidateTimeout)
+		defer cancel()
+		status, err := repos.GetUserAuthStatus(ctx, userID)
+		if err != nil || !status.Active {
+			return false
+		}
+		member, err := repos.Groups.IsMember(ctx, groupID, userID)
+		return err == nil && member
+	}
+	go hub.Run()
 
-	mux.Handle("/api/v1/auth/signup", authLimit(http.HandlerFunc(handlers.Signup)))
-	mux.Handle("/api/v1/auth/login", authLimit(http.HandlerFunc(handlers.Login)))
-	mux.Handle("/api/v1/auth/refresh", http.HandlerFunc(handlers.Refresh))
-	mux.Handle("/api/v1/auth/logout", http.HandlerFunc(handlers.Logout))
-	mux.Handle("/api/v1/auth/verify/request", authLimit(protected(handlers.RequestVerification)))
-	mux.Handle("/api/v1/auth/verify", authLimit(http.HandlerFunc(handlers.VerifyEmail)))
-	mux.Handle("/api/v1/auth/password/forgot", authLimit(http.HandlerFunc(handlers.ForgotPassword)))
-	mux.Handle("/api/v1/auth/password/reset", authLimit(http.HandlerFunc(handlers.ResetPassword)))
-	mux.Handle("/api/v1/auth/password/change", authLimit(protected(handlers.ChangePassword)))
-	mux.Handle("/api/v1/auth/profile", authLimit(protected(handlers.UpdateProfile)))
-	mux.Handle("/api/v1/auth/profile/avatar", authLimit(protected(handlers.UploadAvatar)))
-	mux.Handle("/api/v1/auth/account", protected(handlers.DeleteAccount))
+	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
+	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog, PushSubscriptionExpiry: cfg.PushSubscriptionExpiry}).Run(workerCtx)
 
-	mux.Handle("/api/v1/user/groups", protected(handlers.GetUserGroups))
-	mux.Handle("/api/v1/user/profile/{userID}", protected(handlers.GetPublicProfile))
-	mux.Handle("/api/v1/group/create", protected(handlers.CreateGroup))
-	mux.Handle("/api/v1/group/join", protected(handlers.JoinGroup))
-	mux.Handle("/api/v1/group/details", protected(handlers.GetGroupDetails))
-	mux.Handle("/api/v1/group/members", protected(handlers.GetGroupMembers))
-	mux.Handle("/api/v1/group/leaderboard", protected(handlers.GetLeaderboard))
-	mux.Handle("/api/v1/group/photo", protected(handlers.GroupPhoto))
-	mux.Handle("/api/v1/group/notifications", protected(handlers.GroupNotifications))
-	mux.Handle("/api/v1/group/messages", protected(handlers.GetGroupMessages))
-	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(handlers.SetMessageReaction))
-	mux.Handle("/api/v1/group/messages/media", protected(handlers.UploadChatMedia))
-	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(handlers.ServeChatMedia))
-	mux.Handle("/api/v1/photo/upload", protected(handlers.UploadPhoto))
-	mux.Handle("/api/v1/ws/ticket", protected(handlers.CreateWebSocketTicket))
-	mux.HandleFunc("/api/v1/ws", handlers.HandleChat)
-	mux.Handle("/api/v1/push/subscribe", protected(pushHTTP.Subscribe))
-	mux.Handle("/api/v1/push/unsubscribe", protected(pushHTTP.Unsubscribe))
-	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
-	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(handlers.AcceptChallenge))
-	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(handlers.ConfirmChallengeMediaDelivered))
-	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(handlers.SubmitChallengeGuess))
-	mux.Handle("/api/v1/challenges/{photoID}/results", protected(handlers.GetChallengeResults))
-	mux.Handle("/api/v1/challenges/{photoID}/media", protected(handlers.ServeChallengeMedia))
-	mux.Handle("/api/v1/users/{userID}/avatar", protected(handlers.ServeUserAvatar))
-	// Link-preview endpoint for group invites: unauthenticated, returns HTML
-	// with Open Graph meta tags for messengers and redirects browsers.
-	mux.HandleFunc("GET /invite/{code}", handlers.HandleInvitePreview)
+	// The media-processing worker promotes quarantined video uploads into
+	// canonical records. It runs as a single in-process goroutine sharing the
+	// realtime hub and push notifier so a completed record is announced exactly
+	// once (the product runs one backend replica; see F-04). Enabled by
+	// MEDIA_PROCESSING_WORKER; the runtime image must provide ffprobe/ffmpeg.
+	if cfg.MediaProcessingWorker {
+		worker := mediaprocessing.NewWorker(mediaprocessing.WorkerDeps{
+			Jobs:           repos,
+			Store:          store,
+			Broadcaster:    hub,
+			Notifier:       pushSvc,
+			Runner:         mediaprocessing.OSCommandRunner{},
+			MaxInputBytes:  cfg.UploadMaxBytes,
+			ChallengeTTL:   cfg.ChallengeTTL,
+			PhotoRetention: cfg.PhotoRetention,
+			WorkerID:       fmt.Sprintf("media-%d-%d", os.Getpid(), time.Now().UnixNano()),
+			PollInterval:   500 * time.Millisecond,
+			Logger:         logger,
+			Now:            time.Now,
+		})
+		go worker.Run(workerCtx)
+		logger.Info("media processing worker started", "worker_id", fmt.Sprintf("media-%d", os.Getpid()))
+	}
 
-	registerSystemRoutes(mux, cfg, metrics, store)
-
-	var handler http.Handler = mux
-	handler = middleware.SecurityHeaders(handler)
-	handler = middleware.CORS(cfg.AllowedOrigins)(handler)
-	handler = middleware.RequestLog(logger, metrics, handler)
-	handler = middleware.Recover(logger, handler)
-	handler = middleware.RequestID(handler)
-
-	srv := &http.Server{Addr: ":" + cfg.Port, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+	srv := &http.Server{Addr: ":" + app.Config.Port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
-		logger.Info("server listening", "port", cfg.Port, "environment", cfg.Environment)
+		logger.Info("server listening", "port", app.Config.Port, "environment", app.Config.Environment)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server stopped unexpectedly", "error", err)
 		}
@@ -174,17 +181,19 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server shutdown failed", "error", err)
 	}
-	if handlers.HubInstance != nil {
-		handlers.HubInstance.Stop()
-	}
+	hub.Stop()
 	// Cancel background worker contexts so in-flight cleanup and push delivery
-	// stop promptly, then drain the push queue. Stop is idempotent.
+	// stop promptly, then account for queued notifications as drops. Stop is idempotent.
 	stopWorkers()
 	pushSvc.Stop()
 }
 
+// revalidateTimeout bounds each live-socket revalidation call so a hung
+// database cannot stall the single-threaded hub Run loop past the deadline.
+const revalidateTimeout = 3 * time.Second
+
 func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
-	if strings.EqualFold(os.Getenv("STORAGE_DRIVER"), "local") {
+	if strings.EqualFold(cfg.StorageDriver, "local") {
 		return storage.NewLocalStore(cfg.UploadDir)
 	}
 	return storage.NewS3Store(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UsePathStyle)
@@ -194,7 +203,7 @@ func buildStore(cfg *config.Config) (storage.ObjectStore, error) {
 // an omitted VAPID configuration as an explicit opt-out: minting a new keypair
 // there would invalidate every subscription on the next restart. Development
 // and test retain ephemeral keys for convenient local end-to-end coverage.
-func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
+func configurePush(cfg *config.Config, logger *slog.Logger, pool database.Pool) *push.Service {
 	if cfg.Environment == config.EnvProduction && cfg.VapidPublicKey == "" && cfg.VapidPrivateKey == "" {
 		logger.Info("Web Push is disabled because no VAPID keypair is configured")
 		return push.NewService(push.Deps{Config: cfg, Logger: logger})
@@ -204,14 +213,16 @@ func configurePush(cfg *config.Config, logger *slog.Logger) *push.Service {
 		logger.Error("VAPID key configuration is invalid; push notifications disabled", "error", err)
 		return push.NewService(push.Deps{Config: cfg, Logger: logger})
 	}
+	// The resolved keypair is returned through the service rather than written
+	// back into the loaded configuration: the config stays read-only after
+	// startup and the push handler reads keys from the service.
+	subject := cfg.VapidSubject
 	if ephemeral {
-		cfg.VapidSubject = "mailto:dev@geoguessme.invalid"
+		subject = "mailto:dev@geoguessme.invalid"
 		logger.Warn("VAPID keys not configured; generated ephemeral keys. Existing browser subscriptions will not survive a restart.", "public_key", keyPair.PublicKeyBase64URL())
 	}
-	cfg.VapidPublicKey = keyPair.PublicKeyBase64URL()
-	cfg.VapidPrivateKey = keyPair.PrivateKeyBase64URL()
-	sender := push.NewSender(keyPair, cfg.VapidSubject, nil)
-	return push.NewService(push.Deps{Store: push.NewStore(), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
+	sender := push.NewSender(keyPair, subject, push.NewEndpointGuard(cfg.PushEndpointAllowlist, cfg.Environment != config.EnvProduction), nil)
+	return push.NewService(push.Deps{Store: push.NewStore(pool), Deliver: sender, Keys: keyPair, Config: cfg, Logger: logger})
 }
 
 // printVapidKeys generates a fresh Web Push keypair and prints it in the
@@ -241,5 +252,3 @@ func parseLevel(value string) slog.Level {
 		return slog.LevelInfo
 	}
 }
-
-var _ = repository.CleanupAuthTokens

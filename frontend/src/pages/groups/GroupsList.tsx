@@ -15,7 +15,6 @@ function GroupCard({ group }: { group: Group }) {
                 <img src={groupPhotoURL} alt="" className="group-icon" />
                 <div className="group-info">
                     <h3>{group.name}</h3>
-                    <span className="group-code">#{group.code}</span>
                 </div>
             </div>
             <Icon name="chevron-right" className="group-arrow" />
@@ -114,7 +113,7 @@ export default function GroupsList() {
                     <img src="/join_group_icon.png" alt="" className="btn-icon" />
                     <span>
                         <strong>Join Group</strong>
-                        <small>Enter an invite code</small>
+                        <small>Use an invite link</small>
                     </span>
                 </Link>
             </div>

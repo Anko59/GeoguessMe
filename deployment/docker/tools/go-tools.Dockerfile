@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# Go 1.25.12-alpine (linux/amd64 digest: 56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587)
-FROM golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+# Go 1.26.6-alpine (immutable index digest: af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df)
+FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df
 
 # Lightweight operations tooling: formatting, linting, testing, building.
 # Heavy security/ops tools (govulncheck, postgresql-client, CGO build chain)

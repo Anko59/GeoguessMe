@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"sort"
 	"strings"
@@ -21,9 +20,8 @@ import (
 // applies migrations at a time even across replicas.
 const migrationLockKey = 91734721
 
-// DB is retained as the repository seam while the application is migrated to
-// dependency-injected services. New code should pass request contexts through
-// repository calls.
+// Pool is the minimal PostgreSQL connection pool interface consumed by the
+// repository slices. The concrete *pgxpool.Pool satisfies it.
 type Pool interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 	Query(context.Context, string, ...any) (pgx.Rows, error)
@@ -34,35 +32,23 @@ type Pool interface {
 	Close()
 }
 
-type migrationConnection interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	Begin(context.Context) (pgx.Tx, error)
-	Release()
-}
-
-var DB Pool
-
-var acquireMigrationConnection = func(ctx context.Context) (migrationConnection, error) {
-	if DB == nil {
-		return nil, errors.New("database is not connected")
-	}
-	return DB.Acquire(ctx)
-}
-
 var _ Pool = (*pgxpool.Pool)(nil)
 
-func Connect(dbURL string) error {
+// Connect opens a pool with the default connection limits.
+func Connect(dbURL string) (Pool, error) {
 	return ConnectWithLimits(dbURL, 2, 10)
 }
 
-func ConnectWithLimits(dbURL string, minConns, maxConns int32) error {
+// ConnectWithLimits opens a pool bounded to the given connection limits and
+// verifies it with a ping. The pool is returned to the caller; the database
+// package keeps no global pool reference.
+func ConnectWithLimits(dbURL string, minConns, maxConns int32) (Pool, error) {
 	if dbURL == "" {
-		return errors.New("DATABASE_URL is not set")
+		return nil, errors.New("DATABASE_URL is not set")
 	}
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		return fmt.Errorf("parse database URL: %w", err)
+		return nil, fmt.Errorf("parse database URL: %w", err)
 	}
 	if maxConns > 0 {
 		cfg.MaxConns = maxConns
@@ -74,24 +60,16 @@ func ConnectWithLimits(dbURL string, minConns, maxConns int32) error {
 	defer cancel()
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("connect to database: %w", err)
+		return nil, fmt.Errorf("connect to database: %w", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return fmt.Errorf("ping database: %w", err)
+		return nil, fmt.Errorf("ping database: %w", err)
 	}
-	DB = pool
-	return nil
+	return pool, nil
 }
 
-func Close() {
-	if DB != nil {
-		DB.Close()
-		DB = nil
-	}
-}
-
-//go:embed migrations/*.sql
+//go:embed migrations
 var migrationFS embed.FS
 
 type Migration struct {
@@ -100,50 +78,73 @@ type Migration struct {
 	SQL     string
 }
 
+// migrations discovers every committed migration under migrations/, including
+// nested year subdirectories, so the directory stays within the repository's
+// 14-direct-children structure limit while remaining forward-only.  Version
+// and name are derived from the file name alone, so relocating a file never
+// changes the schema_migrations identity of an applied migration.
 func migrations() ([]Migration, error) {
-	entries, err := fs.ReadDir(migrationFS, "migrations")
-	if err != nil {
-		return nil, err
-	}
 	var result []Migration
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
+	err := fs.WalkDir(migrationFS, "migrations", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".sql") {
+			return nil
 		}
 		var version int
 		var name string
-		if _, err := fmt.Sscanf(entry.Name(), "%d_%s", &version, &name); err != nil {
-			return nil, fmt.Errorf("invalid migration filename %q: %w", entry.Name(), err)
+		if _, err := fmt.Sscanf(d.Name(), "%d_%s", &version, &name); err != nil {
+			return fmt.Errorf("invalid migration filename %q: %w", d.Name(), err)
 		}
-		contents, err := fs.ReadFile(migrationFS, "migrations/"+entry.Name())
+		contents, err := fs.ReadFile(migrationFS, path)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		result = append(result, Migration{Version: version, Name: strings.TrimSuffix(name, ".sql"), SQL: string(contents)})
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Version < result[j].Version })
 	return result, nil
 }
 
-func ensureMigrationTable(ctx context.Context) error {
-	_, err := DB.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+type migrationConnection interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	Begin(context.Context) (pgx.Tx, error)
+}
+
+func ensureMigrationTable(ctx context.Context, conn migrationConnection) error {
+	_, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
 	return err
 }
 
-func MigrateUp(ctx context.Context, logger *slog.Logger) error {
-	if DB == nil {
+// MigrateUp applies pending forward-only migrations against the given pool.
+// It takes a session-level advisory lock for the whole run so concurrent
+// processes wait rather than racing on schema_migrations; the lock is released
+// when the run finishes (including on failure).
+func MigrateUp(ctx context.Context, pool Pool, logger *slog.Logger) error {
+	if pool == nil {
 		return errors.New("database is not connected")
 	}
-	if err := ensureMigrationTable(ctx); err != nil {
-		return fmt.Errorf("create migration table: %w", err)
-	}
-	conn, err := acquireMigrationConnection(ctx)
+	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
 	}
 	defer conn.Release()
-	// Hold a session-level advisory lock for the whole run so concurrent
-	// processes wait rather than racing on schema_migrations.
+	return migrateUpOnConnection(ctx, conn, logger)
+}
+
+// migrateUpOnConnection keeps the session advisory lock, migration queries,
+// and transactions on one physical PostgreSQL connection. Session locks do
+// not protect work issued through arbitrary connections from the same pool.
+func migrateUpOnConnection(ctx context.Context, conn migrationConnection, logger *slog.Logger) error {
+	if err := ensureMigrationTable(ctx, conn); err != nil {
+		return fmt.Errorf("create migration table: %w", err)
+	}
 	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLockKey); err != nil {
 		return fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
@@ -195,15 +196,15 @@ func MigrateUp(ctx context.Context, logger *slog.Logger) error {
 	return nil
 }
 
-func MigrationStatus(ctx context.Context) ([]MigrationRecord, error) {
-	if DB == nil {
+func MigrationStatus(ctx context.Context, pool Pool) ([]MigrationRecord, error) {
+	if pool == nil {
 		return nil, errors.New("database is not connected")
 	}
-	if err := ensureMigrationTable(ctx); err != nil {
+	if err := ensureMigrationTable(ctx, pool); err != nil {
 		return nil, err
 	}
 	appliedAt := make(map[int]time.Time)
-	rows, err := DB.Query(ctx, `SELECT version, applied_at FROM schema_migrations`)
+	rows, err := pool.Query(ctx, `SELECT version, applied_at FROM schema_migrations`)
 	if err != nil {
 		return nil, err
 	}
@@ -241,14 +242,4 @@ type MigrationRecord struct {
 	Name      string
 	Applied   bool
 	AppliedAt time.Time
-}
-
-// InitSchema is deliberately kept only for source compatibility with older
-// callers. Server startup must call MigrateUp explicitly.
-func InitSchema() {
-	logFatalDeprecated()
-}
-
-func logFatalDeprecated() {
-	log.Printf("InitSchema is deprecated; run 'geoguessme migrate up'")
 }

@@ -116,11 +116,3 @@ export const LENS_OPTIONS: LensOption[] = [
     { id: 'arcade', label: 'Pixel hero', icon: '/lenses/icons/arcade.png', accent: '#79ff84' },
     { id: 'glam', label: 'Superstar', icon: '/lenses/icons/glam.png', accent: '#ff8bb5' },
 ];
-
-const DEFORMATION_LENSES = new Set<LensId>(
-    LENS_OPTIONS.filter((option) => option.kind === 'deformation').map((option) => option.id),
-);
-
-export function isDeformationLens(id: LensId): boolean {
-    return DEFORMATION_LENSES.has(id);
-}

@@ -15,17 +15,18 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - **Timestamps**: ISO 8601 / RFC 3339 format in UTC.
 - **Rate limits**: When exceeded, the response includes a `Retry-After` header
   with an integer number of seconds.
-- **Cursor pagination**: Used for group messages. Response includes `items` and
-  `next_cursor` (opaque base64-encoded). An empty `cursor` selects the most
-  recent page (the newest messages, in chronological order, with no forward
-  cursor); a non-empty `cursor` returns messages strictly after it. An empty
-  `next_cursor` in the response means no more pages. The legacy `after_id`
-  message id is resolved onto the cursor so reconnect callers that only know the
-  last received message id keep working. To load chat history backwards, pass
-  `before_id` with a message id: the response is the page of messages strictly
-  older than that message (chronological, empty `next_cursor`), and the client
-  repeats the request with the oldest returned message's id until the page comes
-  back shorter than `limit`.
+- **Cursor pagination**: Used for group messages. Response includes `items`,
+  `next_cursor`, and `stable_cursor` (opaque base64-encoded). An empty `cursor`
+  selects the most recent page (the newest messages, in chronological order,
+  with no forward cursor); a non-empty `cursor` returns messages strictly after
+  it. An empty `next_cursor` in the response means no more pages. Reconnect
+  catch-up sends the `stable_cursor` of the last received page (strictly after
+  its last message) as the `cursor` parameter, so nothing created during a
+  disconnect is skipped. To load chat history backwards, pass `before_id` with a
+  message id: the response is the page of messages strictly older than that
+  message (chronological, empty `next_cursor`), and the client repeats the
+  request with the oldest returned message's id until the page comes back
+  shorter than `limit`.
 - Challenge messages in `items` may include viewer-specific `challenge_status`
   (`available`, `accepted`, `guessed`, `results`, or `expired`). This field
   controls the available chat action and is derived from the authenticated
@@ -35,8 +36,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 - Messages may include aggregate `reactions`; each entry contains a reaction key
   (mapping to the custom reaction artwork), count, the `usernames` of members
   who selected it, and a `reacted` flag for the authenticated viewer. Usernames
-  are sorted alphabetically. Reaction requests use `reaction`; the deprecated
-  `emoji` request and response alias remains available during rolling upgrades.
+  are sorted alphabetically. Reaction requests use the `reaction` field; the
+  deprecated `emoji` request/response alias was removed.
 - Live reaction updates include `reaction_update` metadata so each WebSocket
   recipient applies the shared count without inheriting another member's
   viewer-specific `reacted` state. Guess submission also publishes a
@@ -107,7 +108,7 @@ page reachable from chat and leaderboards.
 | POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                        |
 | GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
 | PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
-| GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`/`after_id`, backward via `before_id`)         |
+| GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`, backward via `before_id`)                    |
 | PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
 | DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                               |
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |

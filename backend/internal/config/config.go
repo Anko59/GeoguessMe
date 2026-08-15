@@ -3,8 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +17,10 @@ type Config struct {
 	Environment string
 	Port        string
 	PublicURL   string
+
+	// StorageDriver selects the object store. "local" uses the filesystem via
+	// UploadDir; "s3" or the absent-value default uses S3-compatible storage.
+	StorageDriver string
 
 	DatabaseURL      string
 	DatabaseMinConns int32
@@ -57,10 +61,26 @@ type Config struct {
 	PhotoRetention  time.Duration
 	UploadDir       string
 
+	// MediaProcessingWorker starts the in-process media-processing worker
+	// goroutine (quarantined video promotion). Enabled by default now that the
+	// runtime image ships ffmpeg/ffprobe; deployments must provide the
+	// media-processing worker container bounds (see docs/video-processing.md).
+	MediaProcessingWorker bool
+
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
-	LogLevel          string
-	MetricsToken      string
+
+	// RateLimitPolicies are the per-route multi-bucket rate-limit policies.
+	// Each bucket is expressed as "type:limit/window" where type is one of
+	// route, global, trustedIP, identity, user. RateLimitFailClosed names the
+	// policies that reject requests when the shared bucket store is exhausted
+	// (the expensive unauthenticated routes). RateLimitStoreCap bounds the
+	// shared in-process bucket store.
+	RateLimitPolicies   []RateLimitPolicy
+	RateLimitFailClosed []string
+	RateLimitStoreCap   int
+	LogLevel            string
+	MetricsToken        string
 
 	// VAPID keys (base64url) enable Web Push. A complete keypair and contact
 	// subject are required when push is enabled. Production may leave all three
@@ -68,6 +88,43 @@ type Config struct {
 	VapidPublicKey  string
 	VapidPrivateKey string
 	VapidSubject    string
+
+	// PushEndpointAllowlist lists the DNS domains push subscriptions may
+	// target. Web Push endpoints are accepted only when their host matches an
+	// allowlisted domain exactly or as a subdomain. The default covers the
+	// canonical delivery hosts of the four major push providers (Google FCM,
+	// Mozilla Push, Apple Web Push, Windows). Production refuses to start with
+	// push enabled unless this list is non-empty.
+	PushEndpointAllowlist []string
+
+	// Push lifecycle and delivery bounds (F-08). PushMaxSubscriptionsPerUser
+	// caps the active subscriptions one account may hold; PushSubscriptionExpiry
+	// is the idle window after which the cleanup worker deletes a subscription
+	// (measured from last_used_at, or created_at when it was never used).
+	// PushDeliveryWorkers bounds the global delivery concurrency, while
+	// PushDeliveryPerHost caps concurrent sends to a single push-service host;
+	// PushDeliveryTimeout is the per-send deadline and PushQueueDepth the
+	// bounded fan-out job queue.
+	PushMaxSubscriptionsPerUser int
+	PushSubscriptionExpiry      time.Duration
+	PushDeliveryWorkers         int
+	PushDeliveryPerHost         int
+	PushDeliveryTimeout         time.Duration
+	PushQueueDepth              int
+}
+
+// RateLimitBucket is one fixed-window counter of a rate-limit policy.
+// Type is one of route, global, trustedIP, identity, user.
+type RateLimitBucket struct {
+	Type   string
+	Limit  int
+	Window time.Duration
+}
+
+// RateLimitPolicy is a named set of rate-limit buckets.
+type RateLimitPolicy struct {
+	Name    string
+	Buckets []RateLimitBucket
 }
 
 // SMTP modes.
@@ -91,60 +148,6 @@ const (
 // enough for an HTTP header.
 const minMetricsTokenBytes = 32
 
-func Load() *Config {
-	return &Config{
-		Environment:      normalizeEnvironment(getEnv("APP_ENV", EnvDevelopment)),
-		Port:             getEnv("PORT", "8080"),
-		PublicURL:        getEnv("PUBLIC_URL", "http://localhost:5173"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		DatabaseMinConns: int32(getEnvAsInt("DB_MIN_CONNS", 2)),
-		DatabaseMaxConns: int32(getEnvAsInt("DB_MAX_CONNS", 10)),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:   getEnvAsDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  getEnvAsDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		VerificationTTL:  getEnvAsDuration("VERIFICATION_TOKEN_TTL", 24*time.Hour),
-		ResetTTL:         getEnvAsDuration("RESET_TOKEN_TTL", time.Hour),
-		PasswordHashCost: getEnvAsInt("BCRYPT_COST", 12),
-
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPPort:        getEnvAsInt("SMTP_PORT", 1025),
-		SMTPUsername:    os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:    os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:        getEnv("SMTP_FROM", "no-reply@localhost"),
-		SMTPTLS:         getEnv("SMTP_TLS", SMTPOff),
-		SMTPDialTimeout: getEnvAsDuration("SMTP_DIAL_TIMEOUT", 10*time.Second),
-		SMTPTimeout:     getEnvAsDuration("SMTP_TIMEOUT", 30*time.Second),
-
-		S3Endpoint:     getEnv("S3_ENDPOINT", "http://localhost:9000"),
-		S3Region:       getEnv("S3_REGION", "us-east-1"),
-		S3Bucket:       getEnv("S3_BUCKET", "geoguessme-media"),
-		S3AccessKey:    getEnv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:    getEnv("S3_SECRET_KEY", "minioadmin"),
-		S3UsePathStyle: getEnvAsBool("S3_USE_PATH_STYLE", true),
-
-		AllowedOrigins:    splitList(getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")),
-		TrustedProxyCIDRs: splitList(os.Getenv("TRUSTED_PROXY_CIDRS")),
-
-		UploadMaxBytes:  getEnvAsInt64("UPLOAD_MAX_BYTES", 10*1024*1024),
-		AvatarMaxBytes:  getEnvAsInt64("AVATAR_MAX_BYTES", 25*1024*1024),
-		UploadMaxPixels: uint64(getEnvAsInt64("UPLOAD_MAX_PIXELS", 25_000_000)),
-		ChallengeTTL:    getEnvAsDuration("CHALLENGE_TTL", 24*time.Hour),
-		LocationHide:    getEnvAsDuration("LOCATION_HIDE_DURATION", 48*time.Hour),
-		ViewWindow:      getEnvAsDuration("PHOTO_VIEW_WINDOW", 10*time.Second),
-		PhotoRetention:  getEnvAsDuration("PHOTO_RETENTION", 30*24*time.Hour),
-		UploadDir:       getEnv("UPLOAD_DIR", "./uploads"),
-
-		RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 10),
-		RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
-		LogLevel:          getEnv("LOG_LEVEL", "info"),
-		MetricsToken:      strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
-
-		VapidPublicKey:  strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY")),
-		VapidPrivateKey: strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY")),
-		VapidSubject:    strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
-	}
-}
-
 // Validate applies strict checks to every environment. Production enforces
 // additional security constraints on top of the base rules.
 func (c *Config) Validate() error {
@@ -154,6 +157,11 @@ func (c *Config) Validate() error {
 	case EnvDevelopment, EnvProduction, EnvTest:
 	default:
 		problems = append(problems, "APP_ENV must be one of development, production, test")
+	}
+	switch strings.ToLower(c.StorageDriver) {
+	case "", "s3", "local":
+	default:
+		problems = append(problems, "STORAGE_DRIVER must be one of s3, local")
 	}
 	if port, err := strconv.Atoi(strings.TrimSpace(c.Port)); err != nil || port < 1 || port > 65535 {
 		problems = append(problems, "PORT must be an integer between 1 and 65535")
@@ -188,6 +196,11 @@ func (c *Config) Validate() error {
 			problems = append(problems, fmt.Sprintf("invalid browser origin %q", origin))
 		}
 	}
+	for _, cidr := range c.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			problems = append(problems, fmt.Sprintf("invalid trusted proxy CIDR %q", cidr))
+		}
+	}
 	if c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey == "" || c.S3SecretKey == "" {
 		problems = append(problems, "S3 endpoint, bucket, and credentials are required")
 	}
@@ -214,6 +227,47 @@ func (c *Config) Validate() error {
 	if c.RateLimitRequests <= 0 || c.RateLimitWindow <= 0 {
 		problems = append(problems, "rate limit values must be positive")
 	}
+	if c.RateLimitStoreCap < 1 {
+		problems = append(problems, "RATE_LIMIT_STORE_CAP must be at least 1")
+	}
+	if len(c.RateLimitPolicies) == 0 {
+		problems = append(problems, "at least one rate limit policy is required")
+	}
+	knownPolicies := make(map[string]bool, len(c.RateLimitPolicies))
+	for _, p := range c.RateLimitPolicies {
+		if p.Name == "" {
+			problems = append(problems, "rate limit policy name must not be empty")
+			continue
+		}
+		if knownPolicies[p.Name] {
+			problems = append(problems, fmt.Sprintf("duplicate rate limit policy %q", p.Name))
+		}
+		knownPolicies[p.Name] = true
+		if len(p.Buckets) == 0 {
+			problems = append(problems, fmt.Sprintf("rate limit policy %q has no buckets", p.Name))
+		}
+		knownBucketTypes := make(map[string]bool, len(p.Buckets))
+		for _, b := range p.Buckets {
+			if knownBucketTypes[b.Type] {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q has duplicate bucket type %q", p.Name, b.Type))
+			}
+			knownBucketTypes[b.Type] = true
+			if b.Limit <= 0 {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q bucket %q must have a positive limit", p.Name, b.Type))
+			}
+			if b.Window <= 0 {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q bucket %q must have a positive window", p.Name, b.Type))
+			}
+			if !isRateLimitBucketType(b.Type) {
+				problems = append(problems, fmt.Sprintf("rate limit policy %q has unknown bucket type %q", p.Name, b.Type))
+			}
+		}
+	}
+	for _, name := range c.RateLimitFailClosed {
+		if !knownPolicies[name] {
+			problems = append(problems, fmt.Sprintf("rate limit fail-closed policy %q is not a known policy", name))
+		}
+	}
 	if c.SMTPDialTimeout <= 0 || c.SMTPTimeout <= 0 {
 		problems = append(problems, "SMTP timeouts must be positive")
 	}
@@ -225,6 +279,29 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTPHost != "" && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
 		problems = append(problems, "SMTP_PORT must be an integer between 1 and 65535")
+	}
+	for _, domain := range c.PushEndpointAllowlist {
+		if !validAllowlistDomain(domain) {
+			problems = append(problems, fmt.Sprintf("invalid push endpoint allowlist domain %q", domain))
+		}
+	}
+	if c.PushMaxSubscriptionsPerUser < 1 {
+		problems = append(problems, "PUSH_MAX_SUBSCRIPTIONS_PER_USER must be at least 1")
+	}
+	if c.PushSubscriptionExpiry <= 0 {
+		problems = append(problems, "PUSH_SUBSCRIPTION_EXPIRY must be positive")
+	}
+	if c.PushDeliveryWorkers < 1 {
+		problems = append(problems, "PUSH_DELIVERY_WORKERS must be at least 1")
+	}
+	if c.PushDeliveryPerHost < 1 {
+		problems = append(problems, "PUSH_DELIVERY_PER_HOST must be at least 1")
+	}
+	if c.PushDeliveryTimeout <= 0 {
+		problems = append(problems, "PUSH_DELIVERY_TIMEOUT must be positive")
+	}
+	if c.PushQueueDepth < 1 {
+		problems = append(problems, "PUSH_QUEUE_DEPTH must be at least 1")
 	}
 	// VAPID is opt-in in production and ephemeral in development/test. A partial
 	// configuration must never be interpreted as either mode.
@@ -269,6 +346,9 @@ func (c *Config) Validate() error {
 		} else if len(c.MetricsToken) < minMetricsTokenBytes {
 			problems = append(problems, "METRICS_TOKEN must be at least 32 bytes in production")
 		}
+		if hasVapidKeyPair && len(c.PushEndpointAllowlist) == 0 {
+			problems = append(problems, "PUSH_ENDPOINT_ALLOWLIST is required in production when Web Push is enabled")
+		}
 	}
 
 	if len(problems) > 0 {
@@ -292,6 +372,30 @@ func (c *Config) MetricsAuthRequired() bool {
 
 // isVapidSubject reports whether value is an acceptable RFC 8292 VAPID contact:
 // a non-empty mailto address or HTTPS URL with a host.
+// validAllowlistDomain reports whether value is an acceptable DNS push-provider
+// domain: non-empty, free of schemes, paths, and whitespace, and made only of
+// DNS label characters. Matching happens later against the exact host or a
+// subdomain, so wildcards are neither needed nor accepted.
+func validAllowlistDomain(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 253 || strings.ContainsAny(value, " \t/") || strings.Contains(value, "://") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func isVapidSubject(value string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(value))
 	if err != nil {
@@ -307,61 +411,10 @@ func isVapidSubject(value string) bool {
 	}
 }
 
-func LoadValidated() (*Config, error) {
-	cfg := Load()
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	return cfg, nil
-}
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok && value != "" {
-		return value
-	}
-	return fallback
-}
-
 // normalizeEnvironment trims surrounding whitespace and lower-cases the value
 // so APP_ENV comparisons can be exact and case-insensitive at the same time.
 func normalizeEnvironment(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func getEnvAsInt(key string, fallback int) int {
-	if value, ok := os.LookupEnv(key); ok {
-		if i, err := strconv.Atoi(value); err == nil {
-			return i
-		}
-	}
-	return fallback
-}
-
-func getEnvAsInt64(key string, fallback int64) int64 {
-	if value, ok := os.LookupEnv(key); ok {
-		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return i
-		}
-	}
-	return fallback
-}
-
-func getEnvAsBool(key string, fallback bool) bool {
-	if value, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			return b
-		}
-	}
-	return fallback
-}
-
-func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
-	if value, ok := os.LookupEnv(key); ok {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return fallback
 }
 
 func splitList(value string) []string {
@@ -376,6 +429,18 @@ func splitList(value string) []string {
 		}
 	}
 	return result
+}
+
+// isRateLimitBucketType reports whether t is a supported rate-limit bucket
+// type. The middleware package owns the canonical BucketType constants; this
+// helper keeps the strict loader self-contained without importing middleware.
+func isRateLimitBucketType(t string) bool {
+	switch t {
+	case "route", "global", "trustedIP", "identity", "user":
+		return true
+	default:
+		return false
+	}
 }
 
 func contains(values []string, wanted string) bool {

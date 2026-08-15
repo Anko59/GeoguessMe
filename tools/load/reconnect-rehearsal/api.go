@@ -48,18 +48,34 @@ func createGroup(access, name string) (groupRef, error) {
 		return groupRef{}, fmt.Errorf("create group returned %d: %s", resp.StatusCode, string(body))
 	}
 	var g struct {
-		ID   string `json:"id"`
-		Code string `json:"code"`
+		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(body, &g); err != nil {
 		return groupRef{}, err
 	}
-	return groupRef{ID: g.ID, Code: g.Code}, nil
+	resp, body, err = doJSON(http.MethodPost, "/api/v1/group/invites",
+		map[string]string{"group_id": g.ID}, access, nil)
+	if err != nil {
+		return groupRef{}, err
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return groupRef{}, fmt.Errorf("create group invite returned %d: %s", resp.StatusCode, string(body))
+	}
+	var invite struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(body, &invite); err != nil {
+		return groupRef{}, err
+	}
+	if invite.Token == "" {
+		return groupRef{}, fmt.Errorf("create group invite returned an empty token")
+	}
+	return groupRef{ID: g.ID, InviteToken: invite.Token}, nil
 }
 
-func joinGroup(access, code string) error {
+func joinGroup(access, inviteToken string) error {
 	resp, body, err := doJSON(http.MethodPost, "/api/v1/group/join",
-		map[string]string{"code": code}, access, nil)
+		map[string]string{"invite_token": inviteToken}, access, nil)
 	if err != nil {
 		return err
 	}

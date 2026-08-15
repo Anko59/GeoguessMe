@@ -1,0 +1,20 @@
+# Allowlisted production package-level mutable variables in backend/.
+#
+# archcheck (tools/quality/archcheck) flags any package-level var that is not
+# an error sentinel, compile-time assertion, embed.FS value, basic/byte-string
+# literal. Composite literals are mutable and must be listed here when an
+# intentional package-owned lookup table cannot be a constant. Only genuinely
+# process-global-by-design values belong here; new entries require a documented
+# justification (see the mutable-globals rule in main.go).
+#
+# Format: <relative-path>:<varName>, one per line.
+#
+# The middleware rate-limiter store is a mutex-protected process-global
+# rate-limiting instance (not an application dependency). Documented in
+# docs/agent-engineering.md (Dependency direction and ownership).
+backend/internal/middleware/limiter.go:limiterStore
+
+# Static lookup tables. Go has no constant arrays/slices; both remain private
+# to their owning packages and are never exposed or mutated after startup.
+backend/internal/progression/ranks.go:rankDefinitions
+backend/internal/validation/upload_validator.go:allowedImageTypes

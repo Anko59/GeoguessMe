@@ -50,20 +50,96 @@ createGroup:
 joinGroup:
   post:
     operationId: joinGroup
-    summary: Join a group by code.
+    summary: Join a group with an invite token.
     tags: [Groups]
     security: [{ bearerAuth: [] }]
     requestBody:
       required: true
       content:
         application/json:
-          schema: { type: object, required: [code], properties: { code: { type: string, pattern: "^[A-Z0-9]{6}$" } } }
+          schema:
+            type: object
+            required: [invite_token]
+            properties:
+              invite_token: { $ref: "../components/schemas.yaml#/InviteToken" }
     responses:
       "200":
         description: Joined group.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Group" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+groupInvites:
+  get:
+    operationId: listInvites
+    summary: List the invites of a group for a current member.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200":
+        description: Invites. Never contains the bearer token.
+        content:
+          {
+            application/json:
+              { schema: { type: array, items: { $ref: "../components/schemas.yaml#/InviteListItem" } } },
+          }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  post:
+    operationId: createInvite
+    summary: Create a group invite; returns the bearer token exactly once.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas.yaml#/InviteCreateRequest" }
+    responses:
+      "201":
+        description: Invite created.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/InviteCreateResponse" } } }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+revokeInvite:
+  delete:
+    operationId: revokeInvite
+    summary: Revoke a group invite immediately.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: inviteID, in: path, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "204": { description: Invite revoked. }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+invitePreview:
+  post:
+    operationId: previewInvite
+    summary: Preview a group from an invite token without authenticating.
+    description: >
+      Public endpoint. The token travels in the JSON body so it never appears
+      in a URL, path, or access log. Unknown, expired, and revoked tokens all
+      return the same generic 404.
+    tags: [Groups]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas.yaml#/InvitePreviewRequest" }
+    responses:
+      "200":
+        description: Non-sensitive group preview.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/InvitePreview" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 groupDetails:
   get:
@@ -209,12 +285,6 @@ messages:
           schema: { type: string },
         }
       - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 500 } }
-      - {
-          name: after_id,
-          in: query,
-          description: Legacy message id resolved onto the cursor for reconnect catch-up; ignored when cursor is set,
-          schema: { type: string },
-        }
     responses:
       "200":
         description: Message page.
@@ -284,6 +354,11 @@ messageMediaUpload:
         {
           description: Persisted media message,
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/Message" } } },
+        }
+      "202":
+        {
+          description: "Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}.",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
         }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }

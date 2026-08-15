@@ -53,12 +53,21 @@ chat records.
 
 ## Verification
 
+- Recovery email is optional and never controls account, gameplay, or social
+  authorization. Before verification it exists only as `pending_email`; only a
+  confirmed claim is promoted to the verified `email` used by recovery.
+- Signup never checks whether another account verified the submitted address: it
+  accepts the address as a pending claim, and verification later resolves
+  ownership with a generic failure if the address is already claimed.
 - `POST /api/v1/auth/verify/request` (authenticated) sends a verification email.
 - `POST /api/v1/auth/verify {token}` consumes a single-use opaque token.
 - Token TTL: `VERIFICATION_TOKEN_TTL` (default 24 hours).
-- Tokens are stored hashed (SHA-256); older unverified tokens for the same user
-  are invalidated on each new request.
-- Before sending, any existing unverified token for the user is deleted.
+- Tokens are stored hashed (SHA-256) and bound to the exact normalized pending
+  address for which they were issued. Changing the pending claim cannot
+  repurpose an older link.
+- Before sending, any existing unverified token for the user is deleted; a
+  database constraint guarantees concurrent requests cannot leave multiple
+  unused verification tokens.
 
 Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
 
@@ -71,14 +80,16 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
   refresh sessions.
 - Token TTL: `RESET_TOKEN_TTL` (default 1 hour).
 
-Authenticated users can update their username, email address, or selected
-profile avatar through `PATCH /api/v1/auth/profile`; the current password is
-required and changing the email clears its verification state. A custom profile
-photo is uploaded separately through `POST /api/v1/auth/profile/avatar`; the web
-client sends the original selected file, and the backend accepts JPG, PNG, or
-WebP up to 25 MiB before resizing and stripping metadata. Password changes use
-`POST /api/v1/auth/password/change`, require the current password, and revoke
-all sessions so the user must sign in again.
+Authenticated users can update their username, pending recovery-email claim, or
+selected profile avatar through `PATCH /api/v1/auth/profile`; the current
+password is required. A verified recovery address remains active until its
+replacement is verified, and omitting email cancels only the pending claim. A
+custom profile photo is uploaded separately through
+`POST /api/v1/auth/profile/avatar`; the web client sends the original selected
+file, and the backend accepts JPG, PNG, or WebP up to 25 MiB before resizing and
+stripping metadata. Password changes use `POST /api/v1/auth/password/change`,
+require the current password, and revoke all sessions so the user must sign in
+again.
 
 ## Logout
 
@@ -128,5 +139,5 @@ Returns 204 on success.
 | Replay of refresh token       | One-time rotation: consumed token is revoked atomically            |
 | Brute-force login             | Rate-limited by identity (`RateLimitByIdentity` on signup/login)   |
 | Session after password change | Auth version bump revokes all tokens                               |
-| Email enumeration             | Forgot password always returns 202                                 |
+| Email enumeration             | Signup never checks ownership; forgot password always returns 202  |
 | Stale leak via logs           | Backend never logs tokens, signed URLs, passwords, or coordinates  |

@@ -1,3 +1,7 @@
+---
+status: primary
+---
+
 # Hosted deployment runbook
 
 This runbook is the production change checklist for the shared Hetzner host. The
@@ -12,9 +16,11 @@ two minutes of planned deployment interruption.
    `geoguessme-terraform-state` bucket and a bucket-scoped S3 credential for
    Terraform state. Create separate bucket-scoped credentials for dev media,
    production media, and database backups after Terraform creates those buckets.
-3. Create a Brevo free account, authenticate `geoguessme.com`, and copy its
-   SPF/DKIM records into Terraform-managed DNS before launch. Publish DMARC as
-   `p=none` during validation, then tighten after reviewing reports.
+3. Create a Brevo free account, authenticate `geoguessme.com`, and copy its DKIM
+   records into `brevo_dns_records`; set the single combined SPF value (Brevo
+   include plus `_spf.mx.cloudflare.net`) in `spf_record`. Publish DMARC as
+   `p=none` during validation, then tighten per
+   [docs/runbooks/dmarc-rollout.md](dmarc-rollout.md) after reviewing reports.
 4. Create one operator SSH key and separate CI keys for dev and production. Put
    only public keys in `terraform.tfvars`; private CI keys go into their
    matching GitHub environment.
@@ -22,10 +28,13 @@ two minutes of planned deployment interruption.
    and export its S3 credentials plus rotated `HCLOUD_TOKEN` and
    `CLOUDFLARE_API_TOKEN`.
 
-The Cloudflare Terraform token needs zone DNS, R2 bucket, Tunnel, Access apps,
-and Access service-token write permissions scoped to this account/zone. The
-Hetzner token should be scoped to the dedicated project. Do not reuse either
-token in application or deployment jobs.
+The Cloudflare API token needs zone DNS/settings, Email Routing, R2 bucket,
+Tunnel, identity-provider, and Access-application write permissions scoped to
+this account/zone. The local QA runner also uses it for temporary dev service
+tokens and therefore needs Access service-token write permission. Terraform does
+not manage those short-lived QA objects. The Hetzner token should be scoped to
+the dedicated project. Do not reuse either token in application or deployment
+jobs.
 
 ## Provision
 
@@ -39,7 +48,10 @@ Terraform ignores post-creation `user_data` drift because Hetzner cannot update
 cloud-init in place and replacing a stateful host is unsafe. Apply bootstrap
 changes explicitly to the running host and verify them, or use the documented
 backup/restore replacement procedure; a newly created host always receives the
-current template.
+current template. Runtime scripts and compose definitions must be updated as one
+exact-revision set using the procedure in
+[docs/runbooks/runtime-hardening.md](runtime-hardening.md#applying-monitored-host-definitions);
+copying only the latest changed file creates an unverifiable host state.
 
 The deployment and backup locks live below `/run`, which is cleared at boot.
 Cloud-init installs `/etc/tmpfiles.d/geoguessme.conf` so systemd recreates
@@ -60,14 +72,17 @@ ssh -i /path/to/operator-key \
   ops@deploy.geoguessme.com
 ```
 
-Export the Terraform Access service-token outputs as `TUNNEL_SERVICE_TOKEN_ID`
-and `TUNNEL_SERVICE_TOKEN_SECRET` before using this non-interactive operator
-route. Do not place either value on the command line. Read the two generated
-public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
-environment example with unique database/JWT/metrics/Restic credentials and its
-dedicated R2/Brevo values. Web Push is optional: leave all three VAPID variables
-absent to disable it, or mint one stable keypair per environment and export all
-three alongside the other credentials:
+Export a Cloudflare Access service-token client ID and client secret as
+`TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` before using this
+non-interactive operator route. Create that token outside Terraform (see
+[docs/runbooks/access-tokens.md](access-tokens.md)); Terraform never holds
+service-token secrets and exposes no service-token outputs. Do not place either
+value on the command line. Read the two generated public age recipients from
+`/etc/geoguessme/age/*-recipient.txt`, fill each environment example with unique
+database/JWT/metrics/Restic credentials and its dedicated R2/Brevo values. Web
+Push is optional: leave all three VAPID variables absent to disable it, or mint
+one stable keypair per environment and export all three alongside the other
+credentials:
 
 ```text
 make vapid-keys
@@ -85,10 +100,13 @@ values must be reused whenever that secret file is regenerated.
 ### Credential and Push recovery
 
 - Cloudflare only reveals an Access service-token secret at creation or
-  rotation. If it is unavailable locally, rotate the existing token, update
-  `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` in the `development`,
-  `production`, and `monitoring` GitHub environments in one maintenance window,
-  then verify a deployment before its overlap expires.
+  rotation. Tokens are created outside Terraform and rotate every 60 days with
+  overlap (see [docs/runbooks/access-tokens.md](access-tokens.md)). If a secret
+  is unavailable locally, rotate that environment's token, update
+  `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` in the matching GitHub
+  environment (`development`, `production`, or `monitoring`), and verify a
+  deployment before the overlap expires. Alert 14 days before each token's
+  expiry.
 - If the operator SSH private key is missing, use a planned Hetzner rescue-mode
   reboot to install a newly generated public key in
   `/home/ops/.ssh/authorized_keys`. Restrict temporary SSH ingress to the
@@ -131,7 +149,8 @@ materialize the `dev` tree on it; this preserves linear squash history without
 rewriting protected branches. The release workflow checks tree equality,
 verifies the dev signatures, promotes the same manifests without rebuilding,
 adds the production signature, selects the next semantic patch version (with
-`v0.2.0` as the launch floor), creates the GitHub release/tag, and deploys
+reads the committed `.release-version` manifest, validates that it is newer than
+the latest semantic release tag, creates the GitHub release/tag, and deploys
 production. Pull-request jobs never receive deployment secrets.
 
 Both branches require signed commits, the aggregate Dockerized verification
@@ -142,10 +161,14 @@ prohibit force-push/deletion. The `development` environment accepts only `dev`;
 
 ## Dev acceptance and production launch
 
-Verify Access OTP for `jeancollette138@gmail.com`, signup/verification/reset
-email, uploads and reads, WebSockets, client-IP rate limiting, TLS/security
-headers, backup creation, and isolated restore on dev. Soak for at least 24
-hours. Resolve or supersede every failing Dependabot PR before merging the
+Run the local LLM-driven source-blind QA agent against the exact deployed dev
+revision: Access-protected browser entry, signup/logout/refresh, pending
+recovery-email dispatch state, uploads and reads, WebSockets, client-IP rate
+limiting, TLS/security headers, group authorization, mobile layout, and
+exploratory navigation. Retain its revision-bound report with the release record
+and do not promote while it contains a reproducible `BUG` finding. There is no
+fixed soak or quarantine delay, and this acceptance step does not run in GitHub
+Actions. Resolve or supersede every failing Dependabot PR before merging the
 release PR.
 
 For production, confirm a fresh pre-deploy backup and complete a real isolated

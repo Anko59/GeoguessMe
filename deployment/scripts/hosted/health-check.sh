@@ -23,6 +23,11 @@ disk_use=$(df -P "$STATE_ROOT" | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
 [ "$disk_use" -lt 85 ] || die "disk usage is ${disk_use}%"
 systemctl is-active --quiet cloudflared || die 'cloudflared is not active'
 
+# The same per-environment systemd timer that checks runtime health also checks
+# the root-owned host definitions every 15 minutes. On mismatch the oneshot
+# fails and its OnFailure unit sends the normal operator alert.
+"$SCRIPT_DIR/verify-deployment-hashes.sh" "$environment"
+
 last_success="$STATE_ROOT/backups/$environment/last-success"
 age=$(backup_age_seconds "$last_success")
 [ "$age" -le 7200 ] || die "$environment backup is older than two hours"

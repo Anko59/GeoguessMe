@@ -22,12 +22,30 @@ type Metrics struct {
 	requests       atomic.Uint64
 	errors         atomic.Uint64
 	cleanupBacklog atomic.Int64
+	// ExtraMetrics optionally renders additional metric lines (for example the
+	// push delivery surface) onto the /metrics response. It is set by the
+	// composition root; nil keeps the endpoint unchanged.
+	ExtraMetrics func() string
 }
 
 func (m *Metrics) Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("geoguessme_http_requests_total " + formatUint(m.requests.Load()) + "\n" + "geoguessme_http_errors_total " + formatUint(m.errors.Load()) + "\n" + "geoguessme_storage_cleanup_backlog " + formatUint(uint64(m.cleanupBacklog.Load())) + "\n"))
+	var body strings.Builder
+	body.WriteString("geoguessme_http_requests_total " + formatUint(m.requests.Load()) + "\n")
+	body.WriteString("geoguessme_http_errors_total " + formatUint(m.errors.Load()) + "\n")
+	body.WriteString("geoguessme_storage_cleanup_backlog " + formatUint(uint64(m.cleanupBacklog.Load())) + "\n")
+	// Rate-limit rejections (F-04/F-08): the aggregate counter plus one line
+	// per policy so an attacker hammering a single route is visible.
+	body.WriteString("geoguessme_limiter_rejections_total " + formatUint(uint64(Rejections())) + "\n")
+	for _, policy := range sortedRejectionPolicies() {
+		body.WriteString("geoguessme_limiter_rejections_total{policy=\"" + policy + "\"} " +
+			formatUint(uint64(RejectionsByPolicy()[policy])) + "\n")
+	}
+	if m.ExtraMetrics != nil {
+		body.WriteString(m.ExtraMetrics())
+	}
+	_, _ = w.Write([]byte(body.String()))
 }
 
 func (m *Metrics) Observe(status int) {

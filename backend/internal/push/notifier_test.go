@@ -11,20 +11,22 @@ import (
 	"time"
 
 	"geoguessme/internal/config"
-	"geoguessme/internal/database"
 
 	"github.com/pashagolub/pgxmock/v4"
 )
 
 type fakeStore struct {
-	mu            sync.Mutex
-	targets       []NotificationTarget
-	targetCalls   int
-	groupName     string
-	usernames     map[string]string
-	subsByUser    map[string][]Subscription
-	deletedIDs    []string
-	deleteIDError error
+	mu              sync.Mutex
+	targets         []NotificationTarget
+	targetCalls     int
+	groupName       string
+	usernames       map[string]string
+	subsByUser      map[string][]Subscription
+	deliveryMembers map[string]bool
+	listCalled      chan struct{}
+	deletedIDs      []string
+	deleteIDError   error
+	touchedIDs      []string
 }
 
 func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
@@ -32,19 +34,16 @@ func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := database.DB
-	database.DB = mock
 	t.Cleanup(func() {
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Error(err)
 		}
 		mock.Close()
-		database.DB = previous
 	})
 	mock.ExpectQuery("group_notification_preferences").WithArgs("group-1", "user-1").WillReturnRows(
 		pgxmock.NewRows([]string{"id", "username"}).AddRow("user-2", "bob"),
 	)
-	targets, err := (pgStore{}).GroupTargets(context.Background(), "group-1", "user-1")
+	targets, err := (pgStore{pool: mock}).GroupTargets(context.Background(), "group-1", "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,8 +52,74 @@ func TestGroupTargetsIncludeOnlyMembersWithNotificationsEnabled(t *testing.T) {
 	}
 }
 
-func (f *fakeStore) Upsert(_ context.Context, _ *Subscription) error { return nil }
+func TestListForGroupUsersRechecksCurrentMembership(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Error(err)
+		}
+		mock.Close()
+	})
+	mock.ExpectQuery("JOIN group_members").WithArgs("group-1", []string{"user-2"}).WillReturnRows(
+		pgxmock.NewRows([]string{"id", "user_id", "endpoint", "p256dh", "auth", "user_agent", "created_at"}),
+	)
+	subs, err := (pgStore{pool: mock}).ListForGroupUsers(context.Background(), "group-1", []string{"user-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 0 {
+		t.Fatalf("removed group member subscriptions = %v, want none", subs)
+	}
+}
+
+func (f *fakeStore) Upsert(_ context.Context, sub *Subscription, maxPerUser int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.subsByUser == nil {
+		f.subsByUser = map[string][]Subscription{}
+	}
+	subs := f.subsByUser[sub.UserID]
+	for i := range subs {
+		if subs[i].Endpoint == sub.Endpoint {
+			subs[i].P256DH = sub.P256DH
+			subs[i].Auth = sub.Auth
+			subs[i].UserAgent = sub.UserAgent
+			f.subsByUser[sub.UserID] = subs
+			return nil
+		}
+	}
+	if maxPerUser > 0 && len(subs) >= maxPerUser {
+		return ErrSubscriptionLimit
+	}
+	f.subsByUser[sub.UserID] = append(subs, *sub)
+	return nil
+}
+func (f *fakeStore) CountSubscriptionsByUser(_ context.Context, userID string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.subsByUser[userID]), nil
+}
+func (f *fakeStore) CountAllSubscriptions(_ context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var total int64
+	for _, subs := range f.subsByUser {
+		total += int64(len(subs))
+	}
+	return total, nil
+}
+func (f *fakeStore) TouchSubscription(_ context.Context, id string) error {
+	f.mu.Lock()
+	f.touchedIDs = append(f.touchedIDs, id)
+	f.mu.Unlock()
+	return nil
+}
 func (f *fakeStore) Delete(_ context.Context, userID, endpoint string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for i, s := range f.subsByUser[userID] {
 		if s.Endpoint == endpoint {
 			f.subsByUser[userID] = append(f.subsByUser[userID][:i], f.subsByUser[userID][i+1:]...)
@@ -63,13 +128,31 @@ func (f *fakeStore) Delete(_ context.Context, userID, endpoint string) error {
 	}
 	return ErrNoSubscription
 }
+func (f *fakeStore) DeleteAll(_ context.Context, userID string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	removed := int64(len(f.subsByUser[userID]))
+	delete(f.subsByUser, userID)
+	return removed, nil
+}
 func (f *fakeStore) ListForUser(_ context.Context, userID string) ([]Subscription, error) {
 	return f.subsByUser[userID], nil
 }
-func (f *fakeStore) ListForUsers(_ context.Context, userIDs []string) ([]Subscription, error) {
+func (f *fakeStore) ListForGroupUsers(_ context.Context, _ string, userIDs []string) ([]Subscription, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var out []Subscription
 	for _, id := range userIDs {
+		if f.deliveryMembers != nil && !f.deliveryMembers[id] {
+			continue
+		}
 		out = append(out, f.subsByUser[id]...)
+	}
+	if f.listCalled != nil {
+		select {
+		case f.listCalled <- struct{}{}:
+		default:
+		}
 	}
 	return out, nil
 }
@@ -141,6 +224,9 @@ func newTestService(store Store, deliver Deliverer) *Service {
 	keys, _ := GenerateKeyPair()
 	return NewService(Deps{Store: store, Deliver: deliver, Keys: keys, Config: &config.Config{VapidPublicKey: keys.PublicKeyBase64URL(), VapidPrivateKey: keys.PrivateKeyBase64URL()}, Logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))})
 }
+
+// newConfiguredService builds a service with an explicit configuration so tests
+// can exercise the delivery bounds (F-08). A nil cfg yields the defaults.
 
 func waitForSignal(ch <-chan struct{}, timeout time.Duration) bool {
 	select {
@@ -258,6 +344,35 @@ func TestNotifySkipsWhenNoTargets(t *testing.T) {
 	svc.NotifyNewChallenge(context.Background(), "g1", "u1", "photo-1")
 	if len(deliver.snapshot()) != 0 {
 		t.Fatal("delivery happened with no targets")
+	}
+}
+
+func TestDeliveryRechecksMembershipAfterEnqueue(t *testing.T) {
+	store := &fakeStore{
+		targets:         []NotificationTarget{{UserID: "u2"}},
+		groupName:       "Private group",
+		usernames:       map[string]string{"u1": "alice"},
+		subsByUser:      map[string][]Subscription{"u2": {{ID: "s1", UserID: "u2"}}},
+		deliveryMembers: map[string]bool{"u2": true},
+		listCalled:      make(chan struct{}, 1),
+	}
+	deliver := newFakeDeliverer()
+	svc := newTestService(store, deliver)
+
+	// Enqueue while u2 is a target, then revoke membership before a worker can
+	// resolve subscriptions. The delayed job must not disclose its payload.
+	svc.NotifyNewMessage(context.Background(), "g1", "u1", "secret")
+	store.mu.Lock()
+	store.deliveryMembers["u2"] = false
+	store.mu.Unlock()
+	svc.Start(context.Background(), 1)
+	defer svc.Stop()
+
+	if !waitForSignal(store.listCalled, time.Second) {
+		t.Fatal("worker did not recheck current group membership")
+	}
+	if got := len(deliver.snapshot()); got != 0 {
+		t.Fatalf("removed member received %d delayed deliveries", got)
 	}
 }
 

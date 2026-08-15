@@ -9,10 +9,11 @@ const mocks = vi.hoisted(() => ({
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    delete: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
-    default: { get: mocks.get, post: mocks.post, put: mocks.put },
+    default: { get: mocks.get, post: mocks.post, put: mocks.put, delete: mocks.delete },
 }));
 
 const user: User = {
@@ -37,62 +38,201 @@ beforeEach(() => {
     mocks.get.mockReset();
     mocks.post.mockReset();
     mocks.put.mockReset();
+    mocks.delete.mockReset();
+    mocks.get.mockImplementation((url: string) => {
+        if (url === '/group/notifications') return Promise.resolve({ data: { enabled: true } });
+        if (url === '/group/invites') return Promise.resolve({ data: [] });
+        if (url === '/group/members') return Promise.resolve({ data: [] });
+        return Promise.resolve({ data: {} });
+    });
     mocks.post.mockResolvedValue({ data: {} });
     mocks.put.mockResolvedValue({ data: { enabled: true } });
+    mocks.delete.mockResolvedValue({});
 });
 
 describe('SettingsModal', () => {
-    it('copies invite data and loads members', async () => {
+    it('creates an invite link (shown once) and lists invites without the token', async () => {
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
             value: { writeText: vi.fn().mockResolvedValue(undefined) },
         });
-        mocks.get.mockResolvedValueOnce({ data: { enabled: true } }).mockResolvedValueOnce({
-            data: [{ id: 'member-1', username: 'bob', avatar: 'avatar.png' }],
+        mocks.get.mockImplementation((url: string) => {
+            if (url === '/group/notifications') return Promise.resolve({ data: { enabled: true } });
+            if (url === '/group/invites') {
+                return Promise.resolve({
+                    data: [
+                        {
+                            id: 'inv-1',
+                            creator_user_id: 'u1',
+                            created_at: '2026-08-01T00:00:00Z',
+                            expires_at: '2026-08-08T00:00:00Z',
+                            revoked: null,
+                        },
+                        {
+                            id: 'inv-2',
+                            creator_user_id: 'u1',
+                            created_at: '2026-08-02T00:00:00Z',
+                            expires_at: '2026-08-09T00:00:00Z',
+                            revoked: '2026-08-03T00:00:00Z',
+                        },
+                    ],
+                });
+            }
+            if (url === '/group/members') return Promise.resolve({ data: [] });
+            return Promise.resolve({ data: {} });
         });
-        const onClose = vi.fn();
-        render(
+        mocks.post.mockImplementation((url: string) => {
+            if (url === '/group/invites') {
+                return Promise.resolve({
+                    data: {
+                        id: 'new-inv',
+                        group_id: 'group-1',
+                        token: 'secret-token',
+                        invite_url: '/group/join#invite=secret-token',
+                        created_at: '2026-08-05T00:00:00Z',
+                        expires_at: '2026-08-12T00:00:00Z',
+                    },
+                });
+            }
+            return Promise.resolve({ data: {} });
+        });
+        const view = render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
-                    <SettingsModal
-                        isOpen
-                        onClose={onClose}
-                        groupCode="ABC123"
-                        groupName="Friends"
-                        groupId="group-1"
-                        currentUserName="alice"
-                    />
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        expect(screen.getByDisplayValue(`${window.location.origin}/invite/ABC123?from=alice`)).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Personal settings' })).toHaveAttribute('href', '/settings');
+        // The invite list shows IDs/creators/dates/state but never the token.
+        expect(await screen.findByText('Active')).toBeInTheDocument();
+        expect(screen.getByText('Revoked')).toBeInTheDocument();
+        expect(screen.getByText(/inv-1 · by u1/)).toBeInTheDocument();
+        expect(screen.queryByText('secret-token')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+        expect(await screen.findByText('This invite link is shown only once. Copy and share it.')).toBeInTheDocument();
+        expect(
+            screen.getByDisplayValue(`${window.location.origin}/group/join#invite=secret-token`),
+        ).toBeInTheDocument();
+        expect(mocks.post).toHaveBeenCalledWith('/group/invites', { group_id: 'group-1' });
+
         fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+            `${window.location.origin}/group/join#invite=secret-token`,
+        );
         expect(await screen.findByText('Copied!')).toBeInTheDocument();
-        const membersToggle = screen.getByRole('button', { name: 'Group Members' });
-        expect(membersToggle).toHaveAttribute('aria-expanded', 'false');
-        fireEvent.click(membersToggle);
-        expect(membersToggle).toHaveAttribute('aria-expanded', 'true');
-        expect(await screen.findByText('bob')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-        expect(onClose).toHaveBeenCalled();
+
+        view.rerender(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen={false} onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        view.rerender(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        await waitFor(() => expect(screen.queryByLabelText('Invite link')).toBeNull());
     });
 
-    it('shows member load failures', async () => {
-        mocks.get
-            .mockResolvedValueOnce({ data: { enabled: true } })
-            .mockRejectedValueOnce(new Error('members unavailable'));
+    it('reports clipboard failures without claiming the link was copied', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: vi.fn().mockRejectedValue(new DOMException('blocked')) },
+        });
+        mocks.post.mockResolvedValue({
+            data: {
+                id: 'new-inv',
+                group_id: 'group-1',
+                token: 'secret-token',
+                invite_url: '/group/join#invite=secret-token',
+                created_at: '2026-08-05T00:00:00Z',
+                expires_at: '2026-08-12T00:00:00Z',
+            },
+        });
         render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
-                    <SettingsModal
-                        isOpen
-                        onClose={vi.fn()}
-                        groupCode="ABC"
-                        groupName="Group"
-                        groupId="g"
-                        currentUserName="bob"
-                    />
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Copy' }));
+        expect(
+            await screen.findByText('Unable to copy the invite. Select and copy the link manually.'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Copied!')).toBeNull();
+    });
+
+    it('revokes an invite and refreshes the list', async () => {
+        mocks.get.mockImplementation((url: string) => {
+            if (url === '/group/notifications') return Promise.resolve({ data: { enabled: true } });
+            if (url === '/group/invites') {
+                return Promise.resolve({
+                    data: [
+                        {
+                            id: 'inv-1',
+                            creator_user_id: 'u1',
+                            created_at: '2026-08-01T00:00:00Z',
+                            expires_at: '2026-08-08T00:00:00Z',
+                            revoked: null,
+                        },
+                    ],
+                });
+            }
+            if (url === '/group/members') return Promise.resolve({ data: [] });
+            return Promise.resolve({ data: {} });
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
+        await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('/group/invites/inv-1'));
+    });
+
+    it('loads group members', async () => {
+        mocks.get.mockImplementation((url: string) => {
+            if (url === '/group/notifications') return Promise.resolve({ data: { enabled: true } });
+            if (url === '/group/invites') return Promise.resolve({ data: [] });
+            if (url.startsWith('/group/members')) {
+                return Promise.resolve({
+                    data: [{ id: 'member-1', username: 'bob', avatar: 'avatar.png' }],
+                });
+            }
+            return Promise.resolve({ data: {} });
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Group" groupId="g" />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+        fireEvent.click(screen.getByText('Group Members'));
+        expect(await screen.findByText('bob')).toBeInTheDocument();
+    });
+
+    it('reports member load failures', async () => {
+        mocks.get.mockImplementation((url: string) => {
+            if (url === '/group/notifications') return Promise.resolve({ data: { enabled: true } });
+            if (url === '/group/invites') return Promise.resolve({ data: [] });
+            if (url.startsWith('/group/members')) return Promise.reject(new Error('members unavailable'));
+            return Promise.resolve({ data: {} });
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <MemoryRouter>
+                    <SettingsModal isOpen onClose={vi.fn()} groupName="Group" groupId="g" />
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
@@ -101,7 +241,6 @@ describe('SettingsModal', () => {
     });
 
     it('updates the group photo and notification preference', async () => {
-        mocks.get.mockResolvedValueOnce({ data: { enabled: true } });
         const onGroupPhotoUpdated = vi.fn();
         render(
             <AuthContext.Provider value={authValue}>
@@ -109,10 +248,8 @@ describe('SettingsModal', () => {
                     <SettingsModal
                         isOpen
                         onClose={vi.fn()}
-                        groupCode="ABC"
                         groupName="Group"
                         groupId="g"
-                        currentUserName="bob"
                         onGroupPhotoUpdated={onGroupPhotoUpdated}
                     />
                 </MemoryRouter>

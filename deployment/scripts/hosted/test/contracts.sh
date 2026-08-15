@@ -11,6 +11,9 @@ HEALTH="$ROOT/deployment/scripts/hosted/health-check.sh"
 COMPOSE="$ROOT/deployment/compose.production.yaml"
 HOSTED="$ROOT/deployment/compose.hosted.yaml"
 CADDY="$ROOT/deployment/caddy/Caddyfile"
+FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
+BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
+RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
 
 fail() {
@@ -36,10 +39,11 @@ assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
 assert_contains "$FORCED" '[ "$#" -eq 4 ]'
 assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
+assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
+assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
 
-# Both workflows must match the forced command's arity. PRs #56 and #57 extended
-# this command string with VAPID material while forced-command.sh was untouched,
-# so every development deployment was rejected with exit 126.
+# Both workflows must match the forced command's arity. This protocol is
+# provisioned root-owned on the host and must stay compatible between releases.
 assert_forced_command_arity() {
     workflow=$1
     command_string=$(sed -n 's/.*"\(deploy \$BACKEND \$WEB \$GITHUB_SHA\)".*/\1/p' "$workflow")
@@ -69,10 +73,17 @@ assert_contains "$DEPLOY" 'github.com/Anko59/GeoguessMe/.github/workflows/releas
 assert_contains "$DEPLOY" '--annotations "revision=$revision"'
 assert_contains "$ROOT/.github/workflows/deploy.yml" '-a "revision=$GITHUB_SHA"'
 assert_contains "$ROOT/.github/workflows/release.yml" '-a "revision=$GITHUB_SHA"'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'cosign-release: v2.5.3'
-assert_contains "$ROOT/.github/workflows/release.yml" 'cosign-release: v2.5.3'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'cosign-release: v2.6.5'
+assert_contains "$ROOT/.github/workflows/release.yml" 'cosign-release: v2.6.5'
+assert_contains "$ROOT/.github/workflows/deploy.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
+assert_contains "$ROOT/.github/workflows/release.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAGE"'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
+assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
-assert_contains "$ROOT/.github/workflows/release.yml" 'tag=v0.2.0'
+assert_contains "$ROOT/.release-version" '0.3.0'
+assert_contains "$ROOT/.github/workflows/release.yml" 'release_version=$(tr -d'
+assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
 assert_contains "$ROOT/.github/workflows/release.yml" 'main_tree=$(git rev-parse "$GITHUB_SHA^{tree}")'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign verify'
@@ -120,10 +131,15 @@ if [ "$(env_keys "$ROOT/deployment/env/dev.env.example")" != \
     fail 'dev.env.example and production.env.example must declare the same keys'
 fi
 assert_contains "$SECRET_GENERATOR" 'RESTIC_REPOSITORY=s3:https://%s.r2.cloudflarestorage.com/geoguessme-database-backups/%s'
-assert_contains "$ROOT/Makefile" 'generate-hosted-secret.sh |'
+# The secrets-generate recipe lives in a responsibility fragment, so search
+# the public Makefile and all fragments.
+if ! cat "$ROOT"/Makefile "$ROOT"/tools/make/*.mk | grep -Fq 'generate-hosted-secret.sh |'; then
+    fail "$ROOT/Makefile does not contain: generate-hosted-secret.sh |"
+fi
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
 assert_contains "$HEALTH" 'for service in postgres backend web'
 assert_contains "$HEALTH" '.State.Health.Status'
+assert_contains "$HEALTH" 'verify-deployment-hashes.sh" "$environment"'
 assert_contains "$COMMON" 'BACKEND_IMAGE="$backend"'
 
 # Secret generation fills every external credential, uses an isolated backup
@@ -173,6 +189,25 @@ age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMM
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
+assert_contains "$FRONTEND_DOCKERFILE" 'caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4'
+assert_contains "$FRONTEND_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
+assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
+assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
+assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
+assert_contains "$RESTIC_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
+assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="restic/restic:0.19.1"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
+assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
+assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
+assert_contains "$BACKEND_DOCKERFILE" 'USER appuser:appuser'
+
+# Terraform plans may contain sensitive values. Re-running the target must
+# repair an existing directory's permissions, and a successful apply removes
+# the exact reviewed plan.
+assert_contains "$ROOT/tools/make/deployment.mk" 'install -d -m 0700 infra/terraform/.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'chmod 0600 infra/terraform/.tfplan/geoguessme.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'apply .tfplan/geoguessme.tfplan'
+assert_contains "$ROOT/tools/make/deployment.mk" 'rm -f infra/terraform/.tfplan/geoguessme.tfplan'
 
 # Reject malformed image input before touching Docker or secrets.
 if "$DEPLOY" dev latest latest 0123456789012345678901234567890123456789 >/dev/null 2>&1; then
@@ -221,6 +256,97 @@ fi
 # Secrets must never be traced or dumped by operator scripts.
 if grep -En 'set -x|printenv|env[[:space:]]*$' "$ROOT"/deployment/scripts/hosted/*.sh; then
     fail 'operator scripts contain a secret-dumping primitive'
+fi
+
+# The runtime hash check compares the installed root-owned host definitions
+# (bin scripts, config compose files) against a root-owned manifest and must
+# fail when any installed file was modified out-of-band. A deploy-writable
+# release copy must not be able to change the expected baseline.
+VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
+hash_root=$(mktemp -d)
+trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
+# The environment's app revision may differ from the shared host-runtime
+# revision; integrity must use the latter for both environments.
+app_revision=$(printf 'a%.0s' $(seq 1 40))
+runtime_revision=$(printf 'b%.0s' $(seq 1 40))
+mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
+    "$hash_root/app/bin" "$hash_root/app/config" \
+    "$hash_root/state/releases/dev"
+printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
+printf '%s\n' "$runtime_revision" >"$hash_root/app/config/runtime-revision"
+for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+    cp "$ROOT/deployment/scripts/hosted/$script.sh" \
+        "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted/$script.sh"
+    cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
+done
+cp "$ROOT/deployment/compose.production.yaml" \
+    "$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
+cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.production.yaml"
+cp "$ROOT/deployment/compose.hosted.yaml" \
+    "$hash_root/app/releases/$runtime_revision/deployment/compose.hosted.yaml"
+cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
+{
+    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+        sha256sum "$hash_root/app/bin/$script.sh" |
+            awk -v path="bin/$script.sh" '{print $1 "  " path}'
+    done
+    sha256sum "$hash_root/app/config/compose.production.yaml" |
+        awk '{print $1 "  config/compose.production.yaml"}'
+    sha256sum "$hash_root/app/config/compose.hosted.yaml" |
+        awk '{print $1 "  config/compose.hosted.yaml"}'
+} >"$hash_root/app/config/runtime-hashes"
+chmod 0444 "$hash_root/app/config/runtime-hashes"
+run_verify() {
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+        GEOGUESSME_STATE_ROOT="$hash_root/state" \
+        GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+        GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+        "$VERIFY" dev
+}
+if ! run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check rejected matching host definitions'
+fi
+printf '\n# deploy-writable release copy must not alter the expected baseline\n' \
+    >>"$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
+if ! run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check trusted a mutable release copy as its baseline'
+fi
+if SSH_ORIGINAL_COMMAND='verify production' \
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+    GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$FORCED" dev >/dev/null 2>&1; then
+    fail 'dev forced command accepted a production integrity request'
+fi
+if ! SSH_ORIGINAL_COMMAND='verify dev' \
+    GEOGUESSME_APP_ROOT="$hash_root/app" \
+    GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
+    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$FORCED" dev >/dev/null 2>&1; then
+    fail 'dev forced command rejected its own integrity request'
+fi
+printf '\n# tampered verifier\n' >>"$hash_root/app/bin/verify-deployment-hashes.sh"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a tampered installed verifier'
+fi
+cp "$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh" \
+    "$hash_root/app/bin/verify-deployment-hashes.sh"
+printf '\n# tampered out-of-band\n' >>"$hash_root/app/config/compose.production.yaml"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a tampered host definition'
+fi
+cp "$ROOT/deployment/compose.production.yaml" \
+    "$hash_root/app/config/compose.production.yaml"
+printf '%s\n' invalid >"$hash_root/app/config/runtime-revision"
+if run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check accepted an invalid root-owned runtime revision'
+fi
+if GEOGUESSME_APP_ROOT="$hash_root/app" GEOGUESSME_STATE_ROOT="$hash_root/state" \
+    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
+    "$VERIFY" >/dev/null 2>&1; then
+    fail 'runtime hash check accepted a missing environment'
 fi
 
 printf 'hosted deployment contracts passed\n'

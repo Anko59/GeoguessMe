@@ -21,7 +21,7 @@ describe('GroupsList', () => {
     it('renders empty and populated groups, including a retry', async () => {
         mocks.get
             .mockRejectedValueOnce(new Error('temporary failure'))
-            .mockResolvedValueOnce({ data: [{ id: 'group-1', name: 'Friends', code: 'ABC123' }] })
+            .mockResolvedValueOnce({ data: [{ id: 'group-1', name: 'Friends' }] })
             .mockResolvedValue({ data: [] });
         render(
             <MemoryRouter>
@@ -31,7 +31,6 @@ describe('GroupsList', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load groups');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByText('Friends')).toBeInTheDocument();
-        expect(screen.getByText('#ABC123')).toBeInTheDocument();
         await waitFor(() => {
             const card = screen.getByRole('link', { name: /Friends/ });
             expect(card.querySelector('.group-icon')).toHaveAttribute('src', 'blob:group-photo');

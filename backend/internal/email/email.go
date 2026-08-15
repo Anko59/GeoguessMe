@@ -57,12 +57,15 @@ func (s SMTP) Send(to, subject, body string) error {
 	if s.Username != "" && mode == ModeOff {
 		return errors.New("email: authenticated SMTP requires TLS (starttls or tls)")
 	}
-	if err := validateAddress(s.From); err != nil {
+	from, err := canonicalAddress(s.From)
+	if err != nil {
 		return fmt.Errorf("email: sender: %w", err)
 	}
-	if err := validateAddress(to); err != nil {
+	recipient, err := canonicalAddress(to)
+	if err != nil {
 		return fmt.Errorf("email: recipient: %w", err)
 	}
+	recipientHeader := (&mail.Address{Address: recipient}).String()
 
 	client, err := s.connect()
 	if err != nil {
@@ -78,17 +81,17 @@ func (s SMTP) Send(to, subject, body string) error {
 			return fmt.Errorf("email: auth: %w", err)
 		}
 	}
-	if err := client.Mail(s.From); err != nil {
+	if err := client.Mail(from); err != nil {
 		return fmt.Errorf("email: MAIL FROM: %w", err)
 	}
-	if err := client.Rcpt(to); err != nil {
+	if err := client.Rcpt(recipient); err != nil {
 		return fmt.Errorf("email: RCPT TO: %w", err)
 	}
 	writer, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("email: DATA: %w", err)
 	}
-	if _, err := writer.Write(s.message(to, subject, body)); err != nil {
+	if _, err := writer.Write(s.message(from, recipientHeader, subject, body)); err != nil {
 		_ = writer.Close()
 		return fmt.Errorf("email: write body: %w", err)
 	}
@@ -190,14 +193,17 @@ func (c deadlineConn) Write(b []byte) (int, error) {
 
 // message assembles a valid MIME message with UTF-8 capable headers and a
 // base64-encoded utf-8 body so non-ASCII content survives every hop.
-func (s SMTP) message(to, subject, body string) []byte {
+func (s SMTP) message(from, recipient, subject, body string) []byte {
 	var builder strings.Builder
 	builder.WriteString("MIME-Version: 1.0\r\n")
-	builder.WriteString("From: " + s.From + "\r\n")
-	builder.WriteString("To: " + to + "\r\n")
+	builder.WriteString("From: " + from + "\r\n")
+	// The recipient is canonicalized before reaching this method. Include it
+	// in the MIME header as well as the SMTP envelope so transactional mail is
+	// recognizable to recipient systems and downstream filtering.
+	builder.WriteString("To: " + recipient + "\r\n")
 	builder.WriteString("Subject: " + mime.QEncoding.Encode("utf-8", subject) + "\r\n")
 	builder.WriteString("Date: " + time.Now().UTC().Format(time.RFC1123Z) + "\r\n")
-	builder.WriteString("Message-ID: " + messageID(s.From) + "\r\n")
+	builder.WriteString("Message-ID: " + messageID(from) + "\r\n")
 	builder.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
 	builder.WriteString("Content-Transfer-Encoding: base64\r\n")
 	builder.WriteString("\r\n")
@@ -221,15 +227,18 @@ func messageID(from string) string {
 	return fmt.Sprintf("<%d.geoguessme@%s>", time.Now().UnixNano(), domain)
 }
 
-func validateAddress(address string) error {
+func canonicalAddress(address string) (string, error) {
 	parsed, err := mail.ParseAddress(address)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !strings.Contains(parsed.Address, "@") {
-		return errors.New("invalid email address")
+		return "", errors.New("invalid email address")
 	}
-	return nil
+	// Only the parsed mailbox is allowed into SMTP commands and MIME headers.
+	// In particular, discard any display name or other original input so CR/LF
+	// and header syntax cannot survive into the assembled message.
+	return parsed.Address, nil
 }
 
 func normalizeMode(mode string) string {

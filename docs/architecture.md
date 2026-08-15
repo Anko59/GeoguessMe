@@ -5,7 +5,9 @@
 GeoGuessMe is a client-server web application with a Go HTTP/WebSocket backend
 and a React/TypeScript/Vite frontend served by Caddy. All media is stored in a
 private S3-compatible bucket and proxied through the authenticated backend —
-browsers never see S3 URLs directly.
+browsers never see S3 URLs directly. Backend wiring is centralized in the
+composition root `backend/app.go`: every handler reaches its dependencies
+through the `App` type, and `main.go` owns process lifecycle.
 
 ## Components
 
@@ -50,16 +52,19 @@ browsers never see S3 URLs directly.
 
 ### HTTP API
 
-All public endpoints are under `/api/v1`. Middleware stack (outer to inner):
+All public endpoints are under `/api/v1`. The middleware chain is applied
+outermost to innermost in `App.routes()` (`backend/app.go`):
 
-- `RequestID` — assigns or propagates `X-Request-ID`
-- `Recover` — catches panics, logs, returns 500
-- `RequestLog` — logs each request with status, method, path, duration
-- `CORS` — checks `Origin` against `ALLOWED_ORIGINS`
 - `SecurityHeaders` — sets `X-Frame-Options`, `CSP`, `Referrer-Policy`
-- `RateLimit` (select auth routes) — per-identity rate limiting
-- `AuthMiddleware` (protected routes) — validates Bearer token, checks
-  `auth_version` and account activity against the database
+- `CORS` — checks `Origin` against `ALLOWED_ORIGINS`
+- `RequestLog` — logs each request with status, method, path, duration
+- `Recover` — catches panics, logs, returns 500
+- `RequestID` — assigns or propagates `X-Request-ID`
+
+At registration time, selected handlers are additionally wrapped by `RateLimit`
+(per-identity rate limiting on auth routes) and `AuthMiddleware` (protected
+routes — validates the Bearer token, then checks account activity and
+`auth_version` against the database).
 
 ### WebSocket chat
 

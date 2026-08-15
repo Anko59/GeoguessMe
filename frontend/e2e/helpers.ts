@@ -1,18 +1,48 @@
+import { randomBytes } from 'node:crypto';
 import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
+
+function secureSuffix(): string {
+    return randomBytes(3).toString('hex');
+}
 
 /** Generate a unique username for test isolation. */
 export function uniqueUsername(): string {
-    return `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    return `user_${Date.now()}_${secureSuffix()}`;
 }
 
 /** Generate a unique email for test isolation. */
 export function uniqueEmail(): string {
-    return `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@test.geoguessme`;
+    return `e2e_${Date.now()}_${secureSuffix()}@test.geoguessme`;
 }
 
 /** Generate a unique group name for test isolation. */
 export function uniqueGroup(): string {
     return `TestGroup_${Date.now()}`;
+}
+
+/**
+ * Create an invite in the open group-settings dialog and return the full
+ * invite URL (e.g. `http://localhost:8080/group/join#invite=TOKEN`). The raw
+ * token is only ever carried in the URL fragment; callers pass this URL to
+ * joiner pages, never the bare token.
+ */
+export async function createInviteFromSettings(page: Page): Promise<string> {
+    const settings = page.getByRole('dialog');
+    await settings.getByTestId('create-invite-btn').click();
+    const urlInput = settings.getByTestId('invite-url');
+    await urlInput.waitFor();
+    return await urlInput.inputValue();
+}
+
+/**
+ * Have an already-authenticated page join a group through an invite link.
+ * Navigating with the fragment lets useInviteFragmentCapture stash the token
+ * in sessionStorage; the join button appears once the preview resolves.
+ */
+export async function joinGroupViaInvite(page: Page, inviteUrl: string, groupId: string): Promise<void> {
+    await page.goto(inviteUrl);
+    await page.getByTestId('join-btn').click();
+    await page.waitForURL(new RegExp(`/group/${groupId}$`));
 }
 
 /** Credentials bag returned after signup or login. */
@@ -203,9 +233,9 @@ export async function installDeterministicGeolocation(context: BrowserContext): 
  * text email. The application sends plain-text (not HTML) messages, so the
  * body is in the `Text` field and the URL is the entire body content.
  */
-export async function getMailpitLink(email: string, pathFragment: string): Promise<string> {
+export async function getMailpitLink(subject: string, pathFragment: string): Promise<string> {
     const mailpitHost = process.env.MAILPIT_BASE_URL || 'http://localhost:8025';
-    const query = encodeURIComponent(`to:${email}`);
+    const query = encodeURIComponent(`subject:"${subject}"`);
 
     let link: string | null = null;
     await expect

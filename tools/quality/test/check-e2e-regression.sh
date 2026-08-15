@@ -4,6 +4,8 @@ set -euo pipefail
 PASS=0
 FAIL=0
 
+bash "$(cd "$(dirname "$0")/.." && pwd)/e2e/arguments_test.sh"
+
 # ── Stale-artifact regression ────────────────────────────────────────────────
 # The E2E runner must clear test-results and playwright-report before each
 # invocation so no stale output from a prior run is retained.
@@ -67,8 +69,10 @@ if ! grep -q 'GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile' "$SCRIPT"; then
     FAIL=$((FAIL + 1))
     project_fail=1
 fi
-MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)/Makefile"
-if ! grep -A 1 '^test-e2e-pr:' "$MAKEFILE" |
+# Search the public Makefile and every responsibility fragment.
+MAKEFILE="$(cd "$(dirname "$0")/../../.." && pwd)"
+MAKEFILES=("$MAKEFILE/Makefile" "$MAKEFILE"/tools/make/*.mk)
+if ! grep -A 1 '^test-e2e-pr:' "${MAKEFILES[@]}" |
     grep -q 'GEOGUESSME_E2E_PROJECTS=desktop'; then
     echo "FAIL: project-selection - PR target does not select Chromium desktop"
     FAIL=$((FAIL + 1))
@@ -76,6 +80,14 @@ if ! grep -A 1 '^test-e2e-pr:' "$MAKEFILE" |
 fi
 if [ "$project_fail" -eq 0 ]; then
     echo "PASS: project-selection"
+    PASS=$((PASS + 1))
+fi
+
+if ! grep -q 'GEOGUESSME_E2E_SHARD' "$SCRIPT"; then
+    echo "FAIL: project-selection - runner does not forward an isolated shard"
+    FAIL=$((FAIL + 1))
+else
+    echo "PASS: shard-selection"
     PASS=$((PASS + 1))
 fi
 

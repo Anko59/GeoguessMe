@@ -1,7 +1,9 @@
 import { expect, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import {
+    createInviteFromSettings,
     installDeterministicCamera,
     installDeterministicGeolocation,
+    joinGroupViaInvite,
     newAuthContext,
     signupViaUI,
     uniqueGroup,
@@ -38,16 +40,12 @@ export async function createScenario(browser: Browser, contextOptions: BrowserCo
     await uploader.waitForURL(/\/group\/[0-9a-f-]{36}$/);
     const groupId = uploader.url().split('/group/')[1];
     await uploader.getByRole('button', { name: 'Open group settings' }).click();
-    const settings = uploader.getByRole('dialog');
-    const groupCode = (await settings.locator('.group-code').textContent())?.trim() ?? '';
-    await settings.getByRole('button', { name: 'Close settings' }).click();
+    const inviteUrl = await createInviteFromSettings(uploader);
+    await uploader.getByRole('button', { name: 'Close settings' }).click();
 
     const guesser = await guesserContext.newPage();
     await signupViaUI(guesser);
-    await guesser.goto('/group/join');
-    await guesser.getByPlaceholder('6-character code').fill(groupCode);
-    await guesser.locator('form.join-form').getByRole('button', { name: 'Join Group' }).click();
-    await guesser.waitForURL(/\/group\//);
+    await joinGroupViaInvite(guesser, inviteUrl, groupId);
 
     await uploader.goto('/group/' + groupId);
     await guesser.goto('/group/' + groupId);
