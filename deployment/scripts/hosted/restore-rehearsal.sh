@@ -29,7 +29,7 @@ gzip -t "$dump"
 docker run -d --name "$name" \
     -e POSTGRES_USER=geoguessme -e POSTGRES_PASSWORD=rehearsal \
     -e POSTGRES_DB=geoguessme \
-    postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f >/dev/null
+    postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 >/dev/null
 attempt=0
 until docker exec "$name" pg_isready -U geoguessme -d geoguessme >/dev/null 2>&1; do
     attempt=$((attempt + 1))
