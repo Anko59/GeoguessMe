@@ -38,6 +38,16 @@ intentionally limited to throwaway QA mailboxes; it must not be used for real
 user mail. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
+For hosted mail providers that do not deliver to disposable domains, the gateway
+also supports an Access-protected HTTP mailbox relay with
+`QA_MAILBOX_PROVIDER=cloudflare`, `QA_MAILBOX_API_URL`, and
+`QA_MAILBOX_ADDRESS`. The relay address must be dedicated to the QA run and the
+relay must retain only short-lived test messages. Access credentials are passed
+to the mailbox gateway from the existing short-lived QA Access session; they are
+never placed in the prompt, report, or mailbox output. A hosted run must not
+claim email coverage until `mailbox_search`, `mailbox_read`, and
+`mailbox_open_link` succeed through the configured provider.
+
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
 generated password inside the browser provider. Full and nightly runs assign
@@ -98,8 +108,9 @@ overridden with the corresponding `QA_ACCOUNT_*_USERNAME` variables. When the
 password is absent, `qa_account_login` provisions fresh email-free QA accounts
 through the visible signup flow and retains their generated credentials only in
 the browser provider. In both modes, credentials are never placed in the prompt,
-report, or CI. If account provisioning or Mail.tm is unavailable, the affected
-journey is reported as blocked rather than silently treated as passed.
+report, or CI. If account provisioning or the configured mailbox provider is
+unavailable, the affected journey is reported as blocked rather than silently
+treated as passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised
