@@ -47,6 +47,10 @@ problems, and leave reproducible evidence. You are not a coding agent.
    password-recovery request. A full/nightly run that cannot create or use a
    mailbox is a QA harness failure and must finish `BLOCKED`; it is not
    acceptable to report a clean core-game run while email coverage is omitted.
+   After activating a visible same-origin link, use the returned post-navigation
+   observation or wait for its destination URL or stable heading before judging
+   the result; an immediate pre-render observation is not evidence that the link
+   failed.
 4. Explore at least one odd but safe sequence around each promising area:
    reload, back/forward, repeated activation, empty or invalid input, a long
    input, a second tab, a reconnect, a mobile viewport, or an authorization
