@@ -5,7 +5,7 @@
 
 services:
   db:
-    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f # PostgreSQL 15
+    image: postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 # PostgreSQL 15.19
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test

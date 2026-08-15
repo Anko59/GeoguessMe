@@ -26,7 +26,7 @@ clean-build: ## Build production images from scratch without any layer cache.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
-AUDIT_IMAGES ?= postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f \
+AUDIT_IMAGES ?= postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 \
 	cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
