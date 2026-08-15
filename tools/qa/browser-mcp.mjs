@@ -219,6 +219,7 @@ async function newSession(args) {
   const session = { context, tabs: new Map(), activeTab: tabId };
   session.tabs.set(tabId, attachPage(page, tabId));
   sessions.set(sessionId, session);
+  coverage.viewportObserved(args.width || 1440, args.height || 900);
   return { session_id: sessionId, tab_id: tabId, viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) };
 }
 
