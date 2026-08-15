@@ -65,6 +65,7 @@ func (s SMTP) Send(to, subject, body string) error {
 	if err != nil {
 		return fmt.Errorf("email: recipient: %w", err)
 	}
+	recipientHeader := (&mail.Address{Address: recipient}).String()
 
 	client, err := s.connect()
 	if err != nil {
@@ -90,7 +91,7 @@ func (s SMTP) Send(to, subject, body string) error {
 	if err != nil {
 		return fmt.Errorf("email: DATA: %w", err)
 	}
-	if _, err := writer.Write(s.message(from, subject, body)); err != nil {
+	if _, err := writer.Write(s.message(from, recipientHeader, subject, body)); err != nil {
 		_ = writer.Close()
 		return fmt.Errorf("email: write body: %w", err)
 	}
@@ -192,14 +193,14 @@ func (c deadlineConn) Write(b []byte) (int, error) {
 
 // message assembles a valid MIME message with UTF-8 capable headers and a
 // base64-encoded utf-8 body so non-ASCII content survives every hop.
-func (s SMTP) message(from, subject, body string) []byte {
+func (s SMTP) message(from, recipient, subject, body string) []byte {
 	var builder strings.Builder
 	builder.WriteString("MIME-Version: 1.0\r\n")
 	builder.WriteString("From: " + from + "\r\n")
-	// Delivery uses the validated SMTP envelope recipient. Do not repeat a
-	// user-controlled address in message content: envelope-only delivery is
-	// valid SMTP and this standard group destination remains safe to forward.
-	builder.WriteString("To: undisclosed-recipients:;\r\n")
+	// The recipient is canonicalized before reaching this method. Include it
+	// in the MIME header as well as the SMTP envelope so transactional mail is
+	// recognizable to recipient systems and downstream filtering.
+	builder.WriteString("To: " + recipient + "\r\n")
 	builder.WriteString("Subject: " + mime.QEncoding.Encode("utf-8", subject) + "\r\n")
 	builder.WriteString("Date: " + time.Now().UTC().Format(time.RFC1123Z) + "\r\n")
 	builder.WriteString("Message-ID: " + messageID(from) + "\r\n")
