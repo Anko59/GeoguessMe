@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
 
 build_e2e_test_args() {
-    if [ "$#" -ne 5 ]; then
-        echo "build_e2e_test_args requires output, projects, shard, spec, and mode" >&2
+    if [ "$#" -ne 4 ]; then
+        echo "build_e2e_test_args requires projects, shard, spec, and mode" >&2
         return 2
     fi
 
-    local output_name=$1
-    local projects=$2
-    local shard=$3
-    local spec=$4
-    local mode=$5
+    local projects=$1
+    local shard=$2
+    local spec=$3
+    local mode=$4
     local project
     local -a selected_projects
-    # shellcheck disable=SC2178 # The nameref intentionally points to an array.
-    local -n output=$output_name
 
-    output=(test)
+    E2E_TEST_ARGS=(test)
     IFS=',' read -r -a selected_projects <<<"$projects"
     for project in "${selected_projects[@]}"; do
         case "$project" in
-            desktop | firefox | mobile) output+=("--project=$project") ;;
+            desktop | firefox | mobile) E2E_TEST_ARGS+=("--project=$project") ;;
             *)
                 echo "unsupported Playwright project: $project" >&2
                 return 2
@@ -34,7 +31,7 @@ build_e2e_test_args() {
             echo "GEOGUESSME_E2E_SHARD must be N/M with 1 <= N <= M" >&2
             return 2
         fi
-        output+=("--shard=$shard")
+        E2E_TEST_ARGS+=("--shard=$shard")
     fi
 
     case "$mode" in
@@ -44,7 +41,7 @@ build_e2e_test_args() {
                 echo "Playwright UI mode cannot be combined with sharding" >&2
                 return 2
             fi
-            output+=(--ui)
+            E2E_TEST_ARGS+=(--ui)
             ;;
         *)
             echo "unsupported E2E runner argument: $mode" >&2
@@ -53,6 +50,6 @@ build_e2e_test_args() {
     esac
 
     if [ -n "$spec" ]; then
-        output+=("$spec")
+        E2E_TEST_ARGS+=("$spec")
     fi
 }

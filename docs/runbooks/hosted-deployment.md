@@ -91,6 +91,27 @@ make secrets-generate ENV=dev RECIPIENT=age1...
 make secrets-generate ENV=production RECIPIENT=age1...
 ```
 
+Generate the shared identity secret once for both host age recipients. Use
+independent Keycloak client secrets for dev and production, provider credentials
+created for `auth.geoguessme.com`, and the Apple Service ID's signed
+client-secret JWT:
+
+```text
+export PRODUCTION_OIDC_CLIENT_SECRET=...
+export DEV_OIDC_CLIENT_SECRET=...
+export GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=...
+export GITHUB_OAUTH_CLIENT_ID=... GITHUB_OAUTH_CLIENT_SECRET=...
+export APPLE_OAUTH_CLIENT_ID=... APPLE_OAUTH_CLIENT_SECRET=...
+make identity-secrets-generate RECIPIENT=age1...,age1...
+```
+
+The production and dev `OAUTH2_PROXY_CLIENT_SECRET` values must respectively
+match the two Keycloak client secrets above. Commit only the three encrypted
+dotenv files. Follow the [social-auth rollout runbook](social-auth-rollout.md)
+before enabling OIDC; it defines the legacy read-only migration phase and the
+provider-specific checks. Apple's JWT expires and must be replaced before its
+configured expiry without regenerating the other identity secrets.
+
 Both environments set `APP_ENV=production`. The backend disables Push when all
 three VAPID variables are absent, but rejects a partial keypair or invalid
 contact subject. Store each configured environment's pair outside the

@@ -1,0 +1,70 @@
+:root {
+    --pf-v5-global--primary-color--100: #0077b6;
+    --pf-v5-global--primary-color--200: #023e8a;
+    --pf-v5-global--link--Color: #006ba3;
+}
+
+body,
+.login-pf body {
+    background:
+        radial-gradient(circle at 85% 5%, rgb(72 202 228 / 28%), transparent 32rem),
+        linear-gradient(145deg, #f6f8fc, #eaf7fb);
+    color: #111a4d;
+}
+
+.login-pf-page .card-pf,
+.pf-v5-c-login__main {
+    border: 1px solid rgb(255 255 255 / 90%);
+    border-radius: 24px;
+    box-shadow: 0 24px 70px rgb(17 26 77 / 16%);
+}
+
+#kc-header-wrapper {
+    color: #111a4d;
+    font-weight: 850;
+    letter-spacing: -0.04em;
+    text-transform: none;
+}
+
+#kc-header-wrapper::before {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #0077b6;
+    content: '🌍';
+    font-size: 3rem;
+}
+
+.pf-v5-c-button.pf-m-primary,
+#kc-login {
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0077b6, #023e8a);
+    font-weight: 750;
+}
+
+.kc-social-item,
+.pf-v5-c-button.pf-m-control {
+    border-radius: 14px;
+}
+
+#kc-social-providers img,
+#kc-social-providers svg,
+.kc-social-provider-logo {
+    width: 1.25rem;
+    max-width: 1.25rem;
+    height: 1.25rem;
+    max-height: 1.25rem;
+    flex: 0 0 1.25rem;
+    object-fit: contain;
+}
+
+#social-apple svg {
+    display: none;
+}
+
+#social-apple::before {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: 0 0 1.25rem;
+    background: url('../img/apple.svg') center / contain no-repeat;
+    content: '';
+}

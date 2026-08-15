@@ -18,6 +18,21 @@ database and media data across make down and make restart. Each make dev rebuild
 renews the frontend's anonymous dependency volume so package-lock changes are
 available to Vite without deleting persistent application data.
 
+To launch the complete identity path instead, use:
+
+```text
+make dev-social
+```
+
+This adds local Keycloak, its separate PostgreSQL database, and OAuth2 Proxy.
+Open `http://geoguessme.localhost:5173`; Keycloak is at
+`http://auth.geoguessme.localhost:8083`. The imported realm displays Google,
+Apple, and GitHub with placeholder provider credentials, so provider buttons are
+visually testable while a local Keycloak user exercises the complete app
+signup/login flow. Normal `/login` and `/signup` contain no application password
+fields in this mode. `make dev-social-down` stops the stack but keeps the named
+application and identity volumes.
+
 ## Useful targets
 
 ```text
@@ -26,6 +41,8 @@ make logs
 make logs-backend
 make logs-frontend
 make restart
+make dev-social
+make dev-social-down
 make down
 make format
 make quality

@@ -19,6 +19,7 @@ esac
 : "${BACKUP_ACCESS_KEY_ID:?BACKUP_ACCESS_KEY_ID is required}"
 : "${BACKUP_SECRET_ACCESS_KEY:?BACKUP_SECRET_ACCESS_KEY is required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+: "${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET is required for the selected GeoGuessMe client}"
 # Web Push keys are supplied rather than minted here because they must stay
 # stable: rotating them invalidates every existing browser subscription. Both
 # hosted templates set APP_ENV=production, so the backend refuses to start
@@ -41,6 +42,7 @@ postgres_password=$(random_hex 32)
 jwt_secret=$(random_base64 48)
 metrics_token=$(random_hex 32)
 restic_password=$(random_base64 48)
+oauth_cookie_secret=$(random_base64 32)
 template="deployment/env/$environment.env.example"
 
 while IFS= read -r line || [ -n "$line" ]; do
@@ -51,6 +53,8 @@ while IFS= read -r line || [ -n "$line" ]; do
                 "$postgres_password"
             ;;
         JWT_SECRET=*) printf 'JWT_SECRET=%s\n' "$jwt_secret" ;;
+        OAUTH2_PROXY_CLIENT_SECRET=*) printf 'OAUTH2_PROXY_CLIENT_SECRET=%s\n' "$KEYCLOAK_CLIENT_SECRET" ;;
+        OAUTH2_PROXY_COOKIE_SECRET=*) printf 'OAUTH2_PROXY_COOKIE_SECRET=%s\n' "$oauth_cookie_secret" ;;
         S3_ENDPOINT=*)
             printf 'S3_ENDPOINT=https://%s.r2.cloudflarestorage.com\n' \
                 "$CLOUDFLARE_ACCOUNT_ID"

@@ -6,8 +6,10 @@ import { AuthContext } from '../../context/AuthContext';
 
 // Mock the API module
 const mockPost = vi.fn();
+const mockGet = vi.fn();
 vi.mock('../../api', () => ({
     default: {
+        get: (...args: unknown[]) => mockGet(...args),
         post: (...args: unknown[]) => mockPost(...args),
     },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
@@ -25,9 +27,11 @@ const authValue = {
 describe('Login Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start' } });
     });
 
-    it('renders login form', () => {
+    it('offers Keycloak social login when enabled', async () => {
+        mockGet.mockResolvedValueOnce({ data: { enabled: true, login_path: '/oauth2/start' } });
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -36,12 +40,45 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
+        const link = await screen.findByRole('link', { name: 'Continue with Google, Apple, or GitHub' });
+        expect(link).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
+        expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
+        expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+        fireEvent.click(link);
+        expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
+    });
+
+    it('only exposes legacy credentials on the dedicated migration page', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login migrationMode />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
+        expect(screen.getByRole('note')).toHaveTextContent('legacy session is read-only');
         expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(mockGet).not.toHaveBeenCalled();
+    });
+
+    it('renders login form when OIDC is explicitly disabled', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
     });
 
-    it('handles input changes', () => {
+    it('handles input changes', async () => {
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -50,7 +87,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        const usernameInput = screen.getByPlaceholderText('Username') as HTMLInputElement;
+        const usernameInput = (await screen.findByPlaceholderText('Username')) as HTMLInputElement;
         const passwordInput = screen.getByPlaceholderText('Password') as HTMLInputElement;
 
         fireEvent.change(usernameInput, { target: { value: 'testuser' } });
@@ -76,6 +113,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
+        await screen.findByPlaceholderText('Username');
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'testuser' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'password123' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
@@ -96,6 +134,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
+        await screen.findByPlaceholderText('Username');
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'wrong' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'wrong' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));

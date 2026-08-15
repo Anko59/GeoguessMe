@@ -22,8 +22,8 @@ include tools/make/docs-agent-config.mk
 include tools/make/openapi-contract.mk
 
 .PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-self-test tools-clean \
-	dev up down restart status logs logs-backend logs-frontend \
-	format format-check fmt fmt-check lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
+	dev up dev-social dev-social-down down restart status logs logs-backend logs-frontend identity-config identity-up identity-down identity-logs \
+	format format-check fmt fmt-check mod-tidy lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \
 	test-unit test-backend test-frontend test-reconnect-harness test-race test-backend-race test-structure-regression test-debt-markers-regression \
@@ -38,7 +38,7 @@ include tools/make/openapi-contract.mk
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
-	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
+	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate identity-secrets-generate \
 	vapid-keys \
 	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci \
 	maintenance-report cache-status prune-report prune disk-cleanup-report disk-cleanup build-cache-prune artifacts-clean clean reset-dev \

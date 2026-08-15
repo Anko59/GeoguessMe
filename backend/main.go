@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	authsvc "geoguessme/internal/auth"
 	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/database"
@@ -139,7 +140,18 @@ func main() {
 	}
 	go hub.Run()
 
-	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now)
+	var identityVerifiers []authsvc.IdentityVerifier
+	if cfg.OIDCEnabled {
+		oidcContext, oidcCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		verifier, err := authsvc.NewOIDCVerifier(oidcContext, cfg.OIDCIssuerURL, cfg.OIDCClientID)
+		oidcCancel()
+		if err != nil {
+			logger.Error("Keycloak OIDC initialization failed", "error", err)
+			os.Exit(1)
+		}
+		identityVerifiers = append(identityVerifiers, verifier)
+	}
+	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now, identityVerifiers...)
 	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog, PushSubscriptionExpiry: cfg.PushSubscriptionExpiry}).Run(workerCtx)
 
 	// The media-processing worker promotes quarantined video uploads into

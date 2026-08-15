@@ -19,6 +19,9 @@ validated. Never commit a real `.env` or production secret.
 | `VERIFICATION_TOKEN_TTL`          | duration | `24h`                                          | All        | Must be positive                                                                                                                                                                                                                                                                                  |
 | `RESET_TOKEN_TTL`                 | duration | `1h`                                           | All        | Must be positive                                                                                                                                                                                                                                                                                  |
 | `BCRYPT_COST`                     | int      | `12`                                           | All        | Must be 4–31                                                                                                                                                                                                                                                                                      |
+| `OIDC_ENABLED`                    | bool     | `false`                                        | All        | Enables Keycloak-only normal login/signup plus the read-only legacy migration policy                                                                                                                                                                                                              |
+| `OIDC_ISSUER_URL`                 | URL      | —                                              | OIDC       | Required when OIDC is enabled; must use HTTPS in production                                                                                                                                                                                                                                       |
+| `OIDC_CLIENT_ID`                  | string   | —                                              | OIDC       | Required when OIDC is enabled; must match the Keycloak audience                                                                                                                                                                                                                                   |
 | `SMTP_HOST`                       | string   | — (empty)                                      | All        | Required in production                                                                                                                                                                                                                                                                            |
 | `SMTP_PORT`                       | int      | `1025`                                         | All        | Must be 1–65535 if host is set                                                                                                                                                                                                                                                                    |
 | `SMTP_USERNAME`                   | string   | —                                              | All        | Optional, but must be supplied together with `SMTP_PASSWORD`; authenticated SMTP requires TLS                                                                                                                                                                                                     |
@@ -90,6 +93,7 @@ When `APP_ENV=production`, the following additional checks apply:
   negative values reject startup so a misconfiguration can never disable the
   subscription cap or remove the delivery deadlines.
 - S3 endpoint must use HTTPS and must not be local MinIO
+- `OIDC_ISSUER_URL` must use HTTPS when OIDC is enabled
 
 `APP_ENV` itself must be one of `development`, `production`, or `test` in every
 environment; any other value is rejected at startup so the metrics
@@ -106,6 +110,15 @@ to the private backup bucket. Both remote environments deliberately use
 `APP_ENV=production`; dev is distinguished by its URL, project, port, bucket,
 credentials, and tighter resource limits.
 
+The application environment also carries the matching `OAUTH2_PROXY_*` issuer,
+client, client-secret, cookie-secret, and callback values. Shared Keycloak
+values live separately in the encrypted identity environment described by
+`deployment/env/identity.env.example`: its own PostgreSQL/admin credentials, the
+production/dev client secrets, and Google, GitHub, and Apple provider
+credentials. Apple's provider secret is a signed client-secret JWT with a
+recorded expiry; rotate only that provider value as described in the
+[social-auth rollout runbook](runbooks/social-auth-rollout.md).
+
 ## Example `.env` for development
 
 ```bash
@@ -121,6 +134,7 @@ S3_SECRET_KEY=minioadmin
 SMTP_HOST=localhost
 SMTP_PORT=1025
 SMTP_FROM=no-reply@localhost
+OIDC_ENABLED=false
 ```
 
 ## Startup validation

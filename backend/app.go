@@ -81,6 +81,7 @@ func NewApp(
 	hub *chat.Hub,
 	logger *slog.Logger,
 	clock func() time.Time,
+	identityVerifiers ...auth.IdentityVerifier,
 ) *App {
 	authService := auth.NewService(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL)
 	return &App{
@@ -98,7 +99,7 @@ func NewApp(
 		Groups:  handlers.NewGroupAPI(repos),
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
-		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub),
+		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
 	}
 }
 
@@ -176,11 +177,14 @@ func (a *App) routes() http.Handler {
 		return limitedHandler.ServeHTTP
 	}
 	protected := func(handler http.HandlerFunc) http.Handler {
-		return a.AuthAPI.AuthMiddleware(handler)
+		return a.AuthAPI.AuthMiddleware(a.AuthAPI.LegacyReadOnlyMiddleware(handler))
 	}
 
 	mux.Handle("/api/v1/auth/signup", limit("signup")(http.HandlerFunc(a.AuthAPI.Signup)))
 	mux.Handle("/api/v1/auth/login", limit("login")(http.HandlerFunc(a.AuthAPI.Login)))
+	mux.Handle("/api/v1/auth/oidc/config", limit("default")(http.HandlerFunc(a.AuthAPI.OIDCConfig)))
+	mux.Handle("/api/v1/auth/oidc/session", limit("login")(http.HandlerFunc(a.AuthAPI.ExchangeOIDCSession)))
+	mux.Handle("/api/v1/auth/oidc/link", protected(limited("default", a.AuthAPI.StartOIDCLink)))
 	mux.Handle("/api/v1/auth/refresh", limit("default")(http.HandlerFunc(a.AuthAPI.Refresh)))
 	mux.Handle("/api/v1/auth/logout", limit("default")(http.HandlerFunc(a.AuthAPI.Logout)))
 	mux.Handle("/api/v1/auth/verify/request", protected(limited("email", a.AuthAPI.RequestVerification)))

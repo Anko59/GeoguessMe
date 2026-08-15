@@ -81,6 +81,37 @@ services:
           memory: ${GEOGUESSME_BACKEND_MEMORY:-1G}
           pids: ${GEOGUESSME_BACKEND_PIDS:-256}
 
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+    profiles: [social]
+    command: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg"]
+    env_file:
+      - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
+        required: false
+    volumes:
+      - ./deployment/oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg:ro
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    user: "65532:65532"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    networks: [frontend]
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/bin/oauth2-proxy", "--version"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_OAUTH2_PROXY_CPUS:-0.25}
+          memory: ${GEOGUESSME_OAUTH2_PROXY_MEMORY:-128M}
+          pids: 128
+
   web:
     image: ${WEB_IMAGE:?WEB_IMAGE must be set to an immutable tag}
     ports: ["127.0.0.1:${GEOGUESSME_WEB_PORT:-8081}:80"]

@@ -10,6 +10,20 @@ The concrete hosted implementation and launch checklist is in the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
 
+The hosted system has three Compose projects: isolated dev and production game
+stacks on loopback ports `8082` and `8081`, plus shared Keycloak and its own
+PostgreSQL database on `8083` for `auth.geoguessme.com`. Each game stack keeps
+its own OAuth2 Proxy beside Caddy. Cloudflare Tunnel is the only ingress and
+Caddy is the same-origin application gateway, so Traefik is not part of this
+topology. Keycloak brokers Google, GitHub, and Apple and also owns ordinary
+email/password signup and login.
+
+Generate `deployment/secrets/identity.env.enc` for both host age recipients with
+`make identity-secrets-generate`, then follow the
+[social-auth rollout runbook](runbooks/social-auth-rollout.md) for Keycloak
+provisioning, the read-only legacy-account migration phase, validation, and
+Apple client-secret JWT rotation.
+
 All operational actions use Dockerized Make targets:
 
 ```text

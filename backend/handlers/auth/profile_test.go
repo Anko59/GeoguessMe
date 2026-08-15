@@ -45,7 +45,7 @@ func TestGetPublicProfile(t *testing.T) {
 	requireStatus(t, api.GetPublicProfile, requestWithUser(http.MethodPost, "/", "", viewer.ID), http.StatusMethodNotAllowed)
 
 	// Unknown target player.
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, target.ID), http.StatusNotFound)
 
 	// Players without a shared group cannot view each other's profile.

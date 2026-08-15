@@ -9,6 +9,7 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
+COMPOSE_IDENTITY := docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
@@ -107,6 +108,13 @@ dev: ## Start the Docker development stack.
 
 up: dev ## Alias for dev.
 
+dev-social: ## Start dev with local Keycloak and OAuth2 Proxy.
+	OIDC_ENABLED=true GEOGUESSME_DEV_PUBLIC_URL=http://geoguessme.localhost:5173 $(COMPOSE_DEV) --profile social up -d --wait --wait-timeout 180 local-keycloak
+	OIDC_ENABLED=true GEOGUESSME_DEV_PUBLIC_URL=http://geoguessme.localhost:5173 $(COMPOSE_DEV) --profile social up -d --build --renew-anon-volumes
+
+dev-social-down: ## Stop the local social-auth development stack.
+	$(COMPOSE_DEV) --profile social down
+
 down: ## Stop the development stack and keep named application volumes.
 	$(COMPOSE_DEV) down
 
@@ -124,3 +132,16 @@ logs-backend: ## Tail backend logs.
 
 logs-frontend: ## Tail frontend logs.
 	$(COMPOSE_DEV) logs -f frontend
+
+identity-config: ## Validate the shared auth.geoguessme.com identity stack.
+	@test -f deployment/env/identity.env || { echo 'deployment/env/identity.env is required'; exit 2; }
+	$(COMPOSE_IDENTITY) config --quiet
+
+identity-up: identity-config ## Start shared Keycloak and its database.
+	$(COMPOSE_IDENTITY) up -d --wait
+
+identity-down: ## Stop shared Keycloak while retaining its database volume.
+	$(COMPOSE_IDENTITY) down
+
+identity-logs: ## Tail shared Keycloak logs.
+	$(COMPOSE_IDENTITY) logs -f keycloak keycloak-db

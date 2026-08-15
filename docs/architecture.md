@@ -13,22 +13,27 @@ through the `App` type, and `main.go` owns process lifecycle.
 
 ```text
 ┌──────────────┐       ┌──────────────┐
-│   Browser    │◄─────►│    Caddy     │  Production gateway (same-origin)
+│   Browser    │◄─────►│    Caddy     │  Same-origin game gateway
 │  (React SPA) │       │  :80/:443    │
-└──────────────┘       └──────┬───────┘
-                              │ /api/*, /api/v1/ws
-                              ▼
-                      ┌──────────────┐
-                      │   Backend    │  Go binary, serves /api/v1/*
-                      │  :8080       │  Migrations via `geoguessme migrate`
-                      └──┬───┬───┬───┘
-                         │   │   │
-              ┌──────────┘   │   └──────────┐
-              ▼              ▼               ▼
-      ┌────────────┐ ┌────────────┐ ┌──────────────┐
-      │ PostgreSQL │ │  S3/MinIO  │ │    SMTP      │
-      │  :5432     │ │  :9000     │ │  :1025/587   │
-      └────────────┘ └────────────┘ └──────────────┘
+└──────────────┘       └───┬──────┬───┘
+                           │      │ /oauth2/* + exact OIDC exchange
+                    /api/* │      ▼
+                           │  ┌──────────────┐       ┌──────────────┐
+                           │  │ OAuth2 Proxy │◄─────►│   Keycloak   │◄── Google
+                           │  │    (BFF)     │       │ auth.* realm │◄── Apple
+                           │  └──────┬───────┘       └──────┬───────┘◄── GitHub
+                           ▼         │                      ▼
+                     ┌──────────────┐│              ┌──────────────┐
+                     │   Backend    │◄┘              │ Keycloak DB  │
+                     │  :8080       │── verifies ───►│ PostgreSQL   │
+                     └──┬───┬───┬───┘ issuer/JWKS    └──────────────┘
+                        │   │   │
+             ┌──────────┘   │   └──────────┐
+             ▼              ▼               ▼
+     ┌────────────┐ ┌────────────┐ ┌──────────────┐
+     │ App DB     │ │  S3/MinIO  │ │    SMTP      │
+     │ PostgreSQL │ │  :9000     │ │  :1025/587   │
+     └────────────┘ └────────────┘ └──────────────┘
 ```
 
 ## Trust boundaries
@@ -40,12 +45,21 @@ through the `App` type, and `main.go` owns process lifecycle.
 2. **Caddy ↔ Backend**: Loopback (same Compose network). The backend trusts the
    gateway only when `TRUSTED_PROXY_CIDRS` is configured.
 
-3. **Backend ↔ PostgreSQL**: Configurable connection string (`DATABASE_URL`).
+3. **Caddy ↔ OAuth2 Proxy ↔ Keycloak**: Caddy sends only `/oauth2/*` and the
+   exact OIDC session-exchange route through the BFF. OAuth2 Proxy owns the
+   encrypted provider session and forwards its Keycloak token only to that
+   backend exchange; browser JavaScript never receives it.
+
+4. **Backend ↔ Keycloak**: The backend independently validates issuer,
+   signature, expiry, and application audience. Keycloak has a separate
+   PostgreSQL database and lifecycle from both game environments.
+
+5. **Backend ↔ PostgreSQL**: Configurable connection string (`DATABASE_URL`).
    SSL mode can be required in production.
 
-4. **Backend ↔ S3**: Private HTTPS endpoint. Object keys never reach browsers.
+6. **Backend ↔ S3**: Private HTTPS endpoint. Object keys never reach browsers.
 
-5. **Backend ↔ SMTP**: TLS modes `off`, `starttls`, or `tls`. Production
+7. **Backend ↔ SMTP**: TLS modes `off`, `starttls`, or `tls`. Production
    requires `starttls` or `tls`.
 
 ## Request flows
@@ -65,6 +79,22 @@ At registration time, selected handlers are additionally wrapped by `RateLimit`
 (per-identity rate limiting on auth routes) and `AuthMiddleware` (protected
 routes — validates the Bearer token, then checks account activity and
 `auth_version` against the database).
+
+### Keycloak login, signup, and migration
+
+Normal login and signup both redirect through OAuth2 Proxy to the shared
+Keycloak realm, where Google, Apple, GitHub, or a Keycloak credential can
+authenticate the player. The exact callback exchange resolves the durable
+`(issuer, subject)` mapping and issues the application's existing access and
+refresh session. A first social identity either reuses an exact verified-email
+user or atomically creates a passwordless app user.
+
+If only a pending/unverified legacy claim matches, the callback exposes the
+otherwise hidden migration route. That legacy password session is backend-
+enforced read-only: GET/HEAD, account deletion/recovery, and starting the OIDC
+link remain available; other writes return `403 migration_required`. Linking
+adds the identity to the same `users.id`, bumps `auth_version`, revokes old
+sessions/tickets, and restores normal writes through the new social session.
 
 ### WebSocket chat
 
@@ -92,7 +122,9 @@ short-lived `blob:` object URL.
 
 | Data                                     | Store                        | Notes                                 |
 | ---------------------------------------- | ---------------------------- | ------------------------------------- |
-| Users, groups, photos, guesses, messages | PostgreSQL                   | Relational, embedded migrations       |
+| Users, groups, photos, guesses, messages | App PostgreSQL               | Relational, embedded migrations       |
+| App identity mappings                    | App PostgreSQL               | Durable issuer/subject → `users.id`   |
+| Keycloak users, clients, provider config | Separate Keycloak PostgreSQL | Shared realm, independent backups     |
 | Media images                             | S3-compatible (MinIO in dev) | Private bucket, no public URLs        |
 | Refresh sessions, tokens                 | PostgreSQL                   | Hashed tokens, one-time use           |
 | Media deletion queue                     | PostgreSQL                   | Durable jobs for async object removal |

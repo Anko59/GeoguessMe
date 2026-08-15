@@ -15,6 +15,8 @@ FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
 BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
 RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
+IDENTITY_SECRET_GENERATOR="$ROOT/deployment/scripts/hosted/generate-identity-secret.sh"
+IDENTITY_COMPOSE="$ROOT/deployment/compose.identity.yaml"
 
 fail() {
     printf 'contract test failed: %s\n' "$1" >&2
@@ -32,6 +34,8 @@ line_of() {
 # Environment isolation and loopback-only ingress.
 assert_contains "$COMPOSE" 'name: ${COMPOSE_PROJECT_NAME:-geoguessme-prod}'
 assert_contains "$COMPOSE" '127.0.0.1:${GEOGUESSME_WEB_PORT:-8081}:80'
+assert_contains "$IDENTITY_COMPOSE" '127.0.0.1:${GEOGUESSME_IDENTITY_PORT:-8083}:8080'
+assert_contains "$IDENTITY_COMPOSE" 'realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro'
 assert_contains "$HOSTED" 'database:/var/lib/postgresql/data'
 assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}'
 
@@ -66,6 +70,7 @@ fi
 
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.production.yaml"'
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.hosted.yaml"'
+assert_contains "$COMMON" '-f "$release/deployment/compose.identity.yaml"'
 assert_contains "$DEPLOY" 'workflows/deploy\.yml@refs/heads/dev'
 assert_contains "$DEPLOY" 'workflows/release\.yml@refs/heads/main'
 assert_contains "$DEPLOY" 'github.com/Anko59/GeoguessMe/.github/workflows/deploy'
@@ -137,7 +142,8 @@ if ! cat "$ROOT"/Makefile "$ROOT"/tools/make/*.mk | grep -Fq 'generate-hosted-se
     fail "$ROOT/Makefile does not contain: generate-hosted-secret.sh |"
 fi
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
-assert_contains "$HEALTH" 'for service in postgres backend web'
+assert_contains "$HEALTH" "services='postgres backend web'"
+assert_contains "$HEALTH" 'for service in keycloak-db keycloak'
 assert_contains "$HEALTH" '.State.Health.Status'
 assert_contains "$HEALTH" 'verify-deployment-hashes.sh" "$environment"'
 assert_contains "$COMMON" 'BACKEND_IMAGE="$backend"'
@@ -150,6 +156,7 @@ generated=$(TARGET_ENV=dev \
     MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
     BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
     CLOUDFLARE_ACCOUNT_ID=account-id \
+    KEYCLOAK_CLIENT_SECRET=keycloak-client-secret \
     VAPID_PUBLIC_KEY=vapid-public VAPID_PRIVATE_KEY=vapid-private \
     VAPID_SUBJECT=mailto:contract@example.invalid "$SECRET_GENERATOR")
 case "$generated" in
@@ -163,6 +170,29 @@ printf '%s\n' "$generated" | grep -Fq 'geoguessme-database-backups/dev' ||
     fail 'generated secret payload omitted the isolated backup prefix'
 printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
     fail 'generated secret payload omitted the supplied Web Push keypair'
+printf '%s\n' "$generated" | grep -Fq 'OAUTH2_PROXY_CLIENT_SECRET=keycloak-client-secret' ||
+    fail 'generated secret payload omitted the selected Keycloak client secret'
+printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
+    fail 'generated secret payload omitted a random OAuth2 Proxy cookie secret'
+
+identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
+    GOOGLE_OAUTH_CLIENT_SECRET=google-secret \
+    GITHUB_OAUTH_CLIENT_ID=github-id GITHUB_OAUTH_CLIENT_SECRET=github-secret \
+    APPLE_OAUTH_CLIENT_ID=apple-id APPLE_OAUTH_CLIENT_SECRET=apple-secret \
+    PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret \
+    DEV_OIDC_CLIENT_SECRET=dev-oidc-secret "$IDENTITY_SECRET_GENERATOR")
+case "$identity_generated" in *replace-*) fail 'generated identity payload contains a template placeholder' ;; esac
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret' ||
+    fail 'generated identity payload omitted the production client secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_DEV_OIDC_CLIENT_SECRET=dev-oidc-secret' ||
+    fail 'generated identity payload omitted the dev client secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_GOOGLE_CLIENT_SECRET=google-secret' ||
+    fail 'generated identity payload omitted the Google provider secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_ID=apple-id' ||
+    fail 'generated identity payload omitted the Apple provider client ID'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_SECRET=apple-secret' ||
+    fail 'generated identity payload omitted the Apple provider secret'
+assert_contains "$ROOT/tools/make/deployment.mk" 'generate-identity-secret.sh |'
 
 # A missing Web Push key must stop generation rather than emit the template
 # placeholder, which is non-empty and so would satisfy the backend's production
@@ -172,7 +202,8 @@ if VAPID_PUBLIC_KEY='' TARGET_ENV=dev \
     GHCR_USERNAME=registry-user GHCR_TOKEN=registry-token \
     MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
     BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
-    CLOUDFLARE_ACCOUNT_ID=account-id VAPID_PRIVATE_KEY=vapid-private \
+    CLOUDFLARE_ACCOUNT_ID=account-id KEYCLOAK_CLIENT_SECRET=keycloak-client-secret \
+    VAPID_PRIVATE_KEY=vapid-private \
     VAPID_SUBJECT=mailto:contract@example.invalid \
     "$SECRET_GENERATOR" >/dev/null 2>&1; then
     fail 'secret generation accepted a missing Web Push public key'

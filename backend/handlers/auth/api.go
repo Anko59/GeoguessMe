@@ -28,14 +28,19 @@ type AuthAPI struct {
 	mailer email.Sender
 	svc    *authsvc.Service
 	kicker chatHub.SocketKicker
+	oidc   authsvc.IdentityVerifier
 }
 
 // NewAuthAPI constructs the auth transport with its explicit dependencies.
 // kicker closes live WebSocket sockets after credential revocation; it is
 // nil-safe (tests and unconfigured hubs rely on the hub's periodic
 // revalidation instead).
-func NewAuthAPI(repos *repository.Repository, cfg *config.Config, store storage.ObjectStore, mailer email.Sender, svc *authsvc.Service, kicker chatHub.SocketKicker) *AuthAPI {
-	return &AuthAPI{repos: repos, cfg: cfg, store: store, mailer: mailer, svc: svc, kicker: kicker}
+func NewAuthAPI(repos *repository.Repository, cfg *config.Config, store storage.ObjectStore, mailer email.Sender, svc *authsvc.Service, kicker chatHub.SocketKicker, verifiers ...authsvc.IdentityVerifier) *AuthAPI {
+	api := &AuthAPI{repos: repos, cfg: cfg, store: store, mailer: mailer, svc: svc, kicker: kicker}
+	if len(verifiers) > 0 {
+		api.oidc = verifiers[0]
+	}
+	return api
 }
 
 // kickDisconnectUser closes every live socket for a user after their

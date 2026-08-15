@@ -5,6 +5,11 @@ const OUTPUT_DIR = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results';
 const REPORT_DIR = process.env.PLAYWRIGHT_REPORT_DIR || 'playwright-report';
 const baseOrigin = new URL(BASE_URL).origin;
 const launchArgs = baseOrigin.startsWith('http://') ? [`--unsafely-treat-insecure-origin-as-secure=${baseOrigin}`] : [];
+const lightweightBrowserRun = process.env.PLAYWRIGHT_LIGHTWEIGHT === 'true';
+if (process.env.PLAYWRIGHT_HOST_RESOLVER_RULES) {
+    launchArgs.push(`--host-resolver-rules=${process.env.PLAYWRIGHT_HOST_RESOLVER_RULES}`);
+}
+if (lightweightBrowserRun) launchArgs.push('--disable-dev-shm-usage');
 
 export default defineConfig({
     testDir: './e2e',
@@ -18,9 +23,9 @@ export default defineConfig({
     ],
     use: {
         baseURL: BASE_URL,
-        trace: 'retain-on-first-failure',
+        trace: lightweightBrowserRun ? 'off' : 'retain-on-first-failure',
         screenshot: 'only-on-failure',
-        video: 'retain-on-failure',
+        video: lightweightBrowserRun ? 'off' : 'retain-on-failure',
         launchOptions: { args: launchArgs },
     },
     projects: [

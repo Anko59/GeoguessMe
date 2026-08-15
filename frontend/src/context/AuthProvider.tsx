@@ -29,6 +29,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await api.post('/auth/logout');
         } finally {
+            if (typeof fetch === 'function') {
+                await fetch('/oauth2/sign_out', { credentials: 'include', redirect: 'manual' }).catch(() => undefined);
+            }
             setAccessToken(null);
             setUser(null);
             clearCachedSession();

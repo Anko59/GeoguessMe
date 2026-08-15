@@ -85,7 +85,12 @@ compose() {
     fi
     [ -n "$backend" ] || die "$environment has no active backend image metadata"
     [ -n "$web" ] || die "$environment has no active web image metadata"
+    profiles=''
+    if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$env_file"; then
+        profiles=social
+    fi
     COMPOSE_PROJECT_NAME=$(environment_project "$environment") \
+    COMPOSE_PROFILES="$profiles" \
     GEOGUESSME_ENV_FILE="$env_file" \
     GEOGUESSME_WEB_PORT=$(environment_port "$environment") \
     BACKEND_IMAGE="$backend" \
@@ -94,6 +99,22 @@ compose() {
         --project-directory "$release" \
         -f "$CONFIG_ROOT/compose.production.yaml" \
         -f "$CONFIG_ROOT/compose.hosted.yaml" "$@"
+}
+
+identity_env_file() {
+    printf '%s/identity.env\n' "$SECRET_ROOT"
+}
+
+compose_identity() {
+    release=$1
+    shift
+    env_file=$(identity_env_file)
+    [ -f "$env_file" ] || die "missing identity secret file: $env_file"
+    COMPOSE_PROJECT_NAME=geoguessme-identity \
+        GEOGUESSME_IDENTITY_ENV_FILE="$env_file" \
+        docker compose \
+        --project-directory "$release" \
+        -f "$release/deployment/compose.identity.yaml" "$@"
 }
 
 backup_age_seconds() {

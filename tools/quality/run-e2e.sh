@@ -15,11 +15,12 @@ STAGING_DIR="$REPO/frontend/.playwright-run"
 source "$REPO/tools/quality/e2e/arguments.sh"
 
 test_args=()
-build_e2e_test_args test_args \
+build_e2e_test_args \
     "${GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile}" \
     "${GEOGUESSME_E2E_SHARD:-}" \
     "${GEOGUESSME_E2E_SPEC:-}" \
     "${1:-}"
+test_args=("${E2E_TEST_ARGS[@]}")
 
 # Clear stale artifacts so only the current invocation's output is retained.
 if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-report" ]; then

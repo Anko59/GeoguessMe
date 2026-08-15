@@ -101,6 +101,7 @@ REFRESH_TOKEN_TTL=720h
 VERIFICATION_TOKEN_TTL=24h
 RESET_TOKEN_TTL=1h
 BCRYPT_COST=4
+OIDC_ENABLED=false
 ALLOWED_ORIGINS=__PUBLIC_URL__
 TRUSTED_PROXY_CIDRS=0.0.0.0/0
 RATE_LIMIT_REQUESTS=100
@@ -142,6 +143,17 @@ services:
     env_file:
       - path: ${TMPDIR}/production.env
         required: true
+  oauth2-proxy:
+    command:
+      - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+      - --provider=github
+      - --client-id=prod-verify
+      - --client-secret=prod-verify-secret
+      - --cookie-secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      - --redirect-url=https://localhost/oauth2/callback
+    env_file:
+      - path: ${TMPDIR}/production.env
+        required: true
   web:
     ports: ["${WEB_PORT}:80"]
     env_file:
@@ -164,7 +176,7 @@ YAMLEOF
 cleanup_stack() {
     set +e
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-        COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
         --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans 2>/dev/null
     rm -rf "$TMPDIR"
@@ -172,7 +184,7 @@ cleanup_stack() {
 trap 'cleanup_stack' EXIT
 
 BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-    COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+    COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
     docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
     --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
@@ -183,7 +195,7 @@ echo "--- Phase 4: Effective runtime hardening ---"
 
 container_id() {
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-        COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
         --project-directory "$REPO" -p "$PROJECT" ps -aq "$1"
 }
@@ -206,19 +218,20 @@ assert_inspect() {
     echo "  ok   $service $field=$actual"
 }
 
-for service in migration backend web db minio smtp; do
+for service in migration backend oauth2-proxy web db minio smtp; do
     assert_inspect "$service" cap_drop '{{join .HostConfig.CapDrop ","}}' ALL
     assert_inspect "$service" no_new_privileges \
         '{{join .HostConfig.SecurityOpt ","}}' no-new-privileges:true
 done
 
-for service in migration backend web db; do
+for service in migration backend oauth2-proxy web db; do
     assert_inspect "$service" read_only '{{.HostConfig.ReadonlyRootfs}}' true
 done
 
 assert_inspect migration pids_limit '{{.HostConfig.PidsLimit}}' 64
 assert_inspect backend pids_limit '{{.HostConfig.PidsLimit}}' \
     "${GEOGUESSME_BACKEND_PIDS:-256}"
+assert_inspect oauth2-proxy pids_limit '{{.HostConfig.PidsLimit}}' 128
 assert_inspect web pids_limit '{{.HostConfig.PidsLimit}}' 128
 assert_inspect db pids_limit '{{.HostConfig.PidsLimit}}' 256
 assert_inspect minio pids_limit '{{.HostConfig.PidsLimit}}' 128

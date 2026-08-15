@@ -33,6 +33,13 @@ type Config struct {
 	ResetTTL         time.Duration
 	PasswordHashCost int
 
+	// OIDC enables the Keycloak token-exchange endpoints. OAuth2 Proxy keeps
+	// Keycloak tokens out of browser JavaScript; the backend independently
+	// verifies the forwarded token against this issuer and audience.
+	OIDCEnabled   bool
+	OIDCIssuerURL string
+	OIDCClientID  string
+
 	SMTPHost        string
 	SMTPPort        int
 	SMTPUsername    string
@@ -180,6 +187,18 @@ func (c *Config) Validate() error {
 	}
 	if c.PasswordHashCost < 4 || c.PasswordHashCost > 31 {
 		problems = append(problems, "BCRYPT_COST must be between 4 and 31")
+	}
+	if c.OIDCEnabled {
+		issuer, err := url.Parse(strings.TrimSpace(c.OIDCIssuerURL))
+		if err != nil || issuer.Host == "" || (issuer.Scheme != "http" && issuer.Scheme != "https") {
+			problems = append(problems, "OIDC_ISSUER_URL must be a valid http(s) URL when OIDC is enabled")
+		}
+		if strings.TrimSpace(c.OIDCClientID) == "" {
+			problems = append(problems, "OIDC_CLIENT_ID is required when OIDC is enabled")
+		}
+		if c.Environment == EnvProduction && (issuer == nil || issuer.Scheme != "https") {
+			problems = append(problems, "OIDC_ISSUER_URL must use HTTPS in production")
+		}
 	}
 	if c.DatabaseMinConns < 0 {
 		problems = append(problems, "DB_MIN_CONNS must not be negative")

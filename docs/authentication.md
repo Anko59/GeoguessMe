@@ -4,8 +4,10 @@
 
 GeoGuessMe uses a split-token authentication scheme:
 
-1. **Login** (`POST /api/v1/auth/login`) or **Signup**
-   (`POST /api/v1/auth/signup`) returns:
+1. A normal login or signup completes in Keycloak and is exchanged through
+   `POST /api/v1/auth/oidc/session`. The hidden legacy migration page may call
+   `POST /api/v1/auth/login` once for an unmigrated account. Either path
+   returns:
     - `access_token` (JWT, short-lived) in the JSON response body
     - `refresh_token` (opaque, long-lived) as an HttpOnly cookie
 2. The access token is sent on every authenticated request as
@@ -51,6 +53,45 @@ the refresh cookie is still checked in the background before new requests are
 authorized. A failed refresh or logout removes the hint and that user's cached
 chat records.
 
+## Keycloak and social authentication
+
+When `OIDC_ENABLED=true`, both normal login and signup use Keycloak exclusively
+and offer Google, Apple, or GitHub through the GeoGuessMe realm. No legacy
+credential fields or password-recovery links are rendered on those pages. OAuth2
+Proxy completes the authorization-code flow and keeps its encrypted session out
+of frontend JavaScript. The backend independently verifies the Keycloak token
+forwarded to the exact OIDC session-exchange route, resolves the application
+account, and then issues the normal GeoGuessMe access/refresh session described
+above.
+
+`user_identities` stores the durable `(issuer, subject) -> users.id` mapping.
+The existing `users.id` always remains canonical, so linking a social identity
+does not copy or replace memberships, scores, guesses, messages, or media.
+
+The first verified OIDC session resolves as follows:
+
+1. An existing issuer/subject mapping signs in its canonical user.
+2. An exact verified recovery-email match links to that existing user while
+   preserving its ID.
+3. A pending or unverified email match returns `account_link_required`. The
+   callback reveals the dedicated migration route. The player uses the old
+   username/password there once and starts the link from Settings; an email
+   claim alone never controls an account.
+4. With no match, social signup creates a new passwordless application user and
+   its identity in one transaction.
+
+An unmigrated legacy session can read its groups and history, start the OIDC
+link, request recovery mail, or delete the account. Every other write is
+rejected by the backend with HTTP 403 and `migration_required`. Linking adds the
+Keycloak subject to the same `users.id`, revokes old sessions, and restores full
+access through the newly issued social session. Password login is rejected after
+linking.
+
+Keycloak may offer TOTP, recovery codes, and passkeys from account settings, but
+none is a required action. Provider MFA remains opt-in for this social game. The
+staged release and read-only policy are owned by the
+[social-auth rollout runbook](runbooks/social-auth-rollout.md).
+
 ## Verification
 
 - Recovery email is optional and never controls account, gameplay, or social
@@ -80,16 +121,15 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
   refresh sessions.
 - Token TTL: `RESET_TOKEN_TTL` (default 1 hour).
 
-Authenticated users can update their username, pending recovery-email claim, or
+Fully migrated users can update their username, pending recovery-email claim, or
 selected profile avatar through `PATCH /api/v1/auth/profile`; the current
 password is required. A verified recovery address remains active until its
 replacement is verified, and omitting email cancels only the pending claim. A
 custom profile photo is uploaded separately through
 `POST /api/v1/auth/profile/avatar`; the web client sends the original selected
 file, and the backend accepts JPG, PNG, or WebP up to 25 MiB before resizing and
-stripping metadata. Password changes use `POST /api/v1/auth/password/change`,
-require the current password, and revoke all sessions so the user must sign in
-again.
+stripping metadata. The legacy password-change route is unavailable after
+Keycloak linking.
 
 ## Logout
 
@@ -116,7 +156,9 @@ tokens immediately, even before the short-lived JWT would have expired.
 
 ## Account deletion
 
-`DELETE /api/v1/auth/account {password}` (authenticated, password confirmation):
+`DELETE /api/v1/auth/account` is authenticated and requires the current password
+for a legacy-password account. A passwordless social account instead requires
+exact username confirmation.
 
 1. Verifies the password.
 2. Calls `DeleteUserCascade` which removes:

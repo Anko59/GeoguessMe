@@ -32,7 +32,7 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password) {
+	if err != nil || user == nil || (user.PasswordEnabled && !user.OIDCLinked && !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password)) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Current password is incorrect")
 		return
 	}
@@ -78,7 +78,7 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusConflict, "profile_update_failed", "Unable to update profile")
 		return
 	}
-	handlers.WriteJSON(w, http.StatusOK, userResponse(updated))
+	handlers.WriteJSON(w, http.StatusOK, a.userResponse(updated))
 }
 
 // GetProfile returns the authenticated player's own profile including global
@@ -114,7 +114,7 @@ func (a *AuthAPI) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handlers.WriteJSON(w, http.StatusOK, ProfileResponse{
-		AuthUser:          userResponse(user),
+		AuthUser:          a.userResponse(user),
 		TotalPoints:       stats.TotalPoints,
 		GuessCount:        stats.GuessCount,
 		AverageScore:      stats.AverageScore,
@@ -204,7 +204,7 @@ func (a *AuthAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password) {
+	if err != nil || user == nil || user.OIDCLinked || !user.PasswordEnabled || !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Current password is incorrect")
 		return
 	}

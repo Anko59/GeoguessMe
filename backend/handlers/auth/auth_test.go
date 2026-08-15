@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -95,8 +96,9 @@ func requestWithUser(method, target, body, userID string) *http.Request {
 }
 
 func handlerUserRows(user *models.User) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
-		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail)
+	passwordEnabled := user.PasswordEnabled || user.Password != "!"
+	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}).
+		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail, passwordEnabled, user.OIDCLinked)
 }
 
 func TestSignup(t *testing.T) {
@@ -238,7 +240,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 }
 
 func userColumnsForQuery() []string {
-	return []string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}
+	return []string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}
 }
 
 func TestDeleteAccountSuccess(t *testing.T) {
@@ -286,7 +288,7 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(user.AuthVersion))
+	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(user.AuthVersion, false))
 	called := false
 	api.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		called = handlers.GetUserIDFromContext(r) == user.ID
@@ -299,7 +301,7 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	if !called {
 		t.Fatal("authenticated handler was not called")
 	}
-	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(user.AuthVersion + 1))
+	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(user.AuthVersion+1, false))
 	recorder = httptest.NewRecorder()
 	api.AuthMiddleware(func(http.ResponseWriter, *http.Request) { t.Fatal("revoked session reached handler") })(recorder, func() *http.Request {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -311,6 +313,85 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	}
 	if handlers.GetUserIDFromContext(httptest.NewRequest(http.MethodGet, "/", nil)) != "" {
 		t.Fatal("anonymous request unexpectedly has a user")
+	}
+}
+
+func TestOIDCEnabledRetiresSignupAndLimitsPasswordLoginToMigration(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	api.cfg.OIDCEnabled = true
+
+	recorder := httptest.NewRecorder()
+	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewBufferString(`{"username":"new-player","password":"Password123"}`)))
+	if recorder.Code != http.StatusGone || !strings.Contains(recorder.Body.String(), `"code":"legacy_signup_disabled"`) {
+		t.Fatalf("legacy signup = %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := &models.User{ID: "legacy-user", Username: "legacy", Password: string(hash), PasswordEnabled: true, Avatar: "avatar.png"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("legacy").WillReturnRows(handlerUserRows(legacy))
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), legacy.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	recorder = httptest.NewRecorder()
+	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"legacy","password":"Password123"}`)))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"migration_required":true`) {
+		t.Fatalf("migration login = %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	linked := &models.User{ID: "linked-user", Username: "linked", Password: string(hash), PasswordEnabled: true, OIDCLinked: true, Avatar: "avatar.png"}
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("linked").WillReturnRows(handlerUserRows(linked))
+	recorder = httptest.NewRecorder()
+	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("linked password login = %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestLegacyReadOnlyMiddleware(t *testing.T) {
+	api := newAuthAPI(t, newAuthMockPool(t), nil)
+	called := false
+	next := api.LegacyReadOnlyMiddleware(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	request := func(method, path string, migrationRequired bool) *http.Request {
+		r := httptest.NewRequest(method, path, nil)
+		return r.WithContext(handlers.WithMigrationRequired(r.Context(), migrationRequired))
+	}
+
+	for _, allowed := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/user/groups"},
+		{http.MethodHead, "/api/v1/group/photo"},
+		{http.MethodPost, "/api/v1/auth/oidc/link"},
+		{http.MethodPost, "/api/v1/auth/verify/request"},
+		{http.MethodDelete, "/api/v1/auth/account"},
+	} {
+		called = false
+		recorder := httptest.NewRecorder()
+		next(recorder, request(allowed.method, allowed.path, true))
+		if !called || recorder.Code != http.StatusNoContent {
+			t.Fatalf("%s %s was not allowed: status=%d called=%v", allowed.method, allowed.path, recorder.Code, called)
+		}
+	}
+
+	called = false
+	recorder := httptest.NewRecorder()
+	next(recorder, request(http.MethodPost, "/api/v1/challenges/photo-1/guess", true))
+	if called || recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), `"code":"migration_required"`) {
+		t.Fatalf("legacy write = %d %q called=%v", recorder.Code, recorder.Body.String(), called)
+	}
+
+	called = false
+	recorder = httptest.NewRecorder()
+	next(recorder, request(http.MethodPost, "/api/v1/challenges/photo-1/guess", false))
+	if !called || recorder.Code != http.StatusNoContent {
+		t.Fatalf("linked write = %d called=%v", recorder.Code, called)
 	}
 }
 

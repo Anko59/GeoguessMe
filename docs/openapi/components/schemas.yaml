@@ -11,7 +11,7 @@ APIError:
 
 AuthUser:
   type: object
-  required: [id, username]
+  required: [id, username, password_login_enabled, oidc_linked, migration_required]
   properties:
     id: { type: string, format: uuid }
     username: { type: string }
@@ -30,6 +30,22 @@ AuthUser:
         until this claim is successfully verified.
     email_verified_at: { type: [string, "null"], format: date-time }
     avatar: { type: string }
+    password_login_enabled:
+      type: boolean
+      description: Whether the hidden migration flow may still confirm this legacy account's password.
+    oidc_linked:
+      type: boolean
+      description: Whether the account is linked to the configured Keycloak realm.
+    migration_required:
+      type: boolean
+      description: Whether the legacy account is read-only until a Keycloak identity is linked.
+
+OIDCConfig:
+  type: object
+  required: [enabled, login_path]
+  properties:
+    enabled: { type: boolean }
+    login_path: { type: string, pattern: "^/oauth2/start$" }
 
 AuthResponse:
   type: object

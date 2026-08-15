@@ -35,6 +35,26 @@ func (a *AuthAPI) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		ctx := handlers.WithUserID(r.Context(), claims.UserID)
+		ctx = handlers.WithMigrationRequired(ctx, a.cfg.OIDCEnabled && !status.OIDCLinked)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+// LegacyReadOnlyMiddleware prevents an unmigrated password account from
+// changing application state. Reads, the Keycloak-link action, recovery-email
+// delivery, and account deletion remain available while the player migrates.
+func (a *AuthAPI) LegacyReadOnlyMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !handlers.MigrationRequired(r) || r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		allowed := r.Method == http.MethodPost && (r.URL.Path == "/api/v1/auth/oidc/link" || r.URL.Path == "/api/v1/auth/verify/request") ||
+			r.Method == http.MethodDelete && r.URL.Path == "/api/v1/auth/account"
+		if allowed {
+			next.ServeHTTP(w, r)
+			return
+		}
+		handlers.WriteError(w, http.StatusForbidden, "migration_required", "Connect this account to Keycloak before making changes")
 	}
 }

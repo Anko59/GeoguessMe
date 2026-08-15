@@ -18,6 +18,9 @@ format: ## Format tracked source/configuration files in Docker.
 
 fmt: format ## Compatibility alias for format.
 
+mod-tidy: ## Reconcile backend Go module metadata in Docker after dependency changes.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps --user 0:0 go-tools-write sh -c 'cd backend && GOCACHE=/tmp/go-build-cache go mod tidy && chown $(shell id -u):$(shell id -g) go.mod go.sum'
+
 format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
@@ -33,7 +36,7 @@ lint-frontend: ## Run ESLint with zero warnings.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint -- --max-warnings=0
 
 lint-dead-code: ## Reject unused frontend files, exports, and dependencies.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint:dead-code
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps -e KNIP_DISABLE_RAW_TRANSFER=1 node-tools npm --prefix /workspace/frontend run lint:dead-code
 
 lint-debt-markers: ## Require durable ownership for deferred code work.
 	tools/quality/debt/check-markers.sh

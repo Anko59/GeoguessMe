@@ -62,6 +62,51 @@
     margin-bottom: var(--space-5);
 }
 
+.btn-social {
+    width: 100%;
+    margin-bottom: var(--space-5);
+    color: var(--brand-navy);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    text-decoration: none;
+}
+
+.auth-provider-note {
+    margin: 0 auto var(--space-5);
+    color: var(--ink-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.auth-migration-notice {
+    margin: 0 0 var(--space-5);
+    padding: var(--space-4);
+    color: var(--brand-navy);
+    background: var(--surface-brand);
+    border: 1px solid rgba(0, 119, 182, 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.auth-divider {
+    margin: 0 0 var(--space-5);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    height: 1px;
+    flex: 1;
+    background: var(--line);
+    content: '';
+}
+
 .auth-form label:not(:first-child) {
     margin-top: var(--space-1);
 }

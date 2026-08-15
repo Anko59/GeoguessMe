@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,9 +14,36 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 )
 
+func TestOIDCIdentityLockKeyIsValidPostgresText(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	identity := OIDCIdentity{
+		Issuer:  "https://auth.geoguessme.com/realms/geoguessme",
+		Subject: "keycloak-subject",
+	}
+	expected := fmt.Sprintf("identity:%d:%s%s", len(identity.Issuer), identity.Issuer, identity.Subject)
+	if strings.ContainsRune(expected, '\x00') {
+		t.Fatal("OIDC advisory-lock key contains a PostgreSQL-invalid NUL byte")
+	}
+	mock.ExpectBegin()
+	tx, err := mock.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(expected).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	if err := lockOIDCIdentity(ctx, tx, identity); err != nil {
+		t.Fatalf("lockOIDCIdentity: %v", err)
+	}
+	mock.ExpectRollback()
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+}
+
 func userRows(user *models.User) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
-		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail)
+	passwordEnabled := user.PasswordEnabled || user.Password != "!"
+	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}).
+		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail, passwordEnabled, user.OIDCLinked)
 }
 
 func TestUserQueriesAndSessionLifecycle(t *testing.T) {
@@ -45,9 +74,9 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 			t.Errorf("%s = %+v, %v", name, got, err)
 		}
 	}
-	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(2))
+	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(2, false))
 	status, err := repo.GetUserAuthStatus(context.Background(), user.ID)
-	if err != nil || !status.Active || status.AuthVersion != 2 {
+	if err != nil || !status.Active || status.AuthVersion != 2 || status.OIDCLinked {
 		t.Fatalf("auth status = %+v, %v", status, err)
 	}
 	mock.ExpectQuery("SELECT auth_version").WithArgs("missing").WillReturnError(pgx.ErrNoRows)

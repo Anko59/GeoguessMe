@@ -12,6 +12,12 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/signup
   /auth/login:
     $ref: ./openapi/paths/auth.yaml#/login
+  /auth/oidc/config:
+    $ref: ./openapi/paths/auth.yaml#/oidcConfig
+  /auth/oidc/session:
+    $ref: ./openapi/paths/auth.yaml#/oidcSession
+  /auth/oidc/link:
+    $ref: ./openapi/paths/auth.yaml#/oidcLink
   /auth/refresh:
     $ref: ./openapi/paths/auth.yaml#/refresh
   /auth/logout:
@@ -94,6 +100,8 @@ components:
       $ref: ./openapi/components/security.yaml#/bearerAuth
     cookieAuth:
       $ref: ./openapi/components/security.yaml#/cookieAuth
+    oidcProxyAuth:
+      $ref: ./openapi/components/security.yaml#/oidcProxyAuth
   schemas:
     $ref: ./openapi/components/schemas.yaml
   responses:

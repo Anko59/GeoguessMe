@@ -192,6 +192,9 @@ func Load() (*Config, error) {
 		VerificationTTL:  l.durationValue("VERIFICATION_TOKEN_TTL", 24*time.Hour),
 		ResetTTL:         l.durationValue("RESET_TOKEN_TTL", time.Hour),
 		PasswordHashCost: l.intValue("BCRYPT_COST", 12),
+		OIDCEnabled:      l.boolValue("OIDC_ENABLED", false),
+		OIDCIssuerURL:    strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL")),
+		OIDCClientID:     strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
 
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        l.intValue("SMTP_PORT", 1025),
@@ -254,6 +257,9 @@ func Load() (*Config, error) {
 
 	l.urlValue("PUBLIC_URL", cfg.PublicURL)
 	l.urlValue("S3_ENDPOINT", cfg.S3Endpoint)
+	if cfg.OIDCIssuerURL != "" {
+		l.urlValue("OIDC_ISSUER_URL", cfg.OIDCIssuerURL)
+	}
 	if len(l.problems) > 0 {
 		return cfg, errors.New(strings.Join(l.problems, "; "))
 	}

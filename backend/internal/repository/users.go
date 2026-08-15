@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at, pending_email"
+	userColumns = "id, username, email, password, avatar, COALESCE(email_verified_at, NULL), auth_version, created_at, updated_at, pending_email, legacy_password_enabled, EXISTS (SELECT 1 FROM user_identities WHERE user_id = users.id)"
 )
 
 // ErrUsernameConflict reports that a username write lost the database's
@@ -48,6 +48,9 @@ func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
 	}
 	query := `INSERT INTO users (id, username, email, email_normalized, pending_email, pending_email_normalized, password, avatar, created_at, updated_at) VALUES ($1, $2, NULL, NULL, $3, $4, $5, $6, $7, $7)`
 	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, pendingValue, normalizedValue, user.Password, user.Avatar, user.CreatedAt)
+	if err == nil {
+		user.PasswordEnabled = true
+	}
 	return translateUsernameConflict(err)
 }
 
@@ -120,20 +123,22 @@ func (r *Repository) GetGlobalRank(ctx context.Context, userID string) (groups.G
 type AuthStatus struct {
 	Active      bool
 	AuthVersion int
+	OIDCLinked  bool
 }
 
 // GetUserAuthStatus reports the account's activity and auth version for
 // protected-route middleware.
 func (r *Repository) GetUserAuthStatus(ctx context.Context, userID string) (AuthStatus, error) {
 	var version int
-	err := r.pool.QueryRow(ctx, `SELECT auth_version FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&version)
+	var oidcLinked bool
+	err := r.pool.QueryRow(ctx, `SELECT auth_version, EXISTS (SELECT 1 FROM user_identities WHERE user_id = users.id) FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&version, &oidcLinked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthStatus{Active: false}, nil
 	}
 	if err != nil {
 		return AuthStatus{}, err
 	}
-	return AuthStatus{Active: true, AuthVersion: version}, nil
+	return AuthStatus{Active: true, AuthVersion: version, OIDCLinked: oidcLinked}, nil
 }
 
 type rowScanner interface{ Scan(dest ...any) error }
@@ -142,7 +147,7 @@ func scanUser(row rowScanner) (*models.User, error) {
 	var user models.User
 	var verified *time.Time
 	var email, pendingEmail sql.NullString
-	err := row.Scan(&user.ID, &user.Username, &email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt, &pendingEmail)
+	err := row.Scan(&user.ID, &user.Username, &email, &user.Password, &user.Avatar, &verified, &user.AuthVersion, &user.CreatedAt, &user.UpdatedAt, &pendingEmail, &user.PasswordEnabled, &user.OIDCLinked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -352,7 +357,7 @@ func (r *Repository) ResetPasswordTransaction(ctx context.Context, tokenHash, pa
 	if err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, userID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, legacy_password_enabled = TRUE, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, userID); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
@@ -423,7 +428,7 @@ func (r *Repository) ChangePassword(ctx context.Context, userID, passwordHash st
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND deleted_at IS NULL`, passwordHash, userID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE users SET password = $1, legacy_password_enabled = TRUE, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND deleted_at IS NULL`, passwordHash, userID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
@@ -489,6 +494,6 @@ func (r *Repository) DeleteUserCascade(ctx context.Context, userID string) ([]st
 // CleanupAuthTokens deletes expired one-time and refresh tokens plus expired
 // WebSocket tickets. It backs the periodic cleanup worker.
 func (r *Repository) CleanupAuthTokens(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM refresh_sessions WHERE expires_at < CURRENT_TIMESTAMP OR revoked_at < CURRENT_TIMESTAMP - interval '30 days'; DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM websocket_tickets WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'`)
+	_, err := r.pool.Exec(ctx, `DELETE FROM refresh_sessions WHERE expires_at < CURRENT_TIMESTAMP OR revoked_at < CURRENT_TIMESTAMP - interval '30 days'; DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM websocket_tickets WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'; DELETE FROM oidc_link_intents WHERE expires_at < CURRENT_TIMESTAMP OR used_at < CURRENT_TIMESTAMP - interval '1 day'`)
 	return err
 }

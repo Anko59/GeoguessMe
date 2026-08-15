@@ -48,9 +48,10 @@ secret_file=$(environment_env_file "$environment")
 temporary_secret=''
 old_secret=''
 secret_replaced=false
+identity_temporary=''
+trap 'rm -f "$temporary_secret" "$identity_temporary"' EXIT INT TERM
 if [ -f "$encrypted" ]; then
     temporary_secret=$(mktemp "$SECRET_ROOT/$environment.env.XXXXXX")
-    trap 'rm -f "$temporary_secret"' EXIT INT TERM
     docker run --rm \
         -e "SOPS_AGE_KEY_FILE=/age/$environment.txt" \
         -v "$release:/source:ro" -v "$SECRET_ROOT/age:/age:ro" \
@@ -65,6 +66,33 @@ if [ -n "$temporary_secret" ]; then
     registry_secret=$temporary_secret
 fi
 [ -f "$registry_secret" ] || die "missing secret file: $registry_secret"
+oidc_enabled=false
+if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$registry_secret"; then
+    oidc_enabled=true
+    identity_encrypted="$release/deployment/secrets/identity.env.enc"
+    [ -f "$identity_encrypted" ] || die 'OIDC is enabled but deployment/secrets/identity.env.enc is missing'
+    identity_temporary=$(mktemp "$SECRET_ROOT/identity.env.XXXXXX")
+    docker run --rm \
+        -e "SOPS_AGE_KEY_FILE=/age/$environment.txt" \
+        -v "$release:/source:ro" -v "$SECRET_ROOT/age:/age:ro" \
+        "$SOPS_IMAGE" decrypt --input-type dotenv --output-type dotenv \
+        "/source/deployment/secrets/identity.env.enc" \
+        >"$identity_temporary"
+    chmod 600 "$identity_temporary"
+    identity_file=$(identity_env_file)
+    if [ -f "$identity_file" ] && ! cmp -s "$identity_file" "$identity_temporary"; then
+        die 'shared identity secrets differ from the installed stack; follow the Keycloak rotation runbook'
+    fi
+    case "$environment" in
+        dev) identity_client_key=GEOGUESSME_DEV_OIDC_CLIENT_SECRET ;;
+        production) identity_client_key=GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET ;;
+    esac
+    app_client_secret=$(sed -n 's/^OAUTH2_PROXY_CLIENT_SECRET=//p' "$registry_secret" | tail -1)
+    identity_client_secret=$(sed -n "s/^$identity_client_key=//p" "$identity_temporary" | tail -1)
+    if [ -z "$app_client_secret" ] || [ "$app_client_secret" != "$identity_client_secret" ]; then
+        die "$environment OAuth2 Proxy client secret does not match the shared Keycloak realm"
+    fi
+fi
 registry_username=$(sed -n 's/^GHCR_USERNAME=//p' "$registry_secret" | tail -1)
 registry_token=$(sed -n 's/^GHCR_TOKEN=//p' "$registry_secret" | tail -1)
 if [ -z "$registry_username" ] || [ -z "$registry_token" ]; then
@@ -114,8 +142,13 @@ rollback() {
                 valid_image_reference "$old_web" &&
                 [ "$valid_revision" = true ] && [ "${#old_revision}" -eq 40 ]; then
                 old_release=$(release_dir "$old_revision")
-                BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
-                    compose "$environment" "$old_release" up -d --wait backend web postgres || true
+                if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$secret_file"; then
+                    BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
+                        compose "$environment" "$old_release" up -d --wait backend oauth2-proxy web postgres || true
+                else
+                    BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
+                        compose "$environment" "$old_release" up -d --wait backend web postgres || true
+                fi
             fi
             printf 'deployment failed; previous images and secrets were restored; database was not restored\n' >&2
         else
@@ -123,6 +156,7 @@ rollback() {
         fi
     fi
     [ -z "$temporary_secret" ] || rm -f "$temporary_secret"
+    [ -z "$identity_temporary" ] || rm -f "$identity_temporary"
     [ -z "$old_secret" ] || rm -f "$old_secret"
     exit "$status"
 }
@@ -140,10 +174,29 @@ if [ -n "$temporary_secret" ]; then
 fi
 require_secret_file "$environment"
 
+if [ "$oidc_enabled" = true ]; then
+    identity_file=$(identity_env_file)
+    if [ ! -f "$identity_file" ]; then
+        mv "$identity_temporary" "$identity_file"
+        identity_temporary=''
+        chmod 600 "$identity_file"
+    fi
+    compose_identity "$release" pull keycloak keycloak-db
+    compose_identity "$release" up -d --wait keycloak-db keycloak
+fi
+
 export BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image"
-compose "$environment" "$release" pull backend web postgres
+if [ "$oidc_enabled" = true ]; then
+    compose "$environment" "$release" pull backend web oauth2-proxy postgres
+else
+    compose "$environment" "$release" pull backend web postgres
+fi
 compose "$environment" "$release" run --rm migration migrate up
-compose "$environment" "$release" up -d --wait postgres backend web
+if [ "$oidc_enabled" = true ]; then
+    compose "$environment" "$release" up -d --wait postgres backend oauth2-proxy web
+else
+    compose "$environment" "$release" up -d --wait postgres backend web
+fi
 curl --fail --silent --show-error --max-time 10 \
     "http://127.0.0.1:$(environment_port "$environment")/health/ready" >/dev/null
 
@@ -157,4 +210,5 @@ umask 077
 ln -sfn "$release" "$APP_ROOT/$environment/current"
 trap - EXIT INT TERM
 [ -z "$old_secret" ] || rm -f "$old_secret"
+[ -z "$identity_temporary" ] || rm -f "$identity_temporary"
 printf 'deployment completed: environment=%s revision=%s\n' "$environment" "$revision"

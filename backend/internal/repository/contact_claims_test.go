@@ -51,8 +51,8 @@ func TestScanUserNullEmail(t *testing.T) {
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
-			AddRow("user-1", "alice", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test"))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}).
+			AddRow("user-1", "alice", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test", true, false))
 	user, err := repo.GetUserByID(context.Background(), "user-1")
 	if err != nil || user == nil {
 		t.Fatalf("GetUserByID = %+v, %v", user, err)

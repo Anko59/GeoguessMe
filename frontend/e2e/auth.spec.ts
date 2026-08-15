@@ -267,3 +267,111 @@ test.describe('Session lifecycle', () => {
         await expect(page.locator('#login-username')).toBeVisible();
     });
 });
+
+test.describe('Local social-auth visual validation', () => {
+    const username = process.env.OIDC_VISUAL_USERNAME;
+    const password = process.env.OIDC_VISUAL_PASSWORD;
+    const legacyUsername = process.env.LEGACY_MIGRATION_VISUAL_USERNAME;
+    const legacyPassword = process.env.LEGACY_MIGRATION_VISUAL_PASSWORD;
+
+    test.skip(!username || !password, 'requires the local dev-social Keycloak fixture');
+
+    test('creates a social account, signs it back in, and captures the key screens', async ({ page }, testInfo) => {
+        test.setTimeout(120_000);
+        await page.goto('/login');
+        const socialLogin = page.getByRole('link', { name: 'Continue with Google, Apple, or GitHub' });
+        await expect(socialLogin).toBeVisible();
+        await expect(page.locator('#login-username')).toHaveCount(0);
+        await page.locator('.auth-card').evaluate(async (element) => {
+            await Promise.all(element.getAnimations().map((animation) => animation.finished));
+        });
+        await page.screenshot({ path: testInfo.outputPath('01-app-login.png'), fullPage: true });
+
+        await page.goto('/signup');
+        const socialSignup = page.getByRole('link', { name: 'Sign up with Google, Apple, or GitHub' });
+        await expect(socialSignup).toBeVisible();
+        await expect(page.locator('#signup-username')).toHaveCount(0);
+        await page.locator('.auth-card').evaluate(async (element) => {
+            await Promise.all(element.getAnimations().map((animation) => animation.finished));
+        });
+        await page.screenshot({ path: testInfo.outputPath('02-app-signup.png'), fullPage: true });
+
+        await Promise.all([
+            page.waitForURL(/auth\.geoguessme\.localhost:8083/, {
+                waitUntil: 'domcontentloaded',
+                timeout: 30_000,
+            }),
+            socialSignup.click(),
+        ]);
+        await expect(page.locator('#kc-form-login')).toBeVisible();
+        await expect(page.getByText('Google', { exact: true })).toBeVisible();
+        await expect(page.getByText('GitHub', { exact: true })).toBeVisible();
+        await expect(page.getByText('Apple', { exact: true })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('03-keycloak-login.png'), fullPage: true });
+
+        await page.locator('#username').fill(username ?? '');
+        await page.locator('#password').fill(password ?? '');
+        await Promise.all([
+            page.waitForURL(/\/groups$/, { waitUntil: 'domcontentloaded', timeout: 60_000 }),
+            page.locator('#kc-login').click(),
+        ]);
+        await expect(page.locator('.groups-header')).toBeVisible();
+        const dismissInstall = page.getByRole('button', { name: 'Dismiss install prompt' });
+        if (await dismissInstall.isVisible()) await dismissInstall.click();
+        await page.screenshot({ path: testInfo.outputPath('04-social-session.png'), fullPage: true });
+
+        await page.goto('/settings');
+        await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+        await expect(page.getByText('Social login is connected.')).toBeVisible();
+        await expect(page.getByRole('link', { name: /Manage 2FA and passkeys/ })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('05-account-security.png'), fullPage: true });
+
+        // A fresh cookie jar proves the identity created through the signup
+        // entry point resolves to the same account on a later login.
+        await page.context().clearCookies();
+        await page.goto('/login');
+        const returningSocialLogin = page.getByRole('link', { name: 'Continue with Google, Apple, or GitHub' });
+        await expect(returningSocialLogin).toBeVisible();
+        await Promise.all([
+            page.waitForURL(/auth\.geoguessme\.localhost:8083/, {
+                waitUntil: 'domcontentloaded',
+                timeout: 30_000,
+            }),
+            returningSocialLogin.click(),
+        ]);
+        await page.locator('#username').fill(username ?? '');
+        await page.locator('#password').fill(password ?? '');
+        await Promise.all([
+            page.waitForURL(/\/groups$/, { waitUntil: 'domcontentloaded', timeout: 60_000 }),
+            page.locator('#kc-login').click(),
+        ]);
+        await expect(page.locator('.groups-header')).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('06-returning-social-login.png'), fullPage: true });
+    });
+
+    test('keeps legacy credentials hidden except for the read-only migration flow', async ({ page }, testInfo) => {
+        test.skip(!legacyUsername || !legacyPassword, 'requires an unmigrated local application fixture');
+
+        await page.goto('/login');
+        await expect(page.getByRole('link', { name: 'Continue with Google, Apple, or GitHub' })).toBeVisible();
+        await expect(page.locator('#login-username')).toHaveCount(0);
+
+        await page.goto('/migrate-account');
+        await expect(page.getByRole('heading', { name: 'Migrate your account' })).toBeVisible();
+        await expect(page.getByRole('note')).toContainText('legacy session is read-only');
+        await page.locator('#login-username').fill(legacyUsername ?? '');
+        await page.locator('#login-password').fill(legacyPassword ?? '');
+        await page.screenshot({ path: testInfo.outputPath('07-hidden-migration-login.png'), fullPage: true });
+
+        await Promise.all([
+            page.waitForURL(/\/settings$/, { timeout: 30_000 }),
+            page.getByRole('button', { name: 'Login' }).click(),
+        ]);
+        await expect(page.getByText('This legacy account is read-only until Keycloak is connected.')).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Finish account migration' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Connect Google, Apple, or GitHub' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save profile' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Change password' })).toHaveCount(0);
+        await page.screenshot({ path: testInfo.outputPath('08-read-only-migration-settings.png'), fullPage: true });
+    });
+});

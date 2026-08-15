@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { AuthResponse } from '../../types';
+import type { AuthResponse, OIDCConfig } from '../../types';
 import './Auth.css';
 
-export default function Login() {
+export default function Login({ migrationMode = false }: { migrationMode?: boolean }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [oidcConfig, setOIDCConfig] = useState<OIDCConfig | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const { login } = useAuth();
@@ -18,7 +19,28 @@ export default function Login() {
     // URL query. GroupJoin reads it from sessionStorage after login, so only a
     // bare /group/join is a valid post-auth target.
     const fromPath = rawFrom.split('?')[0].split('#')[0];
-    const returnTo = fromPath === '/group/join' ? '/group/join' : '/groups';
+    const returnTo = migrationMode ? '/settings' : fromPath === '/group/join' ? '/group/join' : '/groups';
+    const activeOIDCConfig = migrationMode ? { enabled: false, login_path: '/oauth2/start' } : oidcConfig;
+
+    useEffect(() => {
+        if (migrationMode) {
+            return;
+        }
+        let active = true;
+        void api
+            .get<OIDCConfig>('/auth/oidc/config')
+            .then((response) => {
+                if (active) setOIDCConfig(response.data);
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, [migrationMode]);
+
+    const rememberSocialReturn = (): void => {
+        sessionStorage.setItem('geoguessme_oidc_return_to', returnTo);
+    };
 
     const handleSubmit = async (event: React.FormEvent): Promise<void> => {
         event.preventDefault();
@@ -39,48 +61,87 @@ export default function Login() {
         <div className="auth-container">
             <div className="auth-card fade-in">
                 <img src="/logo.png" alt="GeoGuessMe" className="auth-logo" />
-                <h2 className="auth-title gradient-text">Welcome Back!</h2>
-                <p className="auth-subtitle">Login to continue guessing</p>
-                <form onSubmit={handleSubmit} className="auth-form">
-                    <label htmlFor="login-username">Username</label>
-                    <input
-                        id="login-username"
-                        type="text"
-                        placeholder="Username"
-                        value={username}
-                        onChange={(event) => setUsername(event.target.value)}
-                        required
-                        autoComplete="username"
-                    />
-                    <label htmlFor="login-password">Password</label>
-                    <input
-                        id="login-password"
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        required
-                        autoComplete="current-password"
-                    />
-                    {error && (
-                        <div className="auth-error" role="alert">
-                            {error}
-                        </div>
-                    )}
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? 'Logging in…' : 'Login'}
-                    </button>
-                </form>
-                <p className="auth-footer">
-                    <Link to="/forgot-password" className="auth-link">
-                        Forgot your password?
-                    </Link>
+                <h2 className="auth-title gradient-text">{migrationMode ? 'Migrate your account' : 'Welcome Back!'}</h2>
+                <p className="auth-subtitle">
+                    {migrationMode
+                        ? 'Use your old GeoGuessMe credentials once to connect Keycloak.'
+                        : 'Sign in securely to continue guessing'}
                 </p>
+                {migrationMode && (
+                    <p className="auth-migration-notice" role="note">
+                        This legacy session is read-only. Your groups and scores stay on the same account, and normal
+                        access returns as soon as you connect Google, Apple, or GitHub in Settings.
+                    </p>
+                )}
+                {activeOIDCConfig?.enabled ? (
+                    <>
+                        <a
+                            className="btn btn-social"
+                            href={`${activeOIDCConfig.login_path}?rd=${encodeURIComponent('/auth/oidc/callback')}`}
+                            onClick={rememberSocialReturn}
+                        >
+                            Continue with Google, Apple, or GitHub
+                        </a>
+                        <p className="auth-provider-note">
+                            GeoGuessMe uses Keycloak for sign-in. Two-factor authentication and passkeys stay optional.
+                        </p>
+                    </>
+                ) : activeOIDCConfig ? (
+                    <>
+                        <form onSubmit={handleSubmit} className="auth-form">
+                            <label htmlFor="login-username">Username</label>
+                            <input
+                                id="login-username"
+                                type="text"
+                                placeholder="Username"
+                                value={username}
+                                onChange={(event) => setUsername(event.target.value)}
+                                required
+                                autoComplete="username"
+                            />
+                            <label htmlFor="login-password">Password</label>
+                            <input
+                                id="login-password"
+                                type="password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                required
+                                autoComplete="current-password"
+                            />
+                            {error && (
+                                <div className="auth-error" role="alert">
+                                    {error}
+                                </div>
+                            )}
+                            <button type="submit" className="btn btn-primary" disabled={submitting}>
+                                {submitting ? 'Logging in…' : 'Login'}
+                            </button>
+                        </form>
+                        <p className="auth-footer">
+                            <Link to="/forgot-password" className="auth-link">
+                                Forgot your password?
+                            </Link>
+                        </p>
+                    </>
+                ) : (
+                    <p className="auth-provider-note" role="status">
+                        Loading secure sign-in…
+                    </p>
+                )}
                 <p className="auth-footer">
-                    Don't have an account?{' '}
-                    <Link to="/signup" state={{ from: returnTo }} className="auth-link">
-                        Sign up
-                    </Link>
+                    {migrationMode ? (
+                        <Link to="/login" className="auth-link">
+                            Back to Keycloak sign in
+                        </Link>
+                    ) : (
+                        <>
+                            Don't have an account?{' '}
+                            <Link to="/signup" state={{ from: returnTo }} className="auth-link">
+                                Sign up
+                            </Link>
+                        </>
+                    )}
                 </p>
             </div>
         </div>

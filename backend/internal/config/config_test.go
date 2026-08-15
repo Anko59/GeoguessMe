@@ -13,6 +13,7 @@ var allConfigVariables = []string{
 	"APP_ENV", "PORT", "PUBLIC_URL", "STORAGE_DRIVER",
 	"DATABASE_URL", "DB_MIN_CONNS", "DB_MAX_CONNS", "JWT_SECRET",
 	"ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL", "VERIFICATION_TOKEN_TTL", "RESET_TOKEN_TTL", "BCRYPT_COST",
+	"OIDC_ENABLED", "OIDC_ISSUER_URL", "OIDC_CLIENT_ID",
 	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_TLS", "SMTP_DIAL_TIMEOUT", "SMTP_TIMEOUT",
 	"S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_USE_PATH_STYLE",
 	"ALLOWED_ORIGINS", "TRUSTED_PROXY_CIDRS",
@@ -73,6 +74,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.StorageDriver != "" {
 		t.Errorf("Expected default StorageDriver empty (S3), got %q", cfg.StorageDriver)
+	}
+	if cfg.OIDCEnabled {
+		t.Error("Expected OIDC to be disabled by default")
 	}
 }
 

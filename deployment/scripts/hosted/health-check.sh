@@ -12,12 +12,25 @@ release="$APP_ROOT/$environment/current"
 
 curl --fail --silent --show-error --max-time 10 \
     "http://127.0.0.1:$(environment_port "$environment")/health/ready" >/dev/null
-for service in postgres backend web; do
+services='postgres backend web'
+if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$(environment_env_file "$environment")"; then
+    services="$services oauth2-proxy"
+fi
+for service in $services; do
     container_id=$(compose "$environment" "$release" ps --quiet "$service")
     [ -n "$container_id" ] || die "$environment $service container is missing"
     health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
     [ "$health" = healthy ] || die "$environment $service is $health"
 done
+
+if [ "$environment" = production ] && [ -f "$(identity_env_file)" ]; then
+    for service in keycloak-db keycloak; do
+        container_id=$(compose_identity "$release" ps --quiet "$service")
+        [ -n "$container_id" ] || die "identity $service container is missing"
+        health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
+        [ "$health" = healthy ] || die "identity $service is $health"
+    done
+fi
 
 disk_use=$(df -P "$STATE_ROOT" | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')
 [ "$disk_use" -lt 85 ] || die "disk usage is ${disk_use}%"
