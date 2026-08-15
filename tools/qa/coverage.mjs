@@ -26,6 +26,7 @@ export class CoverageTracker {
     this.outsiderGroupAttempt = false;
     this.capabilities = { camera: false, geolocation: false };
     this.challengeUploaded = false;
+    this.mediaActionObserved = false;
     this.challengeAccepted = false;
     this.guessPlaced = false;
     this.guessSubmitted = false;
@@ -63,15 +64,26 @@ export class CoverageTracker {
     this.capabilities.geolocation ||= result?.geolocation?.usable === true;
   }
 
+  viewportObserved(width, height) {
+    if (Number(width) <= 480 && Number(height) >= 240) this.mobile = true;
+  }
+
+  mediaAction() {
+    this.mediaActionObserved = true;
+    this.challengeUploaded = true;
+  }
+
   action(name, args) {
     const target = JSON.stringify(args.target || "").toLowerCase();
-    if (name === "browser_upload" && /(challenge|camera|capture|photo)/.test(target) && !target.includes("profile")) this.challengeUploaded = true;
+    const nonProfileMediaTarget = /(challenge|camera|capture|photo|attach)/.test(target) && !target.includes("profile");
+    if (name === "browser_upload" && nonProfileMediaTarget) this.mediaAction();
+    if (name === "browser_click" && /(capture|take photo|attach photo|publish.*photo|photo challenge)/.test(target)) this.mediaAction();
     if (name === "browser_reload") this.refreshed = true;
     if (name === "browser_resize" && Number(args.width) <= 480) this.mobile = true;
     if (target.includes("message") || target.includes("chat") || target.includes("send")) this.chatAction = true;
-    if (target.includes("accept") && target.includes("challenge")) this.challengeAccepted = true;
-    if (target.includes("guess map") || target.includes("place guess")) this.guessPlaced = true;
-    if (target.includes("submit") && (target.includes("guess") || target.includes("challenge"))) this.guessSubmitted = true;
+    if (target.includes("accept") && (target.includes("challenge") || this.challengeObserved)) this.challengeAccepted = true;
+    if (target.includes("guess map") || target.includes("place guess") || (this.challengeObserved && target.includes("map"))) this.guessPlaced = true;
+    if (target.includes("submit") && (target.includes("guess") || target.includes("challenge") || this.challengeObserved)) this.guessSubmitted = true;
     if (target.includes("leaderboard")) this.leaderboardObserved = true;
     if (target.includes("settings")) this.settingsVisited = true;
     if (target.includes("profile")) this.profileVisited = true;
@@ -98,7 +110,7 @@ export class CoverageTracker {
       "groups-and-authorization": this.inviteCaptured && this.inviteOpened && this.outsiderGroupAttempt,
       "multi-user-group-chat": ["owner", "member", "outsider"].every((role) => this.roles.has(role)) && this.chatAction && this.chatObservationSessions.size >= 2,
       "photo-challenge-game": this.challengeUploaded && this.challengeObserved && this.challengeAccepted && this.guessPlaced && this.guessSubmitted,
-      "camera-location-media": this.capabilities.camera && this.capabilities.geolocation && this.challengeUploaded,
+      "camera-location-media": this.capabilities.camera && this.capabilities.geolocation && this.mediaActionObserved,
       "refresh-and-reconnect": this.refreshed,
       "leaderboard-and-progression": this.leaderboardObserved,
       "profile-and-settings": this.profileVisited && this.settingsVisited,
