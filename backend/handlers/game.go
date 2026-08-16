@@ -124,6 +124,8 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
 		case errors.Is(err, groups.ErrViewNotFinished):
 			WriteError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+		case errors.Is(err, groups.ErrGuessTimeExpired):
+			WriteError(w, http.StatusGone, "guess_time_expired", "You did not guess in time")
 		case errors.Is(err, groups.ErrInvalidCoordinate):
 			WriteError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
 		default:

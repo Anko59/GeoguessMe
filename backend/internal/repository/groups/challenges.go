@@ -55,17 +55,20 @@ func (r *Repository) Photo(ctx context.Context, id string) (*models.Photo, error
 
 // ChallengeView is the accepted viewing state of a challenge.
 type ChallengeView struct {
-	PhotoID       string    `json:"photo_id"`
-	UserID        string    `json:"user_id"`
-	AcceptedAt    time.Time `json:"accepted_at"`
-	ViewExpiresAt time.Time `json:"view_expires_at"`
+	PhotoID        string    `json:"photo_id"`
+	UserID         string    `json:"user_id"`
+	AcceptedAt     time.Time `json:"accepted_at"`
+	ViewExpiresAt  time.Time `json:"view_expires_at"`
+	GuessExpiresAt time.Time `json:"guess_expires_at"`
 }
 
 // AcceptChallenge opens a private viewing window for a member on a challenge
 // they did not post, in a single transaction. The membership and ownership
 // rules are enforced here so the data layer and the transport layer share one
-// access rule.
-func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (*models.Photo, *ChallengeView, error) {
+// access rule. The guess window (view end + guessWindow, capped at the
+// challenge expiry) is recorded alongside the view so the guess deadline is
+// fixed at acceptance time even when the player closes the app.
+func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string, viewWindow, guessWindow time.Duration, now time.Time) (*models.Photo, *ChallengeView, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -92,17 +95,34 @@ func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string
 		return nil, nil, ErrChallengeExpired
 	}
 	var view ChallengeView
-	err = tx.QueryRow(ctx, `SELECT photo_id, user_id, accepted_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&view.PhotoID, &view.UserID, &view.AcceptedAt, &view.ViewExpiresAt)
+	var guessExpires pgtype.Timestamptz
+	err = tx.QueryRow(ctx, `SELECT photo_id, user_id, accepted_at, view_expires_at, guess_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&view.PhotoID, &view.UserID, &view.AcceptedAt, &view.ViewExpiresAt, &guessExpires)
 	if errors.Is(err, pgx.ErrNoRows) {
 		view = ChallengeView{PhotoID: photoID, UserID: userID, AcceptedAt: now, ViewExpiresAt: now.Add(viewWindow)}
 		if view.ViewExpiresAt.After(photo.ExpiresAt) {
 			view.ViewExpiresAt = photo.ExpiresAt
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO challenge_views(photo_id, user_id, accepted_at, view_expires_at) VALUES ($1, $2, $3, $4)`, view.PhotoID, view.UserID, view.AcceptedAt, view.ViewExpiresAt); err != nil {
+		// The guess window opens when the viewing window ends; it is capped at
+		// the challenge expiry so a guess deadline can never outlive the photo.
+		view.GuessExpiresAt = view.ViewExpiresAt.Add(guessWindow)
+		if view.GuessExpiresAt.After(photo.ExpiresAt) {
+			view.GuessExpiresAt = photo.ExpiresAt
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO challenge_views(photo_id, user_id, accepted_at, view_expires_at, guess_expires_at) VALUES ($1, $2, $3, $4, $5)`, view.PhotoID, view.UserID, view.AcceptedAt, view.ViewExpiresAt, view.GuessExpiresAt); err != nil {
 			return nil, nil, err
 		}
 	} else if err != nil {
 		return nil, nil, err
+	} else if !guessExpires.Valid {
+		// A legacy view row without a recorded guess deadline (pre-migration)
+		// derives it from the stored view end so the accept response stays
+		// valid even before migration 021 backfills the row.
+		view.GuessExpiresAt = view.ViewExpiresAt.Add(guessWindow)
+		if view.GuessExpiresAt.After(photo.ExpiresAt) {
+			view.GuessExpiresAt = photo.ExpiresAt
+		}
+	} else {
+		view.GuessExpiresAt = guessExpires.Time
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, err
@@ -110,25 +130,31 @@ func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string
 	return photo, &view, nil
 }
 
-// MarkMediaDelivered starts the one-time private viewing window. It is
-// idempotent so the streaming handler and the client's delivery
-// acknowledgement can safely race without extending an existing window.
-func (r *Repository) MarkMediaDelivered(ctx context.Context, photoID, userID string, viewWindow time.Duration, now time.Time) (time.Time, error) {
-	var expiresAt time.Time
-	err := r.pool.QueryRow(ctx, `
+// MarkMediaDelivered starts the one-time private viewing window and the
+// derived guess window. It is idempotent so the streaming handler and the
+// client's delivery acknowledgement can safely race without extending an
+// existing window; on a first delivery both deadlines move to delivery + the
+// respective windows (capped at the challenge expiry) and are never extended
+// again.
+func (r *Repository) MarkMediaDelivered(ctx context.Context, photoID, userID string, viewWindow, guessWindow time.Duration, now time.Time) (viewExpiresAt, guessExpiresAt time.Time, err error) {
+	err = r.pool.QueryRow(ctx, `
 		UPDATE challenge_views v
 		SET media_delivered_at = COALESCE(v.media_delivered_at, $3),
 			view_expires_at = CASE
 				WHEN v.media_delivered_at IS NULL THEN LEAST($3 + $4 * INTERVAL '1 second', p.expires_at)
 				ELSE v.view_expires_at
+			END,
+			guess_expires_at = CASE
+				WHEN v.media_delivered_at IS NULL THEN LEAST($3 + $4 * INTERVAL '1 second' + $5 * INTERVAL '1 second', p.expires_at)
+				ELSE v.guess_expires_at
 			END
 		FROM photos p
 		WHERE v.photo_id = $1 AND v.user_id = $2 AND p.id = v.photo_id
-		RETURNING v.view_expires_at`, photoID, userID, now, int64(viewWindow.Seconds())).Scan(&expiresAt)
+		RETURNING v.view_expires_at, v.guess_expires_at`, photoID, userID, now, int64(viewWindow.Seconds()), int64(guessWindow.Seconds())).Scan(&viewExpiresAt, &guessExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return time.Time{}, ErrForbidden
+		return time.Time{}, time.Time{}, ErrForbidden
 	}
-	return expiresAt, err
+	return viewExpiresAt, guessExpiresAt, err
 }
 
 // ViewDeliveryStatus reports the delivery state of a challenge view: whether
@@ -240,7 +266,8 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	}
 	var deliveredAt pgtype.Timestamptz
 	var viewExpiresAt time.Time
-	if err := tx.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt); err != nil {
+	var guessExpiresAt pgtype.Timestamptz
+	if err := tx.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt, &guessExpiresAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, ErrForbidden
 		}
@@ -251,6 +278,14 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	}
 	if now.Before(viewExpiresAt) {
 		return nil, false, ErrViewNotFinished
+	}
+	// The guess window is server-authoritative: a guess submitted after the
+	// recorded deadline is refused even when the client lost its timer (for
+	// example because the app was closed), so "did not guess in time" cannot
+	// be bypassed by reopening the challenge. Legacy rows without a recorded
+	// deadline (NULL) keep the pre-window behavior.
+	if guessExpiresAt.Valid && !now.Before(guessExpiresAt.Time) {
+		return nil, false, ErrGuessTimeExpired
 	}
 	distance := game.CalculateDistance(lat, long, photo.Lat, photo.Long)
 	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: photo.GroupID, Lat: lat, Long: long, Score: game.CalculateScore(distance), Distance: distance, CreatedAt: now}

@@ -17,7 +17,7 @@ var allConfigVariables = []string{
 	"S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_USE_PATH_STYLE",
 	"ALLOWED_ORIGINS", "TRUSTED_PROXY_CIDRS",
 	"UPLOAD_MAX_BYTES", "AVATAR_MAX_BYTES", "UPLOAD_MAX_PIXELS",
-	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
+	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "GUESS_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
 	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
 	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
 	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "PUSH_ENDPOINT_ALLOWLIST",
@@ -163,6 +163,7 @@ func validConfig() *Config {
 		UploadMaxPixels:   25_000_000,
 		ChallengeTTL:      24 * time.Hour,
 		ViewWindow:        10 * time.Second,
+		GuessWindow:       2 * time.Minute,
 		LocationHide:      48 * time.Hour,
 		PhotoRetention:    30 * 24 * time.Hour,
 		RateLimitRequests: 10,
@@ -221,6 +222,7 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 		"max conns below min":        func(c *Config) { c.DatabaseMaxConns = 1; c.DatabaseMinConns = 5 },
 		"wildcard origin":            func(c *Config) { c.AllowedOrigins = []string{"*"} },
 		"view window not shorter":    func(c *Config) { c.ViewWindow = c.ChallengeTTL },
+		"zero guess window":          func(c *Config) { c.GuessWindow = 0 },
 		"retention below challenge":  func(c *Config) { c.PhotoRetention = c.ChallengeTTL / 2 },
 		"unknown smtp tls":           func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = "ssl" },
 		"zero rate window":           func(c *Config) { c.RateLimitWindow = 0 },
@@ -483,6 +485,7 @@ func TestValidateReportsBroadConfigurationFailures(t *testing.T) {
 	c.UploadMaxPixels = 0
 	c.ChallengeTTL = 0
 	c.ViewWindow = 0
+	c.GuessWindow = 0
 	c.PhotoRetention = time.Second
 	c.RateLimitRequests = 0
 	c.RateLimitWindow = 0

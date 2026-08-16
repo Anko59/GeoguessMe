@@ -990,6 +990,11 @@ export interface components {
             view_expires_at: string;
             /** Format: date-time */
             guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
+             */
+            guess_expires_at: string;
             /** Format: date-time */
             challenge_expires_at: string;
             /** Format: date-time */
@@ -1000,6 +1005,11 @@ export interface components {
             view_expires_at: string;
             /** Format: date-time */
             guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
+             */
+            guess_expires_at: string;
             /** Format: date-time */
             server_time: string;
         };
@@ -2167,8 +2177,24 @@ export interface operations {
                 };
             };
             403: components['responses']['ErrorResponse'];
-            409: components['responses']['ErrorResponse'];
-            410: components['responses']['ErrorResponse'];
+            /** @description Viewing window is still open (viewing_window_open). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
+            /** @description Guess refused: the challenge expired (challenge_expired) or the guess window elapsed (guess_time_expired — the guesser did not guess in time). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
         };
     };
     getChallengeResults: {

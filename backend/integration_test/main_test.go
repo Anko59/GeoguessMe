@@ -236,10 +236,11 @@ func serverNow(t *testing.T) time.Time {
 // acceptChallenge records the server-controlled viewing window returned by the
 // accept endpoint without mutating challenge state.
 type acceptance struct {
-	PhotoID       string
-	MediaURL      string
-	ViewExpiresAt time.Time
-	ServerTime    time.Time
+	PhotoID        string
+	MediaURL       string
+	ViewExpiresAt  time.Time
+	GuessExpiresAt time.Time
+	ServerTime     time.Time
 }
 
 func acceptChallenge(t *testing.T, bearer, photoID string) acceptance {
@@ -247,17 +248,20 @@ func acceptChallenge(t *testing.T, bearer, photoID string) acceptance {
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/accept", nil, bearer, nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "accept %d: %s", resp.StatusCode, data)
 	var body struct {
-		PhotoID       string `json:"photo_id"`
-		MediaURL      string `json:"media_url"`
-		ViewExpiresAt string `json:"view_expires_at"`
-		ServerTime    string `json:"server_time"`
+		PhotoID        string `json:"photo_id"`
+		MediaURL       string `json:"media_url"`
+		ViewExpiresAt  string `json:"view_expires_at"`
+		GuessExpiresAt string `json:"guess_expires_at"`
+		ServerTime     string `json:"server_time"`
 	}
 	require.NoError(t, jsonUnmarshal(data, &body))
 	viewExp, err := time.Parse(time.RFC3339Nano, body.ViewExpiresAt)
 	require.NoError(t, err)
+	guessExp, err := time.Parse(time.RFC3339Nano, body.GuessExpiresAt)
+	require.NoError(t, err)
 	serverT, err := time.Parse(time.RFC3339Nano, body.ServerTime)
 	require.NoError(t, err)
-	return acceptance{PhotoID: body.PhotoID, MediaURL: body.MediaURL, ViewExpiresAt: viewExp, ServerTime: serverT}
+	return acceptance{PhotoID: body.PhotoID, MediaURL: body.MediaURL, ViewExpiresAt: viewExp, GuessExpiresAt: guessExp, ServerTime: serverT}
 }
 
 // deliverChallengeMedia consumes the complete private stream and confirms the
@@ -270,15 +274,19 @@ func deliverChallengeMedia(t *testing.T, bearer string, accepted acceptance) acc
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/challenges/"+accepted.PhotoID+"/media-delivered", nil, bearer, nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "confirm media delivery %d: %s", resp.StatusCode, data)
 	var body struct {
-		ViewExpiresAt string `json:"view_expires_at"`
-		ServerTime    string `json:"server_time"`
+		ViewExpiresAt  string `json:"view_expires_at"`
+		GuessExpiresAt string `json:"guess_expires_at"`
+		ServerTime     string `json:"server_time"`
 	}
 	require.NoError(t, jsonUnmarshal(data, &body))
 	viewExp, err := time.Parse(time.RFC3339Nano, body.ViewExpiresAt)
 	require.NoError(t, err)
+	guessExp, err := time.Parse(time.RFC3339Nano, body.GuessExpiresAt)
+	require.NoError(t, err)
 	serverT, err := time.Parse(time.RFC3339Nano, body.ServerTime)
 	require.NoError(t, err)
 	accepted.ViewExpiresAt = viewExp
+	accepted.GuessExpiresAt = guessExp
 	accepted.ServerTime = serverT
 	return accepted
 }

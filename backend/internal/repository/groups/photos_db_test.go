@@ -49,11 +49,27 @@ func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	viewExpires := now.Add(30 * time.Minute)
-	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-2", now, viewExpires).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	guessExpires := viewExpires.Add(2 * time.Minute)
+	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-2", now, viewExpires, guessExpires).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
-	acceptedPhoto, view, err := repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, now)
-	if err != nil || acceptedPhoto.ID != photo.ID || view.ViewExpiresAt != viewExpires {
+	acceptedPhoto, view, err := repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 2*time.Minute, now)
+	if err != nil || acceptedPhoto.ID != photo.ID || view.ViewExpiresAt != viewExpires || view.GuessExpiresAt != guessExpires {
 		t.Fatalf("accepted = %+v/%+v, %v", acceptedPhoto, view, err)
+	}
+
+	// Re-accepting an existing legacy view row (pre-migration, NULL guess
+	// deadline) derives the guess deadline from the stored view end so the
+	// accept response stays valid.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-2").
+		WillReturnRows(pgxmock.NewRows([]string{"photo_id", "user_id", "accepted_at", "view_expires_at", "guess_expires_at"}).
+			AddRow(photo.ID, "user-2", now, viewExpires, nil))
+	mock.ExpectCommit()
+	acceptedPhoto, view, err = repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 2*time.Minute, now)
+	if err != nil || view.GuessExpiresAt != guessExpires {
+		t.Fatalf("legacy re-accept = %+v/%+v, %v", acceptedPhoto, view, err)
 	}
 }
 
@@ -84,7 +100,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
-		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(-time.Minute)))
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(nil, now.Add(-time.Minute), now.Add(time.Hour)))
 	mock.ExpectRollback()
 	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); err != ErrViewNotFinished {
 		t.Fatalf("guess before delivery confirmation = %v", err)
@@ -94,7 +110,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
-	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute)))
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(2*time.Hour)))
 	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	result, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)
@@ -110,6 +126,41 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	result, err = repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)
 	if err != nil || result == nil || !result.Existing || result.Guess.ID != "guess-1" {
 		t.Fatalf("existing guess = %+v, %v", result, err)
+	}
+}
+
+func TestGuessRejectedAfterGuessWindow(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	photo := &models.Photo{ID: "photo-1", UserID: "user-1", GroupID: "group-1", StorageKey: "photos/one", MIMEType: "image/jpeg", ByteSize: 10, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
+
+	// The recorded guess deadline has passed: the server refuses the guess
+	// even though the viewing window is closed, so a player who closed the
+	// app cannot bypass the deadline by reopening the challenge.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(-time.Second)))
+	mock.ExpectRollback()
+	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); !errors.Is(err, ErrGuessTimeExpired) {
+		t.Fatalf("guess after the deadline = %v, want ErrGuessTimeExpired", err)
+	}
+
+	// A legacy view row without a recorded deadline (NULL, pre-migration)
+	// keeps the previous behavior: no guess-window limit.
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
+		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), nil))
+	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); err != nil {
+		t.Fatalf("legacy view without a guess deadline must keep guessing, got %v", err)
 	}
 }
 

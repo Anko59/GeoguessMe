@@ -90,6 +90,11 @@ test.describe('Challenge flow', () => {
             await expect(guesser.locator('.guessing-view')).toHaveCount(0);
             await expect(guesser.locator('.game-photo')).toHaveCount(0, { timeout: 10000 });
             await expect(guesser.locator('.guessing-view')).toBeVisible();
+            // The guessing phase shows the server-authoritative countdown bar
+            // with the full two minutes left.
+            const timer = guesser.getByRole('timer');
+            await expect(timer).toBeVisible();
+            await expect(timer).toHaveAttribute('aria-label', /^Time left to guess: 1:\d{2}$/);
 
             await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
             const guessResponsePromise = guesser.waitForResponse(

@@ -195,6 +195,7 @@ Available metrics:
 | `invalid_request`       | Request body malformed                         |
 | `challenge_expired`     | Challenge is past its TTL                      |
 | `viewing_window_open`   | Must wait for view window to end               |
+| `guess_time_expired`    | Guess deadline passed: did not guess in time   |
 | `media_expired`         | Viewing window expired or media already viewed |
 | `media_removed`         | Original media no longer available             |
 | `results_not_available` | Results not yet visible                        |
