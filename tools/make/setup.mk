@@ -108,8 +108,6 @@ tools-clean: ## Remove only project-specific tool containers, networks, and cach
 dev: ## Start the Docker development stack.
 	$(COMPOSE_DEV) up -d --build
 
-up: dev ## Alias for dev.
-
 down: ## Stop the development stack and keep named application volumes.
 	$(COMPOSE_DEV) down
 
