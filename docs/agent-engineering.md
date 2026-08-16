@@ -134,8 +134,15 @@ the merged revision, so they are never part of the local budget.
   and the dev gate runs the complete suite on the merged revision before
   deployment. Test-only changes run the same focused suites as the code they
   test. `make verify` is reserved for changes to `deployment/`, `infra/`, the CI
-  workflows, or the quality gates themselves. Install and verify hooks with
-  `make hooks-install` and `make hooks-check`.
+  workflows, or the quality gates themselves. The seven harness self-test suites
+  in `preflight` (makefile fragments, structure, debt markers,
+  docs/agent-config, CI classifier, E2E, dev-workflow regressions) are
+  path-triggered: they run only when the harness itself changed (Makefile,
+  `tools/make/*`, `tools/quality/*`, `.github/workflows/*`, or the dev/tools
+  Compose files) and always run inside `make quality`. Override the local
+  decision with `PREFLIGHT_HARNESS=true|false`; unknown states fail safe to
+  running them. Install and verify hooks with `make hooks-install` and
+  `make hooks-check`.
 - Architecture rules: `make archcheck` runs the durable backend architecture
   checker (no production package-level mutable application dependencies, no SQL
   in HTTP handlers, no environment reads outside `backend/internal/config`). It

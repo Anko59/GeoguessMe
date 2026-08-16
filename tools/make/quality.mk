@@ -87,8 +87,32 @@ ARCHCHECK := $(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/t
 archcheck: ## Run the durable architecture rules (mutable globals, SQL in handlers, env reads) via tools/quality/archcheck.
 	$(ARCHCHECK)
 
+# Harness self-tests exercise the quality tooling itself (Makefile fragments,
+# structure-check, debt markers, docs/agent-config, the CI classifier, and the
+# E2E/dev-workflow regressions) rather than the application. `make preflight`
+# runs them only when the harness changed; `make quality` always runs them.
+#
+# PREFLIGHT_HARNESS selects them inside the preflight gate:
+#   auto  - default: include them only when the harness changed (git diff
+#          between the merge-base of HEAD and origin/dev and HEAD, falling
+#          back to HEAD~1 when origin/dev is unavailable); unknown results
+#          fail safe to "true" (all suites run)
+#   true  - always include all seven
+#   false - never include them (CI passes the classifier output explicitly
+#          because the fast job checks out with depth 1 and cannot diff)
+HARNESS_GATE_TARGETS := test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression
+
+PREFLIGHT_HARNESS ?= auto
+ifeq ($(PREFLIGHT_HARNESS),auto)
+PREFLIGHT_HARNESS := $(shell git diff --name-only "$$(git merge-base HEAD origin/dev 2>/dev/null || git rev-parse HEAD~1 2>/dev/null)" HEAD 2>/dev/null | tools/quality/ci/classify-changes.sh 2>/dev/null | sed -n 's/^harness=//p')
+ifeq ($(PREFLIGHT_HARNESS),)
+PREFLIGHT_HARNESS := true
+endif
+endif
+HARNESS_GATE := $(if $(filter true,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
+
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -96,7 +120,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 

@@ -175,8 +175,10 @@ services:
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
       - TF_DATA_DIR=/workspace/infra/terraform/.terraform
+      - TF_PLUGIN_CACHE_DIR=/tf-plugin-cache
     volumes:
       - ./:/workspace
+      - ./.tools-cache/terraform-plugins:/tf-plugin-cache
 
   # Restic 0.19.1 with golang.org/x/net v0.56.0. Hosted backup and restore
   # scripts receive this image as an exact signed registry reference.

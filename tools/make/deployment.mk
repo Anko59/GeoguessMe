@@ -198,13 +198,16 @@ terraform-fmt-check: ## Check infrastructure formatting in the pinned Terraform 
 	$(TERRAFORM) fmt -check -recursive
 
 terraform-init: ## Initialize the R2 backend; requires infra/terraform/backend.hcl.
+	@mkdir -p .tools-cache/terraform-plugins
 	@test -f infra/terraform/backend.hcl || { echo 'copy backend.hcl.example to backend.hcl and fill it first'; exit 2; }
 	$(TERRAFORM) init -backend-config=backend.hcl
 
 terraform-validate: ## Initialize without remote state and validate Terraform.
+	@mkdir -p .tools-cache/terraform-plugins
 	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate'
 
 terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
+	@mkdir -p .tools-cache/terraform-plugins
 	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
 
 terraform-plan: terraform-init ## Create a reviewed plan in a mode-0700 directory.

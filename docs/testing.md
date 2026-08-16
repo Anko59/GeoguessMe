@@ -8,7 +8,7 @@ tools from pinned images and named caches.
 
 | Target                                     | Scope                                                                                                                                                                                                                                                                                                                                 | Expected result                                                           |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests                                                                                                                                                                                                                                                      | Fast deterministic local/PR gate PASS                                     |
+| make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests; the seven harness self-test suites are path-triggered on harness changes (`PREFLIGHT_HARNESS=true/false` overrides)                                                                                                                                 | Fast deterministic local/PR gate PASS                                     |
 | make preflight-docs                        | Structure, formatting, documentation lint, and path-classifier regression                                                                                                                                                                                                                                                             | Documentation-only gate PASS                                              |
 | make test-unit                             | Backend unit tests and frontend Vitest                                                                                                                                                                                                                                                                                                | go test PASS; Vitest PASS                                                 |
 | make test-race                             | Backend race detector                                                                                                                                                                                                                                                                                                                 | go test -race PASS (no races)                                             |
@@ -46,6 +46,12 @@ tools from pinned images and named caches.
 
 Reports and traces are written to ignored repository output directories from
 inside containers.
+
+The harness self-test rows (`test-structure-regression`,
+`test-debt-markers-regression`, `test-e2e-regression`, plus
+`test-makefile-fragments-regression`, `test-docs-agent-config`,
+`test-ci-classifier`, and `test-dev-workflow-regression`) run inside
+`make preflight` only when the harness changed and always inside `make quality`.
 
 ## Gate frequency
 
