@@ -390,7 +390,7 @@ ChallengeResults:
 
 Guess:
   type: object
-  required: [id, photo_id, user_id, group_id, score, created_at]
+  required: [id, photo_id, user_id, group_id, score, created_at, elo_delta]
   properties:
     id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
@@ -404,6 +404,7 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
+    elo_delta: { type: integer, description: Elo rating points gained or lost on this challenge. }
     distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }

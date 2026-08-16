@@ -100,9 +100,11 @@ and rank.
 | Any current group member | After `CHALLENGE_TTL` expires            |
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
-`actual_lat`, `actual_long`, all guesses with `username`, `score`, `distance`,
-and `media_url` plus `media_type` (with `?result=1`) if the media is still
-available. Result photos can be opened full screen; videos retain playback
+`actual_lat`, `actual_long`, all guesses with `username`, `score`, `elo_delta`,
+`distance`, and `media_url` plus `media_type` (with `?result=1`) if the media is
+still available. `elo_delta` is the signed change in the player's global Elo
+rating caused by this challenge; it is zero when the challenge has fewer than
+two guesses. Result photos can be opened full screen; videos retain playback
 controls in the result panel.
 
 When a poster hid the location (`hide_location`), the exact spot stays private

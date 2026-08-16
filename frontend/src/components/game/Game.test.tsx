@@ -155,6 +155,7 @@ describe('Game', () => {
                         long: 2.3,
                         score: 100,
                         distance: 1500,
+                        elo_delta: 3,
                         created_at: new Date().toISOString(),
                     },
                     // Another player's guessed point and distance are omitted
@@ -166,6 +167,7 @@ describe('Game', () => {
                         username: 'bob',
                         avatar: 'b.png',
                         score: 80,
+                        elo_delta: -5,
                         created_at: new Date().toISOString(),
                     },
                 ],
@@ -188,6 +190,10 @@ describe('Game', () => {
         const bobRow = screen.getByText('bob').closest('.score-card') as HTMLElement;
         expect(bobRow).not.toHaveTextContent(/km away/);
         expect(bobRow).toHaveTextContent('80 pts');
+        expect(screen.getByLabelText('Gained 3 Elo')).toHaveClass('elo-delta--gain');
+        expect(screen.getByLabelText('Gained 3 Elo')).toHaveTextContent('+3 Elo');
+        expect(screen.getByLabelText('Lost 5 Elo')).toHaveClass('elo-delta--loss');
+        expect(screen.getByLabelText('Lost 5 Elo')).toHaveTextContent('-5 Elo');
     });
 
     it('derives the reveal duration from location_reveals_at instead of hardcoding it', async () => {

@@ -1046,6 +1046,8 @@ export interface components {
              */
             long?: number;
             score: number;
+            /** @description Elo rating points gained or lost on this challenge. */
+            elo_delta: number;
             /** @description Omitted alongside the coordinates while the location is hidden. */
             distance?: number;
             /** Format: date-time */

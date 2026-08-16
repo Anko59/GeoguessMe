@@ -127,6 +127,11 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png").
 			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, now, "carol", "c.png")
 	}
+	challengesRows := func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow(photo.ID, now, "user-2", 80).
+			AddRow(photo.ID, now, "user-3", 60)
+	}
 	fetch := func(viewerID string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
 		request := requestWithUser(http.MethodGet, "/", "", viewerID)
@@ -139,6 +144,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
+		mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
 	}
 	// A guesser sees scores, their own guessed point and distance, but not the
 	// actual location nor the other players' guessed points while it is hidden.
@@ -157,10 +163,14 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	if !strings.Contains(body, `"distance":10`) {
 		t.Fatalf("viewer's own guess distance must be present, got %s", body)
 	}
+	if !strings.Contains(body, `"elo_delta":16`) || !strings.Contains(body, `"elo_delta":-16`) {
+		t.Fatalf("results must include computed elo_delta, got %s", body)
+	}
 	// The owner always sees every guess and their own location.
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
 	recorder = fetch("user-1")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Count(body, `"lat":`) != 2 {
@@ -173,6 +183,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
 	recorder = fetch("user-2")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Contains(body, "location_hidden") || strings.Count(body, `"lat":`) != 2 {
@@ -189,6 +200,7 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png"))
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	resultsRequest.SetPathValue("photoID", photo.ID)
