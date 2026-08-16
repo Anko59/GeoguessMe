@@ -95,10 +95,10 @@ Start with these canonical entry points, then drill into the map below.
 | Deployment change               | `deployment/`, `infra/terraform/`, `infra/cloud-init/`                                                                              | Terraform tests, rehearsal scripts                          | `make terraform-fmt-check`, `make terraform-test`, `make lint-caddy`, `make verify`  |
 | Documentation change            | `docs/`                                                                                                                             | docs/agent-config checker regression tests                  | `make lint-docs`                                                                     |
 
-The Gates column lists the complete gate set, including steps the dev pipeline
-runs after merge. A `make verify` entry in that column is executed by the dev
-gate on the merged revision, not locally; the local budget is defined in
-[Local verification budget](#local-verification-budget).
+The Gates column lists the complete gate set, including steps the post-merge
+development pipeline runs on the merged revision. A `make verify` entry in that
+column is executed there (as the parallel gate jobs), not locally; the local
+budget is defined in [Local verification budget](#local-verification-budget).
 
 ## Canonical commands
 
