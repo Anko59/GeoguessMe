@@ -110,8 +110,15 @@ fi
 preflight_line=$(grep -E '^preflight:' tools/make/quality.mk || true)
 quality_line=$(grep -E '^quality:' tools/make/quality.mk || true)
 verify_line=$(grep -E '^verify:' tools/make/quality.mk || true)
-for dep in structure-check openapi-check archcheck test-makefile-fragments-regression audit test-unit; do
+for dep in structure-check openapi-check archcheck audit test-unit; do
     printf '%s' "$preflight_line" | grep -qE "(^|[[:space:]])$dep([[:space:]]|$)" || fail "preflight is missing dependency $dep"
+done
+# The seven harness self-tests are path-triggered in preflight via the
+# HARNESS_GATE expansion; quality still runs them unconditionally.
+printf '%s' "$preflight_line" | grep -qE '\(HARNESS_GATE\)' || fail "preflight does not select harness self-tests via HARNESS_GATE"
+for dep in test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression; do
+    grep -qE "^HARNESS_GATE_TARGETS.*$dep" tools/make/quality.mk || fail "HARNESS_GATE_TARGETS is missing $dep"
+    printf '%s' "$quality_line" | grep -qE "(^|[[:space:]])$dep([[:space:]]|$)" || fail "quality is missing harness dependency $dep"
 done
 pass "preflight gate ordering intact"
 for dep in structure-check openapi-check archcheck test-archcheck-regression test-makefile-fragments-regression audit test-verified; do

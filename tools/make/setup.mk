@@ -12,7 +12,7 @@ COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.producti
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
-TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform terraform sh -ec
+TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
@@ -38,6 +38,12 @@ DOCKER_COMPOSE_BUILD_FLAGS ?=
 GEOGUESSME_GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null))
 GIT_DIR_WORKTREE := $(abspath $(shell git rev-parse --git-dir 2>/dev/null))
 export GEOGUESSME_GIT_COMMON_DIR GIT_DIR_WORKTREE
+
+# The Terraform service bind-mounts the host provider cache. Create it as the
+# invoking user on every invocation, before any container starts: Docker would
+# otherwise auto-create a root-owned bind source that the non-root terraform
+# container (TOOLS_USER) cannot write to.
+GEOGUESSME_TF_PLUGIN_CACHE := $(shell mkdir -p .tools-cache/terraform-plugins)
 ARGS ?=
 
 ##@ Setup
