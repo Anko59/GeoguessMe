@@ -37,6 +37,9 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	@bash tools/quality/image-scan-exceptions-check.sh
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
+	image_archive=''; \
+	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
+	trap cleanup_image_archive EXIT; \
 	images="$(AUDIT_IMAGES)"; \
 	if [ -n "$${BACKEND_IMAGE:-}" ] && [ -n "$${WEB_IMAGE:-}" ]; then \
 		images="$$images $${BACKEND_IMAGE} $${WEB_IMAGE}"; \
@@ -84,7 +87,8 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --exit-code 0 --format json --output "/workspace/security/image-reports/$$safe/report.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --skip-db-update --format spdx-json --output "/workspace/security/image-reports/$$safe/sbom.spdx.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile "/workspace/security/image-reports/$$safe/ignore.trivy" --format table $$scan_target; \
-		[ -z "$$image_archive" ] || rm -f "$$image_archive"; \
+		cleanup_image_archive; \
+		image_archive=''; \
 		echo "    audit-images: $$img OK (report: security/image-reports/$$safe/report.json, sbom: security/image-reports/$$safe/sbom.spdx.json)"; \
 	done; \
 	echo 'audit-images: complete'
