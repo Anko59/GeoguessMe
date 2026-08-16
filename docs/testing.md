@@ -34,6 +34,7 @@ tools from pinned images and named caches.
 | make test-qa-mailbox-live                  | Verify disposable mailbox creation from the Dockerized browser container; creates and deletes one temporary provider account                                                                                                                                                                                                          | Live provider contract PASS                                               |
 | make quality                               | Structure, format, lint, type-check, audit, regression, verified unit pass (race + coverage), build, compose-validate                                                                                                                                                                                                                 | Zero violations; all gates PASS                                           |
 | make migration-test                        | Concurrent, idempotent, legacy-fixture migration tests (advisory lock, backfill, dedupe)                                                                                                                                                                                                                                              | migration-concurrency.sh PASS                                             |
+| make operational-gate                      | Dev-pipeline operational gate: image hardening, migrations, backup/restart/reconnect rehearsals, smoke                                                                                                                                                                                                                                | All checks PASS                                                           |
 | make backup-rehearsal                      | Disposable backup, restore, continuity verification                                                                                                                                                                                                                                                                                   | backup-restore-rehearsal.sh PASS                                          |
 | make restart-rehearsal                     | Stateful restart: schema/data/media continuity, no duplicate migrations or jobs                                                                                                                                                                                                                                                       | restart-rehearsal.sh: all checks PASS                                     |
 | make reconnect-rehearsal                   | WebSocket disconnect/reconnect, cursor catch-up, exact-once delivery                                                                                                                                                                                                                                                                  | reconnect-rehearsal harness PASS                                          |
@@ -50,20 +51,20 @@ inside containers.
 
 The gates intentionally become broader as a change approaches deployment:
 
-| Event                     | Gate                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                 |
-| Local push                | `make preflight`                                                                                          |
-| Documentation-only PR     | `make preflight-docs`                                                                                     |
-| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                        |
-| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                          |
-| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                              |
-| Merge to `dev`            | One complete `make verify`, then signed-image publication and development deployment                      |
-| Successful dev deployment | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision              |
-| Before a release PR       | `make qa-agent-full` against deployed dev; retain the report with the release record                      |
-| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest  |
-| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy |
-| Nightly                   | Complete `make verify`                                                                                    |
+| Event                     | Gate                                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                                                   |
+| Local push                | `make preflight`                                                                                                                            |
+| Documentation-only PR     | `make preflight-docs`                                                                                                                       |
+| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                                                          |
+| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                                                            |
+| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                                                                |
+| Merge to `dev`            | Four parallel gate jobs (quality, backend integration, Chromium E2E, operational), then signed-image publication and development deployment |
+| Successful dev deployment | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                |
+| Before a release PR       | `make qa-agent-full` against deployed dev; retain the report with the release record                                                        |
+| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                    |
+| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                   |
+| Nightly                   | Complete `make verify`                                                                                                                      |
 
 The aggregate required status remains `Dockerized verification gate`, so branch
 protection cannot be bypassed when path-selected jobs are skipped. Unknown paths
@@ -100,7 +101,8 @@ on serious or critical violations.
 that project across two Playwright shards, each on its own runner and disposable
 Compose project; Playwright keeps one worker per shard. The complete desktop
 Chromium, desktop Firefox, and mobile Chromium matrix remains part of
-`make verify` on dev and nightly.
+`make verify` on nightly; the development pipeline runs the desktop Chromium
+gate.
 
 ## Local/CI equivalence
 
