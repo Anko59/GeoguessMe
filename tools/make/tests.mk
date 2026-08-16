@@ -19,7 +19,6 @@ test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
 test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
 
-test-backend-race: test-race ## Compatibility alias for test-race.
 
 test-verified: ## Run unit tests once with race detection and coverage thresholds.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash -c 'set -o pipefail; cd backend && go test -race -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'

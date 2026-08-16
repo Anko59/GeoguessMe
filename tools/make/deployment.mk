@@ -122,8 +122,6 @@ db-restore: ## Restore a PostgreSQL backup through the tool container.
 backup-rehearsal: build-images ## Run the disposable backup/restore rehearsal.
 	deployment/scripts/backup-restore-rehearsal.sh
 
-restore-rehearsal: backup-rehearsal ## Compatibility alias for restore rehearsal.
-
 restart-rehearsal: build-images ## Run the disposable restart/reconnect rehearsal.
 	deployment/scripts/restart-rehearsal.sh
 
