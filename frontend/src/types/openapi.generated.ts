@@ -443,6 +443,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/group/reaction-usage': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get aggregate reaction usage for a group.
+         * @description Returns counts for reactions used in the group, ordered by popularity.
+         */
+        get: operations['getGroupReactionUsage'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/message-reactions/{messageID}': {
         parameters: {
             query?: never;
@@ -863,7 +883,7 @@ export interface components {
             enabled: boolean;
         };
         /**
-         * @description Reaction identity. The ten keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
+         * @description Reaction identity. The twenty-four named keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
          * @enum {string}
          */
         ReactionKey:
@@ -877,6 +897,20 @@ export interface components {
             | 'mind-blown'
             | 'wrong-way'
             | 'vacation'
+            | 'dislike'
+            | 'cry'
+            | 'kiss'
+            | 'wink'
+            | 'grin'
+            | 'heart-eyes'
+            | 'sunglasses'
+            | 'angry'
+            | 'confused'
+            | 'sleepy'
+            | 'clap'
+            | 'pray'
+            | 'fire'
+            | 'party'
             | '👍'
             | '❤️'
             | '😂'
@@ -942,6 +976,10 @@ export interface components {
             next_cursor?: string | null;
             /** @description Opaque cursor strictly after the last message of the page; the reconnect catch-up anchor (empty for an empty page) */
             stable_cursor?: string | null;
+        };
+        ReactionUsage: {
+            reaction: components['schemas']['ReactionKey'];
+            count: number;
         };
         /** @description Supply the reaction key to set or remove. */
         MessageReactionRequest: {
@@ -1866,6 +1904,30 @@ export interface operations {
                     'application/json': components['schemas']['MessagesPage'];
                 };
             };
+            403: components['responses']['ErrorResponse'];
+        };
+    };
+    getGroupReactionUsage: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reaction usage counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReactionUsage'][];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
             403: components['responses']['ErrorResponse'];
         };
     };

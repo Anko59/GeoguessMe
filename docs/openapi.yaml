@@ -58,6 +58,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/groupNotifications
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
+  /group/reaction-usage:
+    $ref: ./openapi/paths/groups.yaml#/reactionUsage
   /group/message-reactions/{messageID}:
     $ref: ./openapi/paths/groups.yaml#/messageReaction
   /group/messages/media:

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../../types';
 import { buildMessageIndex } from './messageIndex';
 import MessageRow from './MessageRow';
+import { reactionOptions } from '../reactionOptions';
 
 const message = (id: string, overrides: Partial<Message> = {}): Message => ({
     id,
@@ -39,6 +40,7 @@ const renderRow = (
                 onReply={vi.fn()}
                 onReaction={vi.fn()}
                 {...overrides}
+                reactionOptions={overrides.reactionOptions ?? reactionOptions}
             />
         </MemoryRouter>,
     );

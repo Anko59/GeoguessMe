@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../../types';
 import MessageActions from './MessageActions';
+import { reactionOptions } from '../reactionOptions';
 
 const message = (overrides: Partial<Message> = {}): Message => ({
     id: 'message-1',
@@ -23,6 +24,7 @@ const renderActions = (overrides: Partial<React.ComponentProps<typeof MessageAct
             reactionPending={null}
             onReply={vi.fn()}
             onReaction={vi.fn()}
+            reactionOptions={reactionOptions}
             {...overrides}
         />,
     );

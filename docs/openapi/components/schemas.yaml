@@ -259,11 +259,43 @@ Message:
 
 ReactionKey:
   type: string
-  enum: [like, love, laugh, wow, sad, spot-on, lost, mind-blown, wrong-way, vacation, 👍, ❤️, 😂, 😮, 😢, 🙏]
+  enum:
+    [
+      like,
+      love,
+      laugh,
+      wow,
+      sad,
+      spot-on,
+      lost,
+      mind-blown,
+      wrong-way,
+      vacation,
+      dislike,
+      cry,
+      kiss,
+      wink,
+      grin,
+      heart-eyes,
+      sunglasses,
+      angry,
+      confused,
+      sleepy,
+      clap,
+      pray,
+      fire,
+      party,
+      👍,
+      ❤️,
+      😂,
+      😮,
+      😢,
+      🙏,
+    ]
   description: >
-    Reaction identity. The ten keys map to custom artwork shown in the UI; the
-    six legacy emoji values are still accepted so existing reactions keep
-    working.
+    Reaction identity. The twenty-four named keys map to custom artwork shown
+    in the UI; the six legacy emoji values are still accepted so existing
+    reactions keep working.
 
 MessageReaction:
   type: object
@@ -276,6 +308,13 @@ MessageReaction:
       type: array
       items: { type: string }
       description: Usernames of group members who selected this reaction
+
+ReactionUsage:
+  type: object
+  required: [reaction, count]
+  properties:
+    reaction: { $ref: "#/ReactionKey" }
+    count: { type: integer, minimum: 1 }
 
 MessageReactionRequest:
   type: object
