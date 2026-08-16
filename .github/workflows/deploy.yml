@@ -117,7 +117,7 @@ jobs:
           fi
       - name: Upload browser diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0b
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: geoguessme-dev-e2e-${{ github.run_id }}
           retention-days: 7
@@ -151,7 +151,7 @@ jobs:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
           make operational-gate \
-            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+            DOCKER_BUILD_FLAGS="--load --cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
       - name: Save Docker cache
         if: always()
         run: |
