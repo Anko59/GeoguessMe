@@ -131,6 +131,8 @@ reconnect-rehearsal: build-images ## Run the load/reconnect/catch-up rehearsal w
 migration-test: build-images ## Run concurrent, idempotent, and legacy-fixture migration tests.
 	deployment/scripts/migration-concurrency.sh
 
+operational-gate: build-images container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression smoke ## Run the dev-pipeline operational gate: containers, migrations, rehearsals, smoke. The full release gate (`make verify`) additionally runs the complete browser matrix, load-test, and audit-images on the nightly schedule.
+
 load-test: build-images ## Run the documented disposable load profile.
 	deployment/scripts/load-test.sh
 

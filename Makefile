@@ -35,7 +35,7 @@ include tools/make/openapi-contract.mk
 	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
 	build build-backend build-frontend build-images clean-build build-security-tool-images audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
-	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
+	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test operational-gate \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-up prod-down prod-logs \
 	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate \
