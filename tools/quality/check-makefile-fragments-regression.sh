@@ -114,7 +114,7 @@ for dep in structure-check openapi-check archcheck test-makefile-fragments-regre
     printf '%s' "$preflight_line" | grep -qE "(^|[[:space:]])$dep([[:space:]]|$)" || fail "preflight is missing dependency $dep"
 done
 pass "preflight gate ordering intact"
-for dep in structure-check openapi-check archcheck test-archcheck-regression test-makefile-fragments-regression audit test-unit test-race coverage; do
+for dep in structure-check openapi-check archcheck test-archcheck-regression test-makefile-fragments-regression audit test-verified; do
     printf '%s' "$quality_line" | grep -qE "(^|[[:space:]])$dep([[:space:]]|$)" || fail "quality is missing dependency $dep"
 done
 pass "quality gate ordering intact"
