@@ -38,6 +38,12 @@ DOCKER_COMPOSE_BUILD_FLAGS ?=
 GEOGUESSME_GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null))
 GIT_DIR_WORKTREE := $(abspath $(shell git rev-parse --git-dir 2>/dev/null))
 export GEOGUESSME_GIT_COMMON_DIR GIT_DIR_WORKTREE
+
+# The Terraform service bind-mounts the host provider cache. Create it as the
+# invoking user on every invocation, before any container starts: Docker would
+# otherwise auto-create a root-owned bind source that the non-root terraform
+# container (TOOLS_USER) cannot write to.
+GEOGUESSME_TF_PLUGIN_CACHE := $(shell mkdir -p .tools-cache/terraform-plugins)
 ARGS ?=
 
 ##@ Setup
