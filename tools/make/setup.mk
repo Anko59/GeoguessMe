@@ -22,7 +22,10 @@ GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 QA_REPORT_DIR ?= qa-artifacts
-QA_BUDGET ?= full
+# Default QA budget tier: fast (15 min) for routine post-deploy acceptance.
+# Use `make qa-agent-full` before a release PR and `make qa-agent-nightly` for
+# the extended nightly session.
+QA_BUDGET ?= fast
 QA_RUNTIME ?= codex
 QA_BUILD_SHA ?= $(shell git rev-parse origin/dev 2>/dev/null || git rev-parse HEAD)
 
