@@ -109,7 +109,9 @@ ifeq ($(PREFLIGHT_HARNESS),)
 PREFLIGHT_HARNESS := true
 endif
 endif
-HARNESS_GATE := $(if $(filter true,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
+# Any value other than a resolved "false" runs the suites: explicit true,
+# the auto resolution, and typo'd overrides all fail safe to running them.
+HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
 
 ##@ Gates
 preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
