@@ -5,6 +5,7 @@ import MessageActions from './MessageActions';
 import MessageContent from './MessageContent';
 import MessageReactions from './MessageReactions';
 import { useMessagePress } from './useMessagePress';
+import { reactionOptions, type ReactionOption } from '../reactionOptions';
 
 interface MessageRowProps {
     message: Message;
@@ -19,6 +20,7 @@ interface MessageRowProps {
     /** ID → message index used to resolve reply targets in O(1). */
     messageIndex: ReadonlyMap<string, Message>;
     reactionPending: string | null;
+    reactionOptions?: ReactionOption[];
     /** A plain tap on this row dismisses actions shown on other rows. */
     onTapDown: (messageID: string) => void;
     onRevealActions: (messageID: string) => void;
@@ -43,6 +45,7 @@ export default function MessageRow({
     canHover,
     messageIndex,
     reactionPending,
+    reactionOptions: orderedReactionOptions = reactionOptions,
     onTapDown,
     onRevealActions,
     onDismissActions,
@@ -116,6 +119,7 @@ export default function MessageRow({
                             message={message}
                             visible={actionsVisible}
                             reactionPending={reactionPending}
+                            reactionOptions={orderedReactionOptions}
                             onReply={() => onReply(message)}
                             onReaction={(reaction) => onReaction(message, reaction)}
                         />

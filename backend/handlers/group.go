@@ -14,6 +14,7 @@ import (
 	"geoguessme/internal/auth"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
+	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
@@ -30,6 +31,33 @@ type JoinGroupRequest struct {
 	// decoder only so the handler can reject it with a dedicated 410 instead
 	// of a generic body-validation error; typed-code joins are disabled.
 	Code string `json:"code"`
+}
+
+// GetGroupReactionUsage returns the authenticated member's group-wide
+// reaction counts for ordering the picker. It deliberately returns aggregate
+// usage only, not message or member details.
+func (a *ChatAPI) GetGroupReactionUsage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	if !a.requireMember(w, r, groupID, GetUserIDFromContext(r)) {
+		return
+	}
+	usage, err := a.messages.ReactionUsageForGroup(r.Context(), groupID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load reaction usage")
+		return
+	}
+	if usage == nil {
+		usage = []chatrepo.ReactionUsage{}
+	}
+	WriteJSON(w, http.StatusOK, usage)
 }
 
 func generateGroupCode() (string, error) {

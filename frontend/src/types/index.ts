@@ -28,6 +28,7 @@ export type ChallengeAcceptance = components['schemas']['ChallengeAccepted'];
 export type ChallengeMediaDelivered = components['schemas']['ChallengeMediaDelivered'];
 export type GuessResult = components['schemas']['GuessResponse'];
 export type MessagesPage = components['schemas']['MessagesPage'];
+export type ReactionUsage = components['schemas']['ReactionUsage'];
 export type PushSubscriptionRequest = components['schemas']['PushSubscriptionRequest'];
 export type InviteCreateRequest = components['schemas']['InviteCreateRequest'];
 export type InviteCreateResponse = components['schemas']['InviteCreateResponse'];
