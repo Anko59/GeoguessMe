@@ -67,6 +67,9 @@ bootstrap-integration: ## Prepare only the Go tools needed by backend integratio
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools
 
+bootstrap-operational: ## Prepare only the Go tool images needed by the operational gate.
+	$(COMPOSE_TOOLS) build go-tools go-security
+
 bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build node-tools

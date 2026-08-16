@@ -144,6 +144,8 @@ jobs:
           path: /tmp/.buildx-cache
           key: docker-${{ runner.os }}-dev-operational-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
           restore-keys: docker-${{ runner.os }}-dev-operational-
+      - name: Bootstrap operational tools
+        run: make bootstrap-operational
       - name: Run operational rehearsals
         env:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}

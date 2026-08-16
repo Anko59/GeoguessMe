@@ -21,7 +21,7 @@ include tools/make/maintenance.mk
 include tools/make/docs-agent-config.mk
 include tools/make/openapi-contract.mk
 
-.PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e hooks-install hooks-check tools-self-test tools-clean \
+.PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e bootstrap-operational hooks-install hooks-check tools-self-test tools-clean \
 	dev down restart status logs logs-backend logs-frontend \
 	format format-check lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
