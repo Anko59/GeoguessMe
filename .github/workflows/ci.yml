@@ -14,6 +14,14 @@ permissions:
   contents: read
   actions: read
 
+# A new push to the same pull request cancels that PR's in-flight run so
+# superseded jobs (including two full disposable E2E stacks) stop consuming
+# runner time while an agent iterates. Different PRs never cancel each other;
+# branch-push runs outside pull_request keep a unique group via github.ref.
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   policy:
     name: Contribution policy
