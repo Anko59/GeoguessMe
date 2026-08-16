@@ -32,7 +32,7 @@ func (a *AuthAPI) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || (user.PasswordEnabled && !user.OIDCLinked && !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password)) {
+	if err != nil || user == nil || (a.legacyPasswordAvailable(user) && !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password)) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Current password is incorrect")
 		return
 	}
@@ -204,7 +204,7 @@ func (a *AuthAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || user.OIDCLinked || !user.PasswordEnabled || !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password) {
+	if err != nil || user == nil || !a.legacyPasswordAvailable(user) || !authsvc.CheckPasswordHash(req.CurrentPassword, user.Password) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Current password is incorrect")
 		return
 	}

@@ -105,7 +105,7 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := a.repos.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
-	if err != nil || user == nil || user.OIDCLinked || !user.PasswordEnabled || !authsvc.CheckPasswordHash(req.Password, user.Password) {
+	if err != nil || user == nil || !a.legacyPasswordAvailable(user) || !authsvc.CheckPasswordHash(req.Password, user.Password) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed")
 		return
 	}
@@ -325,7 +325,7 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
 		return
 	}
-	passwordConfirmation := user.PasswordEnabled && !user.OIDCLinked
+	passwordConfirmation := a.legacyPasswordAvailable(user)
 	confirmed := subtle.ConstantTimeCompare([]byte{boolByte(passwordConfirmation && authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) == 1
 	if !passwordConfirmation {
 		confirmed = subtle.ConstantTimeCompare([]byte(strings.TrimSpace(req.Confirmation)), []byte(user.Username)) == 1

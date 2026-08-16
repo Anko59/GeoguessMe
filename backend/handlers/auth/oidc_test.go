@@ -44,11 +44,11 @@ func newOIDCTestAPI(t *testing.T, mock pgxmock.PgxPoolIface) *AuthAPI {
 func TestOIDCConfigAndExistingIdentityExchange(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newOIDCTestAPI(t, mock)
-	api.cfg.OIDCSocialProviders = []string{"google", "apple", "github"}
+	api.cfg.OIDCSocialProviders = []string{"google"}
 
 	configRecorder := httptest.NewRecorder()
 	api.OIDCConfig(configRecorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	if configRecorder.Code != http.StatusOK || configRecorder.Body.String() != "{\"account_url\":\"https://login.example.test/realms/geoguessme/account/\",\"enabled\":true,\"login_path\":\"/oauth2/start\",\"social_providers\":[\"google\",\"apple\",\"github\"]}\n" {
+	if configRecorder.Code != http.StatusOK || configRecorder.Body.String() != "{\"account_url\":\"https://login.example.test/realms/geoguessme/account/\",\"enabled\":true,\"login_path\":\"/oauth2/start\",\"social_providers\":[\"google\"]}\n" {
 		t.Fatalf("OIDC config = %d %q", configRecorder.Code, configRecorder.Body.String())
 	}
 

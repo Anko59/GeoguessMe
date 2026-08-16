@@ -17,7 +17,7 @@ import (
 
 const (
 	oidcLinkCookie = "oidc_link_intent"
-	oidcLinkTTL    = 10 * time.Minute
+	oidcLinkTTL    = time.Hour
 )
 
 // OIDCConfig reports runtime capability so one immutable frontend image can
@@ -50,7 +50,7 @@ func (a *AuthAPI) StartOIDCLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !a.cfg.OIDCEnabled || a.oidc == nil {
-		handlers.WriteError(w, http.StatusServiceUnavailable, "oidc_unavailable", "Social login is unavailable")
+		handlers.WriteError(w, http.StatusServiceUnavailable, "oidc_unavailable", "Keycloak login is unavailable")
 		return
 	}
 	raw, err := authsvc.GenerateOpaqueToken(32)
@@ -77,7 +77,7 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !a.cfg.OIDCEnabled || a.oidc == nil {
-		handlers.WriteError(w, http.StatusServiceUnavailable, "oidc_unavailable", "Social login is unavailable")
+		handlers.WriteError(w, http.StatusServiceUnavailable, "oidc_unavailable", "Keycloak login is unavailable")
 		return
 	}
 	var req struct {
@@ -95,7 +95,7 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 	}
 	identity, err := a.oidc.VerifyIdentity(r.Context(), r.Header.Get("Authorization"))
 	if err != nil || validation.ValidateEmail(identity.Email) != nil || !identity.EmailVerified {
-		handlers.WriteError(w, http.StatusUnauthorized, "oidc_authentication_failed", "Social login could not be verified")
+		handlers.WriteError(w, http.StatusUnauthorized, "oidc_authentication_failed", "Keycloak login could not be verified")
 		return
 	}
 	persisted := repository.OIDCIdentity{Issuer: identity.Issuer, Subject: identity.Subject, Email: identity.Email}
@@ -120,13 +120,13 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusConflict, "account_link_required", "Use the account migration page once, then connect Keycloak from Settings")
 		return
 	case errors.Is(userErr, repository.ErrOIDCIdentityConflict):
-		handlers.WriteError(w, http.StatusConflict, "identity_already_linked", "This social identity is linked to another account")
+		handlers.WriteError(w, http.StatusConflict, "identity_already_linked", "This Keycloak identity is linked to another account")
 		return
 	case errors.Is(userErr, repository.ErrOIDCLinkIntentInvalid):
 		handlers.WriteError(w, http.StatusBadRequest, "link_intent_invalid", "The account-link request expired; start again from Settings")
 		return
 	case userErr != nil || user == nil:
-		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to start social session")
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to start Keycloak session")
 		return
 	}
 	a.issueSession(r.Context(), w, user)

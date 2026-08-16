@@ -43,8 +43,8 @@ type Config struct {
 	// before it removes an OIDC-linked GeoGuessMe account.
 	OIDCClientSecret string
 	// OIDCSocialProviders lists the Keycloak broker aliases that are actually
-	// configured in this environment. Email/password remains available through
-	// Keycloak even when this list is empty.
+	// configured in this environment. This rollout supports Google only;
+	// email/password remains available through Keycloak when the list is empty.
 	OIDCSocialProviders []string
 
 	SMTPHost        string
@@ -213,7 +213,7 @@ func (c *Config) Validate() error {
 	seenSocialProviders := make(map[string]bool, len(c.OIDCSocialProviders))
 	for _, provider := range c.OIDCSocialProviders {
 		switch provider {
-		case "google", "apple", "github":
+		case "google":
 		default:
 			problems = append(problems, fmt.Sprintf("OIDC_SOCIAL_PROVIDERS contains unsupported provider %q", provider))
 		}

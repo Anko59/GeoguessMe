@@ -116,7 +116,7 @@ func userResponse(user *models.User) AuthUser {
 
 func (a *AuthAPI) userResponse(user *models.User) AuthUser {
 	response := userResponse(user)
-	response.PasswordEnabled = user.PasswordEnabled && !user.OIDCLinked
+	response.PasswordEnabled = a.legacyPasswordAvailable(user)
 	response.MigrationNeeded = a.cfg.OIDCEnabled && !user.OIDCLinked
 	return response
 }

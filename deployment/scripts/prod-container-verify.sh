@@ -152,8 +152,10 @@ SMTP_TIMEOUT=30s
 METRICS_TOKEN=test-metrics-token-32-chars-long!!
 ENVEOF
 
-# Substitute placeholder values.
-sed -i "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env"
+# Substitute placeholder values through a second file. BSD and GNU sed use
+# incompatible `-i` syntax, while this path behaves identically on both.
+sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env" >"$TMPDIR/production.env.rendered"
+mv "$TMPDIR/production.env.rendered" "$TMPDIR/production.env"
 
 # Compose override: redirect env_file to the temp file for every service and
 # override the web port to avoid host port conflicts.

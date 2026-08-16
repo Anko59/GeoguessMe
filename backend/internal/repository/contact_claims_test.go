@@ -188,3 +188,25 @@ func TestResendTargetEmail(t *testing.T) {
 		t.Fatalf("no-address target = %v, want nil", got)
 	}
 }
+
+func TestLegacyIdentityMigrationInventoryClassifiesWithoutExposingClaims(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	mock.ExpectQuery("SELECT u.email, u.email_verified_at IS NOT NULL").WillReturnRows(
+		pgxmock.NewRows([]string{"email", "verified", "pending_email", "linked"}).
+			AddRow(" Verified@Example.test ", true, nil, false).
+			AddRow(nil, false, "pending@example.test", false).
+			AddRow(nil, false, nil, false).
+			AddRow("linked@example.test", true, nil, true),
+	)
+	inventory, err := repo.LegacyIdentityMigrationInventory(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inventory.Total != 4 || inventory.Linked != 1 || inventory.Verified != 1 || inventory.Pending != 1 || inventory.Missing != 1 {
+		t.Fatalf("unexpected inventory: %+v", inventory)
+	}
+	if len(inventory.VerifiedEmails) != 1 || inventory.VerifiedEmails[0] != "verified@example.test" {
+		t.Fatalf("verified candidates = %v", inventory.VerifiedEmails)
+	}
+}

@@ -380,7 +380,7 @@ describe('AccountSettings', () => {
         );
 
         expect(screen.getByRole('heading', { name: 'Finish account migration' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Connect a Keycloak login' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Continue with GeoGuessMe ID' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Change password' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Resend verification email' })).not.toBeInTheDocument();

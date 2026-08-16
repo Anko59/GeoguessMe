@@ -171,7 +171,7 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
       "frontchannelLogout": true,
-      "redirectUris": ["${GEOGUESSME_PRODUCTION_REDIRECT_URL}"],
+      "redirectUris": ["${GEOGUESSME_PRODUCTION_REDIRECT_URL}", "${GEOGUESSME_PRODUCTION_ORIGIN}/login"],
       "webOrigins": ["${GEOGUESSME_PRODUCTION_ORIGIN}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
@@ -203,7 +203,7 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
       "frontchannelLogout": true,
-      "redirectUris": ["${GEOGUESSME_DEV_REDIRECT_URL}"],
+      "redirectUris": ["${GEOGUESSME_DEV_REDIRECT_URL}", "${GEOGUESSME_DEV_ORIGIN}/login"],
       "webOrigins": ["${GEOGUESSME_DEV_ORIGIN}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",

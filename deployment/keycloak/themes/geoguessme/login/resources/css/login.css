@@ -1,12 +1,24 @@
 :root {
-    --geoguessme-navy: #111a4d;
-    --geoguessme-blue: #0077b6;
-    --geoguessme-blue-dark: #023e8a;
-    --geoguessme-muted: #526080;
-    --geoguessme-line: #dce4f0;
-    --pf-v5-global--primary-color--100: var(--geoguessme-blue);
-    --pf-v5-global--primary-color--200: var(--geoguessme-blue-dark);
-    --pf-v5-global--link--Color: #006ba3;
+    --geoguessme-navy: #1a237e;
+    --geoguessme-ink-strong: #111a4d;
+    --geoguessme-blue: #00c0ff;
+    --geoguessme-blue-accessible: #006399;
+    --geoguessme-green: #00ff80;
+    --geoguessme-orange: #ffb600;
+    --geoguessme-yellow: #ffd700;
+    --geoguessme-muted: #5d6683;
+    --geoguessme-line: #e3e8f1;
+    --geoguessme-gradient-orange: linear-gradient(135deg, var(--geoguessme-orange), var(--geoguessme-yellow));
+    --geoguessme-gradient-blue: linear-gradient(135deg, var(--geoguessme-blue), var(--geoguessme-green));
+    --geoguessme-gradient-mixed: linear-gradient(
+        135deg,
+        var(--geoguessme-orange),
+        var(--geoguessme-blue) 52%,
+        var(--geoguessme-green)
+    );
+    --pf-v5-global--primary-color--100: var(--geoguessme-blue-accessible);
+    --pf-v5-global--primary-color--200: var(--geoguessme-navy);
+    --pf-v5-global--link--Color: var(--geoguessme-blue-accessible);
 }
 
 html,
@@ -18,14 +30,36 @@ body,
 body,
 .login-pf body {
     background:
-        radial-gradient(circle at 92% -8%, rgb(72 202 228 / 32%), transparent 32rem),
         linear-gradient(rgb(246 248 252 / 91%), rgb(246 248 252 / 95%)),
         url('../app/app_background.png') center / 640px;
-    color: var(--geoguessme-navy);
+    color: var(--geoguessme-ink-strong);
+    font-family:
+        Inter,
+        ui-sans-serif,
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        sans-serif;
+}
+
+body::before {
+    width: min(36rem, 70vw);
+    height: min(36rem, 70vw);
+    position: fixed;
+    top: -24rem;
+    right: -10rem;
+    z-index: 0;
+    background: var(--geoguessme-gradient-blue);
+    border-radius: 50%;
+    content: '';
+    opacity: 0.2;
+    pointer-events: none;
 }
 
 .pf-v5-c-login {
     min-height: 100dvh;
+    position: relative;
+    z-index: 1;
 }
 
 .pf-v5-c-login__container {
@@ -54,7 +88,7 @@ body,
     background: rgb(255 255 255 / 97%);
     border: 1px solid rgb(255 255 255 / 90%);
     border-radius: 24px;
-    box-shadow: 0 24px 70px rgb(17 26 77 / 16%);
+    box-shadow: 0 18px 45px rgb(17 26 77 / 12%);
     overflow: hidden;
 }
 
@@ -75,11 +109,15 @@ body,
 #kc-page-title {
     margin: 0 0 1.5rem;
     color: var(--geoguessme-navy);
+    background: var(--geoguessme-gradient-mixed);
+    background-clip: text;
     font-size: clamp(1.75rem, 5vw, 2.15rem);
     font-weight: 850;
     letter-spacing: -0.035em;
     line-height: 1.15;
     text-align: center;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 #kc-page-title::before {
@@ -101,6 +139,7 @@ body,
     font-weight: 400;
     letter-spacing: normal;
     line-height: 1.45;
+    -webkit-text-fill-color: var(--geoguessme-muted);
 }
 
 .pf-v5-c-login__main:has(#kc-register-form) #kc-page-title::after {
@@ -113,7 +152,7 @@ body,
 
 .pf-v5-c-form__label-text,
 label {
-    color: var(--geoguessme-navy);
+    color: var(--geoguessme-ink-strong);
     font-weight: 700;
 }
 
@@ -145,16 +184,17 @@ input[type='password'] {
 #kc-register {
     min-height: 46px;
     border: 0;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--geoguessme-blue), var(--geoguessme-blue-dark));
-    box-shadow: 0 8px 18px rgb(0 119 182 / 18%);
+    color: var(--geoguessme-navy);
+    border-radius: 12px;
+    background: var(--geoguessme-gradient-orange);
+    box-shadow: 0 8px 22px rgb(255 182 0 / 24%);
     font-weight: 750;
 }
 
 .pf-v5-c-button.pf-m-control {
     min-height: 46px;
     justify-content: flex-start;
-    color: var(--geoguessme-navy);
+    color: var(--geoguessme-ink-strong);
     background: #fff;
     border: 1px solid var(--geoguessme-line);
     border-radius: 12px;
@@ -164,19 +204,19 @@ input[type='password'] {
 
 .pf-v5-c-button.pf-m-control:hover {
     background: #f7fbfd;
-    border-color: rgb(0 119 182 / 45%);
+    border-color: rgb(0 99 153 / 45%);
 }
 
 #kc-registration,
 #kc-info-wrapper,
 .pf-v5-c-login__main-footer-band {
     color: var(--geoguessme-muted);
-    background: #f7fbfd;
+    background: #fff;
     text-align: center;
 }
 
 a {
-    color: #006ba3;
+    color: var(--geoguessme-blue-accessible);
     font-weight: 700;
 }
 

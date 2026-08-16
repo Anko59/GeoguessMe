@@ -108,7 +108,7 @@ services:
       retries: 30
 
   local-keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0@sha256:5f3fb534cde6bf006d79f5912473e5d2c828c707cdfc52e16972803aca9d43dd
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
     profiles: [social]
     command: ["start-dev", "--import-realm"]
     environment:
@@ -157,7 +157,12 @@ services:
       GEOGUESSME_KEYCLOAK_SSL_REQUIRED: external
     volumes:
       - ./deployment/keycloak/realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro
-      - ./deployment/keycloak/themes:/opt/keycloak/themes:ro
+      # Keep these sibling mounts separate. A parent /themes bind masks the
+      # nested public-assets bind on Docker Desktop, leaving the logo and map
+      # background as live 404s even though both mounts appear in inspect.
+      - ./deployment/keycloak/themes/geoguessme/login/theme.properties:/opt/keycloak/themes/geoguessme/login/theme.properties:ro
+      - ./deployment/keycloak/themes/geoguessme/login/messages:/opt/keycloak/themes/geoguessme/login/messages:ro
+      - ./deployment/keycloak/themes/geoguessme/login/resources/css:/opt/keycloak/themes/geoguessme/login/resources/css:ro
       - ./frontend/public:/opt/keycloak/themes/geoguessme/login/resources/app:ro
     depends_on:
       local-keycloak-db: { condition: service_healthy }
@@ -174,7 +179,7 @@ services:
       start_period: 30s
 
   local-keycloak-config:
-    image: quay.io/keycloak/keycloak:26.4.0@sha256:5f3fb534cde6bf006d79f5912473e5d2c828c707cdfc52e16972803aca9d43dd
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
     profiles: [social-config]
     entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
     environment:

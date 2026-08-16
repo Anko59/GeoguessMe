@@ -64,41 +64,38 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
 
     return (
         <>
-            <div className="auth-social-grid" aria-label={signup ? 'Social signup options' : 'Social login options'}>
-                {providers.map((provider) => {
-                    const available = socialProviders.includes(provider.alias);
-                    const content = (
-                        <>
-                            <ProviderLogo provider={provider.alias} />
-                            <span>
-                                {signup ? 'Sign up' : 'Continue'} with {provider.label}
-                            </span>
-                        </>
-                    );
-                    return available ? (
-                        <a
-                            className={`btn btn-social btn-social-${provider.alias}`}
-                            href={startURL(loginPath, { kc_idp_hint: provider.alias })}
-                            onClick={onStart}
-                            key={provider.alias}
-                        >
-                            {content}
-                        </a>
-                    ) : (
-                        <button
-                            type="button"
-                            className={`btn btn-social btn-social-${provider.alias}`}
-                            disabled
-                            title={`${provider.label} is not configured in this environment`}
-                            key={provider.alias}
-                        >
-                            {content}
-                        </button>
-                    );
-                })}
-            </div>
-
-            <div className="auth-divider">or use email</div>
+            {socialProviders.length > 0 && (
+                <>
+                    <div
+                        className="auth-social-grid"
+                        aria-label={signup ? 'Social signup options' : 'Social login options'}
+                    >
+                        {providers
+                            .filter((provider) => socialProviders.includes(provider.alias))
+                            .map((provider) => {
+                                const content = (
+                                    <>
+                                        <ProviderLogo provider={provider.alias} />
+                                        <span>
+                                            {signup ? 'Sign up' : 'Continue'} with {provider.label}
+                                        </span>
+                                    </>
+                                );
+                                return (
+                                    <a
+                                        className={`btn btn-social btn-social-${provider.alias}`}
+                                        href={startURL(loginPath, { kc_idp_hint: provider.alias })}
+                                        onClick={onStart}
+                                        key={provider.alias}
+                                    >
+                                        {content}
+                                    </a>
+                                );
+                            })}
+                    </div>
+                    <div className="auth-divider">or use email</div>
+                </>
+            )}
 
             <form action={loginPath} method="get" className="auth-form auth-oidc-form" onSubmit={onStart}>
                 <input type="hidden" name="rd" value={callbackPath} />

@@ -61,6 +61,7 @@ docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-di
     -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results" \
     -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/report" \
     -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json" \
+    -e "HOME=/tmp/playwright" \
     -v "$STAGING_DIR:/tmp/playwright" \
     playwright node node_modules/.bin/playwright "${test_args[@]}" || run_status=$?
 

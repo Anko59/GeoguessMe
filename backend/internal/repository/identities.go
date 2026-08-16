@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,6 +35,56 @@ type OIDCIdentity struct {
 	Issuer  string
 	Subject string
 	Email   string
+}
+
+// LegacyIdentityInventory contains only aggregate migration categories plus
+// the verified addresses eligible for Keycloak pre-provisioning. Callers must
+// never print VerifiedEmails in routine logs or release evidence.
+type LegacyIdentityInventory struct {
+	Total          int
+	Linked         int
+	Verified       int
+	Pending        int
+	Missing        int
+	VerifiedEmails []string
+}
+
+// LegacyIdentityMigrationInventory classifies active accounts that still
+// retain a legacy password. Only an unlinked, application-verified email is
+// safe to pre-provision; pending and missing addresses require the explicit
+// legacy-authenticated linking flow.
+func (r *Repository) LegacyIdentityMigrationInventory(ctx context.Context) (LegacyIdentityInventory, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.email, u.email_verified_at IS NOT NULL, u.pending_email,
+		       EXISTS (SELECT 1 FROM user_identities AS ui WHERE ui.user_id = u.id)
+		FROM users AS u
+		WHERE u.deleted_at IS NULL AND u.legacy_password_enabled = TRUE
+		ORDER BY u.created_at, u.id`)
+	if err != nil {
+		return LegacyIdentityInventory{}, err
+	}
+	defer rows.Close()
+	inventory := LegacyIdentityInventory{}
+	for rows.Next() {
+		var email, pending sql.NullString
+		var verified, linked bool
+		if err := rows.Scan(&email, &verified, &pending, &linked); err != nil {
+			return LegacyIdentityInventory{}, err
+		}
+		inventory.Total++
+		switch {
+		case linked:
+			inventory.Linked++
+		case verified && email.Valid && strings.TrimSpace(email.String) != "":
+			inventory.Verified++
+			inventory.VerifiedEmails = append(inventory.VerifiedEmails, strings.ToLower(strings.TrimSpace(email.String)))
+		case pending.Valid && strings.TrimSpace(pending.String) != "":
+			inventory.Pending++
+		default:
+			inventory.Missing++
+		}
+	}
+	return inventory, rows.Err()
 }
 
 // OIDCIdentitiesByUserID returns the upstream subjects that must be removed

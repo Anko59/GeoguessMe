@@ -25,12 +25,12 @@ func TestValidateOIDCConfiguration(t *testing.T) {
 
 func TestValidateOIDCSocialProviders(t *testing.T) {
 	c := validConfig()
-	c.OIDCSocialProviders = []string{"google", "apple", "github"}
+	c.OIDCSocialProviders = []string{"google"}
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected supported social providers, got %v", err)
 	}
 
-	c.OIDCSocialProviders = []string{"google", "google", "unknown"}
+	c.OIDCSocialProviders = []string{"google", "google", "apple", "github"}
 	err := c.Validate()
 	if err == nil || !strings.Contains(err.Error(), "duplicate provider") || !strings.Contains(err.Error(), "unsupported provider") {
 		t.Fatalf("expected invalid social provider rejection, got %v", err)
@@ -48,12 +48,12 @@ func TestLoadOIDCSocialProviders(t *testing.T) {
 		t.Fatalf("expected no social providers by default, got %v", cfg.OIDCSocialProviders)
 	}
 
-	t.Setenv("OIDC_SOCIAL_PROVIDERS", "google, apple,github")
+	t.Setenv("OIDC_SOCIAL_PROVIDERS", " google ")
 	cfg, err = Load()
 	if err != nil {
 		t.Fatalf("configured OIDC providers must load, got %v", err)
 	}
-	if got := strings.Join(cfg.OIDCSocialProviders, ","); got != "google,apple,github" {
+	if got := strings.Join(cfg.OIDCSocialProviders, ","); got != "google" {
 		t.Fatalf("expected normalized social provider list, got %q", got)
 	}
 }

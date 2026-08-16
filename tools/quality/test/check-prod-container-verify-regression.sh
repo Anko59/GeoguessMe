@@ -243,6 +243,12 @@ echo "--- Test 14: No contradictory SMTP environment ---"
 # TLS mode that satisfies production validation.
 prod_env_block=$(sed -n '/^cat.*production.env/,/^ENVEOF$/p' "$SCRIPT")
 
+if grep -Eq 'sed[[:space:]]+-i([[:space:]]|$)' "$SCRIPT"; then
+    fail "production env substitution uses non-portable sed -i"
+else
+    pass "production env substitution is portable across GNU and BSD sed"
+fi
+
 # SMTP_USERNAME and SMTP_PASSWORD must not appear (unauthenticated fixture).
 if grep -qE '^SMTP_USERNAME=' <<<"$prod_env_block"; then
     fail "production.env must not set SMTP_USERNAME (unauthenticated fixture)"

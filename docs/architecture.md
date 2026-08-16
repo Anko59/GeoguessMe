@@ -20,8 +20,8 @@ through the `App` type, and `main.go` owns process lifecycle.
                     /api/* │      ▼
                            │  ┌──────────────┐       ┌──────────────┐
                            │  │ OAuth2 Proxy │◄─────►│   Keycloak   │◄── Google
-                           │  │    (BFF)     │       │ auth.* realm │◄── Apple
-                           │  └──────┬───────┘       └──────┬───────┘◄── GitHub
+                           │  │    (BFF)     │       │ auth.* realm │   (optional)
+                           │  └──────┬───────┘       └──────┬───────┘
                            ▼         │                      ▼
                      ┌──────────────┐│              ┌──────────────┐
                      │   Backend    │◄┘              │ Keycloak DB  │
@@ -83,18 +83,19 @@ routes — validates the Bearer token, then checks account activity and
 ### Keycloak login, signup, and migration
 
 Normal login and signup both redirect through OAuth2 Proxy to the shared
-Keycloak realm, where Google, Apple, GitHub, or a Keycloak credential can
-authenticate the player. The exact callback exchange resolves the durable
-`(issuer, subject)` mapping and issues the application's existing access and
-refresh session. A first social identity either reuses an exact verified-email
-user or atomically creates a passwordless app user.
+Keycloak realm, where native email/password or optional Google can authenticate
+the player. Apple and GitHub are deferred. The exact callback exchange resolves
+the durable `(issuer, subject)` mapping and issues the application's existing
+access and refresh session. A first Keycloak identity either reuses an exact
+verified-email user or atomically creates a passwordless app user.
 
 If only a pending/unverified legacy claim matches, the callback exposes the
 otherwise hidden migration route. That legacy password session is backend-
 enforced read-only: GET/HEAD, account deletion/recovery, and starting the OIDC
 link remain available; other writes return `403 migration_required`. Linking
 adds the identity to the same `users.id`, bumps `auth_version`, revokes old
-sessions/tickets, and restores normal writes through the new social session.
+sessions/tickets, and restores normal writes through the new Keycloak-backed
+session.
 
 ### WebSocket chat
 

@@ -32,7 +32,7 @@ describe('Signup Page', () => {
 
     it('offers distinct social and native email signup when Keycloak is enabled', async () => {
         mockGet.mockResolvedValueOnce({
-            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google', 'apple', 'github'] },
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
         });
         render(
             <AuthContext.Provider value={authValue}>
@@ -43,14 +43,10 @@ describe('Signup Page', () => {
         );
 
         const google = await screen.findByRole('link', { name: 'Sign up with Google' });
-        const apple = screen.getByRole('link', { name: 'Sign up with Apple' });
-        const github = screen.getByRole('link', { name: 'Sign up with GitHub' });
         expect(google).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=google');
-        expect(apple).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=apple');
-        expect(github).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=github');
         expect(google.querySelector('.auth-provider-logo-google')).toBeInTheDocument();
-        expect(apple.querySelector('.auth-provider-logo-apple')).toBeInTheDocument();
-        expect(github.querySelector('.auth-provider-logo-github')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Sign up with Apple' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Sign up with GitHub' })).not.toBeInTheDocument();
         expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
         expect(screen.getByDisplayValue('create')).toHaveAttribute('name', 'prompt');
         expect(screen.getByRole('button', { name: 'Continue to create account' })).toBeInTheDocument();

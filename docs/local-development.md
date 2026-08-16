@@ -34,32 +34,30 @@ ignored certificate for the local application and identity names. Map
 at `http://localhost:8025`. Caddy is the only browser-facing entrypoint for the
 identity path and redirects the matching HTTP names to HTTPS.
 
-Login and signup each display three distinct provider buttons and one email
-path. After email is selected, Keycloak owns only the password or registration
-form; it does not repeat the social providers. Registration and reset mail stays
-fully local in Mailpit. Normal pages never render the hidden legacy credential
-form while OIDC is enabled.
+Login and signup always display the native Keycloak email path and display the
+Google button only when local Google credentials are supplied. After email is
+selected, Keycloak owns only the password or registration form; it does not
+repeat social providers. Registration and reset mail stays fully local in
+Mailpit. Normal pages never render the hidden legacy credential form while OIDC
+is enabled.
 
-The checked-in Google, Apple, and GitHub values are deliberate placeholders;
-Keycloak disables them and the application renders their buttons unavailable. To
-activate the downloaded Google Web OAuth client without copying its secret into
-the repository, pass its ignored JSON file to the target:
+The checked-in provider values are deliberate placeholders; Keycloak disables
+them and the application does not render their buttons. To activate the
+downloaded Google Web OAuth client without copying its secret into the
+repository, pass its ignored JSON file to the target:
 
 ```text
 GEOGUESSME_GOOGLE_CLIENT_JSON=/absolute/path/to/client_secret.json make dev-social
 ```
 
 The target reads the ID and secret with `jq`, enables the Google alias for that
-run, and never prints either value. Other providers can use the matching
-exported credentials and `GEOGUESSME_OIDC_SOCIAL_PROVIDERS`. Their local broker
-callback is
-`https://auth-dev.geoguessme.com/realms/geoguessme/broker/{alias}/endpoint`.
-Apple still rejects `.localhost` even with a locally trusted certificate; use
-the hosted HTTPS dev domain or a registered public HTTPS tunnel for Apple.
+run, and never prints either value. Its local broker callback is
+`https://auth-dev.geoguessme.com/realms/geoguessme/broker/google/endpoint`.
+Apple and GitHub remain disabled until a later provider rollout.
 `make dev-social-down` stops the stack but keeps the named application and
 identity volumes.
 
-A genuinely new Google, social, or Keycloak email identity must choose an
+A genuinely new Google or Keycloak email identity must choose an
 empty-by-default GeoGuessMe username after verification. Keycloak's provider
 username is never silently copied into the public player profile.
 

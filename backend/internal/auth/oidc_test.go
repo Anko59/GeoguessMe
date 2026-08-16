@@ -85,9 +85,9 @@ func TestOIDCVerifierDeletesOnlyMatchingKeycloakIdentity(t *testing.T) {
 	}))
 	defer server.Close()
 	issuer = server.URL + "/realms/geoguessme"
-	verifier := &OIDCVerifier{
+	verifier := &OIDCVerifier{issuer: issuer, admin: &KeycloakAdmin{
 		issuer: issuer, clientID: "geoguessme-dev", clientSecret: "client-secret", httpClient: server.Client(),
-	}
+	}}
 	if err := verifier.DeleteIdentity(context.Background(), issuer, "keycloak-user-1"); err != nil {
 		t.Fatalf("DeleteIdentity: %v", err)
 	}

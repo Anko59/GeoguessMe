@@ -37,7 +37,7 @@ include tools/make/openapi-contract.mk
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restore-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
-	prod-config prod-migrate prod-up prod-down prod-logs \
+	prod-config prod-migrate prod-legacy-identity-plan prod-legacy-identity-provision prod-up prod-down prod-logs \
 	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate identity-secrets-generate \
 	vapid-keys \
 	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci \

@@ -86,8 +86,16 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	case "legacy-identity-migration":
+		migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer migrationCancel()
+		if err := runLegacyIdentityMigration(migrationCtx, cfg, pool, os.Args[2:], os.Stdout); err != nil {
+			logger.Error("legacy identity migration failed", "error", err)
+			os.Exit(1)
+		}
+		return
 	default:
-		fmt.Fprintln(os.Stderr, "usage: geoguessme [migrate up|migrate status|serve]")
+		fmt.Fprintln(os.Stderr, "usage: geoguessme [migrate up|migrate status|legacy-identity-migration plan|legacy-identity-migration apply --confirm|serve]")
 		os.Exit(2)
 	}
 	store, err := buildStore(cfg)
@@ -152,6 +160,16 @@ func main() {
 		identityVerifiers = append(identityVerifiers, verifier)
 	}
 	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now, identityVerifiers...)
+	// An OIDC-off rollback must not depend on Keycloak to start or verify
+	// sessions. When its client configuration remains available, retain only
+	// the lazy admin client so account deletion still propagates upstream.
+	if !cfg.OIDCEnabled && cfg.OIDCIssuerURL != "" && cfg.OIDCClientID != "" && cfg.OIDCClientSecret != "" {
+		if admin, adminErr := authsvc.NewKeycloakAdmin(cfg.OIDCIssuerURL, cfg.OIDCClientID, cfg.OIDCClientSecret); adminErr == nil {
+			app.AuthAPI.SetIdentityAdmin(admin)
+		} else {
+			logger.Warn("Keycloak account lifecycle unavailable during OIDC rollback", "error", adminErr)
+		}
+	}
 	go (repository.CleanupRunner{Store: store, Repos: app.Repos, Interval: time.Hour, Logger: app.Logger, Backlog: app.Metrics.SetCleanupBacklog, PushSubscriptionExpiry: cfg.PushSubscriptionExpiry}).Run(workerCtx)
 
 	// The media-processing worker promotes quarantined video uploads into

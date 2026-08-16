@@ -172,6 +172,7 @@ test.describe('Keyboard navigation', () => {
             const backLink = page.locator('.back-btn');
             const profileLink = page.getByRole('link', { name: 'Open your profile' });
             const settingsBtn = page.getByRole('button', { name: /settings/i });
+            await expect(settingsBtn).toBeVisible();
 
             // Back link → own-profile link → settings button are the first
             // focusable elements in the group header.

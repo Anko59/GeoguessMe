@@ -33,11 +33,11 @@ for health checks and deployment SSH.
 
 Each game project runs its own OAuth2 Proxy beside the Caddy web gateway. Caddy
 routes `/oauth2/*` and the OIDC session exchange to that proxy; all other API
-traffic goes directly to the backend. Keycloak brokers Google, GitHub, and
-Apple, while its built-in credential flow supplies ordinary email/password
-signup and login. This Compose topology deliberately has no Traefik layer:
-Cloudflare Tunnel provides ingress and Caddy provides the one same-origin
-application gateway.
+traffic goes directly to the backend. Keycloak brokers Google while its built-in
+credential flow supplies ordinary email/password signup and login. Apple and
+GitHub remain disabled for this rollout. This Compose topology deliberately has
+no Traefik layer: Cloudflare Tunnel provides ingress and Caddy provides the one
+same-origin application gateway.
 
 Local social-auth development also uses Caddy, but with a dedicated
 `Caddyfile.dev`: `mkcert` supplies a locally trusted certificate and Caddy maps
@@ -82,13 +82,12 @@ stored values whenever an environment's secret is regenerated.
 
 The shared `identity.env.enc` must be encrypted for both host age recipients.
 Before generating it, export the dedicated dev and production OIDC client
-secrets, Keycloak SMTP credentials, and the Google, GitHub, and Apple
-credentials documented in `deployment/env/identity.env.example`. Register the
-three exact `auth.geoguessme.com` broker callback URLs documented in the rollout
-runbook before testing providers. Apple's client secret is a signed JWT with a
-finite lifetime; rotate only that provider secret before expiry and keep the
-Keycloak database, realm, and application client secrets stable. Follow the
-ordered migration and provider checks in
+secrets, Keycloak SMTP credentials, and Google credentials documented in
+`deployment/env/identity.env.example`. Keep the Apple and GitHub values as
+placeholders until their separate rollout. Register the exact Google
+`auth.geoguessme.com` broker callback URL documented in the rollout runbook
+before testing the provider. Keep the Keycloak database, realm, and application
+client secrets stable. Follow the ordered migration and provider checks in
 [`docs/runbooks/social-auth-rollout.md`](../docs/runbooks/social-auth-rollout.md).
 
 The host deployment command accepts only an environment fixed in

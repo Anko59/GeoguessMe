@@ -349,6 +349,27 @@ func TestOIDCEnabledRetiresSignupAndLimitsPasswordLoginToMigration(t *testing.T)
 	}
 }
 
+func TestOIDCDisabledRestoresLinkedLegacyPasswordLogin(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	api.cfg.OIDCEnabled = false
+	hash, err := bcrypt.GenerateFromPassword([]byte("Password123"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked := &models.User{
+		ID: "linked-user", Username: "linked", Password: string(hash), PasswordEnabled: true,
+		OIDCLinked: true, Avatar: "avatar.png",
+	}
+	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("linked").WillReturnRows(handlerUserRows(linked))
+	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), linked.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	recorder := httptest.NewRecorder()
+	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"password_login_enabled":true`) || strings.Contains(recorder.Body.String(), `"migration_required":true`) {
+		t.Fatalf("rollback login = %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestLegacyReadOnlyMiddleware(t *testing.T) {
 	api := newAuthAPI(t, newAuthMockPool(t), nil)
 	called := false

@@ -190,12 +190,13 @@ export default function AccountSettings() {
                         <div className="account-section-heading">
                             <h2>Finish account migration</h2>
                             <p>
-                                This legacy account is read-only. Connect Keycloak to the same player ID to restore
-                                normal access without moving or recreating your groups, scores, or history.
+                                This legacy account is read-only. Continue with GeoGuessMe ID using email/password or
+                                Google to restore normal access without moving or recreating your groups, scores, or
+                                history.
                             </p>
                         </div>
                         <button className="btn btn-primary" disabled={linking} onClick={() => void linkSocialLogin()}>
-                            {linking ? 'Opening secure login…' : 'Connect a Keycloak login'}
+                            {linking ? 'Opening secure login…' : 'Continue with GeoGuessMe ID'}
                         </button>
                     </div>
                 )}
@@ -285,8 +286,9 @@ export default function AccountSettings() {
                     <div className="account-section-heading">
                         <h2>Sign-in methods</h2>
                         <p>
-                            Email, Google, Apple, and GitHub sign-in are managed through Keycloak while GeoGuessMe keeps
-                            the same player ID and game history.
+                            {user?.oidc_linked
+                                ? 'Email/password and optional Google sign-in are managed through Keycloak while GeoGuessMe keeps the same player ID and game history.'
+                                : 'Legacy password sign-in is active while Keycloak is disabled for rollback.'}
                         </p>
                     </div>
                     {user?.oidc_linked ? (
@@ -310,9 +312,7 @@ export default function AccountSettings() {
                             )}
                         </>
                     ) : (
-                        <button className="btn btn-secondary" disabled={linking} onClick={() => void linkSocialLogin()}>
-                            {linking ? 'Opening secure login…' : 'Connect a Keycloak login'}
-                        </button>
+                        <p className="account-identity-status">Legacy password login is active.</p>
                     )}
                     {!user?.oidc_linked && user?.password_login_enabled ? (
                         <>

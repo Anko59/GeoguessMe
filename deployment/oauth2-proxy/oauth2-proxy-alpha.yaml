@@ -48,8 +48,6 @@ providers:
       - name: kc_idp_hint
         allow:
           - value: google
-          - value: apple
-          - value: github
       - name: prompt
         allow:
           - value: create

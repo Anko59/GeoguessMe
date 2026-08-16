@@ -73,7 +73,8 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
                 {migrationMode && (
                     <p className="auth-migration-notice" role="note">
                         This legacy session is read-only. Your groups and scores stay on the same account, and normal
-                        access returns as soon as you connect an email, Google, Apple, or GitHub login in Settings.
+                        access returns as soon as you connect a GeoGuessMe ID email/password or Google login in
+                        Settings.
                     </p>
                 )}
                 {activeOIDCConfig?.enabled ? (

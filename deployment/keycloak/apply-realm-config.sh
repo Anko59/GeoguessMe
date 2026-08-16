@@ -102,7 +102,7 @@ configure_client() {
     "$kcadm" update "clients/$client_uuid" --config "$config_file" -r geoguessme \
         -s "secret=$client_secret" \
         -s serviceAccountsEnabled=true \
-        -s "redirectUris=[\"$redirect_url\"]" \
+        -s "redirectUris=[\"$redirect_url\",\"${origin%/}/login\"]" \
         -s "webOrigins=[\"$origin\"]" \
         -s "attributes={\"pkce.code.challenge.method\":\"S256\",\"post.logout.redirect.uris\":\"$post_logout_urls\"}"
 }
@@ -118,15 +118,15 @@ configure_client geoguessme-dev \
     "$GEOGUESSME_DEV_ORIGIN" \
     "$GEOGUESSME_DEV_POST_LOGOUT_URLS"
 
-grant_account_deletion_role() {
+grant_user_management_role() {
     client_id=$1
     "$kcadm" add-roles --config "$config_file" -r geoguessme \
         --uusername "service-account-$client_id" \
         --cclientid realm-management --rolename manage-users
 }
 
-grant_account_deletion_role geoguessme-production
-grant_account_deletion_role geoguessme-dev
+grant_user_management_role geoguessme-production
+grant_user_management_role geoguessme-dev
 echo "Keycloak application clients reconciled"
 
 has_real_credentials() {
@@ -160,6 +160,8 @@ configure_identity_provider() {
 }
 
 configure_identity_provider google 1 "$GEOGUESSME_GOOGLE_CLIENT_ID" "$GEOGUESSME_GOOGLE_CLIENT_SECRET"
-configure_identity_provider apple 2 "$GEOGUESSME_APPLE_CLIENT_ID" "$GEOGUESSME_APPLE_CLIENT_SECRET"
-configure_identity_provider github 3 "$GEOGUESSME_GITHUB_CLIENT_ID" "$GEOGUESSME_GITHUB_CLIENT_SECRET"
+# Apple and GitHub remain deliberately disabled for this rollout even if
+# credentials are present. Enable them in a separately reviewed provider PR.
+"$kcadm" update realms/geoguessme/identity-provider/instances/apple --config "$config_file" -s enabled=false -s hideOnLogin=true
+"$kcadm" update realms/geoguessme/identity-provider/instances/github --config "$config_file" -s enabled=false -s hideOnLogin=true
 echo "Keycloak social providers reconciled"

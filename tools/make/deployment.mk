@@ -27,7 +27,7 @@ clean-build: ## Build production images from scratch without any layer cache.
 # --input so private registry credentials never need to enter the Trivy
 # container.
 AUDIT_IMAGES ?= postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 \
-	quay.io/keycloak/keycloak:26.4.0@sha256:5f3fb534cde6bf006d79f5912473e5d2c828c707cdfc52e16972803aca9d43dd \
+	quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561 \
 	cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
@@ -152,6 +152,13 @@ prod-config: ## Validate production image and secret configuration.
 prod-migrate: prod-config ## Run the production migration job.
 	$(COMPOSE_PROD) run --rm migration migrate up
 
+prod-legacy-identity-plan: prod-config ## Count legacy migration categories without changing Keycloak.
+	$(COMPOSE_PROD) run --rm migration legacy-identity-migration plan
+
+prod-legacy-identity-provision: prod-config ## Provision verified legacy emails in Keycloak; requires CONFIRM=provision.
+	@test "$(CONFIRM)" = provision || { echo "Refusing without CONFIRM=provision"; exit 2; }
+	$(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
+
 prod-up: prod-config ## Start the production stack.
 	@if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
 		$(COMPOSE_PROD) --profile social up -d; \
@@ -260,8 +267,6 @@ identity-secrets-generate: ## Generate shared Keycloak secrets and encrypt them 
 	trap 'rm -f "$$temporary"' EXIT INT TERM; \
 	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
-		-e GITHUB_OAUTH_CLIENT_ID -e GITHUB_OAUTH_CLIENT_SECRET \
-		-e APPLE_OAUTH_CLIENT_ID -e APPLE_OAUTH_CLIENT_SECRET \
 		-e KEYCLOAK_SMTP_USERNAME -e KEYCLOAK_SMTP_PASSWORD \
 		-e PRODUCTION_OIDC_CLIENT_SECRET -e DEV_OIDC_CLIENT_SECRET \
 		go-tools sh /workspace/deployment/scripts/hosted/generate-identity-secret.sh | \

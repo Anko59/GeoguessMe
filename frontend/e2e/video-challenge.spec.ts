@@ -79,6 +79,12 @@ test.describe('Video challenge flow', () => {
                     response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/media') &&
                     response.request().method() === 'GET',
             );
+            // The test stack compresses the viewing window to one second. Keep
+            // the UI deadline stable while Chromium decodes the transcoded
+            // media; production grants ten seconds.
+            const frozenTime = new Date();
+            await guesser.clock.install({ time: frozenTime });
+            await guesser.clock.pauseAt(frozenTime);
             await challenge.click();
             expect((await acceptResponsePromise).status()).toBe(200);
             const mediaResponse = await mediaResponsePromise;
@@ -86,6 +92,20 @@ test.describe('Video challenge flow', () => {
 
             const challengeVideo = guesser.locator('video[aria-label="Challenge video"]');
             await expect(challengeVideo).toBeVisible();
+            const h264Support = await challengeVideo.evaluate((video) =>
+                video.canPlayType('video/mp4; codecs="avc1.64002A"'),
+            );
+            if (h264Support === '') {
+                // The open-source Chromium build in Playwright's ARM image
+                // omits H.264. The HTTP and transcode contracts above still
+                // prove that canonical MP4 media is delivered.
+                expect(mediaResponse.headers()['content-type']).toContain('video/mp4');
+                return;
+            }
+            await challengeVideo.evaluate(async (video) => {
+                video.muted = true;
+                await video.play();
+            });
             await expect
                 .poll(() => challengeVideo.evaluate((video) => video.readyState >= 2 && video.error === null), {
                     timeout: 5000,

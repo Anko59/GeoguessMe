@@ -30,6 +30,10 @@ assert_contains() {
     grep -Fq -e "$2" "$1" || fail "$1 does not contain: $2"
 }
 
+assert_not_contains() {
+    ! grep -Fq -e "$2" "$1" || fail "$1 unexpectedly contains: $2"
+}
+
 line_of() {
     grep -n -m1 "$2" "$1" | cut -d: -f1
 }
@@ -47,8 +51,8 @@ assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
 # existing Keycloak realms are reconciled instead of relying on import-once.
 assert_contains "$OAUTH2_PROXY_ALPHA" 'name: kc_idp_hint'
 assert_contains "$OAUTH2_PROXY_ALPHA" 'value: google'
-assert_contains "$OAUTH2_PROXY_ALPHA" 'value: apple'
-assert_contains "$OAUTH2_PROXY_ALPHA" 'value: github'
+assert_not_contains "$OAUTH2_PROXY_ALPHA" 'value: apple'
+assert_not_contains "$OAUTH2_PROXY_ALPHA" 'value: github'
 assert_contains "$OAUTH2_PROXY_ALPHA" 'name: prompt'
 assert_contains "$OAUTH2_PROXY_ALPHA" 'value: create'
 assert_contains "$OAUTH2_PROXY_ALPHA" 'name: login_hint'
@@ -207,8 +211,6 @@ printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
 
 identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
     GOOGLE_OAUTH_CLIENT_SECRET=google-secret \
-    GITHUB_OAUTH_CLIENT_ID=github-id GITHUB_OAUTH_CLIENT_SECRET=github-secret \
-    APPLE_OAUTH_CLIENT_ID=apple-id APPLE_OAUTH_CLIENT_SECRET=apple-secret \
     KEYCLOAK_SMTP_USERNAME=smtp-user KEYCLOAK_SMTP_PASSWORD=smtp-password \
     PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret \
     DEV_OIDC_CLIENT_SECRET=dev-oidc-secret "$IDENTITY_SECRET_GENERATOR")
@@ -219,10 +221,10 @@ printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_DEV_OIDC_CLIENT_SECRE
     fail 'generated identity payload omitted the dev client secret'
 printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_GOOGLE_CLIENT_SECRET=google-secret' ||
     fail 'generated identity payload omitted the Google provider secret'
-printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_ID=apple-id' ||
-    fail 'generated identity payload omitted the Apple provider client ID'
-printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_SECRET=apple-secret' ||
-    fail 'generated identity payload omitted the Apple provider secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_GITHUB_CLIENT_ID=local-github-placeholder' ||
+    fail 'generated identity payload did not keep GitHub disabled'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_ID=local-apple-placeholder' ||
+    fail 'generated identity payload did not keep Apple disabled'
 printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_KEYCLOAK_SMTP_PASSWORD=smtp-password' ||
     fail 'generated identity payload omitted the Keycloak SMTP secret'
 assert_contains "$ROOT/tools/make/deployment.mk" 'generate-identity-secret.sh |'

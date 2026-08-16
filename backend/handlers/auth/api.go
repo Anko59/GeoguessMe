@@ -13,6 +13,7 @@ import (
 	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/config"
 	"geoguessme/internal/email"
+	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 )
@@ -45,6 +46,17 @@ func NewAuthAPI(repos *repository.Repository, cfg *config.Config, store storage.
 		}
 	}
 	return api
+}
+
+// SetIdentityAdmin installs the lifecycle-only Keycloak client used during an
+// OIDC-off rollback. Token verification stays disabled, but deleting an
+// already-linked account must still delete its upstream identity first.
+func (a *AuthAPI) SetIdentityAdmin(admin authsvc.IdentityAdmin) {
+	a.oidcAdmin = admin
+}
+
+func (a *AuthAPI) legacyPasswordAvailable(user *models.User) bool {
+	return user != nil && user.PasswordEnabled && (!a.cfg.OIDCEnabled || !user.OIDCLinked)
 }
 
 // kickDisconnectUser closes every live socket for a user after their

@@ -13,8 +13,8 @@ players), but every step treats the mapping as durable production data.
 
 - `users.id` remains the application identity before, during, and after
   migration.
-- A social identity adds a `user_identities` row; it never creates a second user
-  for a known legacy player.
+- A Keycloak identity adds a `user_identities` row; it never creates a second
+  user for a known legacy player.
 - Groups, memberships, scores, guesses, messages, media, and timestamps are not
   copied or rewritten during account linking.
 - Only a verified Keycloak email may auto-link an existing verified recovery
@@ -23,6 +23,8 @@ players), but every step treats the mapping as durable production data.
   bootstrap/linking signal and may change later.
 - The read-only migration policy is enforced by the backend, not only by hidden
   frontend controls.
+- Native email/password remains fully available through Keycloak. Google is
+  optional; Apple and GitHub are outside this rollout.
 
 ## Phase 0: inventory and dark deployment
 
@@ -71,16 +73,55 @@ ORDER BY u.created_at, u.id;
 If the deployed schema uses a renamed membership table, adapt only that
 read-only evidence query; never change production schema to fit the example.
 
-## Phase 1: Keycloak-only launch and read-only legacy accounts
+Run the aggregate application inventory after migration 021:
+
+```bash
+make prod-legacy-identity-plan
+```
+
+The output contains counts only: total legacy accounts, already linked,
+verified-email candidates, pending email, and missing email. It must total the
+known production population without printing addresses.
+
+## Phase 1: pre-provision verified legacy accounts
+
+Stock Keycloak 26.7.1 does not support the application's bcrypt hash format. Do
+not copy hashes into the Keycloak database and never write that database
+directly. After backups and the aggregate plan are reviewed, create only the
+eligible Keycloak users and send each one a Keycloak `UPDATE_PASSWORD` action:
+
+```bash
+make prod-legacy-identity-provision CONFIRM=provision
+```
+
+The command is idempotent. It creates a passwordless Keycloak user only for an
+active, unlinked application account whose recovery email was already verified
+by GeoGuessMe. It marks that address verified in Keycloak, requires a password
+choice, and sends the action email. A retry reuses the exact verified Keycloak
+user and resends only while `UPDATE_PASSWORD` is still outstanding. After the
+password action, Keycloak returns the player to the GeoGuessMe login page.
+
+Pre-provisioning does not insert `user_identities` and does not unlock the old
+application session. The first successful Keycloak login supplies the verified
+email, atomically links it to the existing `users.id`, revokes old sessions, and
+restores writes. This prevents an operator-side partial failure from binding an
+account before its owner authenticates.
+
+Pending-email and missing-email accounts are deliberately skipped. They use the
+hidden legacy-authenticated linking path in Phase 2; an unverified claim is
+never enough to control an account.
+
+## Phase 2: Keycloak launch and read-only legacy accounts
 
 Enable OIDC only after the local and dev flows are green. During this phase:
 
-- Normal login and signup use Keycloak exclusively. Both pages offer distinct
-  Google, Apple, and GitHub actions plus native email/password. The application
-  does not display legacy credential forms, and passwords are entered only on
-  the branded Keycloak origin.
+- Normal login and signup use Keycloak exclusively. Both pages offer optional
+  Google plus native Keycloak email/password. The application does not display
+  legacy credential forms, and passwords are entered only on the branded
+  Keycloak origin.
 - A brand-new verified native or social identity creates a new GeoGuessMe user
   and its identity mapping atomically.
+- Apple and GitHub are disabled in Keycloak and absent from the application UI.
 - An exact verified recovery-email match may link automatically. A pending or
   unverified match returns `account_link_required`, which is the only normal UI
   path that reveals `/migrate-account`.
@@ -115,20 +156,43 @@ For each of the known legacy players, compare the post-link ID and ownership
 counts with the Phase 0 export. Any changed ID or missing history blocks the
 rollout.
 
-## Phase 2: required legacy-account migration
+## Migration completion during Phase 2
 
-In the second phase, each existing player must connect a Keycloak email, Google,
-Apple, or GitHub identity before normal write access is restored. Contact the
-approximately 11 known players directly, keep the migration support path
-available, and track only aggregate migrated/unmigrated counts in routine
-operations. A player may still read existing history before migrating; do not
-delete, duplicate, or reassign that player's application row.
+Each existing player must connect a Keycloak email/password or Google identity
+before normal write access is restored. Contact the approximately 11 known
+players directly, keep the migration support path available, and track only
+aggregate migrated/unmigrated counts in routine operations. A player may still
+read existing history before migrating; do not delete, duplicate, or reassign
+that player's application row.
 
 Close the phase only after every active legacy player is linked or has been
 handled through the documented support process, and after IDs and ownership
 counts match the Phase 0 evidence. Retiring legacy password material is a later,
 separately reviewed cleanup after the rollback observation window; it is not
 part of this rollout.
+
+## Phase 3: later PR to retire legacy authentication
+
+This repository intentionally retains the hidden legacy login, bcrypt hashes,
+reset endpoints, `legacy_password_enabled`, and the read-only migration support
+path in the current PR. Remove them only in a second, separately reviewed PR
+after all active accounts are linked, the support queue is empty, ID/ownership
+evidence matches Phase 0, and the rollback observation window has closed.
+
+That later PR must proceed in this order:
+
+1. take fresh application and Keycloak backups and archive aggregate completion
+   evidence;
+2. remove the hidden migration UI/routes and legacy reset/change-password code;
+3. deploy and observe the Keycloak-only application while the schema remains
+   backward compatible;
+4. in a subsequent forward-only migration, clear/drop password material and
+   legacy-only tables or columns;
+5. update the rollback plan because revisions older than that cleanup will then
+   require the pre-cleanup backup.
+
+Do not combine steps 2 and 4 in one deployment. The compatible application must
+be proven before schema cleanup makes an old binary unusable.
 
 ### Read-only legacy-session matrix
 
@@ -170,44 +234,59 @@ Before enabling OIDC, require all of the following:
 ## Provider registration and callback contract
 
 Provider credentials are not interchangeable with the GeoGuessMe application
-client secret. Create one credential in each provider console for the hosted
-Keycloak broker and register these exact HTTPS values:
+client secret. Create one Google credential for the hosted Keycloak broker and
+register this exact HTTPS value:
 
-| Provider | Provider-side identifier    | Callback / return URL                                                  |
-| -------- | --------------------------- | ---------------------------------------------------------------------- |
-| Google   | OAuth 2.0 web client        | `https://auth.geoguessme.com/realms/geoguessme/broker/google/endpoint` |
-| Apple    | Services ID for web sign-in | `https://auth.geoguessme.com/realms/geoguessme/broker/apple/endpoint`  |
-| GitHub   | OAuth App                   | `https://auth.geoguessme.com/realms/geoguessme/broker/github/endpoint` |
+| Provider | Provider-side identifier | Callback / return URL                                                  |
+| -------- | ------------------------ | ---------------------------------------------------------------------- |
+| Google   | OAuth 2.0 web client     | `https://auth.geoguessme.com/realms/geoguessme/broker/google/endpoint` |
 
 For Google, also configure the consent screen and use the web client ID and
-secret. For Apple, associate `auth.geoguessme.com` with the Services ID, keep
-the Services ID as the Keycloak client ID, and generate its signed client-secret
-JWT from the Apple team/key material. For GitHub, use the OAuth App client ID
-and secret; the callback URL must include the broker alias exactly as shown.
+secret. The callback URL must include the broker alias exactly as shown. Apple
+and GitHub remain disabled even if credentials are accidentally present; enable
+them only in a separately reviewed provider rollout.
 
 Put those values in the shared encrypted identity environment, run
 `make identity-up` so the realm reconciler applies configuration to an existing
-realm, and then test each button in hosted dev. A correct provider callback
-returns first to `auth.geoguessme.com`; Keycloak then returns to
+realm, and then test the Google button in hosted dev. A correct provider
+callback returns first to `auth.geoguessme.com`; Keycloak then returns to
 `https://dev.geoguessme.com/oauth2/callback` or
 `https://geoguessme.com/oauth2/callback` through its separate application
 client. Do not register either application callback in a social-provider
 console.
 
 The local stack intentionally uses placeholder provider credentials. Keycloak
-keeps those brokers disabled and the application presents their buttons as
-unavailable instead of sending a player into an `invalid_client` response.
-Google and GitHub can be activated locally with dedicated credentials and the
-HTTPS callback
-`https://auth-dev.geoguessme.com/realms/geoguessme/broker/{alias}/endpoint`.
-Apple rejects `.localhost` even when its certificate is trusted locally, so its
-provider acceptance runs on hosted dev or a registered public HTTPS tunnel.
+keeps those brokers disabled and the application omits their buttons instead of
+sending a player into an `invalid_client` response. Google can be activated
+locally with dedicated credentials and the HTTPS callback
+`https://auth-dev.geoguessme.com/realms/geoguessme/broker/google/endpoint`.
 Native email/password, verification mail, callback exchange, and the branded
 Keycloak pages run entirely locally.
 
 An expired Keycloak page after returning from a provider means its one-time
 browser state is stale or was already consumed. Restart from the corresponding
 GeoGuessMe provider button; never bookmark or retry a broker callback URL.
+
+## Account deletion with a social provider
+
+Deleting a linked GeoGuessMe account deletes the Keycloak user first, including
+its Google federation link and Keycloak sessions, and only then deletes the
+application row and gameplay data. If Keycloak cannot confirm deletion, the
+operation fails closed and retains the application data for a safe retry.
+
+The upstream Google account and its provider-side authorization remain outside
+GeoGuessMe's control. The player may therefore choose Google again later; that
+must create a blank Keycloak and GeoGuessMe account, require a new GeoGuessMe
+username, and never restore the deleted ID, profile, groups, scores, or history.
+A permanent provider-identity denylist would retain a tombstone after account
+deletion and is deliberately not part of this rollout.
+
+The local Keycloak E2E test verifies that the deleted user returns `404` from
+the Keycloak Admin API and that the old credentials no longer authenticate.
+Because an automated suite must not store a personal Google session, the hosted
+dev release check must additionally delete a disposable Google-created player,
+start Google sign-in again, and confirm that empty username onboarding appears
+with none of the deleted account's data.
 
 ## Identity-conflict handling
 
@@ -221,10 +300,14 @@ confirmation of both account owners, and before/after ownership-count evidence.
 
 For an identity incident, roll back the application configuration to the dark
 deployment by setting `OIDC_ENABLED=false` and removing OAuth2 Proxy from the
-public route. That rollback restores the OIDC-off compatibility UI and legacy
-write access. Do not unlink already migrated users, roll back migration 021, or
-delete identity mappings. Restore a database backup only for demonstrated data
-corruption; ordinary identity or provider outages require an application or
+public route. Keep issuer/client settings available. That rollback restores the
+OIDC-off compatibility UI and retained legacy-password access for linked and
+unlinked legacy accounts whose hash still exists, without unlinking anyone.
+Accounts created only in Keycloak after launch require Keycloak to return.
+Account deletion still attempts upstream-first Keycloak deletion; if Keycloak is
+unavailable it fails closed and keeps local data. Do not roll back migration 021
+or delete identity mappings. Restore a database backup only for demonstrated
+data corruption; ordinary identity or provider outages require an application or
 configuration rollback, not a schema rollback.
 
 ## Completion evidence
@@ -238,19 +321,3 @@ The release record must include:
   authenticated groups, and optional security settings;
 - the tested OIDC-disable rollback result;
 - the complete read-only route matrix and migration-unlock test.
-
-## Apple provider operations
-
-Apple uses a Service ID as the OIDC client ID and a signed client-secret JWT.
-Record that JWT's expiry in the operator calendar and rotate it before expiry:
-
-1. Generate a new signed Apple client-secret JWT without changing the Service ID
-   or callback URL.
-2. Update only the `apple` identity provider's client secret in Keycloak.
-3. Test a fresh Apple login in dev, then production, while the old application
-   session path remains available.
-4. Record the new expiry and remove the expired JWT from restricted operator
-   material.
-
-Do not rerun the full identity-secret generator merely to rotate Apple: the
-Keycloak database, realm, and other provider credentials must remain stable.
