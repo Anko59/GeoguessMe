@@ -105,7 +105,9 @@ Chromium, desktop Firefox, and mobile Chromium matrix remains part of
 CI checks out the repository and invokes the same focused Make targets available
 locally. It does not install Go, Node, Python, Playwright, or linters directly
 on the runner. The complete `make verify` target is intentionally reserved for
-the exact dev deployment revision and nightly verification.
+the exact dev deployment revision and nightly verification, and must not be run
+locally for application or test-only changes; those are covered by PR CI and the
+dev gate.
 
 Exploratory LLM QA is a separate local acceptance step because CI does not
 receive provider credentials. Its browser implementation still runs through the

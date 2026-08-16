@@ -38,8 +38,10 @@ Go backend at `backend/`. Applies in addition to the root
   database integration lives in `backend/integration_test/` and runs with
   `make test-integration`.
 - Lint with `make lint-go`; validate migrations with `make lint-sql`.
-- Run `make preflight` before handoff and `make verify` when a change touches
-  composition, startup, migrations, or tests.
+- Run `make preflight` before handoff. `make verify` is reserved for changes to
+  deployment, infrastructure, CI workflows, or the quality gates themselves;
+  application code and its tests are covered by PR CI and the dev gate and never
+  require a local `make verify`.
 
 ## Structure
 

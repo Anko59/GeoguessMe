@@ -27,8 +27,9 @@ description:
 6. Add Vitest coverage for behavior; add an E2E scenario in `frontend/e2e/` only
    for a user journey. No `act(...)` warnings, no unconditional sleeps.
 7. Run `make impact BASE=origin/dev`, `make test-frontend`,
-   `make lint-frontend`, `make type-check`, the relevant E2E, then
-   `make preflight`.
+   `make lint-frontend`, `make type-check`, then `make preflight`. Add an E2E
+   scenario only for a user journey; the browser suite itself runs in PR CI and
+   the dev gate, not locally.
 
 ## Inputs
 
@@ -38,7 +39,8 @@ description:
 
 - React/TypeScript changes with Vitest tests.
 - E2E scenario updates when a journey changes.
-- Gate evidence: `test-frontend`, `lint-frontend`, `type-check`, `test-e2e`.
+- Gate evidence: `test-frontend`, `lint-frontend`, `type-check`; E2E evidence is
+  produced by PR CI.
 
 ## References
 
