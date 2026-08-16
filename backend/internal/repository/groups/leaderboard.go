@@ -308,3 +308,15 @@ func (r *Repository) GlobalElo(ctx context.Context, userID string) (EloStats, er
 	}
 	return EloStats{Elo: myElo, Rank: rank, TotalPlayers: len(ratings)}, nil
 }
+
+// GlobalChallengeEloDeltas returns the Elo rating change for each participant
+// on a challenge using the same all-group chronological progression as the
+// global profile rating.
+func (r *Repository) GlobalChallengeEloDeltas(ctx context.Context, photoID string) (map[string]int, error) {
+	challenges, err := r.GlobalChallenges(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deltas := elo.ComputeChallengeDeltas(challenges)
+	return deltas[photoID], nil
+}

@@ -89,6 +89,54 @@ func ComputeRatings(challenges []Challenge) map[string]int {
 	return ratings
 }
 
+// ComputeChallengeDeltas returns the Elo rating change for each participant on
+// each challenge in the chronological replay. The returned map is keyed by
+// challenge ID, then by user ID.
+func ComputeChallengeDeltas(challenges []Challenge) map[string]map[string]int {
+	sorted := make([]Challenge, len(challenges))
+	copy(sorted, challenges)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+
+	ratings := map[string]int{}
+	deltas := map[string]float64{}
+	challengeDeltas := make(map[string]map[string]int, len(sorted))
+	for _, challenge := range sorted {
+		guesses := challenge.Guesses
+		if len(guesses) < 2 {
+			continue
+		}
+		for i := 0; i < len(guesses); i++ {
+			for j := i + 1; j < len(guesses); j++ {
+				a, b := guesses[i], guesses[j]
+				ra := rating(ratings, a.UserID)
+				rb := rating(ratings, b.UserID)
+				var resultA float64
+				switch {
+				case a.Score > b.Score:
+					resultA = 1
+				case a.Score < b.Score:
+					resultA = 0
+				default:
+					resultA = 0.5
+				}
+				deltas[a.UserID] += K * (resultA - expectedScore(ra, rb))
+				deltas[b.UserID] += K * ((1 - resultA) - expectedScore(rb, ra))
+			}
+		}
+		userDeltas := make(map[string]int, len(deltas))
+		for id, delta := range deltas {
+			rounded := int(math.Round(delta))
+			ratings[id] = rating(ratings, id) + rounded
+			userDeltas[id] = rounded
+		}
+		challengeDeltas[challenge.ID] = userDeltas
+		clear(deltas)
+	}
+	return challengeDeltas
+}
+
 func rating(ratings map[string]int, userID string) int {
 	if rating, ok := ratings[userID]; ok {
 		return rating

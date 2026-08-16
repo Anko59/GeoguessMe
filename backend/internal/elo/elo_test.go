@@ -110,3 +110,42 @@ func TestComputeRatingsSecondWinIsSmaller(t *testing.T) {
 		t.Fatalf("two wins = %v, want less than %v (diminishing returns)", got, 2*firstWin)
 	}
 }
+
+func TestComputeChallengeDeltas(t *testing.T) {
+	challenges := []Challenge{
+		{
+			ID:        "c1",
+			CreatedAt: challengeTime("2026-01-01T00:00:00Z"),
+			Guesses:   []Guess{{UserID: "alice", Score: 4500}, {UserID: "bob", Score: 500}},
+		},
+		{
+			ID:        "c2",
+			CreatedAt: challengeTime("2026-01-02T00:00:00Z"),
+			Guesses:   []Guess{{UserID: "alice", Score: 3000}, {UserID: "bob", Score: 3000}},
+		},
+		{
+			ID:        "c3",
+			CreatedAt: challengeTime("2026-01-03T00:00:00Z"),
+			Guesses:   []Guess{{UserID: "solo", Score: 4000}},
+		},
+	}
+	deltas := ComputeChallengeDeltas(challenges)
+
+	// c1: Alice won against Bob (both starting at 1000).
+	if deltas["c1"]["alice"] != 16 || deltas["c1"]["bob"] != -16 {
+		t.Fatalf("c1 deltas = %v, want alice: 16, bob: -16", deltas["c1"])
+	}
+
+	// c2: Alice and Bob tied. Alice was higher rated (1016 vs 984), so tying loses a small amount of Elo for Alice and gains for Bob.
+	if deltas["c2"]["alice"] >= 0 || deltas["c2"]["bob"] <= 0 {
+		t.Fatalf("c2 deltas = %v, higher-rated player tying must lose elo", deltas["c2"])
+	}
+	if deltas["c2"]["alice"]+deltas["c2"]["bob"] != 0 {
+		t.Fatalf("c2 sum = %d, want 0", deltas["c2"]["alice"]+deltas["c2"]["bob"])
+	}
+
+	// c3: Single guesser has no comparisons.
+	if len(deltas["c3"]) != 0 {
+		t.Fatalf("c3 deltas = %v, want empty", deltas["c3"])
+	}
+}

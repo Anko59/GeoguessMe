@@ -237,7 +237,18 @@ function GameResultsView({
                                             <span>{(guess.distance / 1000).toFixed(1)} km away</span>
                                         )}
                                     </div>
-                                    <b>{guess.score} pts</b>
+                                    <div className="score-card__value">
+                                        <b>{guess.score} pts</b>
+                                        {guess.elo_delta !== 0 && (
+                                            <span
+                                                className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
+                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} Elo`}
+                                            >
+                                                {guess.elo_delta > 0 ? '+' : ''}
+                                                {guess.elo_delta} Elo
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>

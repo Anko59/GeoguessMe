@@ -367,10 +367,31 @@
     font-size: 0.76rem;
 }
 
+.score-card__value {
+    display: grid;
+    justify-items: end;
+    gap: 0.15rem;
+}
+
 .score-card b {
     color: var(--brand-navy);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+}
+
+.elo-delta {
+    font-size: 0.76rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.elo-delta--gain {
+    color: var(--success);
+}
+
+.elo-delta--loss {
+    color: var(--danger);
 }
 
 .result-map {
