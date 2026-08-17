@@ -43,24 +43,32 @@ export default function Chat({
     const [reactionUsage, setReactionUsage] = useState<ReactionUsage[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesListRef = useRef<HTMLDivElement>(null);
-    // Hover-capable devices reveal actions on hover and keyboard focus; touch
-    // devices rely on a deliberate long press instead, like Messenger or
-    // WhatsApp, so a plain tap never opens the reply/react panel.
-    const [canHover] = useState(
-        () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover)').matches,
-    );
     const messageIndex = useMessageIndex(messages);
     const orderedReactionOptions = sortReactionOptions(reactionUsage);
 
+    const focusMessageRow = (messageID: string) => {
+        document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageID)}"]`)?.focus();
+    };
+
+    // The panel closes on any pointer down outside the row that owns it and on
+    // Escape, like a popover. A tap on another row's own controls replaces it
+    // through that row's toggle instead.
     useEffect(() => {
+        if (!actionsMessageID) return undefined;
         const dismissActions = (event: PointerEvent) => {
-            if (!(event.target as HTMLElement).closest('[data-message-id]')) {
-                setActionsMessageID(null);
-            }
+            const row = (event.target as HTMLElement).closest('[data-message-id]');
+            if (row?.getAttribute('data-message-id') !== actionsMessageID) setActionsMessageID(null);
+        };
+        const dismissOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setActionsMessageID(null);
         };
         document.addEventListener('pointerdown', dismissActions);
-        return () => document.removeEventListener('pointerdown', dismissActions);
-    }, []);
+        document.addEventListener('keydown', dismissOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', dismissActions);
+            document.removeEventListener('keydown', dismissOnEscape);
+        };
+    }, [actionsMessageID]);
 
     useEffect(() => {
         let active = true;
@@ -88,6 +96,9 @@ export default function Chat({
                 : await api.put<Message>(`/group/message-reactions/${message.id}`, { reaction });
             onMessageUpdated?.(response.data);
             setActionsMessageID(null);
+            // The action completed from inside the panel; return focus to the
+            // message so keyboard users keep their place in the chat.
+            focusMessageRow(message.id);
         } catch (requestError: unknown) {
             setReactionError(getAPIErrorMessage(requestError, 'Unable to save reaction'));
         } finally {
@@ -141,19 +152,17 @@ export default function Chat({
                             isSystem={isSystem}
                             grouped={sameSenderGroup}
                             showSender={showSender}
-                            actionsVisible={actionsMessageID === message.id}
-                            canHover={canHover}
+                            actionsOpen={actionsMessageID === message.id}
                             messageIndex={messageIndex}
                             reactionPending={reactionPending}
                             reactionOptions={orderedReactionOptions}
-                            onTapDown={(messageID) =>
-                                setActionsMessageID((current) => (current === messageID ? current : null))
+                            onToggleActions={(messageID) =>
+                                setActionsMessageID((current) => (current === messageID ? null : messageID))
                             }
-                            onRevealActions={(messageID) => setActionsMessageID(messageID)}
-                            onDismissActions={() => setActionsMessageID(null)}
                             onReply={(target) => {
                                 setReplyingTo(target);
                                 setActionsMessageID(null);
+                                focusMessageRow(target.id);
                             }}
                             onReaction={handleReaction}
                             onChallengeMessage={onChallengeMessage}
