@@ -26,6 +26,7 @@ function RowHarness({
             onFocus={handlers.onFocus}
         >
             row
+            <button type="button">nested action</button>
         </div>
     );
 }
@@ -143,6 +144,16 @@ describe('useMessagePress', () => {
         expect(reveal).toHaveBeenCalledExactlyOnceWith('message-1');
         result.current('message-2', false).onFocus();
         expect(reveal).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not reveal row actions when a nested button receives focus', () => {
+        const reveal = vi.fn();
+        const { getByRole } = render(
+            <RowHarness messageID="message-1" enabled onTapDown={vi.fn()} onReveal={reveal} />,
+        );
+
+        fireEvent.focus(getByRole('button', { name: 'nested action' }));
+        expect(reveal).not.toHaveBeenCalled();
     });
 
     it('clears the reveal timer when the row unmounts', () => {

@@ -66,6 +66,14 @@ The resource **IDs** are non-secret and go into
 `dev_health_token_id`, `dev_deploy_token_id`, and `prod_deploy_token_id`. Do not
 put the distinct `client_id` values there.
 
+Human email-OTP access is managed separately in Terraform. `access_email` is the
+operator identity shared by the protected applications; the optional
+`dev_access_emails` set adds approved identities to `dev.geoguessme.com` only.
+The deployment SSH application at `deploy.geoguessme.com` remains restricted to
+the operator identity. Keep the configured values in the ignored
+`infra/terraform/terraform.tfvars` file and review the saved Terraform plan
+before applying changes.
+
 ## Testing intended and cross-application denial
 
 After wiring each token, verify both directions before rotating the old token:
