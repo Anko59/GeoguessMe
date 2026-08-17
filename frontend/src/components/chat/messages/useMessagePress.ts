@@ -25,7 +25,7 @@ export interface MessagePressHandlers {
     onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
     onPointerUp: () => void;
     onPointerCancel: () => void;
-    onFocus: () => void;
+    onFocus: (event?: React.FocusEvent<HTMLElement>) => void;
 }
 
 export interface UseMessagePressOptions {
@@ -92,8 +92,8 @@ export function useMessagePress({
             },
             onPointerUp: clearPress,
             onPointerCancel: clearPress,
-            onFocus: () => {
-                if (enabled) onReveal(messageID);
+            onFocus: (event) => {
+                if (enabled && !(event?.target as HTMLElement | undefined)?.closest('button')) onReveal(messageID);
             },
         }),
         [clearPress, onTapDown, onReveal],
