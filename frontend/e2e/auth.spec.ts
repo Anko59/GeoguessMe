@@ -6,7 +6,7 @@ import {
     uniqueUsername,
     uniqueEmail,
     resetRateLimiter,
-} from './helpers';
+} from './support/helpers';
 
 test.describe('Authentication', () => {
     test('signup creates account and redirects to groups', async ({ page }) => {

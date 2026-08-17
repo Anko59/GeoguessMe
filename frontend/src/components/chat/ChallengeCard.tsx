@@ -2,7 +2,9 @@ import type { Message } from '../../types';
 import ChallengeTimer from './ChallengeTimer';
 
 /** The compact challenge summary card in chat: it reflects the viewer's
- *  challenge state and lets them open the challenge or its results. */
+ *  challenge state and lets them open the challenge or its results. The card
+ *  chrome opens the chat's reply/reaction panel; the dedicated action button
+ *  is the element that opens the challenge itself. */
 export default function ChallengeCard({
     message,
     isMe,
@@ -36,11 +38,9 @@ export default function ChallengeCard({
               ? 'Continue challenge'
               : 'Accept challenge';
     return (
-        <button
-            type="button"
-            className={`message-content photo-challenge clickable${isResolvedChallenge ? ' resolved' : ''}`}
+        <div
+            className={`message-content photo-challenge${isResolvedChallenge ? ' resolved' : ''}`}
             data-photo-id={message.photo_id}
-            onClick={() => onChallengeMessage?.(message)}
         >
             <span className="challenge-card">
                 <span className="challenge-header">
@@ -57,8 +57,10 @@ export default function ChallengeCard({
                         />
                     ) : null}
                 </span>
-                <span className="start-challenge-btn">{actionLabel}</span>
+                <button type="button" className="start-challenge-btn" onClick={() => onChallengeMessage?.(message)}>
+                    {actionLabel}
+                </button>
             </span>
-        </button>
+        </div>
     );
 }

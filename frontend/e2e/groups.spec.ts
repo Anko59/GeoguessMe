@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './support/fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 import {
     createInviteFromSettings,
@@ -8,7 +8,7 @@ import {
     uniqueEmail,
     uniqueGroup,
     uniqueUsername,
-} from './helpers';
+} from './support/helpers';
 
 interface OwnerScenario {
     context: BrowserContext;

@@ -1,4 +1,5 @@
 .reply-action {
+    flex: none;
     padding: 0.35rem 0.55rem;
     color: var(--ink-muted);
     background: transparent;
@@ -8,60 +9,48 @@
     font-weight: 750;
 }
 
-.message-container.own .reply-action {
-    align-self: flex-end;
-}
-
+/* The actions panel is an overlay anchored under the message, never content
+   in flow: opening it must never resize, reflow, or shift the message it
+   belongs to, and its width is capped so it cannot overflow the viewport. */
 .message-actions {
-    margin-top: 0.3rem;
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    z-index: 4;
+    width: max-content;
+    max-width: calc(100vw - 5rem);
+    padding: 0.25rem;
     display: none;
     align-items: center;
     gap: 0.25rem;
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-    transform: translateY(-0.15rem);
-    transition:
-        opacity var(--duration-fast) ease,
-        transform var(--duration-fast) var(--ease-out),
-        visibility var(--duration-fast) ease;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
 }
 
 .message-container.actions-visible .message-actions {
     display: flex;
-    opacity: 1;
-    pointer-events: auto;
-    visibility: visible;
-    transform: none;
 }
 
-/* Hover and focus reveals only apply where a hover pointer exists. Touch
-   devices must hold the message (long press) or swipe to open the actions,
-   so a plain tap never reveals them. */
-@media (hover: hover) {
-    .message-hover-target:hover .message-actions,
-    .message-container:focus-within .message-actions {
-        display: flex;
-        opacity: 1;
-        pointer-events: auto;
-        visibility: visible;
-        transform: none;
-    }
+.message-container.other .message-actions {
+    left: 0;
 }
 
+.message-container.own .message-actions {
+    right: 0;
+}
+
+/* One horizontally scrollable reaction row: roughly five reactions are
+   visible at once and the rest scroll into view, so the full custom set never
+   stretches the panel past the viewport. */
 .reaction-actions {
-    width: min(100%, 20rem);
-    padding: 0.25rem;
+    max-width: 11.2rem;
     display: flex;
     align-items: center;
     gap: 0.08rem;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
     scrollbar-width: thin;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
 }
 
 .reaction-action {
@@ -102,8 +91,7 @@
     gap: 0.2rem;
 }
 
-.message-container.own .message-reactions,
-.message-container.own .message-actions {
+.message-container.own .message-reactions {
     justify-content: flex-end;
 }
 

@@ -109,10 +109,17 @@ with `GEOGUESSME_E2E_SPEC=challenge.spec.ts make test-e2e-pr`.
 
 ## Message actions
 
-Reply and reaction actions are revealed on hover or keyboard focus on
-hover-capable devices, and on a one-second long press or horizontal swipe on
-touch devices. Hidden actions use no layout space, so adjacent messages keep the
-normal chat gap. The browser regression is covered by the chat E2E suite.
+The reply and reaction panel opens when the message itself — the chat bubble or
+the challenge-card chrome — is tapped or clicked, on touch and pointer devices
+alike. Hover never opens it. The panel is an absolutely positioned overlay below
+the message: its reaction row scrolls horizontally (roughly five options visible
+at a time), it is capped below the viewport width, and opening it never reflows
+the message. Nested controls keep their own actions: the challenge card's action
+button opens the challenge, shared photos open full screen, and profile links
+open profiles. A tap outside the open message, or Escape, dismisses the panel;
+keyboard users toggle it with Enter or Space on the focused message row. Hidden
+actions use no layout space, so adjacent messages keep the normal chat gap. The
+browser regression is covered by the chat E2E suite.
 
 ## Group photos in the groups list
 

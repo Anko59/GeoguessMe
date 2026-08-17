@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './support/fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 import {
     createInviteFromSettings,
@@ -10,7 +10,7 @@ import {
     uniqueUsername,
     uniqueEmail,
     expectConnected,
-} from './helpers';
+} from './support/helpers';
 
 interface ResultScenario {
     uploader: Page;
@@ -99,14 +99,14 @@ async function createResultScenario(browser: Browser, contextOptions: BrowserCon
     const photoId = ((await uploadResponse.json()) as { id: string }).id;
 
     // Guesser accepts, waits for viewing window, and submits a guess.
-    const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + photoId + '"]');
+    const challenge = guesser.locator('.photo-challenge[data-photo-id="' + photoId + '"]');
     const acceptResponsePromise = guesser.waitForResponse(
         (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/accept') && r.request().method() === 'POST',
     );
     const mediaResponsePromise = guesser.waitForResponse(
         (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/media') && r.request().method() === 'GET',
     );
-    await challenge.click();
+    await challenge.locator('.start-challenge-btn').click();
     const acceptResponse = await acceptResponsePromise;
     expect(acceptResponse.status()).toBe(200);
     const mediaResponse = await mediaResponsePromise;
@@ -154,9 +154,9 @@ test.describe('Challenge result authorization', () => {
             const { uploader, photoId, uploaderToken } = scenario;
 
             // Click the challenge button to open results via UI.
-            const ownerChallenge = uploader.locator('button.photo-challenge[data-photo-id="' + photoId + '"]');
+            const ownerChallenge = uploader.locator('.photo-challenge[data-photo-id="' + photoId + '"]');
             await expect(ownerChallenge).toContainText('Challenge sent');
-            await ownerChallenge.click();
+            await ownerChallenge.locator('.start-challenge-btn').click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
             // Targeted visual assertions: the results surface keeps its card
             // layout on the surface token (stable across desktop/mobile).
@@ -318,14 +318,14 @@ test.describe('Challenge result authorization', () => {
             expect(ownerStatus).toBe(200);
 
             // Guesser accepts and guesses.
-            const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + photoId + '"]');
+            const challenge = guesser.locator('.photo-challenge[data-photo-id="' + photoId + '"]');
             const acceptResponsePromise = guesser.waitForResponse(
                 (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/accept') && r.request().method() === 'POST',
             );
             const mediaResponsePromise = guesser.waitForResponse(
                 (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/media') && r.request().method() === 'GET',
             );
-            await challenge.click();
+            await challenge.locator('.start-challenge-btn').click();
             expect((await acceptResponsePromise).status()).toBe(200);
             expect((await mediaResponsePromise).status()).toBe(200);
 

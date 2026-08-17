@@ -46,16 +46,19 @@ describe('MessageContent', () => {
         expect(bubble.className).toContain('system-message');
     });
 
-    it('renders the challenge card for challenge messages and opens it on click', () => {
+    it('renders the challenge card for challenge messages and opens it from the action button', () => {
         const onChallengeMessage = vi.fn();
+        const challenge = message({ kind: 'challenge', photo_id: 'photo-1', content: '' });
         renderContent({
-            message: message({ kind: 'challenge', photo_id: 'photo-1', content: '' }),
+            message: challenge,
             onChallengeMessage,
         });
-        const card = screen.getByRole('button', { name: /Accept challenge/i });
+        const card = screen.getByText('New challenge').closest('.photo-challenge') as HTMLElement;
         expect(card.className).toContain('photo-challenge');
-        card.click();
-        expect(onChallengeMessage).toHaveBeenCalledOnce();
+        const action = screen.getByRole('button', { name: 'Accept challenge' });
+        expect(action).toHaveClass('start-challenge-btn');
+        action.click();
+        expect(onChallengeMessage).toHaveBeenCalledExactlyOnceWith(challenge);
     });
 
     it('renders the media attachment for media messages', async () => {
