@@ -19,6 +19,7 @@ frontend_unit=false
 backend_integration=false
 browser_e2e=false
 operational=false
+harness=false
 docs_candidate=true
 
 classify() {
@@ -83,7 +84,17 @@ classify() {
             backend_integration=true
             browser_e2e=true
             operational=true
+            harness=true
             full=true
+            ;;
+    esac
+
+    # Harness self-tests exercise the quality tooling itself, so they are
+    # selected only when the harness changed. This is additive: the branch
+    # above keeps every existing capability untouched.
+    case "$path" in
+        Makefile | tools/make/* | tools/quality/* | .github/workflows/* | deployment/compose.tools.yaml | deployment/compose.dev.yaml)
+            harness=true
             ;;
     esac
 }
@@ -106,6 +117,7 @@ if [ "$seen" = false ]; then
     backend_integration=true
     browser_e2e=true
     operational=true
+    harness=true
     full=true
 fi
 if [ "$full" = true ]; then
@@ -133,3 +145,4 @@ printf 'frontend_unit=%s\n' "$frontend_unit"
 printf 'backend_integration=%s\n' "$backend_integration"
 printf 'browser_e2e=%s\n' "$browser_e2e"
 printf 'operational=%s\n' "$operational"
+printf 'harness=%s\n' "$harness"

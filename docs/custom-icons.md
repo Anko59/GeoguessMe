@@ -29,6 +29,16 @@ silver (`#C0C0C0`), and bronze (`#CD7F32`) accents are preserved, and the
 first-place bar keeps the orange-yellow gradient, so the data visualization
 contract in `frontend/public/Identity.md` is unchanged.
 
+### Chat reactions — `frontend/public/reactions/`
+
+The chat reaction picker contains 24 branded reaction assets, including thumbs
+up/down, love, laughing, crying, kissing, surprise, anger, confusion, clapping,
+prayer, fire, and party reactions. The picker is one horizontally scrollable
+row, and the authenticated group member's aggregate reaction usage orders the
+most-used reactions first. Ties and unused reactions use the curated fallback
+order in `frontend/src/components/chat/reactionOptions.ts`. Legacy emoji keys
+remain readable and valid during the migration window.
+
 ### Lens catalog — `frontend/public/lenses/icons/`
 
 Every entry in the lens rail (25 including "Original") has a matching brand icon

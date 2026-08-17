@@ -45,6 +45,7 @@ const mockMatchMedia = (matches: boolean) => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] } as never);
     Element.prototype.scrollIntoView = vi.fn();
     mockMatchMedia(true);
 });

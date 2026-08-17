@@ -307,3 +307,19 @@ func TestSortLeaderboardByMetric(t *testing.T) {
 		t.Fatalf("elo order = %+v", entries)
 	}
 }
+
+func TestGlobalChallengeEloDeltas(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	deltas, err := repo.GlobalChallengeEloDeltas(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("GlobalChallengeEloDeltas = %v", err)
+	}
+	if deltas["alice"] != 16 || deltas["bob"] != -16 {
+		t.Fatalf("deltas = %+v, want alice: 16, bob: -16", deltas)
+	}
+}

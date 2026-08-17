@@ -52,6 +52,8 @@ deployment/compose.*.override.yaml
 # --- Terraform local state and plans (state is stored remotely in R2) ---
 infra/terraform/.terraform/
 infra/terraform/.tfplan/
+# Host-cached Terraform provider plugins (bound into compose.tools.yaml)
+/.tools-cache/
 # Local image-scanning artifacts (never tracked); keep the rest of security/
 # visible so future policy or tooling files cannot be hidden accidentally.
 /security/image-reports/

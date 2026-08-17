@@ -14,6 +14,14 @@ permissions:
   contents: read
   actions: read
 
+# A new push to the same pull request cancels that PR's in-flight run so
+# superseded jobs (including two full disposable E2E stacks) stop consuming
+# runner time while an agent iterates. Different PRs never cancel each other;
+# branch-push runs outside pull_request keep a unique group via github.ref.
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   policy:
     name: Contribution policy
@@ -62,6 +70,7 @@ jobs:
       frontend: ${{ steps.scope.outputs.frontend }}
       full: ${{ steps.scope.outputs.full }}
       docs_only: ${{ steps.scope.outputs.docs_only }}
+      harness: ${{ steps.scope.outputs.harness }}
     steps:
       - name: Check out pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -85,6 +94,14 @@ jobs:
     steps:
       - name: Check out pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Restore Terraform provider cache
+        # terraform-test installs providers on every ephemeral runner; cache
+        # them so the fast gate stops re-downloading on each run.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .tools-cache/terraform-plugins
+          key: terraform-providers-${{ hashFiles('infra/terraform/*.tf') }}-${{ hashFiles('infra/terraform/*.hcl') }}
+          restore-keys: terraform-providers-
       - name: Bootstrap pinned tools
         env:
           FULL_SCOPE: ${{ needs.classify.outputs.full }}
@@ -94,8 +111,12 @@ jobs:
             make tools-self-test
           fi
       - name: Run selected fast gate
+        # The harness classification is explicit here because the fast job
+        # checks out with depth 1 and cannot compute the diff itself; local
+        # and push-hook runs keep the auto-detection default in quality.mk.
         env:
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
+          PREFLIGHT_HARNESS: ${{ needs.classify.outputs.harness }}
         run: |
           if [[ "$DOCS_ONLY" == true ]]; then
             make preflight-docs

@@ -1,5 +1,5 @@
 import type { Message } from '../../../types';
-import { reactionOptions } from '../reactionOptions';
+import { type ReactionOption } from '../reactionOptions';
 
 interface MessageActionsProps {
     message: Message;
@@ -9,6 +9,7 @@ interface MessageActionsProps {
     reactionPending: string | null;
     onReply: () => void;
     onReaction: (reaction: string) => void;
+    reactionOptions: ReactionOption[];
 }
 
 /** The reply button and the reaction picker revealed on hover, long press,
@@ -19,6 +20,7 @@ export default function MessageActions({
     reactionPending,
     onReply,
     onReaction,
+    reactionOptions,
 }: MessageActionsProps) {
     const tabIndex = visible ? 0 : -1;
     return (

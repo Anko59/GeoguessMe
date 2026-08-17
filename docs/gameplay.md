@@ -15,8 +15,12 @@ ready → accepted → viewing window → guessable → expired → removed
    `GET /api/v1/challenges/{photoID}/media` only during this window. The window
    is bounded by `PHOTO_VIEW_WINDOW` and `CHALLENGE_TTL` (whichever is shorter).
 4. **guessable** — After the viewing window expires, the member may submit one
-   guess via `POST /api/v1/challenges/{photoID}/guess`. Guesses are idempotent:
-   a duplicate returns the original result.
+   guess via `POST /api/v1/challenges/{photoID}/guess`. Guessing is time-boxed:
+   the guess must be submitted by `guess_expires_at` (view end + `GUESS_WINDOW`,
+   default 2 minutes), a server-authoritative deadline that survives app
+   restarts. A guess submitted after it is refused with `guess_time_expired`
+   ("You did not guess in time") and the challenge counts as 0 points for that
+   member. Guesses are idempotent: a duplicate returns the original result.
 5. **expired** — The challenge reaches `expires_at` (created_at +
    CHALLENGE_TTL). No more guesses can be submitted.
 6. **removed** — After `retention_at` (created_at + PHOTO_RETENTION), the
@@ -26,14 +30,19 @@ ready → accepted → viewing window → guessable → expired → removed
 
 ## Timing
 
-| Parameter           | Default    | Description                           |
-| ------------------- | ---------- | ------------------------------------- |
-| `CHALLENGE_TTL`     | 24h        | Lifetime of the challenge from upload |
-| `PHOTO_VIEW_WINDOW` | 10s        | Per-member window to view the photo   |
-| `PHOTO_RETENTION`   | 720h (30d) | Media retention period from upload    |
+| Parameter           | Default    | Description                                                      |
+| ------------------- | ---------- | ---------------------------------------------------------------- |
+| `CHALLENGE_TTL`     | 24h        | Lifetime of the challenge from upload                            |
+| `PHOTO_VIEW_WINDOW` | 10s        | Per-member window to view the photo                              |
+| `GUESS_WINDOW`      | 2m         | Per-member window to submit the guess after the view window ends |
+| `PHOTO_RETENTION`   | 720h (30d) | Media retention period from upload                               |
 
 The view window is capped at `CHALLENGE_TTL` even if `PHOTO_VIEW_WINDOW` is
-longer. A re-acceptance does not extend access beyond the original window.
+longer. A re-acceptance does not extend access beyond the original window. The
+guess deadline is `view end + GUESS_WINDOW`, also capped at `CHALLENGE_TTL`; it
+is recorded server-side at acceptance, so the countdown keeps running even when
+the player closes the app, and reopening a challenge after the deadline shows
+"You did not guess in time" (0 points) instead of allowing a late guess.
 
 ## Capture media
 
@@ -60,7 +69,9 @@ off.
 
 After a guess is recorded, the frontend presents a short, animated tier label
 from **Cartographic Catastrophe** through **Masterstroke**. These labels are
-presentation-only; the score returned by the server remains authoritative.
+presentation-only; the score returned by the server remains authoritative. A
+member who lets the guess window expire receives no guess row: the challenge
+counts as 0 points for them and they are not compared in Elo for it.
 
 The group leaderboard ranks each member by one of three metrics, each scoped to
 the selected calendar week, month, or all-time period:
@@ -89,9 +100,11 @@ and rank.
 | Any current group member | After `CHALLENGE_TTL` expires            |
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
-`actual_lat`, `actual_long`, all guesses with `username`, `score`, `distance`,
-and `media_url` plus `media_type` (with `?result=1`) if the media is still
-available. Result photos can be opened full screen; videos retain playback
+`actual_lat`, `actual_long`, all guesses with `username`, `score`, `elo_delta`,
+`distance`, and `media_url` plus `media_type` (with `?result=1`) if the media is
+still available. `elo_delta` is the signed change in the player's global Elo
+rating caused by this challenge; it is zero when the challenge has fewer than
+two guesses. Result photos can be opened full screen; videos retain playback
 controls in the result panel.
 
 When a poster hid the location (`hide_location`), the exact spot stays private

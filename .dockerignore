@@ -33,3 +33,7 @@ frontend/test-results
 frontend/playwright-report
 frontend/coverage
 frontend/e2e/.auth
+
+# Image audits retain reports and a reusable vulnerability database locally.
+# They are runtime verification artifacts, never application build inputs.
+security/image-reports

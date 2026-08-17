@@ -25,7 +25,7 @@ func handlerConfig() *config.Config {
 		Environment: "test", PublicURL: "http://localhost:8080", JWTSecret: "test_secret_key_at_least_32_characters_long",
 		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour, VerificationTTL: 24 * time.Hour, ResetTTL: time.Hour,
 		PasswordHashCost: 4, UploadMaxBytes: 5 * 1024 * 1024, AvatarMaxBytes: 25 * 1024 * 1024, UploadMaxPixels: 100000, ChallengeTTL: time.Hour,
-		ViewWindow: time.Minute, LocationHide: 48 * time.Hour, PhotoRetention: 24 * time.Hour, AllowedOrigins: []string{"http://localhost:8080"},
+		ViewWindow: time.Minute, GuessWindow: 2 * time.Minute, LocationHide: 48 * time.Hour, PhotoRetention: 24 * time.Hour, AllowedOrigins: []string{"http://localhost:8080"},
 	}
 }
 
@@ -303,6 +303,9 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	gameAPI := newGameAPI(t, mock)
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPost, "👍"), http.StatusMethodNotAllowed)
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👎"), http.StatusBadRequest)
+	usageRequest := requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1")
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	requireStatus(t, chatAPI.GetGroupReactionUsage, usageRequest, http.StatusForbidden)
 
 	columns := []string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).
@@ -329,6 +332,12 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, gameAPI.GroupNotifications, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusForbidden)
+
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT mr.reaction, COUNT").WithArgs(groupID).
+		WillReturnRows(pgxmock.NewRows([]string{"reaction", "count"}).AddRow("like", 3))
+	requireStatus(t, chatAPI.GetGroupReactionUsage, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
 }
 
 func TestGroupPhotoAvailabilityFailures(t *testing.T) {
