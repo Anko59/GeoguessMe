@@ -47,7 +47,7 @@ export default function Chat({
     const orderedReactionOptions = sortReactionOptions(reactionUsage);
 
     const focusMessageRow = (messageID: string) => {
-        document.querySelector(`[data-message-id="${CSS.escape(messageID)}"]`)?.focus();
+        document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageID)}"]`)?.focus();
     };
 
     // The panel closes on any pointer down outside the row that owns it and on
