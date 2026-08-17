@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { uniqueEmail, signupViaUI, loginViaUI, getMailpitLink } from './helpers';
+import { uniqueEmail, signupViaUI, loginViaUI, getMailpitLink } from './support/helpers';
 
 test.describe('Email flows via Mailpit', () => {
     test('signup with email, verify via Mailpit link', async ({ page }) => {
