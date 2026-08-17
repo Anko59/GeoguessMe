@@ -108,7 +108,7 @@ test.describe('Challenge flow', () => {
             await expect(guesser.locator('.result-view')).toContainText('Challenge results');
 
             await expect(exactChallenge).toContainText('Challenge sent');
-            await exactChallenge.click();
+            await exactChallenge.locator('.start-challenge-btn').click();
             await expect(uploader.locator('.result-view')).toContainText('Challenge results');
         } finally {
             await closeScenario(scenario);
