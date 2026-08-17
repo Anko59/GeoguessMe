@@ -292,7 +292,7 @@ func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
-	photo, view, err := a.groups.AcceptChallenge(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.clock())
+	photo, view, err := a.groups.AcceptChallenge(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.cfg.GuessWindow, a.clock())
 	if err != nil {
 		challengeError(w, err)
 		return
@@ -304,6 +304,7 @@ func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 		"accepted_at":          view.AcceptedAt,
 		"view_expires_at":      view.ViewExpiresAt,
 		"guess_after":          view.ViewExpiresAt,
+		"guess_expires_at":     view.GuessExpiresAt,
 		"challenge_expires_at": photo.ExpiresAt,
 		"server_time":          a.clock(),
 	})
@@ -321,7 +322,7 @@ func (a *GameAPI) ConfirmChallengeMediaDelivered(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
-	expiresAt, err := a.groups.MarkMediaDelivered(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.clock())
+	viewExpiresAt, guessExpiresAt, err := a.groups.MarkMediaDelivered(r.Context(), photoID, GetUserIDFromContext(r), a.cfg.ViewWindow, a.cfg.GuessWindow, a.clock())
 	if err != nil {
 		if errors.Is(err, groups.ErrForbidden) {
 			WriteError(w, http.StatusForbidden, "forbidden", "Challenge media was not accepted")
@@ -330,7 +331,7 @@ func (a *GameAPI) ConfirmChallengeMediaDelivered(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to start the viewing window")
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"view_expires_at": expiresAt, "guess_after": expiresAt, "server_time": a.clock()})
+	WriteJSON(w, http.StatusOK, map[string]any{"view_expires_at": viewExpiresAt, "guess_after": viewExpiresAt, "guess_expires_at": guessExpiresAt, "server_time": a.clock()})
 }
 
 // mediaURL always returns a same-origin, authenticated API path. Internal S3
@@ -432,7 +433,7 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 	if copyErr == nil && n == photo.ByteSize {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		if _, err := a.groups.MarkMediaDelivered(ctx, photoID, userID, a.cfg.ViewWindow, now); err != nil {
+		if _, _, err := a.groups.MarkMediaDelivered(ctx, photoID, userID, a.cfg.ViewWindow, a.cfg.GuessWindow, now); err != nil {
 			slog.Error("failed to start challenge view window after media delivery", "photo_id", photoID, "user_id", userID, "error", err)
 		}
 	}

@@ -50,10 +50,14 @@
 }
 
 .reaction-actions {
+    width: min(100%, 20rem);
     padding: 0.25rem;
-    display: grid;
-    grid-template-columns: repeat(5, auto);
+    display: flex;
+    align-items: center;
     gap: 0.08rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
@@ -63,6 +67,7 @@
 .reaction-action {
     width: 2rem;
     height: 2rem;
+    flex: 0 0 2rem;
     padding: 0;
     display: grid;
     place-items: center;

@@ -124,6 +124,8 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
 		case errors.Is(err, groups.ErrViewNotFinished):
 			WriteError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+		case errors.Is(err, groups.ErrGuessTimeExpired):
+			WriteError(w, http.StatusGone, "guess_time_expired", "You did not guess in time")
 		case errors.Is(err, groups.ErrInvalidCoordinate):
 			WriteError(w, http.StatusBadRequest, "invalid_coordinates", "Coordinates are invalid")
 		default:
@@ -177,6 +179,11 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
 	}
+	eloDeltas, err := a.groups.GlobalChallengeEloDeltas(r.Context(), photoID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
+		return
+	}
 	// A poster who hid the location keeps the exact spot private from guessers
 	// until the hide duration has passed; the owner always sees their own spot.
 	// While hidden, other players' guessed points and distances are not sent at
@@ -187,6 +194,10 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	}
 	responseGuesses := make([]resultsGuess, 0, len(guesses))
 	for _, guess := range guesses {
+		var eloDelta int
+		if eloDeltas != nil {
+			eloDelta = eloDeltas[guess.UserID]
+		}
 		item := resultsGuess{
 			ID:        guess.ID,
 			PhotoID:   guess.PhotoID,
@@ -196,6 +207,7 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: guess.CreatedAt,
 			Username:  guess.Username,
 			Avatar:    guess.Avatar,
+			EloDelta:  eloDelta,
 		}
 		if !hidden || guess.UserID == viewerID {
 			item.Lat = &guess.Lat
@@ -221,7 +233,8 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 
 // resultsGuess is the results payload for a single guess. Lat, long, and
 // distance are optional and omitted while a hidden-location challenge keeps
-// other players' guessed points private.
+// other players' guessed points private. EloDelta reflects the rating points
+// gained or lost on this challenge.
 type resultsGuess struct {
 	ID        string    `json:"id"`
 	PhotoID   string    `json:"photo_id"`
@@ -234,4 +247,5 @@ type resultsGuess struct {
 	CreatedAt time.Time `json:"created_at"`
 	Username  string    `json:"username"`
 	Avatar    string    `json:"avatar"`
+	EloDelta  int       `json:"elo_delta"`
 }

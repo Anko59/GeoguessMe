@@ -112,13 +112,12 @@ if [ "$secret_paths" = false ]; then
     ok "artifact paths exclude secrets and credentials"
 fi
 
-deploy_verify_count=$(grep -c 'make verify' "$DEPLOY" || true)
-if [ "$deploy_verify_count" -eq 1 ]; then
-    ok "dev performs exactly one complete gate"
-else
-    bad "dev must perform exactly one complete gate (found $deploy_verify_count)"
-fi
-contains "$DEPLOY" 'needs: verify' "dev publishing waits for the complete gate"
+absent "$DEPLOY" 'make verify' "dev gate jobs run focused suites, not the serial release gate"
+contains "$DEPLOY" 'make quality' "dev gate includes the quality job"
+contains "$DEPLOY" 'make pr-backend' "dev gate includes backend integration"
+contains "$DEPLOY" 'GEOGUESSME_E2E_PROJECTS=desktop make test-e2e' "dev gate runs Chromium E2E"
+contains "$DEPLOY" 'make operational-gate' "dev gate includes operational rehearsals"
+contains "$DEPLOY" 'needs: \[quality, integration, e2e, operational\]' "dev publishing waits for every gate job"
 
 absent "$RELEASE" 'make verify' "production does not repeat the dev gate"
 absent "$RELEASE" 'docker/build-push-action@' "production does not rebuild tested images"

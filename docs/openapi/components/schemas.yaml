@@ -259,11 +259,43 @@ Message:
 
 ReactionKey:
   type: string
-  enum: [like, love, laugh, wow, sad, spot-on, lost, mind-blown, wrong-way, vacation, 👍, ❤️, 😂, 😮, 😢, 🙏]
+  enum:
+    [
+      like,
+      love,
+      laugh,
+      wow,
+      sad,
+      spot-on,
+      lost,
+      mind-blown,
+      wrong-way,
+      vacation,
+      dislike,
+      cry,
+      kiss,
+      wink,
+      grin,
+      heart-eyes,
+      sunglasses,
+      angry,
+      confused,
+      sleepy,
+      clap,
+      pray,
+      fire,
+      party,
+      👍,
+      ❤️,
+      😂,
+      😮,
+      😢,
+      🙏,
+    ]
   description: >
-    Reaction identity. The ten keys map to custom artwork shown in the UI; the
-    six legacy emoji values are still accepted so existing reactions keep
-    working.
+    Reaction identity. The twenty-four named keys map to custom artwork shown
+    in the UI; the six legacy emoji values are still accepted so existing
+    reactions keep working.
 
 MessageReaction:
   type: object
@@ -276,6 +308,13 @@ MessageReaction:
       type: array
       items: { type: string }
       description: Usernames of group members who selected this reaction
+
+ReactionUsage:
+  type: object
+  required: [reaction, count]
+  properties:
+    reaction: { $ref: "#/ReactionKey" }
+    count: { type: integer, minimum: 1 }
 
 MessageReactionRequest:
   type: object
@@ -318,7 +357,17 @@ ChallengeCreated:
 ChallengeAccepted:
   type: object
   required:
-    [photo_id, media_url, media_type, accepted_at, view_expires_at, guess_after, challenge_expires_at, server_time]
+    [
+      photo_id,
+      media_url,
+      media_type,
+      accepted_at,
+      view_expires_at,
+      guess_after,
+      guess_expires_at,
+      challenge_expires_at,
+      server_time,
+    ]
   properties:
     photo_id: { type: string, format: uuid }
     media_url: { type: string }
@@ -326,15 +375,27 @@ ChallengeAccepted:
     accepted_at: { type: string, format: date-time }
     view_expires_at: { type: string, format: date-time }
     guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
     challenge_expires_at: { type: string, format: date-time }
     server_time: { type: string, format: date-time }
 
 ChallengeMediaDelivered:
   type: object
-  required: [view_expires_at, guess_after, server_time]
+  required: [view_expires_at, guess_after, guess_expires_at, server_time]
   properties:
     view_expires_at: { type: string, format: date-time }
     guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
     server_time: { type: string, format: date-time }
 
 GuessResponse:
@@ -368,7 +429,7 @@ ChallengeResults:
 
 Guess:
   type: object
-  required: [id, photo_id, user_id, group_id, score, created_at]
+  required: [id, photo_id, user_id, group_id, score, created_at, elo_delta]
   properties:
     id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
@@ -382,6 +443,7 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
+    elo_delta: { type: integer, description: Elo rating points gained or lost on this challenge. }
     distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }

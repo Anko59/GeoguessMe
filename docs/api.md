@@ -109,6 +109,7 @@ page reachable from chat and leaderboards.
 | GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
 | PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`, backward via `before_id`)                    |
+| GET    | `/api/v1/group/reaction-usage?group_id=`                     | Bearer | Aggregate reaction counts ordered by popularity (member only)                          |
 | PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
 | DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                               |
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
@@ -195,6 +196,7 @@ Available metrics:
 | `invalid_request`       | Request body malformed                         |
 | `challenge_expired`     | Challenge is past its TTL                      |
 | `viewing_window_open`   | Must wait for view window to end               |
+| `guess_time_expired`    | Guess deadline passed: did not guess in time   |
 | `media_expired`         | Viewing window expired or media already viewed |
 | `media_removed`         | Original media no longer available             |
 | `results_not_available` | Results not yet visible                        |

@@ -206,6 +206,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/photo", protected(a.Game.GroupPhoto))
 	mux.Handle("/api/v1/group/notifications", protected(a.Game.GroupNotifications))
 	mux.Handle("/api/v1/group/messages", protected(a.Chat.GetGroupMessages))
+	mux.Handle("/api/v1/group/reaction-usage", protected(a.Chat.GetGroupReactionUsage))
 	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(a.Chat.SetMessageReaction))
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))

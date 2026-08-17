@@ -95,10 +95,18 @@ Start with these canonical entry points, then drill into the map below.
 | Deployment change               | `deployment/`, `infra/terraform/`, `infra/cloud-init/`                                                                              | Terraform tests, rehearsal scripts                          | `make terraform-fmt-check`, `make terraform-test`, `make lint-caddy`, `make verify`  |
 | Documentation change            | `docs/`                                                                                                                             | docs/agent-config checker regression tests                  | `make lint-docs`                                                                     |
 
+The Gates column lists the complete gate set, including steps the post-merge
+development pipeline runs on the merged revision. A `make verify` entry in that
+column is executed there (as the parallel gate jobs), not locally; the local
+budget is defined in [Local verification budget](#local-verification-budget).
+
 ## Canonical commands
 
 Everything below runs in Docker through Make. Never invoke Go, Node, npm,
-linters, Playwright, or migration tools directly on the host.
+linters, Playwright, or migration tools directly on the host. Targets that boot
+a disposable stack (`make test-integration`, `make test-e2e`) are listed for
+reference: PR CI selects them from changed paths and the dev gate runs them on
+the merged revision, so they are never part of the local budget.
 
 - API work: `make lint-openapi` validates the split OpenAPI contract with
   Redocly; `make preflight` runs `hosted-contract-test` against the running
@@ -112,8 +120,8 @@ linters, Playwright, or migration tools directly on the host.
   (`frontend/src/types/openapi.generated.ts`) no longer matches
   `docs/openapi.yaml`.
 - Database work: add a forward-only migration in
-  `backend/internal/database/migrations/`; `make lint-sql`; `make verify`
-  includes `migration-test`.
+  `backend/internal/database/migrations/` and run `make lint-sql`;
+  `migration-test` runs inside `make verify` in the dev gate.
 - Infrastructure work: `make terraform-fmt-check`, `make terraform-test`,
   `make lint-caddy`; release rehearsals live in `make verify`
   (`backup-rehearsal`, `restart-rehearsal`, `reconnect-rehearsal`).
@@ -121,14 +129,58 @@ linters, Playwright, or migration tools directly on the host.
   [docs/agent-config checker](agent-engineering.md#docsagent-config-checker);
   `make format-check` enforces Prettier and shfmt.
 - Complete gates: `make preflight` is the fast local and pull-request gate;
-  `make verify` is the complete release gate. Install and verify hooks with
-  `make hooks-install` and `make hooks-check`.
+  `make verify` is the complete release gate. Application code or its tests
+  never require a local `make verify`: PR CI runs the selected live-stack suites
+  and the dev gate runs the complete suite on the merged revision before
+  deployment. Test-only changes run the same focused suites as the code they
+  test. `make verify` is reserved for changes to `deployment/`, `infra/`, the CI
+  workflows, or the quality gates themselves. The seven harness self-test suites
+  in `preflight` (makefile fragments, structure, debt markers,
+  docs/agent-config, CI classifier, E2E, dev-workflow regressions) are
+  path-triggered: they run only when the harness itself changed (Makefile,
+  `tools/make/*`, `tools/quality/*`, `.github/workflows/*`, or the dev/tools
+  Compose files) and always run inside `make quality`. Override the local
+  decision with `PREFLIGHT_HARNESS=true|false`; unknown states fail safe to
+  running them. Install and verify hooks with `make hooks-install` and
+  `make hooks-check`.
 - Architecture rules: `make archcheck` runs the durable backend architecture
   checker (no production package-level mutable application dependencies, no SQL
   in HTTP handlers, no environment reads outside `backend/internal/config`). It
   is wired into `make preflight` and `make quality`; contract currentness and
   agent/documentation reference validity are enforced by `make openapi-check`
   and `make lint-docs` in the same gates.
+
+## Local verification budget
+
+Run the minimum targets that match the change below, then `make preflight`
+before pushing. Anything beyond the table — the live integration stack, browser
+E2E, rehearsals, the full release gate — is deferred to PR CI and the dev gate
+on the merged revision. That deferral is a deliberate trust boundary, not a
+shortcut: the exact merged tree is verified in full before development
+deployment, and again before nightly.
+
+| Change type                      | Minimum local targets                                                               |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| Backend behavior or its tests    | `make test-backend`, `make lint-go`; add `make test-race` when touching concurrency |
+| Frontend behavior or its tests   | `make test-frontend`, `make lint-frontend`, `make type-check`                       |
+| API contract                     | `make lint-openapi`, `make openapi-generate`, `make openapi-check`                  |
+| Database migration               | `make lint-sql` and the focused migration fixture tests                             |
+| Documentation                    | `make preflight-docs`                                                               |
+| Deployment/infra/workflows/gates | Focused targets plus `make verify` — the one change type that requires it locally   |
+| Every non-docs change            | `make preflight` before pushing (enforced by the pre-push hook)                     |
+
+## CI waiting protocol
+
+- Push at most once per meaningful state. Accumulate related edits and commits
+  into one push instead of pushing after every commit; every push re-runs the PR
+  gate.
+- After pushing, continue with other work. Do not poll CI: never run
+  `gh run watch` loops or repeated `gh pr checks` calls.
+- Consume CI results at the next natural touchpoint: when you return to the PR
+  to address feedback, when another task completes, or when a check failure
+  notification arrives.
+- When a PR is believed green, prefer enabling auto-merge over watching it
+  merge.
 
 ## Cross-cutting invariants
 
@@ -208,7 +260,10 @@ Run `make impact BASE=origin/dev` before selecting focused validation. The
 manifest maps changed paths to capabilities (`backend_unit`, `frontend_unit`,
 `backend_integration`, `browser_e2e`, and `operational`) and preserves the
 conservative `backend`, `frontend`, and `full` decisions consumed by CI. Unknown
-paths deliberately request the complete scope. The manifest helps explain why a
+paths deliberately request the complete scope. The capability list IS the local
+budget: run the focused targets for the selected capabilities and leave the rest
+to PR CI and the dev gate; capabilities not selected by changed paths are
+deferred to CI, exactly as the workflow does. The manifest helps explain why a
 gate is needed; it never authorizes skipping a gate required by this guide, a
 scoped `AGENTS.md`, or CI.
 

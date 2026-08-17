@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
-import type { Message } from '../../types';
+import type { Message, ReactionUsage } from '../../types';
+import { sortReactionOptions } from './reactionOptions';
 import Composer from './composer/Composer';
 import MessageRow from './messages/MessageRow';
 import { useMessageIndex } from './messages/messageIndex';
@@ -39,6 +40,7 @@ export default function Chat({
     const [actionsMessageID, setActionsMessageID] = useState<string | null>(null);
     const [reactionPending, setReactionPending] = useState<string | null>(null);
     const [reactionError, setReactionError] = useState('');
+    const [reactionUsage, setReactionUsage] = useState<ReactionUsage[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesListRef = useRef<HTMLDivElement>(null);
     // Hover-capable devices reveal actions on hover and keyboard focus; touch
@@ -48,6 +50,7 @@ export default function Chat({
         () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover)').matches,
     );
     const messageIndex = useMessageIndex(messages);
+    const orderedReactionOptions = sortReactionOptions(reactionUsage);
 
     useEffect(() => {
         const dismissActions = (event: PointerEvent) => {
@@ -58,6 +61,21 @@ export default function Chat({
         document.addEventListener('pointerdown', dismissActions);
         return () => document.removeEventListener('pointerdown', dismissActions);
     }, []);
+
+    useEffect(() => {
+        let active = true;
+        void api
+            .get<ReactionUsage[]>('/group/reaction-usage', { params: { group_id: groupID } })
+            .then((response) => {
+                if (active) setReactionUsage(response.data);
+            })
+            .catch(() => {
+                // The curated order remains a complete and usable fallback.
+            });
+        return () => {
+            active = false;
+        };
+    }, [groupID]);
 
     const handleReaction = async (message: Message, reaction: string) => {
         const selected = message.reactions?.find((item) => item.reaction === reaction);
@@ -127,6 +145,7 @@ export default function Chat({
                             canHover={canHover}
                             messageIndex={messageIndex}
                             reactionPending={reactionPending}
+                            reactionOptions={orderedReactionOptions}
                             onTapDown={(messageID) =>
                                 setActionsMessageID((current) => (current === messageID ? current : null))
                             }

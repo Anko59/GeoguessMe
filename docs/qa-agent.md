@@ -103,6 +103,15 @@ context only; they are not put in the prompt or report. The default runtime is
 `codex`; select Pi explicitly with `QA_RUNTIME=pi`. Use `make qa-agent-fast` for
 a short investigation or `make qa-agent-nightly` for the extended budget.
 
+## Budget tiers
+
+- `make qa-agent` (default, `fast`): the routine acceptance pass after every
+  development deployment — a short, focused investigation.
+- `make qa-agent-full`: the complete pass (`full` budget). Run it once against
+  dev before opening a release PR and retain the report with the release record.
+- `make qa-agent-nightly`: the extended exploratory budget for the nightly
+  session.
+
 The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.

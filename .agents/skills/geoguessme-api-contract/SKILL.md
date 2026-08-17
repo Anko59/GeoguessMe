@@ -28,7 +28,8 @@ description:
 6. Add or update contract tests: handler tests for request parsing and response
    mapping, plus the `hosted-contract-test` gate.
 7. Run `make impact BASE=origin/dev`, `make lint-openapi`, the focused handler
-   tests, `make preflight`, and (for compatibility removals) `make verify`.
+   tests, then `make preflight`. Compatibility removals do not add a local gate:
+   the dev gate runs the complete suite on the merged revision.
 
 ## Inputs
 
