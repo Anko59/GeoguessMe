@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures';
-import { expectUserCameraOrientation, EXPECTED_LENS_ASSETS } from './cameraAssertions';
-import { cameraOptions, closeScenario, createScenario } from './challengeScenario';
+import { test, expect } from './support/fixtures';
+import { expectUserCameraOrientation, EXPECTED_LENS_ASSETS } from './support/cameraAssertions';
+import { cameraOptions, closeScenario, createScenario } from './support/challengeScenario';
 import {
     deterministicTestImage,
     installDeterministicCamera,
@@ -11,7 +11,7 @@ import {
     signupViaUI,
     uniqueGroup,
     unsupportedFormatBytes,
-} from './helpers';
+} from './support/helpers';
 import { LENS_OPTIONS } from '../src/components/camera/lenses/lensCatalog';
 test.describe('Challenge flow', () => {
     test('uploads, accepts, hides media, records a guess, and reopens exact results', async ({
@@ -66,8 +66,8 @@ test.describe('Challenge flow', () => {
             expect(uploaded.id).toMatch(/^[0-9a-f-]{36}$/);
             await expect(uploader.locator('.chat-container')).toBeVisible();
 
-            const exactChallenge = uploader.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
-            const receivedChallenge = guesser.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
+            const exactChallenge = uploader.locator('.photo-challenge[data-photo-id="' + uploaded.id + '"]');
+            const receivedChallenge = guesser.locator('.photo-challenge[data-photo-id="' + uploaded.id + '"]');
             await expect(receivedChallenge).toContainText('New challenge');
             await expect(receivedChallenge).toContainText('Accept challenge');
             const acceptResponsePromise = guesser.waitForResponse(
@@ -80,7 +80,7 @@ test.describe('Challenge flow', () => {
                     response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/media') &&
                     response.request().method() === 'GET',
             );
-            await receivedChallenge.click();
+            await receivedChallenge.locator('.start-challenge-btn').click();
             const acceptResponse = await acceptResponsePromise;
             expect(acceptResponse.status()).toBe(200);
             const mediaResponse = await mediaResponsePromise;
@@ -128,7 +128,7 @@ test.describe('Challenge flow', () => {
             await uploader.getByRole('button', { name: /Send/ }).click();
             const uploadResponse = await uploadResponsePromise;
             const photoID = ((await uploadResponse.json()) as { id: string }).id;
-            const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + photoID + '"]');
+            const challenge = guesser.locator('.photo-challenge[data-photo-id="' + photoID + '"]');
             const acceptResponsePromise = guesser.waitForResponse(
                 (response) =>
                     response.url().endsWith('/api/v1/challenges/' + photoID + '/accept') &&
@@ -139,7 +139,7 @@ test.describe('Challenge flow', () => {
                     response.url().endsWith('/api/v1/challenges/' + photoID + '/media') &&
                     response.request().method() === 'GET',
             );
-            await challenge.click();
+            await challenge.locator('.start-challenge-btn').click();
             const acceptResponse = await acceptResponsePromise;
             expect(acceptResponse.status()).toBe(200);
             const mediaResponse = await mediaResponsePromise;
@@ -150,7 +150,7 @@ test.describe('Challenge flow', () => {
             await guesser.getByRole('button', { name: /Submit guess/ }).click();
             await expect(guesser.locator('.result-view')).toBeVisible();
             await guesser.getByRole('button', { name: 'Close' }).click();
-            await challenge.click();
+            await challenge.locator('.start-challenge-btn').click();
             await expect(guesser.locator('.result-view')).toContainText('Challenge results');
         } finally {
             await closeScenario(scenario);

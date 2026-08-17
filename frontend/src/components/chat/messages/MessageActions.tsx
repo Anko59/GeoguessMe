@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Message } from '../../../types';
 import { type ReactionOption } from '../reactionOptions';
 
@@ -12,8 +13,10 @@ interface MessageActionsProps {
     reactionOptions: ReactionOption[];
 }
 
-/** The reply button and the reaction picker revealed on hover, long press,
- *  swipe, or keyboard focus. */
+/** The reply button and the reaction picker, opened by tapping or clicking the
+ *  message itself. Rendered as an overlay above the reaction chips: the
+ *  reactions sit in one horizontally scrollable row, so the panel never
+ *  overflows the viewport and never changes the message's layout. */
 export default function MessageActions({
     message,
     visible,
@@ -22,9 +25,17 @@ export default function MessageActions({
     onReaction,
     reactionOptions,
 }: MessageActionsProps) {
+    const panelRef = useRef<HTMLDivElement>(null);
     const tabIndex = visible ? 0 : -1;
+
+    // The panel overlays the chat below its message; keep every part of it
+    // inside the visible scroll region when it opens near a list edge.
+    useEffect(() => {
+        if (visible) panelRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [visible]);
+
     return (
-        <div className="message-actions" aria-label="Message actions">
+        <div ref={panelRef} className="message-actions" role="group" aria-label="Message actions">
             <button
                 type="button"
                 className="reply-action"
