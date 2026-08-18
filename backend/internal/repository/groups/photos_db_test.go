@@ -49,10 +49,10 @@ func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	viewExpires := now.Add(30 * time.Minute)
-	guessExpires := viewExpires.Add(2 * time.Minute)
+	guessExpires := viewExpires.Add(5 * time.Minute)
 	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-2", now, viewExpires, guessExpires).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
-	acceptedPhoto, view, err := repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 2*time.Minute, now)
+	acceptedPhoto, view, err := repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 5*time.Minute, now)
 	if err != nil || acceptedPhoto.ID != photo.ID || view.ViewExpiresAt != viewExpires || view.GuessExpiresAt != guessExpires {
 		t.Fatalf("accepted = %+v/%+v, %v", acceptedPhoto, view, err)
 	}
@@ -67,7 +67,7 @@ func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"photo_id", "user_id", "accepted_at", "view_expires_at", "guess_expires_at"}).
 			AddRow(photo.ID, "user-2", now, viewExpires, nil))
 	mock.ExpectCommit()
-	acceptedPhoto, view, err = repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 2*time.Minute, now)
+	acceptedPhoto, view, err = repo.AcceptChallenge(context.Background(), photo.ID, "user-2", 30*time.Minute, 5*time.Minute, now)
 	if err != nil || view.GuessExpiresAt != guessExpires {
 		t.Fatalf("legacy re-accept = %+v/%+v, %v", acceptedPhoto, view, err)
 	}

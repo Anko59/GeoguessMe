@@ -218,7 +218,7 @@ func Load() (*Config, error) {
 		ChallengeTTL:    l.durationValue("CHALLENGE_TTL", 24*time.Hour),
 		LocationHide:    l.durationValue("LOCATION_HIDE_DURATION", 48*time.Hour),
 		ViewWindow:      l.durationValue("PHOTO_VIEW_WINDOW", 10*time.Second),
-		GuessWindow:     l.durationValue("GUESS_WINDOW", 2*time.Minute),
+		GuessWindow:     l.durationValue("GUESS_WINDOW", 5*time.Minute),
 		PhotoRetention:  l.durationValue("PHOTO_RETENTION", 30*24*time.Hour),
 		UploadDir:       l.stringValue("UPLOAD_DIR", "./uploads"),
 

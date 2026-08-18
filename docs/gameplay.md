@@ -17,7 +17,7 @@ ready → accepted → viewing window → guessable → expired → removed
 4. **guessable** — After the viewing window expires, the member may submit one
    guess via `POST /api/v1/challenges/{photoID}/guess`. Guessing is time-boxed:
    the guess must be submitted by `guess_expires_at` (view end + `GUESS_WINDOW`,
-   default 2 minutes), a server-authoritative deadline that survives app
+   default 5 minutes), a server-authoritative deadline that survives app
    restarts. A guess submitted after it is refused with `guess_time_expired`
    ("You did not guess in time") and the challenge counts as 0 points for that
    member. Guesses are idempotent: a duplicate returns the original result.
@@ -34,7 +34,7 @@ ready → accepted → viewing window → guessable → expired → removed
 | ------------------- | ---------- | ---------------------------------------------------------------- |
 | `CHALLENGE_TTL`     | 24h        | Lifetime of the challenge from upload                            |
 | `PHOTO_VIEW_WINDOW` | 10s        | Per-member window to view the photo                              |
-| `GUESS_WINDOW`      | 2m         | Per-member window to submit the guess after the view window ends |
+| `GUESS_WINDOW`      | 5m         | Per-member window to submit the guess after the view window ends |
 | `PHOTO_RETENTION`   | 720h (30d) | Media retention period from upload                               |
 
 The view window is capped at `CHALLENGE_TTL` even if `PHOTO_VIEW_WINDOW` is

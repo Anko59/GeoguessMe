@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// allConfigVariables lists every environment variable the strict loader reads.
-// Tests use it to guarantee a hermetic environment when asserting defaults.
 var allConfigVariables = []string{
 	"APP_ENV", "PORT", "PUBLIC_URL", "STORAGE_DRIVER",
 	"DATABASE_URL", "DB_MIN_CONNS", "DB_MAX_CONNS", "JWT_SECRET",
@@ -51,6 +49,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.UploadDir != "./uploads" {
 		t.Errorf("Expected default UploadDir ./uploads, got %s", cfg.UploadDir)
+	}
+	if cfg.GuessWindow != 5*time.Minute {
+		t.Errorf("Expected default GuessWindow 5m, got %v", cfg.GuessWindow)
 	}
 	if cfg.AvatarMaxBytes != 25*1024*1024 {
 		t.Errorf("Expected default AvatarMaxBytes 25 MiB, got %d", cfg.AvatarMaxBytes)
@@ -163,7 +164,7 @@ func validConfig() *Config {
 		UploadMaxPixels:   25_000_000,
 		ChallengeTTL:      24 * time.Hour,
 		ViewWindow:        10 * time.Second,
-		GuessWindow:       2 * time.Minute,
+		GuessWindow:       5 * time.Minute,
 		LocationHide:      48 * time.Hour,
 		PhotoRetention:    30 * 24 * time.Hour,
 		RateLimitRequests: 10,
