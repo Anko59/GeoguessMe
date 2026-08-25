@@ -251,7 +251,7 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 		return nil, false, ErrOwnPhoto
 	}
 	var existing models.Guess
-	err = tx.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.CreatedAt)
+	err = tx.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.TimedOut, &existing.CreatedAt)
 	if err == nil {
 		if err := tx.Commit(ctx); err != nil {
 			return nil, isRetryable(err), err
@@ -283,13 +283,32 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	// recorded deadline is refused even when the client lost its timer (for
 	// example because the app was closed), so "did not guess in time" cannot
 	// be bypassed by reopening the challenge. Legacy rows without a recorded
-	// deadline (NULL) keep the pre-window behavior.
+	// deadline (NULL) keep the pre-window behavior. When the deadline has
+	// passed, the server records a timed-out guess (score 0) so the player
+	// still appears in results.
 	if guessExpiresAt.Valid && !now.Before(guessExpiresAt.Time) {
+		timeoutGuess, timeoutErr := r.ensureTimeoutGuess(ctx, tx, photoID, userID, photo.GroupID, now)
+		if timeoutErr == nil && timeoutGuess != nil {
+			_ = tx.Commit(ctx)
+		} else {
+			_ = tx.Rollback(ctx)
+		}
 		return nil, false, ErrGuessTimeExpired
 	}
 	distance := game.CalculateDistance(lat, long, photo.Lat, photo.Long)
-	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: photo.GroupID, Lat: lat, Long: long, Score: game.CalculateScore(distance), Distance: distance, CreatedAt: now}
-	if _, err := tx.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, guess.Lat, guess.Long, guess.Score, guess.Distance, guess.CreatedAt); err != nil {
+	elapsed := now.Sub(viewExpiresAt)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	var guessWindow time.Duration
+	if guessExpiresAt.Valid {
+		guessWindow = guessExpiresAt.Time.Sub(viewExpiresAt)
+	} else {
+		guessWindow = 5 * time.Minute
+	}
+	score := game.CalculateScoreWithTime(distance, elapsed, guessWindow)
+	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: photo.GroupID, Lat: lat, Long: long, Score: score, Distance: distance, CreatedAt: now}
+	if _, err := tx.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, guess.Lat, guess.Long, guess.Score, guess.Distance, false, guess.CreatedAt); err != nil {
 		// A concurrent duplicate lost the race; read the persisted winner.
 		if isUniqueViolation(err) {
 			return r.readExistingGuess(ctx, photoID, userID, photo)
@@ -302,11 +321,78 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	return &GuessResult{Guess: guess, Photo: photo}, false, nil
 }
 
+// ensureTimeoutGuess records a timed-out guess (score 0) when the guess window
+// expired without a guess, so the player appears in results with "timed out".
+func (r *Repository) ensureTimeoutGuess(ctx context.Context, tx pgx.Tx, photoID, userID, groupID string, now time.Time) (*models.Guess, error) {
+	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: groupID, Score: 0, TimedOut: true, CreatedAt: now}
+	_, err := tx.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (photo_id, user_id) DO NOTHING`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, 0, 0, 0, 0, true, guess.CreatedAt)
+	return &guess, err
+}
+
+// TimeoutGuess records a timed-out guess for the caller without coordinates.
+// It is idempotent and used when the client's countdown expires.
+func (r *Repository) TimeoutGuess(ctx context.Context, photoID, userID string, now time.Time) (*GuessResult, error) {
+	photo, err := r.Photo(ctx, photoID)
+	if err != nil {
+		return nil, err
+	}
+	if photo == nil {
+		return nil, ErrNotFound
+	}
+	var member bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`, photo.GroupID, userID).Scan(&member); err != nil {
+		return nil, err
+	}
+	if !member {
+		return nil, ErrForbidden
+	}
+	if photo.UserID == userID {
+		return nil, ErrOwnPhoto
+	}
+	var existing models.Guess
+	err = r.pool.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.TimedOut, &existing.CreatedAt)
+	if err == nil {
+		return &GuessResult{Guess: existing, Photo: photo, Existing: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	var deliveredAt pgtype.Timestamptz
+	var viewExpiresAt time.Time
+	var guessExpiresAt pgtype.Timestamptz
+	if err := r.pool.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt, &guessExpiresAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrForbidden
+		}
+		return nil, err
+	}
+	if !deliveredAt.Valid || now.Before(viewExpiresAt) {
+		return nil, ErrViewNotFinished
+	}
+	if guessExpiresAt.Valid && now.Before(guessExpiresAt.Time) {
+		return nil, ErrViewNotFinished
+	}
+	if photo.ExpiresAt.Before(now) {
+		return nil, ErrChallengeExpired
+	}
+	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: photo.GroupID, Score: 0, TimedOut: true, CreatedAt: now}
+	_, err = r.pool.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (photo_id, user_id) DO NOTHING`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, 0, 0, 0, 0, true, guess.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	var inserted models.Guess
+	err = r.pool.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&inserted.ID, &inserted.PhotoID, &inserted.UserID, &inserted.GroupID, &inserted.Lat, &inserted.Long, &inserted.Score, &inserted.Distance, &inserted.TimedOut, &inserted.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &GuessResult{Guess: inserted, Photo: photo}, nil
+}
+
 // readExistingGuess resolves the idempotent-duplicate case after a unique
 // violation using a separate read so the original result is returned verbatim.
 func (r *Repository) readExistingGuess(ctx context.Context, photoID, userID string, photo *models.Photo) (*GuessResult, bool, error) {
 	var existing models.Guess
-	err := r.pool.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.CreatedAt)
+	err := r.pool.QueryRow(ctx, `SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&existing.ID, &existing.PhotoID, &existing.UserID, &existing.GroupID, &existing.Lat, &existing.Long, &existing.Score, &existing.Distance, &existing.TimedOut, &existing.CreatedAt)
 	if err != nil {
 		return nil, false, err
 	}
@@ -324,7 +410,7 @@ type GuessWithUser struct {
 // GuessesForPhoto returns every guess on a challenge with the guesser's
 // profile, ordered by score descending then creation time ascending.
 func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]GuessWithUser, error) {
-	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.created_at, u.username, u.avatar FROM guesses g JOIN users u ON g.user_id = u.id WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
+	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.timed_out, g.created_at, u.username, u.avatar FROM guesses g JOIN users u ON g.user_id = u.id WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +418,7 @@ func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]Gue
 	var guesses []GuessWithUser
 	for rows.Next() {
 		var g GuessWithUser
-		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.CreatedAt, &g.Username, &g.Avatar); err != nil {
+		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.TimedOut, &g.CreatedAt, &g.Username, &g.Avatar); err != nil {
 			return nil, err
 		}
 		guesses = append(guesses, g)

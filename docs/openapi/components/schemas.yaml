@@ -400,12 +400,14 @@ ChallengeMediaDelivered:
 
 GuessResponse:
   type: object
-  required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
+  required: [guess_id, photo_id, score, created_at, duplicate, server_time]
   properties:
     guess_id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
     score: { type: integer }
-    distance: { type: number }
+    distance: { type: number, description: Omitted when timed_out is true }
+    timed_out:
+      { type: boolean, description: True when the player let the guess window expire without guessing (score 0) }
     created_at: { type: string, format: date-time }
     duplicate: { type: boolean }
     server_time: { type: string, format: date-time }
@@ -444,7 +446,12 @@ Guess:
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
     elo_delta: { type: integer, description: Elo rating points gained or lost on this challenge. }
-    distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
+    distance:
+      {
+        type: number,
+        description: Omitted alongside the coordinates while the location is hidden or when timed_out is true.,
+      }
+    timed_out: { type: boolean, description: True when the player timed out with score 0 and no location }
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }

@@ -10,6 +10,6 @@ ALTER TABLE challenge_views ADD COLUMN IF NOT EXISTS guess_expires_at TIMESTAMPT
 -- expiry, exactly like newly created rows), so the deadline is deterministic
 -- for in-flight challenges after the migration.
 UPDATE challenge_views v
-SET guess_expires_at = LEAST(v.view_expires_at + INTERVAL '2 minutes', p.expires_at)
+SET guess_expires_at = LEAST(v.view_expires_at + INTERVAL '5 minutes', p.expires_at)
 FROM photos p
 WHERE p.id = v.photo_id AND v.guess_expires_at IS NULL;

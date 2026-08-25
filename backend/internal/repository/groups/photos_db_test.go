@@ -18,8 +18,8 @@ func photoRows(photo *models.Photo) *pgxmock.Rows {
 }
 
 func guessRows(now time.Time) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at"}).
-		AddRow("guess-1", "photo-1", "user-2", "group-1", 48.8, 2.3, 90, 10.5, now)
+	return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at"}).
+		AddRow("guess-1", "photo-1", "user-2", "group-1", 48.8, 2.3, 90, 10.5, false, now)
 }
 
 func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
@@ -111,7 +111,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(2*time.Hour)))
-	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), false, guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	result, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)
 	if err != nil || result == nil || result.Existing || result.Guess.ID == "" {
@@ -144,7 +144,8 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(-time.Second)))
-	mock.ExpectRollback()
+	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 0, 0, 0, 0, true, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
 	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); !errors.Is(err, ErrGuessTimeExpired) {
 		t.Fatalf("guess after the deadline = %v, want ErrGuessTimeExpired", err)
 	}
@@ -157,7 +158,7 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), nil))
-	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), false, now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); err != nil {
 		t.Fatalf("legacy view without a guess deadline must keep guessing, got %v", err)
@@ -168,7 +169,7 @@ func TestPhotoGuessListsAndErrors(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs("photo-1").WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).AddRow("guess-1", "photo-1", "user-2", "group-1", 1.0, 2.0, 80, 20.0, now, "alice", "a.png"))
+	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs("photo-1").WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).AddRow("guess-1", "photo-1", "user-2", "group-1", 1.0, 2.0, 80, 20.0, false, now, "alice", "a.png"))
 	guesses, err := repo.GuessesForPhoto(context.Background(), "photo-1")
 	if err != nil || len(guesses) != 1 || guesses[0].Username != "alice" {
 		t.Fatalf("guesses = %+v, %v", guesses, err)

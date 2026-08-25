@@ -233,8 +233,12 @@ function GameResultsView({
                                 >
                                     <div>
                                         <strong>{guess.user_id === currentUserId ? 'You' : guess.username}</strong>
-                                        {guess.distance !== undefined && (
-                                            <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                        {guess.timed_out ? (
+                                            <span>Timed out — 0 pts</span>
+                                        ) : (
+                                            guess.distance !== undefined && (
+                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            )
                                         )}
                                     </div>
                                     <div className="score-card__value">
