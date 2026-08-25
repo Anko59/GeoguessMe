@@ -64,8 +64,8 @@ func TestConcurrentMediaDeliveryConfirmation(t *testing.T) {
 // TestGuessRejectedAfterGuessWindowExpiry pins the server-authoritative guess
 // deadline end-to-end: accept and delivery publish guess_expires_at (view end
 // + GUESS_WINDOW), and a guess submitted after it is refused with 410
-// guess_time_expired without creating a guess row (the challenge counts as 0
-// points for that member). The recorded deadline is pushed into the past
+// guess_time_expired while recording a timed_out guess (score 0) so the player
+// still appears in results. The recorded deadline is pushed into the past
 // directly so the test does not wait for the configured GUESS_WINDOW.
 func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 	alice := signup(t, unique("gwalice"), unique("gwalice")+"@example.test", "StrongPassword123")
@@ -103,10 +103,12 @@ func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 		map[string]float64{"lat": 51.505, "long": -0.09}, bob.access, nil)
 	require.Equal(t, http.StatusGone, resp.StatusCode)
 	require.Contains(t, string(data), "guess_time_expired")
-	var count int
+	var score int
+	var timedOut bool
 	require.NoError(t, db.QueryRow(t.Context(),
-		`SELECT count(*) FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID2, bob.userID).Scan(&count))
-	require.Zero(t, count, "a refused late guess must not create a guess row")
+		`SELECT score, timed_out FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID2, bob.userID).Scan(&score, &timedOut))
+	require.Zero(t, score, "a late guess records a 0-point timeout")
+	require.True(t, timedOut, "a late guess must be marked timed_out")
 }
 
 // TestLeaderboardRankingDeterminism pins ranking determinism: reading the same
