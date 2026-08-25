@@ -54,14 +54,27 @@ func TimeMultiplier(elapsed, guessWindow time.Duration) float64 {
 	if penaltySpan <= 0 {
 		return 1
 	}
-	ratio := float64(elapsed-60*time.Second) / float64(penaltySpan)
+	elapsedOffset := elapsed - 60*time.Second
+	if elapsedOffset >= penaltySpan {
+		return 0.2
+	}
+	if elapsedOffset <= 0 {
+		return 1
+	}
+	ratio := float64(elapsedOffset) / float64(penaltySpan)
 	if ratio < 0 {
 		ratio = 0
 	}
 	if ratio > 1 {
 		ratio = 1
 	}
-	return 1 - 0.8*ratio
+	mult := 1 - 0.8*ratio
+	// Snap the 0.2 anchor to an exact representable value so callers can
+	// compare with == 0.2 without tripping on 0.1999… from binary 0.8.
+	if mult < 0.2000005 && mult > 0.1999995 {
+		return 0.2
+	}
+	return mult
 }
 
 // CalculateScoreWithTime returns the distance-based score scaled by the time

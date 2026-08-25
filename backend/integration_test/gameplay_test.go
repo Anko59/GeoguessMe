@@ -76,10 +76,10 @@ func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 
 	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.True(t, strings.HasPrefix(acc.MediaURL, "/api/v1/challenges/"), "media must be same-origin, got %q", acc.MediaURL)
-	// The guess deadline is the view end plus the default GUESS_WINDOW (2m),
+	// The guess deadline is the view end plus the default GUESS_WINDOW (5m),
 	// published by both the accept and the delivery responses.
 	require.False(t, acc.GuessExpiresAt.IsZero(), "accept/delivery must publish guess_expires_at")
-	require.WithinDuration(t, acc.ViewExpiresAt.Add(2*time.Minute), acc.GuessExpiresAt, time.Second,
+	require.WithinDuration(t, acc.ViewExpiresAt.Add(5*time.Minute), acc.GuessExpiresAt, time.Second,
 		"guess deadline must be view end + GUESS_WINDOW")
 
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
