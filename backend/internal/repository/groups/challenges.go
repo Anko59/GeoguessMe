@@ -3,6 +3,7 @@ package groups
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"geoguessme/internal/game"
@@ -287,11 +288,16 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	// passed, the server records a timed-out guess (score 0) so the player
 	// still appears in results.
 	if guessExpiresAt.Valid && !now.Before(guessExpiresAt.Time) {
-		timeoutGuess, timeoutErr := r.ensureTimeoutGuess(ctx, tx, photoID, userID, photo.GroupID, now)
-		if timeoutErr == nil && timeoutGuess != nil {
-			_ = tx.Commit(ctx)
-		} else {
-			_ = tx.Rollback(ctx)
+		// Recording the timed-out row is part of the guarantee that a player
+		// who misses the window still appears in results, so an insert or
+		// commit failure must surface (500 + observability) instead of
+		// silently degrading to a 410 without a persisted timeout row.
+		if _, err := r.ensureTimeoutGuess(ctx, tx, photoID, userID, photo.GroupID, now); err != nil {
+			_ = tx.Rollback(ctx) // best effort: the transaction is being aborted regardless
+			return nil, isRetryable(err), fmt.Errorf("record timed-out guess: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, isRetryable(err), err
 		}
 		return nil, false, ErrGuessTimeExpired
 	}
@@ -369,7 +375,13 @@ func (r *Repository) TimeoutGuess(ctx context.Context, photoID, userID string, n
 	if !deliveredAt.Valid || now.Before(viewExpiresAt) {
 		return nil, ErrViewNotFinished
 	}
-	if guessExpiresAt.Valid && now.Before(guessExpiresAt.Time) {
+	// The client fires POST /timeout when its local countdown hits zero, which
+	// can be a tick or two before the authoritative server deadline (clock and
+	// render-tick skew). Accept such calls inside a small tolerance so the
+	// guaranteed timeout row is not lost to the race; anything earlier is
+	// still refused as viewing_window_open.
+	const timeoutSkew = 2 * time.Second
+	if guessExpiresAt.Valid && now.Before(guessExpiresAt.Time.Add(-timeoutSkew)) {
 		return nil, ErrViewNotFinished
 	}
 	if photo.ExpiresAt.Before(now) {

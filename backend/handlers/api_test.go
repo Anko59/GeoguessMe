@@ -174,7 +174,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT u.id, u.username, u.avatar").WithArgs(group.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "avatar", "score", "count", "average", "total_points"}).AddRow("user-1", "alice", "avatar.png", 10, 1, 10.0, 10))
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).WithArgs(group.ID).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out AND g\.group_id = \$1`).WithArgs(group.ID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder = httptest.NewRecorder()
 	gameAPI.GetLeaderboard(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))

@@ -144,7 +144,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-		mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
+		mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).WillReturnRows(challengesRows())
 	}
 	// A guesser sees scores, their own guessed point and distance, but not the
 	// actual location nor the other players' guessed points while it is hidden.
@@ -170,7 +170,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).WillReturnRows(challengesRows())
 	recorder = fetch("user-1")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Count(body, `"lat":`) != 2 {
@@ -183,7 +183,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(challengesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).WillReturnRows(challengesRows())
 	recorder = fetch("user-2")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Contains(body, "location_hidden") || strings.Count(body, `"lat":`) != 2 {
@@ -200,7 +200,7 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png"))
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE ORDER BY`).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	resultsRequest.SetPathValue("photoID", photo.ID)
