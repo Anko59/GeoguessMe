@@ -179,7 +179,9 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
 	}
-	eloDeltas, err := a.groups.GlobalChallengeEloDeltas(r.Context(), photoID)
+	// The results page shows the weekly Elo change only: the same all-group
+	// progression the weekly ladders use, driven by the weekly update factor.
+	eloDeltas, err := a.groups.WeeklyChallengeEloDeltas(r.Context(), photoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
@@ -233,8 +235,8 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 
 // resultsGuess is the results payload for a single guess. Lat, long, and
 // distance are optional and omitted while a hidden-location challenge keeps
-// other players' guessed points private. EloDelta reflects the rating points
-// gained or lost on this challenge.
+// other players' guessed points private. EloDelta is the signed change in the
+// player's weekly Elo rating caused by this challenge.
 type resultsGuess struct {
 	ID        string    `json:"id"`
 	PhotoID   string    `json:"photo_id"`

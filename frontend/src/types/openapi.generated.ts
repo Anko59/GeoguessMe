@@ -779,7 +779,7 @@ export interface components {
             total_points: number;
             guess_count: number;
             average_score: number;
-            /** @description Global Elo rating; 0 while never compared against another guesser. */
+            /** @description Global all-time Elo rating, updated with a small factor so it reflects long-run skill; 0 while never compared against another guesser. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
             global_rank: components['schemas']['GlobalRank'];
@@ -866,7 +866,7 @@ export interface components {
             average_score: number;
             /** @description Lifetime guess points used for rank progression. */
             total_points: number;
-            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. */
+            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. The update factor depends on the period: weekly ladders move fastest, monthly moderately, and all-time slowest. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
         };
@@ -1084,7 +1084,7 @@ export interface components {
              */
             long?: number;
             score: number;
-            /** @description Elo rating points gained or lost on this challenge. */
+            /** @description Signed change in the player's weekly Elo rating caused by this challenge; zero when the challenge has fewer than two guesses or was created before the current calendar week started. */
             elo_delta: number;
             /** @description Omitted alongside the coordinates while the location is hidden. */
             distance?: number;

@@ -81,7 +81,12 @@ Profile:
         guess_count: { type: integer, minimum: 0 }
         average_score: { type: number, minimum: 0 }
         elo:
-          { type: integer, minimum: 0, description: Global Elo rating; 0 while never compared against another guesser. }
+          type: integer
+          minimum: 0
+          description: >-
+            Global all-time Elo rating, updated with a small factor so it
+            reflects long-run skill; 0 while never compared against another
+            guesser.
         rank: { $ref: "#/ProgressionRank" }
         global_rank: { $ref: "#/GlobalRank" }
         global_average_rank: { $ref: "#/GlobalRank" }
@@ -214,11 +219,14 @@ LeaderboardEntry:
     average_score: { type: number, description: Average guess score in the selected period. }
     total_points: { type: integer, minimum: 0, description: Lifetime guess points used for rank progression. }
     elo:
-      {
-        type: integer,
-        minimum: 0,
-        description: Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period.,
-      }
+      type: integer
+      minimum: 0
+      description: >-
+        Elo rating computed from the selected period's challenges; 0 while
+        the player never compared against another guesser on a shared
+        challenge in the period. The update factor depends on the period:
+        weekly ladders move fastest, monthly moderately, and all-time
+        slowest.
     rank: { $ref: "#/ProgressionRank" }
 
 Message:
@@ -443,7 +451,12 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
-    elo_delta: { type: integer, description: Elo rating points gained or lost on this challenge. }
+    elo_delta:
+      type: integer
+      description: >-
+        Signed change in the player's weekly Elo rating caused by this
+        challenge; zero when the challenge has fewer than two guesses or was
+        created before the current calendar week started.
     distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }
