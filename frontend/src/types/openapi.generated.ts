@@ -426,6 +426,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/group/party': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the group's Party Time state.
+         * @description Returns whether a party window is currently active and, while the recharge cooldown still blocks a new start, the earliest instant the next party may begin. `server_time` lets clients correct for clock skew. Requires group membership.
+         */
+        get: operations['getPartyStatus'];
+        put?: never;
+        /**
+         * Start Party Time for the group.
+         * @description Any current member may start a party. The window stays active for PARTY_TIME_DURATION (default 1h); a persisted system message announces the starter by name, and every other member receives a push notification. While a party is active, a member's guesses score double when they posted at least one challenge during the same window. A new party is refused with 409 party_active while one is running, and with 409 party_recharging until PARTY_TIME_COOLDOWN (default 48h, measured from the previous end) has elapsed.
+         */
+        post: operations['startParty'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/messages': {
         parameters: {
             query?: never;
@@ -882,6 +906,27 @@ export interface components {
         GroupNotificationPreference: {
             enabled: boolean;
         };
+        PartyStatus: {
+            /** @description True while a party window covers server_time; dates present when true */
+            active: boolean;
+            /**
+             * Format: date-time
+             * @description Present only while a party is active
+             */
+            started_at?: string;
+            /**
+             * Format: date-time
+             * @description Present only while a party is active
+             */
+            ends_at?: string;
+            /**
+             * Format: date-time
+             * @description Earliest instant the next party may start (previous ends_at plus PARTY_TIME_COOLDOWN); present while recharging or active.
+             */
+            next_available_at?: string;
+            /** Format: date-time */
+            server_time: string;
+        };
         /**
          * @description Reaction identity. The twenty-four named keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
          * @enum {string}
@@ -1058,6 +1103,8 @@ export interface components {
             photo_id: string;
             score: number;
             distance: number;
+            /** @description True when Party Time doubled this guess; omitted otherwise */
+            party_doubled?: boolean;
             /** Format: date-time */
             created_at: string;
             duplicate: boolean;
@@ -1879,6 +1926,61 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             403: components['responses']['ErrorResponse'];
+        };
+    };
+    getPartyStatus: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Party state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PartyStatus'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+        };
+    };
+    startParty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: uuid */
+                    group_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Party started; the response carries the active window. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PartyStatus'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
         };
     };
     listGroupMessages: {

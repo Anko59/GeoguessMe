@@ -91,6 +91,32 @@ Elo 0, sorts below rated players, and has no numbered place. Profiles use the
 same Elo model across all groups and all-time challenges for the global rating
 and rank.
 
+## Party Time
+
+Party Time is a member-started group event that rewards playing (and posting) at
+the same time.
+
+- **Starting**: any current group member taps the 🎉 button in the group header
+  and confirms. The party runs for `PARTY_TIME_DURATION` (default 1h). A
+  persisted system chat message announces the starter by name, every other
+  member receives a Web Push notification, and while the party is active the app
+  frames the screen with a pulsing orange-and-blue neon border.
+- **Doubling rule**: a guess recorded while a party is active scores **double**
+  exactly when the guesser posted at least one challenge into that group since
+  the party started — posting during the window is what unlocks the bonus.
+  Everyone else scores normally. Doubled points flow into leaderboard totals,
+  averages, and Elo exactly like base points, and the guess response carries
+  `party_doubled: true` so the score card can show it.
+- **Recharge**: a new party cannot start while one is running (`party_active`)
+  or until `PARTY_TIME_COOLDOWN` (default 48h) has passed measured from the
+  previous party's end (`party_recharging`). While recharging, the header button
+  is grayed out until `next_available_at`.
+
+| Parameter             | Default | Description                                          |
+| --------------------- | ------- | ---------------------------------------------------- |
+| `PARTY_TIME_DURATION` | 1h      | How long a started party stays active                |
+| `PARTY_TIME_COOLDOWN` | 48h     | Recharge wait after a party ends before the next one |
+
 ## Result visibility
 
 | Who                      | When                                     |

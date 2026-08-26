@@ -238,6 +238,53 @@ groupNotifications:
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+groupParty:
+  get:
+    operationId: getPartyStatus
+    summary: Get the group's Party Time state.
+    description: >
+      Returns whether a party window is currently active and, while the
+      recharge cooldown still blocks a new start, the earliest instant the
+      next party may begin. `server_time` lets clients correct for clock
+      skew. Requires group membership.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200":
+        description: Party state.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  post:
+    operationId: startParty
+    summary: Start Party Time for the group.
+    description: >
+      Any current member may start a party. The window stays active for
+      PARTY_TIME_DURATION (default 1h); a persisted system message announces
+      the starter by name, and every other member receives a push
+      notification. While a party is active, a member's guesses score double
+      when they posted at least one challenge during the same window. A new
+      party is refused with 409 party_active while one is running, and with
+      409 party_recharging until PARTY_TIME_COOLDOWN (default 48h, measured
+      from the previous end) has elapsed.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [group_id], properties: { group_id: { type: string, format: uuid } } }
+    responses:
+      "201":
+        description: Party started; the response carries the active window.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 leaderboard:
   get:
     operationId: getLeaderboard

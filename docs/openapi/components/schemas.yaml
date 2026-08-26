@@ -398,6 +398,21 @@ ChallengeMediaDelivered:
       }
     server_time: { type: string, format: date-time }
 
+PartyStatus:
+  type: object
+  required: [active, server_time]
+  properties:
+    active: { type: boolean, description: True while a party window covers server_time; dates present when true }
+    started_at: { type: string, format: date-time, description: Present only while a party is active }
+    ends_at: { type: string, format: date-time, description: Present only while a party is active }
+    next_available_at:
+      {
+        type: string,
+        format: date-time,
+        description: Earliest instant the next party may start (previous ends_at plus PARTY_TIME_COOLDOWN); present while recharging or active.,
+      }
+    server_time: { type: string, format: date-time }
+
 GuessResponse:
   type: object
   required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
@@ -406,6 +421,7 @@ GuessResponse:
     photo_id: { type: string, format: uuid }
     score: { type: integer }
     distance: { type: number }
+    party_doubled: { type: boolean, description: True when Party Time doubled this guess; omitted otherwise }
     created_at: { type: string, format: date-time }
     duplicate: { type: boolean }
     server_time: { type: string, format: date-time }

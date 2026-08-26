@@ -11,7 +11,7 @@ import (
 )
 
 func TestMigrationDiscoveryAndDisconnectedDatabase(t *testing.T) {
-	wantVersions := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22}
+	wantVersions := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 24}
 	all, err := migrations()
 	if err != nil || len(all) != len(wantVersions) {
 		t.Fatalf("migrations = %+v, %v", all, err)
@@ -50,7 +50,7 @@ func TestMigrationStatusUsesPool(t *testing.T) {
 	when := time.Now().UTC()
 	mock.ExpectQuery("SELECT version, applied_at FROM schema_migrations").WillReturnRows(pgxmock.NewRows([]string{"version", "applied_at"}).AddRow(1, when))
 	records, err := MigrationStatus(context.Background(), mock)
-	if err != nil || len(records) != 21 || !records[0].Applied {
+	if err != nil || len(records) != 22 || !records[0].Applied {
 		t.Fatalf("migration records = %+v, %v", records, err)
 	}
 	for _, record := range records[1:] {
@@ -74,7 +74,7 @@ func TestMigrateUpSkipsAppliedMigrations(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").WillReturnResult(pgxmock.NewResult("CREATE", 0))
 	mock.ExpectExec("SELECT pg_advisory_lock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 	mock.ExpectQuery("SELECT version FROM schema_migrations").WillReturnRows(
-		pgxmock.NewRows([]string{"version"}).AddRow(1).AddRow(2).AddRow(3).AddRow(4).AddRow(5).AddRow(6).AddRow(7).AddRow(8).AddRow(9).AddRow(10).AddRow(11).AddRow(12).AddRow(13).AddRow(15).AddRow(16).AddRow(17).AddRow(18).AddRow(19).AddRow(20).AddRow(21).AddRow(22),
+		pgxmock.NewRows([]string{"version"}).AddRow(1).AddRow(2).AddRow(3).AddRow(4).AddRow(5).AddRow(6).AddRow(7).AddRow(8).AddRow(9).AddRow(10).AddRow(11).AddRow(12).AddRow(13).AddRow(15).AddRow(16).AddRow(17).AddRow(18).AddRow(19).AddRow(20).AddRow(21).AddRow(22).AddRow(24),
 	)
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
@@ -192,6 +192,12 @@ func TestMigrateUpAppliesPendingMigrations(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("ALTER TABLE message_reactions DROP CONSTRAINT IF EXISTS message_reactions_reaction_check").WillReturnResult(pgxmock.NewResult("ALTER", 0))
 	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(22, "expand_custom_reactions").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	// Each migration file runs as a single multi-statement Exec; the regex
+	// anchors on its first and last statements.
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS group_party_times(?s:.*)CREATE INDEX IF NOT EXISTS group_party_times_group_started_idx").WillReturnResult(pgxmock.NewResult("CREATE", 0))
+	mock.ExpectExec("INSERT INTO schema_migrations").WithArgs(24, "group_party_times").WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").WithArgs(migrationLockKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 

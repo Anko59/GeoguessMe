@@ -222,6 +222,9 @@ func Load() (*Config, error) {
 		PhotoRetention:  l.durationValue("PHOTO_RETENTION", 30*24*time.Hour),
 		UploadDir:       l.stringValue("UPLOAD_DIR", "./uploads"),
 
+		PartyTimeDuration: l.durationValue("PARTY_TIME_DURATION", time.Hour),
+		PartyTimeCooldown: l.durationValue("PARTY_TIME_COOLDOWN", 48*time.Hour),
+
 		MediaProcessingWorker: l.boolValue("MEDIA_PROCESSING_WORKER", true),
 
 		RateLimitRequests: l.intValue("RATE_LIMIT_REQUESTS", 10),

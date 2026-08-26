@@ -56,6 +56,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/groupPhoto
   /group/notifications:
     $ref: ./openapi/paths/groups.yaml#/groupNotifications
+  /group/party:
+    $ref: ./openapi/paths/groups.yaml#/groupParty
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
   /group/reaction-usage:

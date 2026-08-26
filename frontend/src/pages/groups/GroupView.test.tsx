@@ -20,6 +20,13 @@ vi.mock('../../hooks/useGroupMessages', () => ({
     useGroupMessages: (id?: string) => mockUseGroupMessages(id),
 }));
 
+// Same for the Party Time state hook: its fetch lifecycle is covered in
+// useGroupParty.test.ts.
+const mockUseGroupParty = vi.fn();
+vi.mock('../../hooks/useGroupParty', () => ({
+    useGroupParty: (id?: string) => mockUseGroupParty(id),
+}));
+
 vi.mock('../../components/chat/Chat', () => ({
     default: ({
         connectionStatus,
@@ -92,16 +99,20 @@ const authValue = (overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     ...overrides,
 });
 
-function renderGroupView(groupId: string, auth = authValue()) {
-    return render(
+function groupTree(groupId: string, auth = authValue()) {
+    return (
         <AuthContext.Provider value={auth}>
             <MemoryRouter initialEntries={[`/group/${groupId}`]}>
                 <Routes>
                     <Route path="/group/:id" element={<GroupView />} />
                 </Routes>
             </MemoryRouter>
-        </AuthContext.Provider>,
+        </AuthContext.Provider>
     );
+}
+
+function renderGroupView(groupId: string, auth = authValue()) {
+    return render(groupTree(groupId, auth));
 }
 
 beforeEach(() => {
@@ -114,6 +125,8 @@ beforeEach(() => {
         wsRef: { current: null },
         error: '',
     });
+    mockUseGroupParty.mockReset();
+    mockUseGroupParty.mockReturnValue({ status: null, loading: false, refresh: vi.fn() });
     mocks.get.mockResolvedValue({
         data: { id: 'group-1', name: 'Test Group', created_at: '2026-01-01T00:00:00Z' },
     });
@@ -240,6 +253,75 @@ describe('GroupView', () => {
         expect(screen.getByTestId('active-tab')).toHaveTextContent('leaderboard');
         expect(screen.getByTestId('leaderboard')).toBeInTheDocument();
         expect(screen.getByTestId('leaderboard').parentElement).toHaveClass('leaderboard-tab-panel');
+    });
+
+    it('renders the header party button', async () => {
+        renderGroupView('group-1');
+        expect(await screen.findByRole('button', { name: 'Start party time' })).toBeEnabled();
+        // No neon border while no party is running.
+        expect(document.querySelector('.party-border')).toBeNull();
+    });
+
+    it('shows the neon border overlay while a party is active', async () => {
+        mockUseGroupParty.mockReturnValue({
+            status: {
+                active: true,
+                started_at: new Date(Date.now() - 1_800_000).toISOString(),
+                ends_at: new Date(Date.now() + 1_800_000).toISOString(),
+                server_time: new Date().toISOString(),
+            },
+            loading: false,
+            refresh: vi.fn(),
+        });
+        renderGroupView('group-1');
+        await screen.findByRole('button', { name: /Party time is active/ });
+        const border = document.querySelector('.party-border');
+        expect(border).not.toBeNull();
+        expect(border).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('refreshes party state when a new system message arrives', async () => {
+        const refresh = vi.fn();
+        mockUseGroupParty.mockReturnValue({ status: null, loading: false, refresh });
+        const messages = [
+            {
+                id: 'm1',
+                group_id: 'g1',
+                user_id: 'u1',
+                kind: 'text',
+                content: 'hi',
+                created_at: '2026-01-01T00:00:00Z',
+            },
+        ];
+        const messagesResult = {
+            messages,
+            connectionStatus: 'connected',
+            wsRef: { current: null },
+            error: '',
+        };
+        mockUseGroupMessages.mockReturnValue(messagesResult);
+        const view = renderGroupView('group-1');
+        await waitFor(() => expect(screen.getByText('Test Group')).toBeInTheDocument());
+        expect(refresh).not.toHaveBeenCalled();
+
+        // A persisted system message arriving over the socket (someone may
+        // have started a party) triggers exactly one authoritative refetch.
+        mockUseGroupMessages.mockReturnValue({
+            ...messagesResult,
+            messages: [
+                ...messages,
+                {
+                    id: 'm2',
+                    group_id: 'g1',
+                    user_id: 'u2',
+                    kind: 'system',
+                    content: 'Alice started Party Time!',
+                    created_at: '2026-01-01T00:01:00Z',
+                },
+            ],
+        });
+        view.rerender(groupTree());
+        await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     });
 
     it('opens the game when a challenge message is received', async () => {

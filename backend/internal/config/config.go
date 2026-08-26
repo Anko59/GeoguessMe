@@ -62,6 +62,12 @@ type Config struct {
 	PhotoRetention  time.Duration
 	UploadDir       string
 
+	// PartyTimeDuration is how long a group party window stays active.
+	// PartyTimeCooldown is the recharge wait after a party ends before the
+	// next one may start (48h by default). See docs/gameplay.md.
+	PartyTimeDuration time.Duration
+	PartyTimeCooldown time.Duration
+
 	// MediaProcessingWorker starts the in-process media-processing worker
 	// goroutine (quarantined video promotion). Enabled by default now that the
 	// runtime image ships ffmpeg/ffprobe; deployments must provide the
@@ -224,6 +230,9 @@ func (c *Config) Validate() error {
 	}
 	if c.PhotoRetention < c.ChallengeTTL {
 		problems = append(problems, "PHOTO_RETENTION must be at least CHALLENGE_TTL")
+	}
+	if c.PartyTimeDuration <= 0 || c.PartyTimeCooldown < 0 {
+		problems = append(problems, "PARTY_TIME_DURATION must be positive and PARTY_TIME_COOLDOWN must not be negative")
 	}
 	if c.RateLimitRequests <= 0 || c.RateLimitWindow <= 0 {
 		problems = append(problems, "rate limit values must be positive")

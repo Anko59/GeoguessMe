@@ -29,6 +29,9 @@ export interface GamePosition {
 export interface GameFeedback {
     feedback: GuessFeedback;
     score: number;
+    /** True when an active Party Time doubled this guess (wire
+     *  `party_doubled`); drives the ×2 badge on the score card. */
+    partyDoubled?: boolean;
 }
 
 export interface GameState {
@@ -81,7 +84,7 @@ export type GameAction =
           results: ChallengeResults;
       }
     | { type: 'results-failed'; photoId: string; message: string }
-    | { type: 'show-feedback'; score: number }
+    | { type: 'show-feedback'; score: number; partyDoubled?: boolean }
     | { type: 'clear-feedback' }
     | { type: 'close' }
     | { type: 'reset' };
@@ -180,7 +183,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 ? { ...state, selectedLocation: { lat: action.lat, long: action.long } }
                 : state;
         case 'show-feedback':
-            return { ...state, feedback: { feedback: feedbackForScore(action.score), score: action.score } };
+            return {
+                ...state,
+                feedback: {
+                    feedback: feedbackForScore(action.score),
+                    score: action.score,
+                    partyDoubled: action.partyDoubled ?? false,
+                },
+            };
         case 'clear-feedback':
             return { ...state, feedback: undefined };
         case 'guess-start':
