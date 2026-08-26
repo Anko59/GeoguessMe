@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { waitForKeycloakVerificationLink } from '../helpers';
+import { waitForKeycloakVerificationLink } from '../support/helpers';
 
 const keycloakURL = process.env.KEYCLOAK_ADMIN_URL || 'https://auth-dev.geoguessme.com';
 
