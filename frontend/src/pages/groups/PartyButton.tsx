@@ -37,8 +37,10 @@ export default function PartyButton({ groupId, status, onStarted, onRefresh }: P
         setStarting(true);
         setError('');
         try {
-            const response = await api.post<PartyStatus>('/group/party', { group_id: groupId });
-            onStarted(response.data);
+            await api.post<PartyStatus>('/group/party', { group_id: groupId });
+            // The owner re-syncs from the hook; the response body is already
+            // reflected by that authoritative fetch.
+            onStarted();
         } catch (requestError: unknown) {
             const code = (requestError as { response?: { data?: { error?: { code?: string } } } })?.response?.data
                 ?.error?.code;

@@ -320,7 +320,7 @@ describe('GroupView', () => {
                 },
             ],
         });
-        view.rerender(groupTree());
+        view.rerender(groupTree('group-1'));
         await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     });
 
