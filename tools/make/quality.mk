@@ -21,13 +21,12 @@ fmt: format ## Compatibility alias for format.
 mod-tidy: ## Reconcile backend Go module metadata in Docker after dependency changes.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps --user 0:0 go-tools-write sh -c 'cd backend && GOCACHE=/tmp/go-build-cache go mod tidy && chown $(shell id -u):$(shell id -g) go.mod go.sum'
 
+
 format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci
-
-fmt-check: format-check ## Compatibility alias for format-check.
 
 lint-go: ## Run strict Go analyzers.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && golangci-lint run ./...'
@@ -96,8 +95,34 @@ ARCHCHECK := $(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/t
 archcheck: ## Run the durable architecture rules (mutable globals, SQL in handlers, env reads) via tools/quality/archcheck.
 	$(ARCHCHECK)
 
+# Harness self-tests exercise the quality tooling itself (Makefile fragments,
+# structure-check, debt markers, docs/agent-config, the CI classifier, and the
+# E2E/dev-workflow regressions) rather than the application. `make preflight`
+# runs them only when the harness changed; `make quality` always runs them.
+#
+# PREFLIGHT_HARNESS selects them inside the preflight gate:
+#   auto  - default: include them only when the harness changed (git diff
+#          between the merge-base of HEAD and origin/dev and HEAD, falling
+#          back to HEAD~1 when origin/dev is unavailable); unknown results
+#          fail safe to "true" (all suites run)
+#   true  - always include all seven
+#   false - never include them (CI passes the classifier output explicitly
+#          because the fast job checks out with depth 1 and cannot diff)
+HARNESS_GATE_TARGETS := test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression
+
+PREFLIGHT_HARNESS ?= auto
+ifeq ($(PREFLIGHT_HARNESS),auto)
+PREFLIGHT_HARNESS := $(shell git diff --name-only "$$(git merge-base HEAD origin/dev 2>/dev/null || git rev-parse HEAD~1 2>/dev/null)" HEAD 2>/dev/null | tools/quality/ci/classify-changes.sh 2>/dev/null | sed -n 's/^harness=//p')
+ifeq ($(PREFLIGHT_HARNESS),)
+PREFLIGHT_HARNESS := true
+endif
+endif
+# Any value other than a resolved "false" runs the suites: explicit true,
+# the auto resolution, and typo'd overrides all fail safe to running them.
+HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
+
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -105,9 +130,9 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit test-race coverage build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
-verify: quality test-integration test-e2e container-verify compose-validate prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
+verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh

@@ -20,6 +20,10 @@ interface GameViewProps {
     loadingMedia: boolean;
     /** Seconds left in the current viewing/waiting phase. */
     remaining: number;
+    /** Seconds left in the guessing phase, derived from the server guess deadline. */
+    guessRemaining: number;
+    /** Full guessing-window length in seconds (view end to guess deadline). */
+    guessTotalSeconds: number;
     /** The client clock offset by the server offset (used for reveal clauses). */
     serverNowMs: number;
     /** Optional score-feedback overlay rendered above the active phase. */
@@ -101,12 +105,39 @@ function GameWaitingView({ remaining }: { remaining: number }) {
     );
 }
 
+// GuessTimerBar renders the remaining guess time as a bottom-of-screen bar in
+// the brand colors. The fill ratio derives from the server-published window
+// length, and the countdown keeps running across app restarts because the
+// deadline itself is server-authoritative.
+function GuessTimerBar({ remaining, total }: { remaining: number; total: number }) {
+    const label = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+    const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+    return (
+        <div
+            className={`guess-timer-bar${remaining <= 15 ? ' guess-timer-bar--urgent' : ''}`}
+            role="timer"
+            aria-label={`Time left to guess: ${label}`}
+        >
+            <span className="guess-timer-bar__label" aria-hidden="true">
+                {label}
+            </span>
+            <div className="guess-timer-bar__track" aria-hidden="true">
+                <div className="guess-timer-bar__fill" style={{ width: `${fraction * 100}%` }} />
+            </div>
+        </div>
+    );
+}
+
 function GameGuessingView({
     state,
+    guessRemaining,
+    guessTotalSeconds,
     onSelectLocation,
     onSubmitGuess,
 }: {
     state: GameState;
+    guessRemaining: number;
+    guessTotalSeconds: number;
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
 }) {
@@ -137,6 +168,7 @@ function GameGuessingView({
                         'Select a location…'
                     )}
                 </button>
+                <GuessTimerBar remaining={guessRemaining} total={guessTotalSeconds} />
             </div>
         </GameOverlay>
     );
@@ -205,7 +237,19 @@ function GameResultsView({
                                             <span>{(guess.distance / 1000).toFixed(1)} km away</span>
                                         )}
                                     </div>
-                                    <b>{guess.score} pts</b>
+                                    <div className="score-card__value">
+                                        <b>{guess.score} pts</b>
+                                        {guess.elo_delta !== 0 && (
+                                            <span
+                                                className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
+                                                title="Weekly Elo change"
+                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} weekly Elo`}
+                                            >
+                                                {guess.elo_delta > 0 ? '+' : ''}
+                                                {guess.elo_delta} Elo
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -242,12 +286,31 @@ function GameResultsView({
     );
 }
 
+// GameMissedView is the terminal view after the server guess deadline passes
+// without a submitted guess: the challenge counts as 0 points.
+function GameMissedView({ onClose }: { onClose: () => void }) {
+    return (
+        <GameOverlay label="Challenge missed">
+            <div className="missed-view fade-in">
+                <img src="/timer_icon.png" alt="" className="skip-icon" />
+                <h2>You did not guess in time</h2>
+                <p className="missed-score">0 points</p>
+                <button className="next-button btn btn-primary" onClick={onClose}>
+                    Close
+                </button>
+            </div>
+        </GameOverlay>
+    );
+}
+
 /** The phase view for the current game state, plus the optional feedback
  *  overlay. Returns null while idle so the game renders nothing. */
 export default function GameView({
     state,
     loadingMedia,
     remaining,
+    guessRemaining,
+    guessTotalSeconds,
     serverNowMs,
     feedback,
     currentUserId,
@@ -268,7 +331,18 @@ export default function GameView({
             break;
         case 'guessing':
         case 'submitting':
-            view = <GameGuessingView state={state} onSelectLocation={onSelectLocation} onSubmitGuess={onSubmitGuess} />;
+            view = (
+                <GameGuessingView
+                    state={state}
+                    guessRemaining={guessRemaining}
+                    guessTotalSeconds={guessTotalSeconds}
+                    onSelectLocation={onSelectLocation}
+                    onSubmitGuess={onSubmitGuess}
+                />
+            );
+            break;
+        case 'missed':
+            view = <GameMissedView onClose={onClose} />;
             break;
         case 'results':
             view = (

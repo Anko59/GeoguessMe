@@ -83,8 +83,11 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/frontend.dev.Dockerfile
-    ports: ["127.0.0.1:5173:5173"]
-    volumes: ["./frontend:/app/frontend", "/app/frontend/node_modules"]
+    ports: ["5173:5173"]
+    command: ["sh", "-c", "npm install --prefer-offline --no-audit && npm run dev -- --host"]
+    volumes:
+      - "./frontend:/app/frontend"
+      - "frontend-node-modules:/app/frontend/node_modules"
     environment: { CHOKIDAR_USEPOLLING: "true" }
     depends_on:
       backend: { condition: service_healthy }
@@ -266,3 +269,4 @@ volumes:
   geoguessme_dev_db:
   geoguessme_dev_minio:
   geoguessme_dev_keycloak_db:
+  frontend-node-modules:

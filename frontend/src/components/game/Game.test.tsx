@@ -116,12 +116,14 @@ describe('Game', () => {
                     media_type: 'image/jpeg',
                     accepted_at: new Date(serverTime - 10000).toISOString(),
                     view_expires_at: new Date(serverTime).toISOString(),
+                    guess_expires_at: new Date(serverTime + 120000).toISOString(),
                     server_time: new Date(serverTime).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(serverTime + 10000).toISOString(),
+                    guess_expires_at: new Date(serverTime + 130000).toISOString(),
                     server_time: new Date(serverTime).toISOString(),
                 },
             });
@@ -156,6 +158,7 @@ describe('Game', () => {
                         long: 2.3,
                         score: 100,
                         distance: 1500,
+                        elo_delta: 3,
                         created_at: new Date().toISOString(),
                     },
                     // Another player's guessed point and distance are omitted
@@ -167,6 +170,7 @@ describe('Game', () => {
                         username: 'bob',
                         avatar: 'b.png',
                         score: 80,
+                        elo_delta: -5,
                         created_at: new Date().toISOString(),
                     },
                 ],
@@ -189,6 +193,10 @@ describe('Game', () => {
         const bobRow = screen.getByText('bob').closest('.score-card') as HTMLElement;
         expect(bobRow).not.toHaveTextContent(/km away/);
         expect(bobRow).toHaveTextContent('80 pts');
+        expect(screen.getByLabelText('Gained 3 weekly Elo')).toHaveClass('elo-delta--gain');
+        expect(screen.getByLabelText('Gained 3 weekly Elo')).toHaveTextContent('+3 Elo');
+        expect(screen.getByLabelText('Lost 5 weekly Elo')).toHaveClass('elo-delta--loss');
+        expect(screen.getByLabelText('Lost 5 weekly Elo')).toHaveTextContent('-5 Elo');
     });
 
     it('derives the reveal duration from location_reveals_at instead of hardcoding it', async () => {
@@ -282,11 +290,13 @@ describe('Game', () => {
                     media_url: 'https://example.test/photo.jpg',
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });
@@ -321,6 +331,7 @@ describe('Game', () => {
                     accepted_at: new Date(Date.now() - 11000).toISOString(),
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() - 1000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 119000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
@@ -385,12 +396,14 @@ describe('Game', () => {
                     media_type: 'image/jpeg',
                     accepted_at: new Date(Date.now() - 5000).toISOString(),
                     view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 125000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 5000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 125000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });
@@ -450,11 +463,13 @@ describe('Game', () => {
                     media_type: 'video/webm',
                     server_time: new Date().toISOString(),
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                 },
             })
             .mockResolvedValueOnce({
                 data: {
                     view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                    guess_expires_at: new Date(Date.now() + 122000).toISOString(),
                     server_time: new Date().toISOString(),
                 },
             });

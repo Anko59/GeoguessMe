@@ -72,6 +72,7 @@ type Config struct {
 	ChallengeTTL    time.Duration
 	LocationHide    time.Duration
 	ViewWindow      time.Duration
+	GuessWindow     time.Duration
 	PhotoRetention  time.Duration
 	UploadDir       string
 
@@ -256,7 +257,7 @@ func (c *Config) Validate() error {
 	if c.UploadMaxBytes <= 0 || c.AvatarMaxBytes <= 0 || c.UploadMaxPixels == 0 {
 		problems = append(problems, "upload limits must be positive")
 	}
-	if c.ChallengeTTL <= 0 || c.ViewWindow <= 0 || c.LocationHide <= 0 || c.PhotoRetention <= 0 {
+	if c.ChallengeTTL <= 0 || c.ViewWindow <= 0 || c.GuessWindow <= 0 || c.LocationHide <= 0 || c.PhotoRetention <= 0 {
 		problems = append(problems, "challenge timing values must be positive")
 	}
 	if c.ViewWindow >= c.ChallengeTTL {

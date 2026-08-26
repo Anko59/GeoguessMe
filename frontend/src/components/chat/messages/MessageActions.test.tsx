@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../../types';
 import MessageActions from './MessageActions';
+import { reactionOptions } from '../reactionOptions';
 
 const message = (overrides: Partial<Message> = {}): Message => ({
     id: 'message-1',
@@ -15,19 +16,34 @@ const message = (overrides: Partial<Message> = {}): Message => ({
     ...overrides,
 });
 
+const actionsProps = (
+    overrides: Partial<React.ComponentProps<typeof MessageActions>> = {},
+): React.ComponentProps<typeof MessageActions> => ({
+    message: message(),
+    visible: true,
+    reactionPending: null,
+    onReply: vi.fn(),
+    onReaction: vi.fn(),
+    reactionOptions,
+    ...overrides,
+});
+
 const renderActions = (overrides: Partial<React.ComponentProps<typeof MessageActions>> = {}) =>
-    render(
-        <MessageActions
-            message={message()}
-            visible
-            reactionPending={null}
-            onReply={vi.fn()}
-            onReaction={vi.fn()}
-            {...overrides}
-        />,
-    );
+    render(<MessageActions {...actionsProps(overrides)} />);
+
+beforeEach(() => {
+    // The panel scrolls itself into view when it opens; jsdom has no layout.
+    Element.prototype.scrollIntoView = vi.fn();
+});
 
 describe('MessageActions', () => {
+    it('is a labelled group and scrolls into view once revealed', () => {
+        const { rerender } = render(<MessageActions {...actionsProps()} visible={false} />);
+        expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+        rerender(<MessageActions {...actionsProps()} visible />);
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' });
+        expect(screen.getByRole('group', { name: 'Message actions' })).toBeInTheDocument();
+    });
     it('renders the reply button with the sender name and fires onReply', () => {
         const onReply = vi.fn();
         renderActions({ onReply });

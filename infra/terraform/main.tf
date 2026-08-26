@@ -209,7 +209,10 @@ resource "cloudflare_zero_trust_access_application" "dev_health" {
     name       = "Owner email OTP"
     decision   = "allow"
     precedence = 1
-    include    = [{ email = { email = var.access_email } }]
+    include = concat(
+      [{ email = { email = var.access_email } }],
+      [for email in sort(var.dev_access_emails) : { email = { email = email } }]
+    )
     }, {
     name       = "Development health service token"
     decision   = "non_identity"

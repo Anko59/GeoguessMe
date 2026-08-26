@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../../api';
@@ -30,23 +30,10 @@ const renderChat = (props: Partial<React.ComponentProps<typeof Chat>> = {}) =>
         </MemoryRouter>,
     );
 
-const mockMatchMedia = (matches: boolean) => {
-    window.matchMedia = ((query: string) => ({
-        matches,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-};
-
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] } as never);
     Element.prototype.scrollIntoView = vi.fn();
-    mockMatchMedia(true);
 });
 
 describe('Chat', () => {
@@ -218,8 +205,8 @@ describe('Chat', () => {
             ],
         });
         // Someone else answered ch1; the viewer has not, so it stays a new challenge.
-        const othersChallenge = container.querySelector('button[data-photo-id="photo-1"]') as HTMLButtonElement;
-        const myChallenge = container.querySelector('button[data-photo-id="photo-2"]') as HTMLButtonElement;
+        const othersChallenge = container.querySelector('.photo-challenge[data-photo-id="photo-1"]') as HTMLElement;
+        const myChallenge = container.querySelector('.photo-challenge[data-photo-id="photo-2"]') as HTMLElement;
         expect(othersChallenge).not.toHaveClass('resolved');
         expect(othersChallenge).toHaveTextContent('New challenge');
         expect(myChallenge).toHaveClass('resolved');
@@ -241,7 +228,7 @@ describe('Chat', () => {
         // Opening the results of an old challenge sets the local status to
         // 'results'; the card must not flip back to the yellow 'New challenge'
         // state until the next refresh.
-        const card = container.querySelector('button[data-photo-id="photo-4"]') as HTMLButtonElement;
+        const card = container.querySelector('.photo-challenge[data-photo-id="photo-4"]') as HTMLElement;
         expect(card).toHaveClass('resolved');
         expect(card).toHaveTextContent('Resolved challenge');
     });
@@ -259,7 +246,7 @@ describe('Chat', () => {
                 }),
             ],
         });
-        const card = container.querySelector('button[data-photo-id="photo-5"]') as HTMLButtonElement;
+        const card = container.querySelector('.photo-challenge[data-photo-id="photo-5"]') as HTMLElement;
         expect(card).not.toHaveClass('resolved');
         expect(card).toHaveTextContent('Challenge sent');
     });
@@ -276,7 +263,9 @@ describe('Chat', () => {
                 }),
             ],
         });
-        expect(container.querySelector('button[data-photo-id="photo-3"]')).toHaveTextContent('Challenge expired');
+        expect(container.querySelector('.photo-challenge[data-photo-id="photo-3"]')).toHaveTextContent(
+            'Challenge expired',
+        );
     });
 
     it('shows a round countdown of the challenge deadline', () => {
@@ -326,13 +315,13 @@ describe('Chat', () => {
             </MemoryRouter>,
         );
         expect(screen.getByRole('status')).toHaveTextContent('Connected');
-        fireEvent.click(screen.getByRole('button', { name: /challenge/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'View results' }));
         expect(onChallenge).toHaveBeenCalled();
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: '  hi  ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledWith(JSON.stringify({ content: 'hi' }));
 
-        fireEvent.mouseEnter(screen.getByText('Hello').closest('.message-hover-target') as HTMLElement);
+        fireEvent.click(screen.getByText('Hello'));
         fireEvent.click(screen.getAllByRole('button', { name: 'Reply to bob' })[0]);
         expect(screen.getAllByRole('status')[1]).toHaveTextContent('Replying to bob');
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'same here' } });
@@ -354,69 +343,63 @@ describe('Chat', () => {
         expect(screen.getByText('No messages yet')).toBeInTheDocument();
     });
 
-    it('reveals actions only when hovering the message bubble, not the row', () => {
+    it('toggles actions from the message content only, not from the row', () => {
         renderChat({ connectionStatus: 'connected' });
         const reply = screen.getByRole('button', { name: 'Reply to bob' });
         const row = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
-        const bubble = screen.getByText('Hello').closest('.message-hover-target') as HTMLElement;
+        const bubble = screen.getByText('Hello').closest('.message-anchor') as HTMLElement;
 
-        fireEvent.mouseEnter(row);
+        // Hovering never opens the panel on any device, and neither does a tap
+        // on the row outside the message itself.
+        fireEvent.mouseEnter(bubble);
+        expect(reply).toHaveAttribute('tabindex', '-1');
+        fireEvent.click(row);
         expect(reply).toHaveAttribute('tabindex', '-1');
 
-        fireEvent.mouseEnter(bubble);
+        // A tap or click on the message opens, and repeats close again.
+        fireEvent.click(bubble);
         expect(reply).toHaveAttribute('tabindex', '0');
+        fireEvent.click(bubble);
+        expect(reply).toHaveAttribute('tabindex', '-1');
     });
 
-    it('requires a one-second long press on touch instead of opening on tap', () => {
-        mockMatchMedia(false);
-        vi.useFakeTimers();
-        try {
-            renderChat({ connectionStatus: 'connected' });
-            const reply = screen.getByRole('button', { name: 'Reply to bob' });
-            const bubble = screen.getByText('Hello').closest('.message-hover-target') as HTMLElement;
+    it('opens actions on a plain tap and dismisses them outside the message', () => {
+        renderChat({ connectionStatus: 'connected' });
+        const reply = screen.getByRole('button', { name: 'Reply to bob' });
+        const bubble = screen.getByText('Hello').closest('.message-anchor') as HTMLElement;
 
-            // A tap (synthetic hover plus a quick pointer sequence) must not open actions.
-            fireEvent.mouseEnter(bubble);
-            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
-            fireEvent.pointerUp(bubble);
-            expect(reply).toHaveAttribute('tabindex', '-1');
+        // A plain tap on the message opens the panel immediately: no long
+        // press, swipe, or hover gesture is required on any device.
+        fireEvent.click(bubble);
+        expect(reply).toHaveAttribute('tabindex', '0');
 
-            // A short hold is still too short.
-            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
-            act(() => {
-                vi.advanceTimersByTime(500);
-            });
-            fireEvent.pointerUp(bubble);
-            expect(reply).toHaveAttribute('tabindex', '-1');
+        // Tapping outside the open message dismisses the panel again.
+        fireEvent.pointerDown(document.body);
+        expect(reply).toHaveAttribute('tabindex', '-1');
 
-            // Holding for a full second opens them.
-            fireEvent.pointerDown(bubble, { isPrimary: true, clientX: 10, clientY: 10 });
-            act(() => {
-                vi.advanceTimersByTime(1000);
-            });
-            expect(reply).toHaveAttribute('tabindex', '0');
+        // Escape closes the open panel as well.
+        fireEvent.click(bubble);
+        expect(reply).toHaveAttribute('tabindex', '0');
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(reply).toHaveAttribute('tabindex', '-1');
 
-            // Tapping elsewhere dismisses the actions.
-            fireEvent.pointerDown(document.body);
-            expect(reply).toHaveAttribute('tabindex', '-1');
-
-            // A hardware-keyboard user on the same touch device can still
-            // reveal the actions without a hover-capable pointer.
-            fireEvent.focus(bubble.closest('[data-message-id]') as HTMLElement);
-            expect(reply).toHaveAttribute('tabindex', '0');
-        } finally {
-            vi.useRealTimers();
-        }
+        // A hardware-keyboard user toggles the same panel with Enter on the
+        // focused message row.
+        const row = bubble.closest('[data-message-id]') as HTMLElement;
+        fireEvent.keyDown(row, { key: 'Enter' });
+        expect(reply).toHaveAttribute('tabindex', '0');
+        fireEvent.keyDown(row, { key: 'Enter' });
+        expect(reply).toHaveAttribute('tabindex', '-1');
     });
 
-    it('reveals message actions and saves reactions', async () => {
+    it('reveals message actions on a message tap and saves reactions', async () => {
         const put = vi.spyOn(api, 'put').mockResolvedValue({
             data: message({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
         });
         const onMessageUpdated = vi.fn();
         renderChat({ connectionStatus: 'connected', onMessageUpdated });
 
-        fireEvent.mouseEnter(screen.getByText('Hello').closest('.message-hover-target') as HTMLElement);
+        fireEvent.click(screen.getByText('Hello'));
         fireEvent.click(screen.getByRole('button', { name: 'React with thumbs up' }));
 
         await waitFor(() =>
@@ -425,6 +408,9 @@ describe('Chat', () => {
         expect(onMessageUpdated).toHaveBeenCalledWith(
             expect.objectContaining({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
         );
+        // A saved reaction closes the panel and returns focus to the message.
+        expect(screen.getByRole('button', { name: 'Reply to bob' })).toHaveAttribute('tabindex', '-1');
+        expect(screen.getByText('Hello').closest('[data-message-id]')).toHaveFocus();
     });
 
     it('shows the members who selected each reaction', () => {
@@ -450,18 +436,19 @@ describe('Chat', () => {
         expect(container.querySelector('.reaction-chip-image')).toHaveAttribute('src', '/reactions/like.png');
     });
 
-    it('reveals actions for a horizontal swipe but ignores vertical scrolling', () => {
+    it('keeps the panel closed while the message list is scrolled', () => {
         renderChat({ connectionStatus: 'connected' });
         const messageElement = screen.getByText('Hello').closest('[data-message-id]') as HTMLElement;
         const reply = screen.getByRole('button', { name: 'Reply to bob' });
 
-        fireEvent.pointerDown(messageElement, { isPrimary: true, clientX: 10, clientY: 10 });
-        fireEvent.pointerMove(messageElement, { isPrimary: true, clientX: 12, clientY: 45 });
-        expect(reply).toHaveAttribute('tabindex', '-1');
-
+        // Vertical and horizontal drags over a message are scroll gestures,
+        // not panel toggles: only a tap or click that stays on the message
+        // (a real click event) opens the panel.
         fireEvent.pointerDown(messageElement, { isPrimary: true, clientX: 10, clientY: 10 });
         fireEvent.pointerMove(messageElement, { isPrimary: true, clientX: 45, clientY: 12 });
-        expect(reply).toHaveAttribute('tabindex', '0');
+        fireEvent.pointerMove(messageElement, { isPrimary: true, clientX: 12, clientY: 60 });
+        fireEvent.pointerUp(messageElement);
+        expect(reply).toHaveAttribute('tabindex', '-1');
     });
 
     it('uploads a selected photo through the authenticated chat-media endpoint', async () => {

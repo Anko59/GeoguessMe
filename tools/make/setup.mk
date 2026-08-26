@@ -13,7 +13,7 @@ COMPOSE_IDENTITY := docker compose -p geoguessme-identity -f deployment/compose.
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
-TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform terraform sh -ec
+TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
 TOOLS_USER := --user $(shell id -u):$(shell id -g)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
@@ -23,7 +23,10 @@ GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 QA_REPORT_DIR ?= qa-artifacts
-QA_BUDGET ?= full
+# Default QA budget tier: fast (15 min) for routine post-deploy acceptance.
+# Use `make qa-agent-full` before a release PR and `make qa-agent-nightly` for
+# the extended nightly session.
+QA_BUDGET ?= fast
 QA_RUNTIME ?= codex
 QA_BUILD_SHA ?= $(shell git rev-parse origin/dev 2>/dev/null || git rev-parse HEAD)
 
@@ -36,6 +39,12 @@ DOCKER_COMPOSE_BUILD_FLAGS ?=
 GEOGUESSME_GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null))
 GIT_DIR_WORKTREE := $(abspath $(shell git rev-parse --git-dir 2>/dev/null))
 export GEOGUESSME_GIT_COMMON_DIR GIT_DIR_WORKTREE
+
+# The Terraform service bind-mounts the host provider cache. Create it as the
+# invoking user on every invocation, before any container starts: Docker would
+# otherwise auto-create a root-owned bind source that the non-root terraform
+# container (TOOLS_USER) cannot write to.
+GEOGUESSME_TF_PLUGIN_CACHE := $(shell mkdir -p .tools-cache/terraform-plugins)
 ARGS ?=
 
 ##@ Setup
@@ -64,6 +73,9 @@ bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR ga
 bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools
+
+bootstrap-operational: ## Prepare only the Go tool images needed by the operational gate.
+	$(COMPOSE_TOOLS) build go-tools go-security
 
 bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
 	@mkdir -p frontend/node_modules
@@ -103,12 +115,11 @@ tools-clean: ## Remove only project-specific tool containers, networks, and cach
 	$(COMPOSE_TOOLS) down --volumes --remove-orphans
 
 ##@ Development
-
 dev-local-state: ## Create ignored local runtime directories used by Compose bind mounts.
 	mkdir -p .local/caddy
 
 dev: dev-local-state ## Start the Docker development stack.
-	$(COMPOSE_DEV) up -d --build --renew-anon-volumes
+	$(COMPOSE_DEV) up -d --build
 
 up: dev ## Alias for dev.
 

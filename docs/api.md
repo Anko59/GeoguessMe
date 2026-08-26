@@ -54,18 +54,22 @@ with standard competition ranking (equal totals share a rank), and
 never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
 average guess score, and `global_elo_rank` ranks the player among everyone who
 has been compared against another guesser on a shared challenge, ordered by Elo
-rating (`elo` is 0 and the rank is 0 for a player with no such challenge). Each
-rank object carries a `next_rank` with the following rank's name and badge key
-(omitted at the highest rank). Group leaderboard entries include the same rank
-object beneath each player's name while their `score` remains the selected
-period's sum; entries also carry `average_score` and `elo` for the same period.
+rating (`elo` is 0 and the rank is 0 for a player with no such challenge). The
+global rating is an all-time ladder and moves with a small update factor, so it
+tracks long-run skill rather than the most recent challenges. Each rank object
+carries a `next_rank` with the following rank's name and badge key (omitted at
+the highest rank). Group leaderboard entries include the same rank object
+beneath each player's name while their `score` remains the selected period's
+sum; entries also carry `average_score` and `elo` for the same period.
 
 The group leaderboard is ranked by one of three metrics — `total` (period score
 sum, the default), `average` (period average score), or `elo` (Elo rating
 computed from the period's challenges) — selected with the `metric` query
 parameter, and can be scoped to a calendar week, month, or all time with
 `period`. Elo ratings are recomputed from guess history on every read, so a late
-guess on an old challenge retroactively moves the whole ladder.
+guess on an old challenge retroactively moves the whole ladder. Each period uses
+its own Elo update factor: weekly ladders move fastest (`K = 40`), monthly
+ladders moderately (`K = 20`), and all-time ladders slowest (`K = 8`).
 
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must
@@ -109,6 +113,7 @@ page reachable from chat and leaderboards.
 | GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
 | PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`, backward via `before_id`)                    |
+| GET    | `/api/v1/group/reaction-usage?group_id=`                     | Bearer | Aggregate reaction counts ordered by popularity (member only)                          |
 | PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
 | DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                               |
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
@@ -195,6 +200,7 @@ Available metrics:
 | `invalid_request`       | Request body malformed                         |
 | `challenge_expired`     | Challenge is past its TTL                      |
 | `viewing_window_open`   | Must wait for view window to end               |
+| `guess_time_expired`    | Guess deadline passed: did not guess in time   |
 | `media_expired`         | Viewing window expired or media already viewed |
 | `media_removed`         | Original media no longer available             |
 | `results_not_available` | Results not yet visible                        |

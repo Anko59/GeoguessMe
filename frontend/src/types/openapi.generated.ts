@@ -503,6 +503,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/group/reaction-usage': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get aggregate reaction usage for a group.
+         * @description Returns counts for reactions used in the group, ordered by popularity.
+         */
+        get: operations['getGroupReactionUsage'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/message-reactions/{messageID}': {
         parameters: {
             query?: never;
@@ -836,7 +856,7 @@ export interface components {
             total_points: number;
             guess_count: number;
             average_score: number;
-            /** @description Global Elo rating; 0 while never compared against another guesser. */
+            /** @description Global all-time Elo rating, updated with a small factor so it reflects long-run skill; 0 while never compared against another guesser. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
             global_rank: components['schemas']['GlobalRank'];
@@ -923,7 +943,7 @@ export interface components {
             average_score: number;
             /** @description Lifetime guess points used for rank progression. */
             total_points: number;
-            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. */
+            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. The update factor depends on the period: weekly ladders move fastest, monthly moderately, and all-time slowest. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
         };
@@ -940,7 +960,7 @@ export interface components {
             enabled: boolean;
         };
         /**
-         * @description Reaction identity. The ten keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
+         * @description Reaction identity. The twenty-four named keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
          * @enum {string}
          */
         ReactionKey:
@@ -954,6 +974,20 @@ export interface components {
             | 'mind-blown'
             | 'wrong-way'
             | 'vacation'
+            | 'dislike'
+            | 'cry'
+            | 'kiss'
+            | 'wink'
+            | 'grin'
+            | 'heart-eyes'
+            | 'sunglasses'
+            | 'angry'
+            | 'confused'
+            | 'sleepy'
+            | 'clap'
+            | 'pray'
+            | 'fire'
+            | 'party'
             | '👍'
             | '❤️'
             | '😂'
@@ -1020,6 +1054,10 @@ export interface components {
             /** @description Opaque cursor strictly after the last message of the page; the reconnect catch-up anchor (empty for an empty page) */
             stable_cursor?: string | null;
         };
+        ReactionUsage: {
+            reaction: components['schemas']['ReactionKey'];
+            count: number;
+        };
         /** @description Supply the reaction key to set or remove. */
         MessageReactionRequest: {
             reaction: components['schemas']['ReactionKey'];
@@ -1067,6 +1105,11 @@ export interface components {
             view_expires_at: string;
             /** Format: date-time */
             guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
+             */
+            guess_expires_at: string;
             /** Format: date-time */
             challenge_expires_at: string;
             /** Format: date-time */
@@ -1077,6 +1120,11 @@ export interface components {
             view_expires_at: string;
             /** Format: date-time */
             guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
+             */
+            guess_expires_at: string;
             /** Format: date-time */
             server_time: string;
         };
@@ -1113,6 +1161,8 @@ export interface components {
              */
             long?: number;
             score: number;
+            /** @description Signed change in the player's weekly Elo rating caused by this challenge; zero when the challenge has fewer than two guesses or was created before the current calendar week started. */
+            elo_delta: number;
             /** @description Omitted alongside the coordinates while the location is hidden. */
             distance?: number;
             /** Format: date-time */
@@ -2013,6 +2063,30 @@ export interface operations {
             403: components['responses']['ErrorResponse'];
         };
     };
+    getGroupReactionUsage: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reaction usage counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReactionUsage'][];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+        };
+    };
     setMessageReaction: {
         parameters: {
             query?: never;
@@ -2323,8 +2397,24 @@ export interface operations {
                 };
             };
             403: components['responses']['ErrorResponse'];
-            409: components['responses']['ErrorResponse'];
-            410: components['responses']['ErrorResponse'];
+            /** @description Viewing window is still open (viewing_window_open). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
+            /** @description Guess refused: the challenge expired (challenge_expired) or the guess window elapsed (guess_time_expired — the guesser did not guess in time). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
         };
     };
     getChallengeResults: {

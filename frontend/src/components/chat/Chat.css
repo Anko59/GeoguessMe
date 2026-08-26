@@ -167,7 +167,10 @@
     color: var(--brand-blue-accessible);
 }
 
-.message-hover-target {
+/* The anchor for the actions overlay; it hugs the message content, so the
+   overlay rides along with the bubble or challenge card. */
+.message-anchor {
+    position: relative;
     min-width: 0;
 }
 
@@ -439,9 +442,15 @@
 }
 
 @media (hover: hover) {
-    .message-content.photo-challenge.clickable:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(255, 182, 0, 0.28);
+    /* The message content toggles the reply/reaction panel, so it reads as
+       clickable where a hover pointer exists. */
+    .message-anchor {
+        cursor: pointer;
+    }
+
+    .message-container .start-challenge-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(255, 182, 0, 0.3);
     }
 }
 

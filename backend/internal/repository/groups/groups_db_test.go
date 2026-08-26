@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"geoguessme/internal/elo"
 	"geoguessme/internal/models"
 
 	"github.com/jackc/pgx/v5"
@@ -305,5 +306,54 @@ func TestSortLeaderboardByMetric(t *testing.T) {
 	SortLeaderboard(entries, LeaderboardMetricElo)
 	if entries[0].UserID != "c" || entries[1].UserID != "b" {
 		t.Fatalf("elo order = %+v", entries)
+	}
+}
+
+func TestLeaderboardFactorMapping(t *testing.T) {
+	cases := map[LeaderboardPeriod]elo.Factor{
+		LeaderboardWeek:    elo.FactorWeekly,
+		LeaderboardMonth:   elo.FactorMonthly,
+		LeaderboardAllTime: elo.FactorAllTime,
+	}
+	for period, want := range cases {
+		if got := leaderboardFactor(period); got != want {
+			t.Fatalf("leaderboardFactor(%s) = %v, want %v", period, got, want)
+		}
+	}
+}
+
+func TestWeeklyChallengeEloDeltas(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*AND p\.created_at >= \$1 ORDER BY`).
+		WithArgs(pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	deltas, err := repo.WeeklyChallengeEloDeltas(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("WeeklyChallengeEloDeltas = %v", err)
+	}
+	if deltas["alice"] != 20 || deltas["bob"] != -20 {
+		t.Fatalf("deltas = %+v, want alice: 20, bob: -20 (weekly factor)", deltas)
+	}
+}
+
+func TestWeeklyChallengeEloDeltasOutsideWeek(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	// The SQL window only returns this week's challenges, so a photo created
+	// before the week started is absent from the replay.
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*AND p\.created_at >= \$1 ORDER BY`).
+		WithArgs(pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p2", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p2", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	deltas, err := repo.WeeklyChallengeEloDeltas(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("WeeklyChallengeEloDeltas = %v", err)
+	}
+	if deltas != nil {
+		t.Fatalf("deltas = %+v, want nil for a challenge outside the weekly window", deltas)
 	}
 }

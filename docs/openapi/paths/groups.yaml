@@ -291,6 +291,25 @@ messages:
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MessagesPage" } } }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+reactionUsage:
+  get:
+    operationId: getGroupReactionUsage
+    summary: Get aggregate reaction usage for a group.
+    description: Returns counts for reactions used in the group, ordered by popularity.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "200":
+        description: Reaction usage counts.
+        content:
+          {
+            application/json: { schema: { type: array, items: { $ref: "../components/schemas.yaml#/ReactionUsage" } } },
+          }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 messageReaction:
   put:
     operationId: setMessageReaction
@@ -358,7 +377,7 @@ messageMediaUpload:
       "202":
         {
           description: "Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}.",
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-media.yaml#/MediaProcessingJob" } } },
         }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }

@@ -31,7 +31,7 @@ upload:
       "202":
         {
           description: "Video accepted for asynchronous processing; poll the returned job at /media-processing/{id}.",
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-media.yaml#/MediaProcessingJob" } } },
         }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
@@ -121,8 +121,16 @@ guess:
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
-      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
-      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409":
+        {
+          description: "Viewing window is still open (viewing_window_open).",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/APIError" } } },
+        }
+      "410":
+        {
+          description: "Guess refused: the challenge expired (challenge_expired) or the guess window elapsed (guess_time_expired — the guesser did not guess in time).",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/APIError" } } },
+        }
 
 results:
   get:
@@ -153,7 +161,7 @@ mediaProcessing:
       "200":
         {
           description: "Job status; the result is present when ready, the error_code only when failed. Storage keys and upload metadata are never exposed.",
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/MediaProcessingJob" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-media.yaml#/MediaProcessingJob" } } },
         }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

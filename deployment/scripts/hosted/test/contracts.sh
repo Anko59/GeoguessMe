@@ -120,7 +120,7 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAG
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
-assert_contains "$ROOT/.release-version" '0.3.0'
+assert_contains "$ROOT/.release-version" '0.3.2'
 assert_contains "$ROOT/.github/workflows/release.yml" 'release_version=$(tr -d'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'

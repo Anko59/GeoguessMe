@@ -1,6 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { expectConnected, signupViaUI, uniqueGroup, installDeterministicCamera, newAuthContext } from './helpers';
+import {
+    expectConnected,
+    signupViaUI,
+    uniqueGroup,
+    installDeterministicCamera,
+    newAuthContext,
+} from './support/helpers';
 import type { Browser, BrowserContext, BrowserContextOptions } from '@playwright/test';
 
 async function expectAccessible(page: Page): Promise<void> {

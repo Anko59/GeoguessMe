@@ -14,9 +14,11 @@ make dev
 
 The development stack runs PostgreSQL, MinIO, Mailpit, a Go backend hot-reload
 container, and a Vite frontend container. Named application volumes preserve
-database and media data across make down and make restart. Each make dev rebuild
-renews the frontend's anonymous dependency volume so package-lock changes are
-available to Vite without deleting persistent application data.
+database, media, and frontend dependency data across make down and make restart.
+The single named frontend dependency volume is reused across rebuilds, so
+repeated make dev invocations do not strand anonymous node_modules volumes.
+Frontend startup updates that volume from package-lock.json before starting
+Vite, keeping dependency changes current without allocating another volume.
 
 To launch the complete identity path instead, use:
 

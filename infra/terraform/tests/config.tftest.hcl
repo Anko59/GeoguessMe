@@ -23,6 +23,7 @@ run "hosted_plan" {
     dev_health_token_id          = "11111111-1111-4111-8111-111111111111"
     dev_deploy_token_id          = "22222222-2222-4222-8222-222222222222"
     prod_deploy_token_id         = "33333333-3333-4333-8333-333333333333"
+    dev_access_emails            = ["developer@example.test"]
     enable_dmarc_forwarding      = true
   }
 
@@ -128,9 +129,15 @@ run "hosted_plan" {
 
   assert {
     condition = (
-      cloudflare_zero_trust_access_application.dev_health.domain == "dev.geoguessme.com"
+      cloudflare_zero_trust_access_application.dev_health.domain == "dev.geoguessme.com" &&
+      length(cloudflare_zero_trust_access_application.dev_health.policies) == 2 &&
+      length([
+        for p in cloudflare_zero_trust_access_application.dev_health.policies : p
+        if p.name == "Owner email OTP" &&
+        contains([for inc in p.include : try(inc.email.email, "")], "developer@example.test")
+      ]) == 1
     )
-    error_message = "Access must protect the development hostname."
+    error_message = "Dev Access must allow approved human identities and its service token."
   }
 
   assert {
@@ -138,7 +145,7 @@ run "hosted_plan" {
       cloudflare_zero_trust_access_application.dev_deployment.domain == "deploy.geoguessme.com" &&
       length(cloudflare_zero_trust_access_application.dev_deployment.policies) == 2
     )
-    error_message = "Dev deployment Access must allow both the owner and the dev deployment service token."
+    error_message = "Dev deployment Access must allow its owner and service token."
   }
 
   assert {

@@ -32,7 +32,7 @@ players), but every step treats the mapping as durable production data.
    database backup.
 2. Record every current user ID and ownership count before applying the additive
    identity migration. Keep this export with restricted release evidence.
-3. Apply migration `021_oidc_identities.sql` with `OIDC_ENABLED=false`.
+3. Apply migration `023_oidc_identities.sql` with `OIDC_ENABLED=false`.
 4. Deploy Keycloak, OAuth2 Proxy, and the compatible application build. Confirm
    that legacy signup, login, and gameplay are unchanged while OIDC is off.
 5. Configure the production and dev clients separately. Production callbacks and
@@ -73,7 +73,7 @@ ORDER BY u.created_at, u.id;
 If the deployed schema uses a renamed membership table, adapt only that
 read-only evidence query; never change production schema to fit the example.
 
-Run the aggregate application inventory after migration 021:
+Run the aggregate application inventory after migration 023:
 
 ```bash
 make prod-legacy-identity-plan
@@ -305,7 +305,7 @@ OIDC-off compatibility UI and retained legacy-password access for linked and
 unlinked legacy accounts whose hash still exists, without unlinking anyone.
 Accounts created only in Keycloak after launch require Keycloak to return.
 Account deletion still attempts upstream-first Keycloak deletion; if Keycloak is
-unavailable it fails closed and keeps local data. Do not roll back migration 021
+unavailable it fails closed and keeps local data. Do not roll back migration 023
 or delete identity mappings. Restore a database backup only for demonstrated
 data corruption; ordinary identity or provider outages require an application or
 configuration rollback, not a schema rollback.

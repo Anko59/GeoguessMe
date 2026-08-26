@@ -1,3 +1,8 @@
+# Development pipeline. The complete dev gate runs as four parallel jobs
+# (quality, backend integration, Chromium E2E, operational rehearsals); the
+# full browser matrix and the load profile remain part of the complete nightly
+# gate. Publishing waits for all four, then deploys the exact
+# signed digest.
 name: Deploy development
 
 on:
@@ -12,13 +17,13 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Development verification gate
+  quality:
+    name: Quality gate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -28,15 +33,125 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: /tmp/.buildx-cache
-          key: docker-${{ runner.os }}-dev-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
-          restore-keys: docker-${{ runner.os }}-dev-
+          key: docker-${{ runner.os }}-dev-quality-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: docker-${{ runner.os }}-dev-quality-
       - run: make bootstrap
-      - name: Run the complete development gate once
+      - name: Run the quality gate
         env:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
-          make verify \
+          make quality \
             DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+      - name: Save Docker cache
+        if: always()
+        run: |
+          if [[ -d /tmp/.buildx-cache-new ]]; then
+            rm -rf /tmp/.buildx-cache
+            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          fi
+
+  integration:
+    name: Backend integration gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        id: buildx
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              gc = true
+              gckeepstorage = 20000000000
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-dev-integration-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: docker-${{ runner.os }}-dev-integration-
+      - run: make bootstrap-integration
+      - name: Run backend integration
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+        run: |
+          make pr-backend \
+            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+      - name: Save Docker cache
+        if: always()
+        run: |
+          if [[ -d /tmp/.buildx-cache-new ]]; then
+            rm -rf /tmp/.buildx-cache
+            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          fi
+
+  e2e:
+    name: Chromium E2E gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        id: buildx
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              gc = true
+              gckeepstorage = 20000000000
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-dev-e2e-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: docker-${{ runner.os }}-dev-e2e-
+      - run: make bootstrap-e2e
+      - name: Run Chromium E2E (full matrix stays on nightly)
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+        run: |
+          GEOGUESSME_E2E_PROJECTS=desktop make test-e2e \
+            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+      - name: Save Docker cache
+        if: always()
+        run: |
+          if [[ -d /tmp/.buildx-cache-new ]]; then
+            rm -rf /tmp/.buildx-cache
+            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          fi
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: geoguessme-dev-e2e-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+
+  operational:
+    name: Operational gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        id: buildx
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              gc = true
+              gckeepstorage = 20000000000
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-dev-operational-${{ hashFiles('backend/go.sum', 'frontend/package-lock.json') }}
+          restore-keys: docker-${{ runner.os }}-dev-operational-
+      - name: Bootstrap operational tools
+        run: make bootstrap-operational
+      - name: Run operational rehearsals
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+        run: |
+          make operational-gate \
+            DOCKER_BUILD_FLAGS="--load --cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
       - name: Save Docker cache
         if: always()
         run: |
@@ -47,7 +162,7 @@ jobs:
 
   publish:
     name: Publish signed development images
-    needs: verify
+    needs: [quality, integration, e2e, operational]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -60,7 +175,7 @@ jobs:
       restic: ${{ steps.refs.outputs.restic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.5

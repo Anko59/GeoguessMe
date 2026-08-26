@@ -10,6 +10,7 @@ var (
 	ErrForbidden         = errors.New("forbidden")
 	ErrChallengeExpired  = errors.New("challenge expired")
 	ErrViewNotFinished   = errors.New("viewing window is still open")
+	ErrGuessTimeExpired  = errors.New("guess window expired")
 	ErrOwnPhoto          = errors.New("cannot use own challenge")
 	ErrAlreadyGuessed    = errors.New("guess already submitted")
 	ErrInvalidCoordinate = errors.New("invalid coordinate")

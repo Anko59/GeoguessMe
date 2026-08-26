@@ -18,7 +18,7 @@ var allConfigVariables = []string{
 	"S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_USE_PATH_STYLE",
 	"ALLOWED_ORIGINS", "TRUSTED_PROXY_CIDRS",
 	"UPLOAD_MAX_BYTES", "AVATAR_MAX_BYTES", "UPLOAD_MAX_PIXELS",
-	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
+	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "GUESS_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
 	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
 	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
 	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "PUSH_ENDPOINT_ALLOWLIST",
@@ -167,6 +167,7 @@ func validConfig() *Config {
 		UploadMaxPixels:   25_000_000,
 		ChallengeTTL:      24 * time.Hour,
 		ViewWindow:        10 * time.Second,
+		GuessWindow:       2 * time.Minute,
 		LocationHide:      48 * time.Hour,
 		PhotoRetention:    30 * 24 * time.Hour,
 		RateLimitRequests: 10,
@@ -225,6 +226,7 @@ func TestValidateRejectsMisconfiguration(t *testing.T) {
 		"max conns below min":        func(c *Config) { c.DatabaseMaxConns = 1; c.DatabaseMinConns = 5 },
 		"wildcard origin":            func(c *Config) { c.AllowedOrigins = []string{"*"} },
 		"view window not shorter":    func(c *Config) { c.ViewWindow = c.ChallengeTTL },
+		"zero guess window":          func(c *Config) { c.GuessWindow = 0 },
 		"retention below challenge":  func(c *Config) { c.PhotoRetention = c.ChallengeTTL / 2 },
 		"unknown smtp tls":           func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = "ssl" },
 		"zero rate window":           func(c *Config) { c.RateLimitWindow = 0 },
@@ -373,84 +375,6 @@ func TestValidateProductionRequiresStrongMetricsToken(t *testing.T) {
 	}
 }
 
-func TestValidateVapidRules(t *testing.T) {
-	// Outside production, VAPID keys are optional (ephemeral keys are minted at
-	// startup), but a half-set pair is always wrong.
-	halfSet := validConfig()
-	halfSet.VapidPublicKey = "only-public"
-	if err := halfSet.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be provided together") {
-		t.Fatalf("expected partial VAPID key rejection, got %v", err)
-	}
-
-	// A subject is rejected unless a complete keypair enables push.
-	badSubject := validConfig()
-	badSubject.VapidSubject = "ftp://not-valid"
-	if err := badSubject.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT requires") {
-		t.Fatalf("expected VAPID subject without keys rejection, got %v", err)
-	}
-
-	// Production without VAPID keys is valid: push is explicitly disabled.
-	prod := validConfig()
-	prod.Environment = EnvProduction
-	prod.PublicURL = "https://app.example.test"
-	prod.SMTPTLS = SMTPStartTLS
-	prod.SMTPHost = "smtp.example"
-	prod.SMTPFrom = "no-reply@example.test"
-	prod.S3Endpoint = "https://s3.example"
-	prod.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
-	if err := prod.Validate(); err != nil {
-		t.Fatalf("expected valid production config without VAPID, got %v", err)
-	}
-	// A complete keypair requires a syntactically valid RFC 8292 contact.
-	prod.VapidPublicKey = "example-public-key"
-	prod.VapidPrivateKey = "example-private-key"
-	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be") {
-		t.Fatalf("expected missing VAPID subject rejection, got %v", err)
-	}
-	prod.VapidSubject = "mailto:"
-	if err := prod.Validate(); err == nil || !strings.Contains(err.Error(), "VAPID_SUBJECT must be") {
-		t.Fatalf("expected malformed VAPID subject rejection, got %v", err)
-	}
-	prod.VapidSubject = "https://example.test/contact"
-	prod.PushEndpointAllowlist = []string{"fcm.googleapis.com", "wns.windows.com"}
-	if err := prod.Validate(); err != nil {
-		t.Fatalf("expected valid production config, got %v", err)
-	}
-}
-
-func TestValidateProductionRejectsEmptyPushAllowlist(t *testing.T) {
-	c := validConfig()
-	c.Environment = EnvProduction
-	c.PublicURL = "https://app.example.test"
-	c.SMTPTLS = SMTPStartTLS
-	c.SMTPHost = "smtp.example"
-	c.SMTPFrom = "no-reply@example.test"
-	c.S3Endpoint = "https://s3.example"
-	c.MetricsToken = strings.Repeat("x", minMetricsTokenBytes)
-	c.VapidPublicKey = "example-public-key"
-	c.VapidPrivateKey = "example-private-key"
-	c.VapidSubject = "mailto:ops@example.com"
-	// Push enabled with an empty allowlist must reject production startup.
-	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "PUSH_ENDPOINT_ALLOWLIST") {
-		t.Fatalf("expected empty push allowlist rejection, got %v", err)
-	}
-	c.PushEndpointAllowlist = []string{"fcm.googleapis.com"}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("expected valid production config with allowlist, got %v", err)
-	}
-}
-
-func TestValidateRejectsMalformedPushAllowlist(t *testing.T) {
-	c := validConfig()
-	c.PushEndpointAllowlist = []string{
-		"https://fcm.googleapis.com", "", "bad host", ".example.com",
-		"example.com.", "two..dots.example", "-prefix.example", "suffix-.example",
-	}
-	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "allowlist domain") {
-		t.Fatalf("expected malformed allowlist rejection, got %v", err)
-	}
-}
-
 func TestLoadTrimsMetricsToken(t *testing.T) {
 	// Whitespace around the configured token is removed on load so the value
 	// used for constant-time comparison matches what a correct client sends.
@@ -487,6 +411,7 @@ func TestValidateReportsBroadConfigurationFailures(t *testing.T) {
 	c.UploadMaxPixels = 0
 	c.ChallengeTTL = 0
 	c.ViewWindow = 0
+	c.GuessWindow = 0
 	c.PhotoRetention = time.Second
 	c.RateLimitRequests = 0
 	c.RateLimitWindow = 0

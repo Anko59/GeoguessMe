@@ -39,6 +39,9 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	@bash tools/quality/image-scan-exceptions-check.sh
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
+	image_archive=''; \
+	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
+	trap cleanup_image_archive EXIT; \
 	images="$(AUDIT_IMAGES)"; \
 	if [ -n "$${BACKEND_IMAGE:-}" ] && [ -n "$${WEB_IMAGE:-}" ]; then \
 		images="$$images $${BACKEND_IMAGE} $${WEB_IMAGE}"; \
@@ -86,7 +89,8 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --exit-code 0 --format json --output "/workspace/security/image-reports/$$safe/report.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --skip-db-update --format spdx-json --output "/workspace/security/image-reports/$$safe/sbom.spdx.json" $$scan_target; \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile "/workspace/security/image-reports/$$safe/ignore.trivy" --format table $$scan_target; \
-		[ -z "$$image_archive" ] || rm -f "$$image_archive"; \
+		cleanup_image_archive; \
+		image_archive=''; \
 		echo "    audit-images: $$img OK (report: security/image-reports/$$safe/report.json, sbom: security/image-reports/$$safe/sbom.spdx.json)"; \
 	done; \
 	echo 'audit-images: complete'
@@ -121,8 +125,6 @@ db-restore: ## Restore a PostgreSQL backup through the tool container.
 backup-rehearsal: build-images ## Run the disposable backup/restore rehearsal.
 	deployment/scripts/backup-restore-rehearsal.sh
 
-restore-rehearsal: backup-rehearsal ## Compatibility alias for restore rehearsal.
-
 restart-rehearsal: build-images ## Run the disposable restart/reconnect rehearsal.
 	deployment/scripts/restart-rehearsal.sh
 
@@ -131,6 +133,8 @@ reconnect-rehearsal: build-images ## Run the load/reconnect/catch-up rehearsal w
 
 migration-test: build-images ## Run concurrent, idempotent, and legacy-fixture migration tests.
 	deployment/scripts/migration-concurrency.sh
+
+operational-gate: build-images container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression smoke ## Run the dev-pipeline operational gate: containers, migrations, rehearsals, smoke. The full release gate (`make verify`) additionally runs the complete browser matrix, load-test, and audit-images on the nightly schedule.
 
 load-test: build-images ## Run the documented disposable load profile.
 	deployment/scripts/load-test.sh

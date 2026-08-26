@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { uniqueUsername, uniqueEmail, signupViaUI } from './helpers';
+import { uniqueUsername, uniqueEmail, signupViaUI } from './support/helpers';
 
 test.describe('Account deletion', () => {
     test('delete account, immediate loss of access, identity can be reused', async ({ page }) => {

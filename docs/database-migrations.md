@@ -144,6 +144,15 @@ Repository insertion uses
 duplicate active obligation is an idempotent success while genuine database
 errors still fail.
 
+## Migration 022: Expand custom reactions
+
+Replaces the fixed named-reaction allowlist with the expanded branded set used
+by chat (`dislike`, `cry`, `kiss`, `wink`, `grin`, `heart-eyes`, `sunglasses`,
+`angry`, `confused`, `sleepy`, `clap`, `pray`, `fire`, and `party`). The six
+legacy emoji keys remain valid during the compatibility window. The migration
+swaps the database check constraint in one transaction; existing reaction rows
+are preserved.
+
 ## Deferred migration 014: Retire the legacy reaction column
 
 Migration 011 temporarily kept `message_reactions.emoji` synchronized with the

@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures';
-import { expectUserCameraOrientation } from './cameraAssertions';
-import { closeScenario, createScenario } from './challengeScenario';
+import { test, expect } from './support/fixtures';
+import { expectUserCameraOrientation } from './support/cameraAssertions';
+import { closeScenario, createScenario } from './support/challengeScenario';
 
 test.describe('Video challenge flow', () => {
     test('records a playable video, uploads it, and serves it for playback', async ({ browser, contextOptions }) => {
@@ -64,11 +64,11 @@ test.describe('Video challenge flow', () => {
             // The guesser feed revealing the challenge is the deterministic
             // ready signal (transcode is bounded to 60s server-side), and the
             // accept + media flow below proves the canonical video is served.
-            const challengeButton = guesser.locator('button.photo-challenge[data-photo-id]').first();
+            const challengeButton = guesser.locator('.photo-challenge[data-photo-id]').first();
             await expect(challengeButton).toBeVisible({ timeout: 60000 });
             const uploaded = { id: (await challengeButton.getAttribute('data-photo-id')) ?? '' };
 
-            const challenge = guesser.locator('button.photo-challenge[data-photo-id="' + uploaded.id + '"]');
+            const challenge = guesser.locator('.photo-challenge[data-photo-id="' + uploaded.id + '"]');
             const acceptResponsePromise = guesser.waitForResponse(
                 (response) =>
                     response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/accept') &&
@@ -79,13 +79,7 @@ test.describe('Video challenge flow', () => {
                     response.url().endsWith('/api/v1/challenges/' + uploaded.id + '/media') &&
                     response.request().method() === 'GET',
             );
-            // The test stack compresses the viewing window to one second. Keep
-            // the UI deadline stable while Chromium decodes the transcoded
-            // media; production grants ten seconds.
-            const frozenTime = new Date();
-            await guesser.clock.install({ time: frozenTime });
-            await guesser.clock.pauseAt(frozenTime);
-            await challenge.click();
+            await challenge.locator('.start-challenge-btn').click();
             expect((await acceptResponsePromise).status()).toBe(200);
             const mediaResponse = await mediaResponsePromise;
             expect(mediaResponse.status()).toBe(200);

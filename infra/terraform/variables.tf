@@ -47,6 +47,20 @@ variable "access_email" {
   }
 }
 
+variable "dev_access_emails" {
+  description = "Additional human identities allowed into the development application only."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for email in var.dev_access_emails :
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", email))
+    ])
+    error_message = "dev_access_emails must contain valid email addresses."
+  }
+}
+
 variable "dev_health_token_id" {
   description = "Cloudflare resource UUID (result.id, not client_id) for the development health service token. The token is created outside Terraform and its secret never enters state."
   type        = string

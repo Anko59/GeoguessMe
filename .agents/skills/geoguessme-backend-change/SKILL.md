@@ -22,9 +22,11 @@ description:
    `backend/internal/database/migrations/` and keep `make lint-sql` green.
 5. Do not add SQL to handlers, do not read environment variables outside
    `backend/internal/config/`, and do not introduce mutable package globals.
-6. Run `make impact BASE=origin/dev`, `make test-backend`, `make test-race`,
-   focused integration tests, then `make preflight`. Run `make verify` when
-   composition, startup, migrations, or tests change.
+6. Run `make impact BASE=origin/dev`, `make test-backend`, `make lint-go`, then
+   `make preflight`. Add `make test-race` when the change touches concurrency.
+   Do not run `make verify` locally: it is reserved for deployment,
+   infrastructure, workflow, or gate changes, and the dev gate runs the complete
+   suite on the merged revision.
 
 ## Inputs
 
@@ -34,7 +36,8 @@ description:
 
 - Go changes with unit and integration tests.
 - Migration files when schema changes, with fixtures.
-- Gate evidence: `test-backend`, `test-race`, `test-integration`, `preflight`.
+- Gate evidence: `test-backend`, `preflight` (plus `test-race` for concurrency
+  changes); integration evidence is produced by PR CI.
 
 ## References
 

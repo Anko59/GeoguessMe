@@ -106,7 +106,12 @@ Profile:
         guess_count: { type: integer, minimum: 0 }
         average_score: { type: number, minimum: 0 }
         elo:
-          { type: integer, minimum: 0, description: Global Elo rating; 0 while never compared against another guesser. }
+          type: integer
+          minimum: 0
+          description: >-
+            Global all-time Elo rating, updated with a small factor so it
+            reflects long-run skill; 0 while never compared against another
+            guesser.
         rank: { $ref: "#/ProgressionRank" }
         global_rank: { $ref: "#/GlobalRank" }
         global_average_rank: { $ref: "#/GlobalRank" }
@@ -239,11 +244,14 @@ LeaderboardEntry:
     average_score: { type: number, description: Average guess score in the selected period. }
     total_points: { type: integer, minimum: 0, description: Lifetime guess points used for rank progression. }
     elo:
-      {
-        type: integer,
-        minimum: 0,
-        description: Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period.,
-      }
+      type: integer
+      minimum: 0
+      description: >-
+        Elo rating computed from the selected period's challenges; 0 while
+        the player never compared against another guesser on a shared
+        challenge in the period. The update factor depends on the period:
+        weekly ladders move fastest, monthly moderately, and all-time
+        slowest.
     rank: { $ref: "#/ProgressionRank" }
 
 Message:
@@ -284,11 +292,43 @@ Message:
 
 ReactionKey:
   type: string
-  enum: [like, love, laugh, wow, sad, spot-on, lost, mind-blown, wrong-way, vacation, 👍, ❤️, 😂, 😮, 😢, 🙏]
+  enum:
+    [
+      like,
+      love,
+      laugh,
+      wow,
+      sad,
+      spot-on,
+      lost,
+      mind-blown,
+      wrong-way,
+      vacation,
+      dislike,
+      cry,
+      kiss,
+      wink,
+      grin,
+      heart-eyes,
+      sunglasses,
+      angry,
+      confused,
+      sleepy,
+      clap,
+      pray,
+      fire,
+      party,
+      👍,
+      ❤️,
+      😂,
+      😮,
+      😢,
+      🙏,
+    ]
   description: >
-    Reaction identity. The ten keys map to custom artwork shown in the UI; the
-    six legacy emoji values are still accepted so existing reactions keep
-    working.
+    Reaction identity. The twenty-four named keys map to custom artwork shown
+    in the UI; the six legacy emoji values are still accepted so existing
+    reactions keep working.
 
 MessageReaction:
   type: object
@@ -301,6 +341,13 @@ MessageReaction:
       type: array
       items: { type: string }
       description: Usernames of group members who selected this reaction
+
+ReactionUsage:
+  type: object
+  required: [reaction, count]
+  properties:
+    reaction: { $ref: "#/ReactionKey" }
+    count: { type: integer, minimum: 1 }
 
 MessageReactionRequest:
   type: object
@@ -343,7 +390,17 @@ ChallengeCreated:
 ChallengeAccepted:
   type: object
   required:
-    [photo_id, media_url, media_type, accepted_at, view_expires_at, guess_after, challenge_expires_at, server_time]
+    [
+      photo_id,
+      media_url,
+      media_type,
+      accepted_at,
+      view_expires_at,
+      guess_after,
+      guess_expires_at,
+      challenge_expires_at,
+      server_time,
+    ]
   properties:
     photo_id: { type: string, format: uuid }
     media_url: { type: string }
@@ -351,15 +408,27 @@ ChallengeAccepted:
     accepted_at: { type: string, format: date-time }
     view_expires_at: { type: string, format: date-time }
     guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
     challenge_expires_at: { type: string, format: date-time }
     server_time: { type: string, format: date-time }
 
 ChallengeMediaDelivered:
   type: object
-  required: [view_expires_at, guess_after, server_time]
+  required: [view_expires_at, guess_after, guess_expires_at, server_time]
   properties:
     view_expires_at: { type: string, format: date-time }
     guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
     server_time: { type: string, format: date-time }
 
 GuessResponse:
@@ -393,7 +462,7 @@ ChallengeResults:
 
 Guess:
   type: object
-  required: [id, photo_id, user_id, group_id, score, created_at]
+  required: [id, photo_id, user_id, group_id, score, created_at, elo_delta]
   properties:
     id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
@@ -407,6 +476,9 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
+    elo_delta:
+      type: integer
+      description: Signed change in the player's weekly Elo rating caused by this challenge; zero when the challenge has fewer than two guesses or was created before the current calendar week started.
     distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
     created_at: { type: string, format: date-time }
     username: { type: string }
@@ -423,23 +495,3 @@ PushSubscriptionRequest:
       properties:
         p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
         auth: { type: string, description: "Base64url 16-byte authentication secret" }
-
-MediaProcessingJob:
-  type: object
-  required: [id, kind, status, queued_at]
-  description: Owner-only status of an asynchronous video-processing job. Storage keys and upload metadata are never serialized.
-  properties:
-    id: { type: string, format: uuid }
-    kind: { type: string, enum: [challenge, chat] }
-    status: { type: string, enum: [queued, processing, ready, failed] }
-    queued_at: { type: string, format: date-time }
-    started_at: { type: [string, "null"], format: date-time }
-    completed_at: { type: [string, "null"], format: date-time }
-    result:
-      description: Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned.
-      oneOf:
-        - { $ref: "#/ChallengeCreated" }
-        - { $ref: "#/Message" }
-    error_code:
-      type: string
-      description: Stable, non-sensitive failure code (for example invalid_video, authorization_revoked, output_too_large, or transcode_failed); present only when the job failed.

@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './support/fixtures';
 import type { Browser, BrowserContextOptions } from '@playwright/test';
-import { newAuthContext, signupViaUI, uniqueGroup } from './helpers';
+import { newAuthContext, signupViaUI, uniqueGroup } from './support/helpers';
 
 test.describe('Viewport preservation', () => {
     test('landing page remains usable at narrow-phone and tablet widths', async ({ page }) => {

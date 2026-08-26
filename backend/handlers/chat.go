@@ -323,7 +323,7 @@ func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 // removed by the compatibility-removal PR, only the reaction key is accepted.
 func allowedReaction(reaction string) bool {
 	switch reaction {
-	case "like", "love", "laugh", "wow", "sad", "spot-on", "lost", "mind-blown", "wrong-way", "vacation":
+	case "like", "love", "laugh", "wow", "sad", "spot-on", "lost", "mind-blown", "wrong-way", "vacation", "dislike", "cry", "kiss", "wink", "grin", "heart-eyes", "sunglasses", "angry", "confused", "sleepy", "clap", "pray", "fire", "party":
 		return true
 	// Legacy emoji reactions stay valid so existing data keeps working.
 	case "👍", "❤️", "😂", "😮", "😢", "🙏":
