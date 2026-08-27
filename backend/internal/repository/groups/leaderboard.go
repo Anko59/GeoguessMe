@@ -2,6 +2,7 @@ package groups
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -77,11 +78,27 @@ func leaderboardPeriodStart(period LeaderboardPeriod, now time.Time) *time.Time 
 	}
 }
 
+// leaderboardFactor maps a leaderboard period to its Elo update factor: the
+// weekly ladder moves fastest to reward current form, the monthly ladder is
+// moderate, and the all-time ladder moves slowest so it reflects durable
+// skill instead of the most recent challenges.
+func leaderboardFactor(period LeaderboardPeriod) elo.Factor {
+	switch period {
+	case LeaderboardWeek:
+		return elo.FactorWeekly
+	case LeaderboardMonth:
+		return elo.FactorMonthly
+	default:
+		return elo.FactorAllTime
+	}
+}
+
 // LeaderboardForPeriod returns the leaderboard of a group for a period. Elo
 // ratings come from pairwise comparisons on the period's challenges and are
 // recomputed here so a late guess on an old challenge moves the whole period
-// ladder, not just one row. Ranking computation stays pure: SortLeaderboard
-// orders the rows and elo.ComputeRatings is a pure function over the loaded
+// ladder, not just one row; the period also selects the update factor (see
+// leaderboardFactor). Ranking computation stays pure: SortLeaderboard orders
+// the rows and elo.ComputeRatings is a pure function over the loaded
 // challenges.
 func (r *Repository) LeaderboardForPeriod(ctx context.Context, groupID string, period LeaderboardPeriod) ([]LeaderboardEntry, error) {
 	start := leaderboardPeriodStart(period, time.Now())
@@ -142,7 +159,7 @@ func (r *Repository) LeaderboardForPeriod(ctx context.Context, groupID string, p
 	if err != nil {
 		return nil, err
 	}
-	ratings := elo.ComputeRatings(challenges)
+	ratings := elo.ComputeRatings(challenges, leaderboardFactor(period))
 	for index := range result {
 		result[index].Elo = ratings[result[index].UserID]
 	}
@@ -202,6 +219,9 @@ func (r *Repository) loadChallenges(ctx context.Context, groupID *string, start 
 	// Timed-out guesses carry no competitive result: their owners are not
 	// compared against other players in Elo (see docs/gameplay.md), so the
 	// loader excludes them via AND NOT g.timed_out.
+	// Placeholders are numbered by position so every filter combination is
+	// valid SQL: the time filter is $2 only when the group filter precedes
+	// it, and $1 when it is the sole argument.
 	query := `
 		SELECT p.id, p.created_at, g.user_id, g.score
 		FROM guesses g
@@ -210,12 +230,12 @@ func (r *Repository) loadChallenges(ctx context.Context, groupID *string, start 
 		WHERE TRUE AND NOT g.timed_out`
 	args := []any{}
 	if groupID != nil {
-		query += ` AND g.group_id = $1`
 		args = append(args, *groupID)
+		query += fmt.Sprintf(` AND g.group_id = $%d`, len(args))
 	}
 	if start != nil {
-		query += ` AND p.created_at >= $2`
 		args = append(args, *start)
+		query += fmt.Sprintf(` AND p.created_at >= $%d`, len(args))
 	}
 	query += ` ORDER BY p.created_at, p.id, g.user_id`
 
@@ -293,15 +313,17 @@ type EloStats struct {
 	TotalPlayers int
 }
 
-// GlobalElo recomputes the global Elo ladder and returns the player's rating
-// and competition rank among every rated player. A player with no qualifying
-// challenge (never compared against anyone) is unrated: Elo 0, rank 0.
+// GlobalElo recomputes the global all-time Elo ladder and returns the
+// player's rating and competition rank among every rated player. The all-time
+// factor keeps the global rating slow-moving so it measures long-run skill.
+// A player with no qualifying challenge (never compared against anyone) is
+// unrated: Elo 0, rank 0.
 func (r *Repository) GlobalElo(ctx context.Context, userID string) (EloStats, error) {
 	challenges, err := r.GlobalChallenges(ctx)
 	if err != nil {
 		return EloStats{}, err
 	}
-	ratings := elo.ComputeRatings(challenges)
+	ratings := elo.ComputeRatings(challenges, elo.FactorAllTime)
 	myElo, rated := ratings[userID]
 	if !rated {
 		return EloStats{Elo: 0, Rank: 0, TotalPlayers: len(ratings)}, nil
@@ -315,14 +337,18 @@ func (r *Repository) GlobalElo(ctx context.Context, userID string) (EloStats, er
 	return EloStats{Elo: myElo, Rank: rank, TotalPlayers: len(ratings)}, nil
 }
 
-// GlobalChallengeEloDeltas returns the Elo rating change for each participant
-// on a challenge using the same all-group chronological progression as the
-// global profile rating.
-func (r *Repository) GlobalChallengeEloDeltas(ctx context.Context, photoID string) (map[string]int, error) {
-	challenges, err := r.GlobalChallenges(ctx)
+// WeeklyChallengeEloDeltas returns the weekly Elo rating change for each
+// participant on a challenge: the all-group chronological progression limited
+// to challenges created in the current calendar week and driven by the weekly
+// update factor, matching the weekly ladders. A photo created before the week
+// started contributes no weekly change, so the returned map is nil; the same
+// holds for challenges with fewer than two guesses.
+func (r *Repository) WeeklyChallengeEloDeltas(ctx context.Context, photoID string) (map[string]int, error) {
+	start := leaderboardPeriodStart(LeaderboardWeek, time.Now())
+	challenges, err := r.loadChallenges(ctx, nil, start)
 	if err != nil {
 		return nil, err
 	}
-	deltas := elo.ComputeChallengeDeltas(challenges)
+	deltas := elo.ComputeChallengeDeltas(challenges, elo.FactorWeekly)
 	return deltas[photoID], nil
 }

@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -132,7 +132,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -175,7 +175,7 @@ jobs:
       restic: ${{ steps.refs.outputs.restic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.5

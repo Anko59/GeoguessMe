@@ -246,7 +246,8 @@ function GameResultsView({
                                         {guess.elo_delta !== 0 && (
                                             <span
                                                 className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
-                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} Elo`}
+                                                title="Weekly Elo change"
+                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} weekly Elo`}
                                             >
                                                 {guess.elo_delta > 0 ? '+' : ''}
                                                 {guess.elo_delta} Elo

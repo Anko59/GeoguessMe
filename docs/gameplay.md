@@ -89,16 +89,18 @@ the selected calendar week, month, or all-time period:
 - **Average** — the member's average guess score in the period.
 - **Elo** — a rating computed from the period's challenges. Every photo that at
   least two group members guessed is a challenge; each pair of guessers is
-  compared by raw score (win/draw/loss) and both ratings move by the standard
-  `K = 32` Elo update. Ratings are recomputed from guess history on every read,
-  so a late guess on an old challenge retroactively moves everyone who played it
-  — this is what makes Elo measure guessing skill independently of who posts the
-  harder challenges.
+  compared by raw score (win/draw/loss) and both ratings move by a
+  period-specific Elo update factor: weekly ladders use `K = 40` so they reward
+  current form, monthly ladders `K = 20`, and all-time ladders `K = 8`. Ratings
+  are recomputed from guess history on every read, so a late guess on an old
+  challenge retroactively moves everyone who played it — this is what makes Elo
+  measure guessing skill independently of who posts the harder challenges.
 
 A player who never compared against another guesser on a shared challenge has
 Elo 0, sorts below rated players, and has no numbered place. Profiles use the
 same Elo model across all groups and all-time challenges for the global rating
-and rank.
+and rank; the global rating uses the slow all-time factor so it reflects
+long-run skill instead of the last few challenges.
 
 ## Result visibility
 
@@ -111,9 +113,11 @@ and rank.
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 `actual_lat`, `actual_long`, all guesses with `username`, `score`, `elo_delta`,
 `distance`, and `media_url` plus `media_type` (with `?result=1`) if the media is
-still available. `elo_delta` is the signed change in the player's global Elo
-rating caused by this challenge; it is zero when the challenge has fewer than
-two guesses. Result photos can be opened full screen; videos retain playback
+still available. `elo_delta` is the signed change in the player's weekly Elo
+rating caused by this challenge — the results page shows the weekly change only.
+It is zero when the challenge has fewer than two guesses or was created before
+the current calendar week started (such challenges no longer belong to any
+weekly ladder). Result photos can be opened full screen; videos retain playback
 controls in the result panel.
 
 When a poster hid the location (`hide_location`), the exact spot stays private
