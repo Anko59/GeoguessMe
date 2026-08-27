@@ -25,7 +25,7 @@
 # and an `expires` date that is today or later and at most 30 days away.
 set -euo pipefail
 
-EXCEPTIONS_INPUT="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml tools/quality/image-scan-exceptions-keycloak.yaml tools/quality/image-scan-exceptions-oauth2-proxy.yaml}"
+EXCEPTIONS_INPUT="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml tools/quality/image-scan-exceptions-keycloak.yaml tools/quality/image-scan-exceptions-oauth2-proxy.yaml tools/quality/image-scan-exceptions-cloudflared.yaml}"
 read -r -a EXCEPTION_FILES <<<"$EXCEPTIONS_INPUT"
 
 usage() {

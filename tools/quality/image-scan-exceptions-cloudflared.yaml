@@ -1,0 +1,74 @@
+# --- cloudflare/cloudflared:2026.8.0 (upstream; not used as a runtime image
+#     in this repo — the locally rebuilt geoguessme/cloudflared-tools is the
+#     scanned deployment path — but retained in AUDIT_IMAGES as the upstream
+#     pin; newest 2026.8.0 still ships libssl 3.5.6 and Go 1.26.4) ---
+- id: CVE-2026-14456
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "QUIC unbounded memory growth in libssl 3.5.6; the upstream pin is not used as a runtime image (the rebuilt geoguessme/cloudflared-tools layers the 3.5.7 fix) and the Go stdlib findings below are not reachable through the tunnel/SSH ProxyCommand path"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-33818
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; recursive ASN.1 input is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-39821
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; punycode label processing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-39822
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; os.Root symlink traversal is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-46600
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; malformed DNS record parsing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56853
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; unencrypted HTTP/2 is not used by the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56858
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; html/template is not used by the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56859
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; recursive XML input is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56860
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; pathological URL parsing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56862
+  image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  digest: sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+  owner: security-program
+  reachable: "cloudflared embeds Go 1.26.4 stdlib; TLS KeyUpdate handling is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
+  approved: true
+  expires: 2026-09-09
