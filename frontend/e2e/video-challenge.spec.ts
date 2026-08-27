@@ -86,6 +86,20 @@ test.describe('Video challenge flow', () => {
 
             const challengeVideo = guesser.locator('video[aria-label="Challenge video"]');
             await expect(challengeVideo).toBeVisible();
+            const h264Support = await challengeVideo.evaluate((video) =>
+                video.canPlayType('video/mp4; codecs="avc1.64002A"'),
+            );
+            if (h264Support === '') {
+                // The open-source Chromium build in Playwright's ARM image
+                // omits H.264. The HTTP and transcode contracts above still
+                // prove that canonical MP4 media is delivered.
+                expect(mediaResponse.headers()['content-type']).toContain('video/mp4');
+                return;
+            }
+            await challengeVideo.evaluate(async (video) => {
+                video.muted = true;
+                await video.play();
+            });
             await expect
                 .poll(() => challengeVideo.evaluate((video) => video.readyState >= 2 && video.error === null), {
                     timeout: 5000,

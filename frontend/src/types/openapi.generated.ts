@@ -14,7 +14,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create an account */
+        /**
+         * Create a legacy account when Keycloak is disabled.
+         * @description Normal signup uses Keycloak. This compatibility endpoint returns 410 while OIDC is enabled.
+         */
         post: operations['signup'];
         delete?: never;
         options?: never;
@@ -31,8 +34,65 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Log in */
+        /**
+         * Start a temporary legacy migration session.
+         * @description Hidden from normal login; accepts only an unmigrated legacy account and issues a read-only session while OIDC is enabled.
+         */
         post: operations['login'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report whether Keycloak sign-in is enabled. */
+        get: operations['getOIDCConfig'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/session': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the OAuth2 Proxy Keycloak session for an application session.
+         * @description Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript. A genuinely new identity receives username_required until it submits an explicit GeoGuessMe username; existing identities and verified-email migrations do not need one.
+         */
+        post: operations['exchangeOIDCSession'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/link': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start linking Keycloak to the authenticated application account. */
+        post: operations['startOIDCLink'];
         delete?: never;
         options?: never;
         head?: never;
@@ -786,6 +846,12 @@ export interface components {
             /** Format: date-time */
             email_verified_at?: string | null;
             avatar?: string;
+            /** @description Whether the hidden migration flow may still confirm this legacy account's password. */
+            password_login_enabled: boolean;
+            /** @description Whether the account is linked to the configured Keycloak realm. */
+            oidc_linked: boolean;
+            /** @description Whether the legacy account is read-only until a Keycloak identity is linked. */
+            migration_required: boolean;
         };
         AuthResponse: {
             access_token: string;
@@ -797,6 +863,17 @@ export interface components {
                 code: string;
                 message: string;
             };
+        };
+        OIDCConfig: {
+            enabled: boolean;
+            login_path: string;
+            /**
+             * Format: uri
+             * @description Runtime-specific Keycloak account console used for optional 2FA, recovery codes, and passkeys.
+             */
+            account_url?: string;
+            /** @description Social brokers configured in this environment; email/password is always handled by Keycloak. */
+            social_providers: ('google' | 'apple' | 'github')[];
         };
         ProgressionRank: {
             level: number;
@@ -1151,7 +1228,7 @@ export interface components {
              */
             long?: number;
             score: number;
-            /** @description Weekly Elo change for this challenge (0 when <2 guesses or before week start). */
+            /** @description Weekly Elo change (0 when <2 guesses or before week start). */
             elo_delta: number;
             /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
@@ -1255,6 +1332,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
         };
     };
     login: {
@@ -1283,6 +1361,77 @@ export interface operations {
                 };
             };
             401: components['responses']['ErrorResponse'];
+        };
+    };
+    getOIDCConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime identity capability. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['OIDCConfig'];
+                };
+            };
+            405: components['responses']['ErrorResponse'];
+        };
+    };
+    exchangeOIDCSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                'application/json': {
+                    username?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing identity resolved, verified-email account linked, or new account provisioned with its chosen username. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AuthResponse'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    startOIDCLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Single-use link intent stored in an HttpOnly cookie. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
         };
     };
     refreshSession: {
@@ -1448,6 +1597,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
         };
     };
     getProfile: {
@@ -1499,7 +1649,8 @@ export interface operations {
                         | 'avatar8.png'
                         | 'avatar9.png'
                         | 'avatar10.png';
-                    current_password: string;
+                    /** @description Required when password_login_enabled is true; omitted for passwordless social accounts. */
+                    current_password?: string;
                 };
             };
         };
@@ -1515,6 +1666,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
         };
     };
@@ -1545,6 +1697,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
         };
     };
     deleteAccount: {
@@ -1557,7 +1710,10 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    password: string;
+                    /** @description Required for accounts with legacy password login enabled. */
+                    password?: string;
+                    /** @description Exact username required for passwordless social accounts. */
+                    confirmation?: string;
                 };
             };
         };

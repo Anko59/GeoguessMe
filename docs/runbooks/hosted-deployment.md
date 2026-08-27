@@ -91,6 +91,28 @@ make secrets-generate ENV=dev RECIPIENT=age1...
 make secrets-generate ENV=production RECIPIENT=age1...
 ```
 
+Generate the shared identity secret once for both host age recipients. Use
+independent Keycloak client secrets for dev and production and the Google
+credential created for `auth.geoguessme.com`:
+
+```text
+export PRODUCTION_OIDC_CLIENT_SECRET=...
+export DEV_OIDC_CLIENT_SECRET=...
+export GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=...
+export KEYCLOAK_SMTP_USERNAME=... KEYCLOAK_SMTP_PASSWORD=...
+make identity-secrets-generate RECIPIENT=age1...,age1...
+```
+
+The production and dev `OIDC_CLIENT_SECRET` values must respectively match the
+two Keycloak client secrets above. The shared SMTP credential lets Keycloak send
+native-account verification and password-reset mail; it may use the same Brevo
+account as the application while remaining independently configured. Commit only
+the three encrypted dotenv files. Follow the
+[social-auth rollout runbook](social-auth-rollout.md) before enabling OIDC; it
+defines the exact Google callback, the legacy read-only migration phase, and the
+provider-specific checks. The generator writes inert placeholders for Apple and
+GitHub until their separately reviewed rollout.
+
 Both environments set `APP_ENV=production`. The backend disables Push when all
 three VAPID variables are absent, but rejects a partial keypair or invalid
 contact subject. Store each configured environment's pair outside the

@@ -1,0 +1,97 @@
+# Time-boxed Keycloak exceptions for `make audit-images`.
+# Keycloak 26.7.1 is the newest stable upstream image as of 2026-08-16. These
+# fixed dependency findings remain visible in report.json and expire before the
+# next monthly review; replace the pin and remove them as soon as upstream ships
+# the corrected libraries.
+
+- id: GHSA-r7wm-3cxj-wff9
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "public JSON parsing may reach the async parser; Cloudflare request limits bound the memory amplification while the newest Keycloak still embeds Jackson 2.21.2"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-54512
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "exploit requires attacker-controlled polymorphic type identifiers; Keycloak public APIs bind fixed DTOs and the bundled admin CLI is not executed by the server"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-54513
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "exploit requires BasicPolymorphicTypeValidator array allowlisting; Keycloak public APIs bind fixed DTOs and do not expose that deserialization mode"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2025-59250
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the vulnerable Microsoft SQL Server driver is bundled but this deployment uses only PostgreSQL"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-40983
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the affected Micrometer gRPC instrumentation is not configured by the Keycloak Quarkus and Vert.x runtime"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-40984
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the affected Micrometer Jetty binders are not used by the Keycloak Quarkus and Vert.x HTTP runtime"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-59901
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the Netty bzip2 decoder is bundled but Keycloak accepts no bzip2-compressed protocol input in this deployment"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-55851
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "PROXY protocol v2 is not enabled; public traffic arrives through the Cloudflare tunnel as ordinary HTTP"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-55831
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the affected SPDY codec is bundled but SPDY is not enabled by Keycloak or the Cloudflare origin tunnel"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-55833
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the affected SPDY decompressor is bundled but SPDY is not enabled by Keycloak or the Cloudflare origin tunnel"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56745
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the affected SPDY-to-HTTP codec is bundled but SPDY is not enabled by Keycloak or the Cloudflare origin tunnel"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-56819
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "public HTTP/2 terminates at Cloudflare; its origin tunnel uses HTTP/1.1 and Keycloak has no directly exposed HTTP/2 listener"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-54291
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "the downgrade requires TLS SCRAM-SHA-256-PLUS channel binding; Keycloak reaches PostgreSQL only on the isolated Compose network without TLS channel binding"
+  approved: true
+  expires: 2026-09-09

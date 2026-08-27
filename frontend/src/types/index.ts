@@ -21,6 +21,7 @@ export type GlobalRank = components['schemas']['GlobalRank'];
 export type Profile = components['schemas']['Profile'];
 export type PublicProfile = components['schemas']['PublicProfile'];
 export type AuthResponse = components['schemas']['AuthResponse'];
+export type OIDCConfig = components['schemas']['OIDCConfig'];
 export type Group = components['schemas']['Group'];
 export type Member = components['schemas']['Member'];
 export type LeaderboardEntry = components['schemas']['LeaderboardEntry'];

@@ -21,13 +21,29 @@ read-only source mounts for checks. Formatter services use the host UID/GID.
 
 ## Hosted topology
 
-The hosted overlay runs `dev` and `production` on one Hetzner CX23 as separate
-Compose projects. Each has an isolated PostgreSQL volume, environment file, R2
-media bucket, loopback port, and resource limits. Cloudflare Tunnel is the only
-ingress path: production uses port 8081, dev uses 8082, and public inbound
-firewall rules are empty. Dev is protected by Cloudflare Access email OTP for
-the owner; CI has a separate service-token rule used only for health checks and
-deployment SSH.
+The hosted overlay runs `dev`, `production`, and the shared identity service on
+one Hetzner CX23 as three separate Compose projects. The two game projects each
+have an isolated PostgreSQL volume, environment file, R2 media bucket, loopback
+port, and resource limits. Keycloak owns a third PostgreSQL volume and is
+published only on loopback port 8083. Cloudflare Tunnel is the only ingress
+path: production uses port 8081, dev uses 8082, and `auth.geoguessme.com` uses
+8083; public inbound firewall rules are empty. Dev is protected by Cloudflare
+Access email OTP for the owner; CI has a separate service-token rule used only
+for health checks and deployment SSH.
+
+Each game project runs its own OAuth2 Proxy beside the Caddy web gateway. Caddy
+routes `/oauth2/*` and the OIDC session exchange to that proxy; all other API
+traffic goes directly to the backend. Keycloak brokers Google while its built-in
+credential flow supplies ordinary email/password signup and login. Apple and
+GitHub remain disabled for this rollout. This Compose topology deliberately has
+no Traefik layer: Cloudflare Tunnel provides ingress and Caddy provides the one
+same-origin application gateway.
+
+Local social-auth development also uses Caddy, but with a dedicated
+`Caddyfile.dev`: `mkcert` supplies a locally trusted certificate and Caddy maps
+`https://geoguessme.localhost` to Vite plus `https://auth-dev.geoguessme.com` to
+Keycloak. This keeps local callbacks and secure cookies production-shaped
+without adding Traefik.
 
 Terraform in `infra/terraform` provisions the server, backups, deletion
 protection, deny-inbound firewall, tunnel routes, DNS, Access applications, and
@@ -46,6 +62,7 @@ make terraform-validate
 make terraform-plan
 CONFIRM=apply make terraform-apply
 make secrets-generate ENV=dev RECIPIENT=age1...
+make identity-secrets-generate RECIPIENT=age1...,age1...
 make hosted-config
 ```
 
@@ -62,6 +79,16 @@ mint a stable pair per environment with `make vapid-keys` and set
 generating that environment's secret. A partial configuration is rejected.
 Rotating a keypair invalidates every existing browser subscription, so reuse the
 stored values whenever an environment's secret is regenerated.
+
+The shared `identity.env.enc` must be encrypted for both host age recipients.
+Before generating it, export the dedicated dev and production OIDC client
+secrets, Keycloak SMTP credentials, and Google credentials documented in
+`deployment/env/identity.env.example`. Keep the Apple and GitHub values as
+placeholders until their separate rollout. Register the exact Google
+`auth.geoguessme.com` broker callback URL documented in the rollout runbook
+before testing the provider. Keep the Keycloak database, realm, and application
+client secrets stable. Follow the ordered migration and provider checks in
+[`docs/runbooks/social-auth-rollout.md`](../docs/runbooks/social-auth-rollout.md).
 
 The host deployment command accepts only an environment fixed in
 `authorized_keys`, two digest-qualified image references, and a 40-character
@@ -95,7 +122,9 @@ make smoke BASE_URL=https://your-domain.example
 
 The migration job must complete before the backend starts. The backend runs
 non-root with a read-only root filesystem, /tmp tmpfs, a health check, and
-graceful termination. Caddy proxies the API and WebSocket endpoint same-origin.
+graceful termination. Caddy proxies the API, WebSocket, and per-application
+OAuth2 Proxy same-origin. When OIDC is enabled, the shared identity stack must
+also be healthy before accepting login and signup traffic.
 
 ## Migrations and upgrades
 

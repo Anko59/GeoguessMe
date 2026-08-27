@@ -1,10 +1,11 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
+import type { OIDCConfig } from '../../types';
 import './AccountSettings.css';
 
 const avatars = Array.from({ length: 10 }, (_, index) => (index === 0 ? 'avatar.png' : `avatar${index + 1}.png`));
@@ -25,6 +26,23 @@ export default function AccountSettings() {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [linking, setLinking] = useState(false);
+    const [keycloakAccountURL, setKeycloakAccountURL] = useState('');
+    const migrationRequired = Boolean(user?.migration_required);
+
+    useEffect(() => {
+        let active = true;
+        if (!user?.oidc_linked) return () => undefined;
+        void api
+            .get<OIDCConfig>('/auth/oidc/config')
+            .then((response) => {
+                if (active) setKeycloakAccountURL(response.data.account_url ?? '');
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, [user?.oidc_linked]);
 
     const clearNotice = () => {
         setMessage('');
@@ -67,11 +85,11 @@ export default function AccountSettings() {
         const currentTarget = user?.pending_email ?? user?.email ?? '';
         const wasVerified = Boolean(user?.email_verified_at && user?.email);
         try {
-            const payload: { username: string; avatar: string; current_password: string; email?: string } = {
+            const payload: { username: string; avatar: string; current_password?: string; email?: string } = {
                 username,
                 avatar,
-                current_password: profilePassword,
             };
+            if (user?.password_login_enabled) payload.current_password = profilePassword;
             if (submittedEmail) payload.email = submittedEmail;
             await api.patch('/auth/profile', payload);
             setProfilePassword('');
@@ -126,12 +144,30 @@ export default function AccountSettings() {
         }
     };
 
+    const linkSocialLogin = async (): Promise<void> => {
+        clearNotice();
+        setLinking(true);
+        try {
+            await api.post('/auth/oidc/link');
+            sessionStorage.setItem('geoguessme_oidc_return_to', '/settings');
+            window.location.assign('/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
+        } catch (requestError: unknown) {
+            setError(getAPIErrorMessage(requestError, 'Unable to start Keycloak login setup'));
+            setLinking(false);
+        }
+    };
+
     const removeAccount = async (): Promise<void> => {
         if (!window.confirm('Delete your account and gameplay data?')) return;
         clearNotice();
         try {
-            await api.delete('/auth/account', { data: { password } });
+            const data = user?.password_login_enabled ? { password } : { confirmation: password };
+            await api.delete('/auth/account', { data });
+            if (typeof fetch === 'function') {
+                await fetch('/oauth2/sign_out', { credentials: 'include', redirect: 'manual' }).catch(() => undefined);
+            }
             await refresh();
+            navigate('/', { replace: true });
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Unable to delete account'));
         }
@@ -149,7 +185,23 @@ export default function AccountSettings() {
                     </div>
                 </div>
 
-                <div className="account-section">
+                {migrationRequired && (
+                    <div className="account-section account-migration-required" role="status">
+                        <div className="account-section-heading">
+                            <h2>Finish account migration</h2>
+                            <p>
+                                This legacy account is read-only. Continue with GeoGuessMe ID using email/password or
+                                Google to restore normal access without moving or recreating your groups, scores, or
+                                history.
+                            </p>
+                        </div>
+                        <button className="btn btn-primary" disabled={linking} onClick={() => void linkSocialLogin()}>
+                            {linking ? 'Opening secure login…' : 'Continue with GeoGuessMe ID'}
+                        </button>
+                    </div>
+                )}
+
+                <div className="account-section" hidden={migrationRequired}>
                     <div className="account-section-heading">
                         <h2>Profile</h2>
                         <p>How friends see you in groups and results.</p>
@@ -213,36 +265,81 @@ export default function AccountSettings() {
                         Email is a recovery/contact channel, not an identity. A new address is verified before it
                         becomes active.
                     </p>
-                    <label htmlFor="profile-current-password">Current password to save profile changes</label>
-                    <input
-                        id="profile-current-password"
-                        type="password"
-                        autoComplete="current-password"
-                        value={profilePassword}
-                        onChange={(event) => setProfilePassword(event.target.value)}
-                    />
+                    {user?.password_login_enabled && (
+                        <>
+                            <label htmlFor="profile-current-password">Current password to save profile changes</label>
+                            <input
+                                id="profile-current-password"
+                                type="password"
+                                autoComplete="current-password"
+                                value={profilePassword}
+                                onChange={(event) => setProfilePassword(event.target.value)}
+                            />
+                        </>
+                    )}
                     <button className="btn btn-primary" disabled={saving} onClick={() => void saveProfile()}>
                         Save profile
                     </button>
                 </div>
 
-                <div className="account-section">
+                <div className="account-section" hidden={migrationRequired}>
                     <div className="account-section-heading">
-                        <h2>Security</h2>
-                        <p>Choose a strong password you do not use elsewhere.</p>
+                        <h2>Sign-in methods</h2>
+                        <p>
+                            {user?.oidc_linked
+                                ? 'Email/password and optional Google sign-in are managed through Keycloak while GeoGuessMe keeps the same player ID and game history.'
+                                : 'Legacy password sign-in is active while Keycloak is disabled for rollback.'}
+                        </p>
                     </div>
-                    <label htmlFor="new-password">New password</label>
-                    <input
-                        id="new-password"
-                        type="password"
-                        autoComplete="new-password"
-                        value={newPassword}
-                        onChange={(event) => setNewPassword(event.target.value)}
-                    />
-                    <p className="account-help">Use at least 8 characters with uppercase, lowercase, and a number.</p>
-                    <button className="btn btn-secondary" disabled={saving} onClick={() => void changePassword()}>
-                        Change password
-                    </button>
+                    {user?.oidc_linked ? (
+                        <>
+                            <p className="account-identity-status" role="status">
+                                Keycloak login is connected.
+                            </p>
+                            <p className="account-help">
+                                Two-factor authentication, recovery codes, and passkeys are optional. You can add or
+                                remove them in your Keycloak account.
+                            </p>
+                            {keycloakAccountURL && (
+                                <a
+                                    className="btn btn-secondary"
+                                    href={keycloakAccountURL}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    Manage 2FA and passkeys
+                                </a>
+                            )}
+                        </>
+                    ) : (
+                        <p className="account-identity-status">Legacy password login is active.</p>
+                    )}
+                    {!user?.oidc_linked && user?.password_login_enabled ? (
+                        <>
+                            <label htmlFor="new-password">New password</label>
+                            <input
+                                id="new-password"
+                                type="password"
+                                autoComplete="new-password"
+                                value={newPassword}
+                                onChange={(event) => setNewPassword(event.target.value)}
+                            />
+                            <p className="account-help">
+                                Use at least 8 characters with uppercase, lowercase, and a number.
+                            </p>
+                            <button
+                                className="btn btn-secondary"
+                                disabled={saving}
+                                onClick={() => void changePassword()}
+                            >
+                                Change password
+                            </button>
+                        </>
+                    ) : (
+                        <p className="account-help">
+                            Normal sign-in goes through Keycloak; legacy password login is disabled.
+                        </p>
+                    )}
                 </div>
 
                 {message && (
@@ -255,7 +352,7 @@ export default function AccountSettings() {
                         {error}
                     </p>
                 )}
-                <div className="account-verification">
+                <div className="account-verification" hidden={migrationRequired}>
                     <div>
                         {user?.email_verified_at && user?.email ? (
                             <>
@@ -290,10 +387,14 @@ export default function AccountSettings() {
                         <h2>Danger zone</h2>
                         <p>Permanently delete your account and gameplay data.</p>
                     </div>
-                    <label htmlFor="delete-password">Confirm password to delete account</label>
+                    <label htmlFor="delete-password">
+                        {user?.password_login_enabled
+                            ? 'Confirm password to delete account'
+                            : `Type ${user?.username ?? 'your username'} to delete account`}
+                    </label>
                     <input
                         id="delete-password"
-                        type="password"
+                        type={user?.password_login_enabled ? 'password' : 'text'}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                     />

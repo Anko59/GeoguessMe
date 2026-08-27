@@ -13,6 +13,9 @@ const user: User = {
     username: 'alice',
     email: 'alice@example.test',
     avatar: 'avatar.png',
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 const message: Message = {
@@ -45,7 +48,14 @@ describe('pwaSessionCache', () => {
     });
 
     it('round-trips an unverified account that has no email address', () => {
-        const unverified: User = { id: 'user-2', username: 'bob', avatar: 'avatar.png' };
+        const unverified: User = {
+            id: 'user-2',
+            username: 'bob',
+            avatar: 'avatar.png',
+            password_login_enabled: true,
+            oidc_linked: false,
+            migration_required: false,
+        };
 
         saveSessionHint(unverified);
 

@@ -1,0 +1,99 @@
+name: geoguessme-identity
+
+# Shared identity stack for auth.geoguessme.com. It is intentionally separate
+# from the dev and production game projects: both OAuth clients use one realm,
+# while Keycloak keeps its own PostgreSQL data and lifecycle.
+services:
+  keycloak-db:
+    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+    env_file:
+      - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
+        required: true
+    volumes:
+      - keycloak_database:/var/lib/postgresql/data
+    read_only: true
+    tmpfs: ["/tmp", "/var/run/postgresql"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    restart: unless-stopped
+    networks: [identity]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_KEYCLOAK_DB_CPUS:-0.5}
+          memory: ${GEOGUESSME_KEYCLOAK_DB_MEMORY:-512M}
+          pids: 256
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    command: ["start", "--import-realm"]
+    env_file:
+      - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
+        required: true
+    ports: ["127.0.0.1:${GEOGUESSME_IDENTITY_PORT:-8083}:8080"]
+    volumes:
+      - ./deployment/keycloak/realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro
+      # Sibling mounts avoid a parent bind hiding the nested application
+      # assets on Docker Desktop and on hosted Docker engines.
+      - ./deployment/keycloak/themes/geoguessme/login/theme.properties:/opt/keycloak/themes/geoguessme/login/theme.properties:ro
+      - ./deployment/keycloak/themes/geoguessme/login/messages:/opt/keycloak/themes/geoguessme/login/messages:ro
+      - ./deployment/keycloak/themes/geoguessme/login/resources/css:/opt/keycloak/themes/geoguessme/login/resources/css:ro
+      - ./frontend/public:/opt/keycloak/themes/geoguessme/login/resources/app:ro
+    tmpfs: ["/tmp:size=64m,noexec,nosuid,nodev"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    restart: unless-stopped
+    networks: [identity]
+    depends_on:
+      keycloak-db: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '200' <&3",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: ${GEOGUESSME_KEYCLOAK_CPUS:-1.0}
+          memory: ${GEOGUESSME_KEYCLOAK_MEMORY:-768M}
+          pids: 256
+
+  keycloak-config:
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
+    env_file:
+      - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
+        required: true
+    environment:
+      KEYCLOAK_CONFIG_SERVER: http://keycloak:8080
+    volumes:
+      - ./deployment/keycloak/apply-realm-config.sh:/opt/geoguessme/keycloak/apply-realm-config.sh:ro
+      - ./deployment/keycloak/user-profile.json:/opt/geoguessme/keycloak/user-profile.json:ro
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    restart: "no"
+    networks: [identity]
+    depends_on:
+      keycloak: { condition: service_healthy }
+
+networks:
+  identity: {}
+
+volumes:
+  keycloak_database:

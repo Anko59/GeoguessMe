@@ -69,8 +69,10 @@ All passes run through the Dockerized Trivy tool service
 
 ## Exceptions
 
-Committed exceptions live in `tools/quality/image-scan-exceptions.yaml` and are
-validated by `tools/quality/image-scan-exceptions-check.sh`. Each entry requires
+Committed exceptions live in `tools/quality/image-scan-exceptions.yaml` and the
+component-specific `tools/quality/image-scan-exceptions-keycloak.yaml` and
+`tools/quality/image-scan-exceptions-oauth2-proxy.yaml`. They are validated
+together by `tools/quality/image-scan-exceptions-check.sh`. Each entry requires
 all of the following fields:
 
 - `id` — the CVE/GHSA identifier;

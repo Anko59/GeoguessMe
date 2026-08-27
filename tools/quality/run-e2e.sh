@@ -15,11 +15,12 @@ STAGING_DIR="$REPO/frontend/.playwright-run"
 source "$REPO/tools/quality/e2e/arguments.sh"
 
 test_args=()
-build_e2e_test_args test_args \
+build_e2e_test_args \
     "${GEOGUESSME_E2E_PROJECTS:-desktop,firefox,mobile}" \
     "${GEOGUESSME_E2E_SHARD:-}" \
     "${GEOGUESSME_E2E_SPEC:-}" \
     "${1:-}"
+test_args=("${E2E_TEST_ARGS[@]}")
 
 # Clear stale artifacts so only the current invocation's output is retained.
 if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-report" ]; then
@@ -60,6 +61,7 @@ docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-di
     -e "PLAYWRIGHT_OUTPUT_DIR=/tmp/playwright/test-results" \
     -e "PLAYWRIGHT_REPORT_DIR=/tmp/playwright/report" \
     -e "PLAYWRIGHT_LAST_RUN_OUTPUT_FILE=/tmp/playwright/test-results/.last-run.json" \
+    -e "HOME=/tmp/playwright" \
     -v "$STAGING_DIR:/tmp/playwright" \
     playwright node node_modules/.bin/playwright "${test_args[@]}" || run_status=$?
 

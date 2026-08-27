@@ -19,6 +19,7 @@ const { routeRef, apiMocks, mockModule } = vi.hoisted(() => {
                     .post('/auth/refresh')
                     .then((response: { data?: AuthResponse } | undefined) => response?.data ?? null)
                     .catch(() => null),
+            exchangeOIDCSession: vi.fn(),
             setAccessToken: vi.fn(),
         },
     };
@@ -33,7 +34,15 @@ import { AuthContext } from './context/AuthContext';
 const authResponse: AuthResponse = {
     access_token: 'access-token',
     expires_in: 900,
-    user: { id: 'u1', username: 'alice', email: 'alice@example.test', avatar: 'avatar.png' },
+    user: {
+        id: 'u1',
+        username: 'alice',
+        email: 'alice@example.test',
+        avatar: 'avatar.png',
+        password_login_enabled: true,
+        oidc_linked: false,
+        migration_required: false,
+    },
 };
 
 beforeEach(() => {
@@ -47,6 +56,8 @@ beforeEach(() => {
     apiMocks.delete.mockReset();
     // By default, fail auth refresh so the shell is in an unauthenticated state.
     apiMocks.post.mockRejectedValue(new Error('no session'));
+    // Public route tests exercise the intentionally supported OIDC-off mode.
+    apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
 });
 
 describe('Home Page', () => {
@@ -126,6 +137,16 @@ describe('App shell — public routes', () => {
         });
         expect(await screen.findByPlaceholderText('Email — verify to enable account recovery')).toBeInTheDocument();
         expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
+    });
+
+    it('renders legacy credentials only at /migrate-account', async () => {
+        routeRef.current = '/migrate-account';
+        window.history.pushState({}, '', routeRef.current);
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
     });
 
     it('renders the forgot-password page at /forgot-password', async () => {

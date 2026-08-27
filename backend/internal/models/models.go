@@ -13,6 +13,8 @@ type User struct {
 	Password        string     `json:"-"`
 	Avatar          string     `json:"avatar"`
 	AuthVersion     int        `json:"-"`
+	PasswordEnabled bool       `json:"-"`
+	OIDCLinked      bool       `json:"-"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }

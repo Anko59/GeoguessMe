@@ -9,8 +9,8 @@
 #   image-scan-exceptions-check.sh --append REF OUT # validate, then append REF
 #                                                   # matches to the ignorefile
 #
-# The exceptions file (IMAGE_SCAN_EXCEPTIONS or
-# tools/quality/image-scan-exceptions.yaml) is a YAML list of records:
+# The exception files (the space-separated IMAGE_SCAN_EXCEPTIONS override or
+# the two repository defaults) are YAML lists of records:
 #
 #   - id: CVE-2026-00000
 #     image: postgres:15-alpine@sha256:...
@@ -25,7 +25,8 @@
 # and an `expires` date that is today or later and at most 30 days away.
 set -euo pipefail
 
-EXCEPTIONS_FILE="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml}"
+EXCEPTIONS_INPUT="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml tools/quality/image-scan-exceptions-keycloak.yaml tools/quality/image-scan-exceptions-oauth2-proxy.yaml}"
+read -r -a EXCEPTION_FILES <<<"$EXCEPTIONS_INPUT"
 
 usage() {
     echo "usage: $0 [--emit|--append IMAGE_REF OUTFILE]" >&2
@@ -48,9 +49,23 @@ case "${1:-}" in
         ;;
 esac
 
-[ -f "$EXCEPTIONS_FILE" ] || {
-    echo "ERROR: exceptions file not found: $EXCEPTIONS_FILE" >&2
-    exit 1
+for exception_file in "${EXCEPTION_FILES[@]}"; do
+    [ -f "$exception_file" ] || {
+        echo "ERROR: exceptions file not found: $exception_file" >&2
+        exit 1
+    }
+done
+
+date_utc_days_from_today() {
+    local days=$1
+    if date -u -d "$days days" +%F 2>/dev/null; then
+        return
+    fi
+    if [ "$days" -ge 0 ]; then
+        date -u -v+"${days}"d +%F
+    else
+        date -u -v"${days}"d +%F
+    fi
 }
 
 # Parse the constrained YAML list with awk. Each record is emitted as one
@@ -87,11 +102,11 @@ records=$(
         function emit() {
             printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, image, digest, owner, reachable, approved, expires
         }
-    ' "$EXCEPTIONS_FILE"
+    ' "${EXCEPTION_FILES[@]}"
 ) || exit 1
 
 today=$(date -u +%F)
-max_expiry=$(date -u -d "+30 days" +%F)
+max_expiry=$(date_utc_days_from_today 30)
 
 fail=0
 record_count=0

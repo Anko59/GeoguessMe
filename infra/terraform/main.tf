@@ -62,6 +62,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "app" {
     ingress = [
       { hostname = var.domain, service = "http://127.0.0.1:8081" },
       { hostname = "dev.${var.domain}", service = "http://127.0.0.1:8082" },
+      { hostname = "auth.${var.domain}", service = "http://127.0.0.1:8083" },
       # Development CI reaches SSH through deploy.geoguessme.com and production
       # CI through deploy-prod.geoguessme.com; the Access application on each
       # hostname accepts only its own service token (F-05 isolation).
@@ -78,7 +79,7 @@ data "cloudflare_zero_trust_tunnel_cloudflared_token" "app" {
 }
 
 resource "cloudflare_dns_record" "tunnel" {
-  for_each = toset(["@", "dev", "deploy", "deploy-prod"])
+  for_each = toset(["@", "auth", "dev", "deploy", "deploy-prod"])
   zone_id  = var.cloudflare_zone_id
   name     = each.value
   type     = "CNAME"

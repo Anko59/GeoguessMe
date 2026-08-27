@@ -40,13 +40,19 @@ services:
       context: .
       dockerfile: deployment/docker/backend.dev.Dockerfile
     command: ["sh", "-c", "go run . migrate up && air"]
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
     environment:
       APP_ENV: development
       DATABASE_URL: postgres://user:password@db:5432/geoguessme?sslmode=disable
       JWT_SECRET: dev_secret_key_change_me_please_32_characters
-      PUBLIC_URL: http://localhost:5173
-      ALLOWED_ORIGINS: http://localhost:5173
+      PUBLIC_URL: ${GEOGUESSME_DEV_PUBLIC_URL:-http://localhost:5173}
+      ALLOWED_ORIGINS: ${GEOGUESSME_DEV_PUBLIC_URL:-http://localhost:5173}
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_ISSUER_URL: https://auth-dev.geoguessme.com/realms/geoguessme
+      OIDC_CLIENT_ID: geoguessme-dev
+      OIDC_CLIENT_SECRET: local-geoguessme-client-secret
+      OIDC_SOCIAL_PROVIDERS: ${GEOGUESSME_OIDC_SOCIAL_PROVIDERS:-}
+      SSL_CERT_DIR: /etc/ssl/certs:/run/local-ca
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
       S3_BUCKET: geoguessme-media
@@ -62,7 +68,11 @@ services:
       db: { condition: service_healthy }
       minio: { condition: service_healthy }
       mailpit: { condition: service_started }
-    volumes: ["./backend:/app/backend"]
+    volumes:
+      - ./backend:/app/backend
+      - ./.local/caddy:/run/local-ca:ro
+    extra_hosts:
+      - "auth-dev.geoguessme.com:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health/ready"]
       interval: 5s
@@ -82,7 +92,181 @@ services:
     depends_on:
       backend: { condition: service_healthy }
 
+  # Optional, fully local social-auth path. `make dev-social` starts these
+  # services before the application so backend OIDC discovery is deterministic.
+  # External provider credentials can be supplied through the matching shell
+  # variables. Native Keycloak email signup/login works without those credentials.
+  local-keycloak-db:
+    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+    profiles: [social]
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: local-keycloak-password
+      POSTGRES_DB: keycloak
+    volumes: ["geoguessme_dev_keycloak_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  local-keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    profiles: [social]
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: local-keycloak-db
+      KC_DB_URL_PORT: "5432"
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: local-keycloak-password
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-admin-password
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: "8083"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # Keep the optional identity stack viable in a 2 GiB local Docker VM
+      # alongside the application and a Playwright browser.
+      JAVA_OPTS_KC_HEAP: -Xms48m -Xmx160m
+      KC_HOSTNAME: https://auth-dev.geoguessme.com
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_TRANSACTION_XA_ENABLED: "false"
+      GEOGUESSME_WEBAUTHN_RP_ID: auth-dev.geoguessme.com
+      GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET: unused-local-production-secret
+      GEOGUESSME_PRODUCTION_REDIRECT_URL: https://geoguessme.com/oauth2/callback
+      GEOGUESSME_PRODUCTION_ORIGIN: https://geoguessme.com
+      GEOGUESSME_PRODUCTION_POST_LOGOUT_URLS: https://geoguessme.com/*
+      GEOGUESSME_DEV_OIDC_CLIENT_SECRET: local-geoguessme-client-secret
+      GEOGUESSME_DEV_REDIRECT_URL: https://geoguessme.localhost/oauth2/callback
+      GEOGUESSME_DEV_ORIGIN: https://geoguessme.localhost
+      GEOGUESSME_DEV_POST_LOGOUT_URLS: https://geoguessme.localhost/*
+      GEOGUESSME_GOOGLE_CLIENT_ID: ${GEOGUESSME_GOOGLE_CLIENT_ID:-local-google-placeholder}
+      GEOGUESSME_GOOGLE_CLIENT_SECRET: ${GEOGUESSME_GOOGLE_CLIENT_SECRET:-local-google-placeholder}
+      GEOGUESSME_GITHUB_CLIENT_ID: ${GEOGUESSME_GITHUB_CLIENT_ID:-local-github-placeholder}
+      GEOGUESSME_GITHUB_CLIENT_SECRET: ${GEOGUESSME_GITHUB_CLIENT_SECRET:-local-github-placeholder}
+      GEOGUESSME_APPLE_CLIENT_ID: ${GEOGUESSME_APPLE_CLIENT_ID:-local-apple-placeholder}
+      GEOGUESSME_APPLE_CLIENT_SECRET: ${GEOGUESSME_APPLE_CLIENT_SECRET:-local-apple-placeholder}
+      GEOGUESSME_KEYCLOAK_SMTP_HOST: mailpit
+      GEOGUESSME_KEYCLOAK_SMTP_PORT: "1025"
+      GEOGUESSME_KEYCLOAK_SMTP_FROM: no-reply@geoguessme.localhost
+      GEOGUESSME_KEYCLOAK_SMTP_AUTH: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_STARTTLS: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_SSL: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_USER: ""
+      GEOGUESSME_KEYCLOAK_SMTP_PASSWORD: ""
+      GEOGUESSME_KEYCLOAK_SSL_REQUIRED: external
+    volumes:
+      - ./deployment/keycloak/realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro
+      # Keep these sibling mounts separate. A parent /themes bind masks the
+      # nested public-assets bind on Docker Desktop, leaving the logo and map
+      # background as live 404s even though both mounts appear in inspect.
+      - ./deployment/keycloak/themes/geoguessme/login/theme.properties:/opt/keycloak/themes/geoguessme/login/theme.properties:ro
+      - ./deployment/keycloak/themes/geoguessme/login/messages:/opt/keycloak/themes/geoguessme/login/messages:ro
+      - ./deployment/keycloak/themes/geoguessme/login/resources/css:/opt/keycloak/themes/geoguessme/login/resources/css:ro
+      - ./frontend/public:/opt/keycloak/themes/geoguessme/login/resources/app:ro
+    depends_on:
+      local-keycloak-db: { condition: service_healthy }
+      mailpit: { condition: service_started }
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '200' <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  local-keycloak-config:
+    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    profiles: [social-config]
+    entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
+    environment:
+      KEYCLOAK_CONFIG_SERVER: http://local-keycloak:8083
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-admin-password
+      GEOGUESSME_KEYCLOAK_SMTP_HOST: mailpit
+      GEOGUESSME_KEYCLOAK_SMTP_PORT: "1025"
+      GEOGUESSME_KEYCLOAK_SMTP_FROM: no-reply@geoguessme.localhost
+      GEOGUESSME_KEYCLOAK_SMTP_AUTH: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_STARTTLS: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_SSL: "false"
+      GEOGUESSME_KEYCLOAK_SMTP_USER: ""
+      GEOGUESSME_KEYCLOAK_SMTP_PASSWORD: ""
+      GEOGUESSME_KEYCLOAK_SSL_REQUIRED: external
+      GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET: unused-local-production-secret
+      GEOGUESSME_PRODUCTION_REDIRECT_URL: https://geoguessme.com/oauth2/callback
+      GEOGUESSME_PRODUCTION_ORIGIN: https://geoguessme.com
+      GEOGUESSME_PRODUCTION_POST_LOGOUT_URLS: https://geoguessme.com/*
+      GEOGUESSME_DEV_OIDC_CLIENT_SECRET: local-geoguessme-client-secret
+      GEOGUESSME_DEV_REDIRECT_URL: https://geoguessme.localhost/oauth2/callback
+      GEOGUESSME_DEV_ORIGIN: https://geoguessme.localhost
+      GEOGUESSME_DEV_POST_LOGOUT_URLS: https://geoguessme.localhost/*
+      GEOGUESSME_GOOGLE_CLIENT_ID: ${GEOGUESSME_GOOGLE_CLIENT_ID:-local-google-placeholder}
+      GEOGUESSME_GOOGLE_CLIENT_SECRET: ${GEOGUESSME_GOOGLE_CLIENT_SECRET:-local-google-placeholder}
+      GEOGUESSME_GITHUB_CLIENT_ID: ${GEOGUESSME_GITHUB_CLIENT_ID:-local-github-placeholder}
+      GEOGUESSME_GITHUB_CLIENT_SECRET: ${GEOGUESSME_GITHUB_CLIENT_SECRET:-local-github-placeholder}
+      GEOGUESSME_APPLE_CLIENT_ID: ${GEOGUESSME_APPLE_CLIENT_ID:-local-apple-placeholder}
+      GEOGUESSME_APPLE_CLIENT_SECRET: ${GEOGUESSME_APPLE_CLIENT_SECRET:-local-apple-placeholder}
+    volumes:
+      - ./deployment/keycloak:/opt/geoguessme/keycloak:ro
+    tmpfs: ["/tmp"]
+    depends_on:
+      local-keycloak: { condition: service_healthy }
+    restart: "no"
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+    profiles: [social]
+    command: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg", "--alpha-config=/etc/oauth2-proxy/oauth2-proxy-alpha.yaml"]
+    environment:
+      OIDC_ISSUER_URL: https://auth-dev.geoguessme.com/realms/geoguessme
+      OIDC_CLIENT_ID: geoguessme-dev
+      OIDC_CLIENT_SECRET: local-geoguessme-client-secret
+      OAUTH2_PROXY_COOKIE_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      OAUTH2_PROXY_COOKIE_NAME: __Host-geoguessme_oidc_local
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_REDIRECT_URL: https://geoguessme.localhost/oauth2/callback
+      SSL_CERT_DIR: /etc/ssl/certs:/run/local-ca
+    volumes:
+      - ./deployment/oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg:ro
+      - ./deployment/oauth2-proxy/oauth2-proxy-alpha.yaml:/etc/oauth2-proxy/oauth2-proxy-alpha.yaml:ro
+      - ./.local/caddy:/run/local-ca:ro
+    extra_hosts:
+      - "auth-dev.geoguessme.com:host-gateway"
+    depends_on:
+      backend: { condition: service_healthy }
+      local-keycloak: { condition: service_healthy }
+
+  local-caddy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    profiles: [social]
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./deployment/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - ./.local/caddy:/etc/caddy/local-tls:ro
+    read_only: true
+    tmpfs:
+      - /data
+      - /config
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    networks:
+      default:
+        aliases: [auth-dev.geoguessme.com]
+    depends_on:
+      local-keycloak: { condition: service_healthy }
+
 volumes:
   geoguessme_dev_db:
   geoguessme_dev_minio:
+  geoguessme_dev_keycloak_db:
   frontend-node-modules:

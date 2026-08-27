@@ -57,6 +57,13 @@
     border-radius: var(--radius-md);
 }
 
+/* Author-level grid/flex rules otherwise override the browser's [hidden]
+ * default. Migration sessions must not expose editable account sections. */
+.account-section[hidden],
+.account-verification[hidden] {
+    display: none;
+}
+
 .account-section-heading {
     margin-bottom: var(--space-2);
 }
@@ -69,6 +76,17 @@
 .account-section-heading p,
 .account-help {
     font-size: 0.82rem;
+}
+
+.account-identity-status {
+    margin: 0;
+    color: var(--success);
+    font-weight: 750;
+}
+
+.account-migration-required {
+    background: #fff8e1;
+    border-color: #e8c76b;
 }
 
 .account-help {

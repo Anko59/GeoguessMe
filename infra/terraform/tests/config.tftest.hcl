@@ -168,6 +168,8 @@ run "hosted_plan" {
   assert {
     condition = (
       var.domain == "geoguessme.com" &&
+      cloudflare_dns_record.tunnel["auth"].name == "auth" &&
+      strcontains(jsonencode(cloudflare_zero_trust_tunnel_cloudflared_config.app.config), "http://127.0.0.1:8083") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&

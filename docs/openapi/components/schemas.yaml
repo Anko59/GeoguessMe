@@ -11,7 +11,7 @@ APIError:
 
 AuthUser:
   type: object
-  required: [id, username]
+  required: [id, username, password_login_enabled, oidc_linked, migration_required]
   properties:
     id: { type: string, format: uuid }
     username: { type: string }
@@ -30,6 +30,31 @@ AuthUser:
         until this claim is successfully verified.
     email_verified_at: { type: [string, "null"], format: date-time }
     avatar: { type: string }
+    password_login_enabled:
+      type: boolean
+      description: Whether the hidden migration flow may still confirm this legacy account's password.
+    oidc_linked:
+      type: boolean
+      description: Whether the account is linked to the configured Keycloak realm.
+    migration_required:
+      type: boolean
+      description: Whether the legacy account is read-only until a Keycloak identity is linked.
+
+OIDCConfig:
+  type: object
+  required: [enabled, login_path, social_providers]
+  properties:
+    enabled: { type: boolean }
+    login_path: { type: string, pattern: "^/oauth2/start$" }
+    account_url:
+      type: string
+      format: uri
+      description: Runtime-specific Keycloak account console used for optional 2FA, recovery codes, and passkeys.
+    social_providers:
+      type: array
+      uniqueItems: true
+      items: { type: string, enum: [google, apple, github] }
+      description: Social brokers configured in this environment; email/password is always handled by Keycloak.
 
 AuthResponse:
   type: object
@@ -455,8 +480,7 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
-    elo_delta:
-      { type: integer, description: Weekly Elo change for this challenge (0 when <2 guesses or before week start). }
+    elo_delta: { type: integer, description: Weekly Elo change (0 when <2 guesses or before week start). }
     distance: { type: number, description: Omitted while the location is hidden or when timed_out is true. }
     timed_out: { type: boolean, description: True when the guess timed out (score 0). }
     created_at: { type: string, format: date-time }
@@ -474,23 +498,3 @@ PushSubscriptionRequest:
       properties:
         p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
         auth: { type: string, description: "Base64url 16-byte authentication secret" }
-
-MediaProcessingJob:
-  type: object
-  required: [id, kind, status, queued_at]
-  description: Owner-only status of an asynchronous video-processing job. Storage keys and upload metadata are never serialized.
-  properties:
-    id: { type: string, format: uuid }
-    kind: { type: string, enum: [challenge, chat] }
-    status: { type: string, enum: [queued, processing, ready, failed] }
-    queued_at: { type: string, format: date-time }
-    started_at: { type: [string, "null"], format: date-time }
-    completed_at: { type: [string, "null"], format: date-time }
-    result:
-      description: Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned.
-      oneOf:
-        - { $ref: "#/ChallengeCreated" }
-        - { $ref: "#/Message" }
-    error_code:
-      type: string
-      description: Stable, non-sensitive failure code (for example invalid_video, authorization_revoked, output_too_large, or transcode_failed); present only when the job failed.

@@ -56,6 +56,30 @@ for image in "$backend_image" "$web_image"; do
     echo "  ok   $image healthcheck=$health"
 done
 
+# The backend build uses BuildKit's target-platform arguments. Verify that the
+# ELF executable agrees with the image manifest so an undeclared TARGETARCH
+# cannot silently place an emulated amd64 binary in an arm64 runtime image.
+backend_arch="$(docker image inspect --format '{{.Architecture}}' "$backend_image")"
+case "$backend_arch" in
+    amd64) expected_machine="62 0" ;;
+    arm64) expected_machine="183 0" ;;
+    *)
+        echo "$backend_image has unsupported architecture $backend_arch" >&2
+        exit 1
+        ;;
+esac
+binary_machine="$(
+    docker run --rm --network none --read-only --cap-drop ALL \
+        --security-opt no-new-privileges --entrypoint od "$backend_image" \
+        -An -t u1 -j 18 -N 2 /usr/local/bin/geoguessme |
+        awk '{$1=$1; print}'
+)"
+test "$binary_machine" = "$expected_machine" || {
+    echo "$backend_image binary architecture mismatch: image=$backend_arch ELF-machine-bytes=$binary_machine" >&2
+    exit 1
+}
+echo "  ok   $backend_image binary architecture=$backend_arch"
+
 # ---------------------------------------------------------------------------
 # Phase 2: Validate production Compose configuration
 # ---------------------------------------------------------------------------
@@ -101,6 +125,7 @@ REFRESH_TOKEN_TTL=720h
 VERIFICATION_TOKEN_TTL=24h
 RESET_TOKEN_TTL=1h
 BCRYPT_COST=4
+OIDC_ENABLED=false
 ALLOWED_ORIGINS=__PUBLIC_URL__
 TRUSTED_PROXY_CIDRS=0.0.0.0/0
 RATE_LIMIT_REQUESTS=100
@@ -127,8 +152,10 @@ SMTP_TIMEOUT=30s
 METRICS_TOKEN=test-metrics-token-32-chars-long!!
 ENVEOF
 
-# Substitute placeholder values.
-sed -i "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env"
+# Substitute placeholder values through a second file. BSD and GNU sed use
+# incompatible `-i` syntax, while this path behaves identically on both.
+sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env" >"$TMPDIR/production.env.rendered"
+mv "$TMPDIR/production.env.rendered" "$TMPDIR/production.env"
 
 # Compose override: redirect env_file to the temp file for every service and
 # override the web port to avoid host port conflicts.
@@ -139,6 +166,22 @@ services:
       - path: ${TMPDIR}/production.env
         required: true
   backend:
+    env_file:
+      - path: ${TMPDIR}/production.env
+        required: true
+  oauth2-proxy:
+    command:
+      - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+      - --provider=github
+      - --client-id=prod-verify
+      - --client-secret=prod-verify-secret
+      - --upstream=http://backend:8080/
+      - --http-address=0.0.0.0:4180
+      - --pass-host-header=true
+      - --pass-authorization-header=true
+      - --skip-auth-strip-headers=false
+      - --cookie-secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      - --redirect-url=https://localhost/oauth2/callback
     env_file:
       - path: ${TMPDIR}/production.env
         required: true
@@ -164,7 +207,7 @@ YAMLEOF
 cleanup_stack() {
     set +e
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-        COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
         --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans 2>/dev/null
     rm -rf "$TMPDIR"
@@ -172,7 +215,7 @@ cleanup_stack() {
 trap 'cleanup_stack' EXIT
 
 BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-    COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+    COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
     docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
     --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
@@ -183,7 +226,7 @@ echo "--- Phase 4: Effective runtime hardening ---"
 
 container_id() {
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-        COMPOSE_PROFILES="local-db,local-minio,local-smtp" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
         --project-directory "$REPO" -p "$PROJECT" ps -aq "$1"
 }
@@ -206,19 +249,20 @@ assert_inspect() {
     echo "  ok   $service $field=$actual"
 }
 
-for service in migration backend web db minio smtp; do
+for service in migration backend oauth2-proxy web db minio smtp; do
     assert_inspect "$service" cap_drop '{{join .HostConfig.CapDrop ","}}' ALL
     assert_inspect "$service" no_new_privileges \
         '{{join .HostConfig.SecurityOpt ","}}' no-new-privileges:true
 done
 
-for service in migration backend web db; do
+for service in migration backend oauth2-proxy web db; do
     assert_inspect "$service" read_only '{{.HostConfig.ReadonlyRootfs}}' true
 done
 
 assert_inspect migration pids_limit '{{.HostConfig.PidsLimit}}' 64
 assert_inspect backend pids_limit '{{.HostConfig.PidsLimit}}' \
     "${GEOGUESSME_BACKEND_PIDS:-256}"
+assert_inspect oauth2-proxy pids_limit '{{.HostConfig.PidsLimit}}' 128
 assert_inspect web pids_limit '{{.HostConfig.PidsLimit}}' 128
 assert_inspect db pids_limit '{{.HostConfig.PidsLimit}}' 256
 assert_inspect minio pids_limit '{{.HostConfig.PidsLimit}}' 128

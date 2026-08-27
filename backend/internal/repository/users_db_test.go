@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,9 +14,36 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 )
 
+func TestOIDCIdentityLockKeyIsValidPostgresText(t *testing.T) {
+	mock := newMockPool(t)
+	ctx := context.Background()
+	identity := OIDCIdentity{
+		Issuer:  "https://auth.geoguessme.com/realms/geoguessme",
+		Subject: "keycloak-subject",
+	}
+	expected := fmt.Sprintf("identity:%d:%s%s", len(identity.Issuer), identity.Issuer, identity.Subject)
+	if strings.ContainsRune(expected, '\x00') {
+		t.Fatal("OIDC advisory-lock key contains a PostgreSQL-invalid NUL byte")
+	}
+	mock.ExpectBegin()
+	tx, err := mock.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(expected).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	if err := lockOIDCIdentity(ctx, tx, identity); err != nil {
+		t.Fatalf("lockOIDCIdentity: %v", err)
+	}
+	mock.ExpectRollback()
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+}
+
 func userRows(user *models.User) *pgxmock.Rows {
-	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
-		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail)
+	passwordEnabled := user.PasswordEnabled || user.Password != "!"
+	return pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}).
+		AddRow(user.ID, user.Username, user.Email, user.Password, user.Avatar, user.EmailVerifiedAt, user.AuthVersion, user.CreatedAt, user.UpdatedAt, user.PendingEmail, passwordEnabled, user.OIDCLinked)
 }
 
 func TestUserQueriesAndSessionLifecycle(t *testing.T) {
@@ -45,9 +74,9 @@ func TestUserQueriesAndSessionLifecycle(t *testing.T) {
 			t.Errorf("%s = %+v, %v", name, got, err)
 		}
 	}
-	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version"}).AddRow(2))
+	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(2, false))
 	status, err := repo.GetUserAuthStatus(context.Background(), user.ID)
-	if err != nil || !status.Active || status.AuthVersion != 2 {
+	if err != nil || !status.Active || status.AuthVersion != 2 || status.OIDCLinked {
 		t.Fatalf("auth status = %+v, %v", status, err)
 	}
 	mock.ExpectQuery("SELECT auth_version").WithArgs("missing").WillReturnError(pgx.ErrNoRows)
@@ -292,5 +321,143 @@ func TestUserMutationAndCascade(t *testing.T) {
 	mock.ExpectExec("DELETE FROM refresh_sessions WHERE expires_at").WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	if err := repo.CleanupAuthTokens(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func expectOIDCLock(mock pgxmock.PgxPoolIface, identity OIDCIdentity) {
+	key := fmt.Sprintf("identity:%d:%s%s", len(identity.Issuer), identity.Issuer, identity.Subject)
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(key).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+}
+
+func expectLegacyMigration(mock pgxmock.PgxPoolIface, userID string, now time.Time) {
+	mock.ExpectExec("UPDATE users SET auth_version").WithArgs(userID, now).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(userID, now).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs(userID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+}
+
+func TestCreateOIDCLinkIntent(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	expiresAt := time.Date(2026, 7, 17, 12, 5, 0, 0, time.UTC)
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM oidc_link_intents").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectExec("INSERT INTO oidc_link_intents").WithArgs("token-hash", "user-1", expiresAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+	if err := repo.CreateOIDCLinkIntent(context.Background(), "user-1", "token-hash", expiresAt); err != nil {
+		t.Fatalf("CreateOIDCLinkIntent: %v", err)
+	}
+}
+
+func TestResolveOIDCIdentity(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	identity := OIDCIdentity{Issuer: "https://auth.example/realms/game", Subject: "subject-1", Email: " Alice@Example.test "}
+
+	t.Run("existing identity", func(t *testing.T) {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "!", Avatar: "avatar.png", AuthVersion: 2, OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+		mock.ExpectBegin()
+		expectOIDCLock(mock, identity)
+		mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
+		mock.ExpectExec("UPDATE user_identities SET last_login_at").WithArgs(now, identity.Issuer, identity.Subject).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectQuery("SELECT .* FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+		mock.ExpectCommit()
+		got, err := repo.ResolveOIDCIdentity(ctx, identity, "unused", "unused", "unused", now)
+		if err != nil || got == nil || got.ID != user.ID {
+			t.Fatalf("ResolveOIDCIdentity = %+v, %v", got, err)
+		}
+	})
+
+	t.Run("verified email migrates legacy account", func(t *testing.T) {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		user := &models.User{ID: "legacy-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png", AuthVersion: 3, OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+		mock.ExpectBegin()
+		expectOIDCLock(mock, identity)
+		mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnError(pgx.ErrNoRows)
+		mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("email:alice@example.test").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectQuery("SELECT id FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(user.ID))
+		mock.ExpectExec("INSERT INTO user_identities").WithArgs(identity.Issuer, identity.Subject, user.ID, identity.Email, now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		expectLegacyMigration(mock, user.ID, now)
+		mock.ExpectQuery("SELECT .* FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+		mock.ExpectCommit()
+		got, err := repo.ResolveOIDCIdentity(ctx, identity, "unused", "unused", "unused", now)
+		if err != nil || got == nil || got.ID != user.ID {
+			t.Fatalf("ResolveOIDCIdentity = %+v, %v", got, err)
+		}
+	})
+
+	t.Run("new account requires explicit username", func(t *testing.T) {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		mock.ExpectBegin()
+		expectOIDCLock(mock, identity)
+		mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnError(pgx.ErrNoRows)
+		mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("email:alice@example.test").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectQuery("SELECT id FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectRollback()
+		got, err := repo.ResolveOIDCIdentity(ctx, identity, "new-user", "", "avatar.png", now)
+		if got != nil || !errors.Is(err, ErrOIDCUsernameRequired) {
+			t.Fatalf("ResolveOIDCIdentity = %+v, %v; want ErrOIDCUsernameRequired", got, err)
+		}
+	})
+
+	t.Run("chosen username conflict is returned", func(t *testing.T) {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		mock.ExpectBegin()
+		expectOIDCLock(mock, identity)
+		mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnError(pgx.ErrNoRows)
+		mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("email:alice@example.test").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectQuery("SELECT id FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectExec("INSERT INTO users").WithArgs("new-user", "alice", identity.Email, "alice@example.test", now, "avatar.png").WillReturnResult(pgxmock.NewResult("INSERT", 0))
+		mock.ExpectRollback()
+		got, err := repo.ResolveOIDCIdentity(ctx, identity, "new-user", "alice", "avatar.png", now)
+		if got != nil || !errors.Is(err, ErrUsernameConflict) {
+			t.Fatalf("ResolveOIDCIdentity = %+v, %v; want ErrUsernameConflict", got, err)
+		}
+	})
+
+	t.Run("new account uses chosen username", func(t *testing.T) {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		user := &models.User{ID: "new-user", Username: "map-master", Email: identity.Email, EmailVerifiedAt: &now, Password: "!", Avatar: "avatar.png", OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+		mock.ExpectBegin()
+		expectOIDCLock(mock, identity)
+		mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnError(pgx.ErrNoRows)
+		mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("email:alice@example.test").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectQuery("SELECT id FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT EXISTS").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectExec("INSERT INTO users").WithArgs(user.ID, user.Username, identity.Email, "alice@example.test", now, user.Avatar).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec("INSERT INTO user_identities").WithArgs(identity.Issuer, identity.Subject, user.ID, identity.Email, now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectQuery("SELECT .* FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+		mock.ExpectCommit()
+		got, err := repo.ResolveOIDCIdentity(ctx, identity, user.ID, user.Username, user.Avatar, now)
+		if err != nil || got == nil || got.Username != user.Username {
+			t.Fatalf("ResolveOIDCIdentity = %+v, %v", got, err)
+		}
+	})
+}
+
+func TestLinkOIDCIdentity(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	identity := OIDCIdentity{Issuer: "https://auth.example/realms/game", Subject: "subject-1", Email: "alice@example.test"}
+	user := &models.User{ID: "user-1", Username: "alice", Email: identity.Email, Password: "!", Avatar: "avatar.png", AuthVersion: 3, OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+	mock.ExpectBegin()
+	expectOIDCLock(mock, identity)
+	mock.ExpectQuery("UPDATE oidc_link_intents SET used_at").WithArgs(now, "token-hash").WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
+	mock.ExpectQuery("SELECT user_id FROM user_identities").WithArgs(identity.Issuer, identity.Subject).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
+	mock.ExpectExec("UPDATE user_identities SET last_login_at").WithArgs(now, identity.Issuer, identity.Subject).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	expectLegacyMigration(mock, user.ID, now)
+	mock.ExpectQuery("SELECT .* FROM users WHERE id").WithArgs(user.ID).WillReturnRows(userRows(user))
+	mock.ExpectCommit()
+	got, err := repo.LinkOIDCIdentity(context.Background(), "token-hash", identity, now)
+	if err != nil || got == nil || got.ID != user.ID {
+		t.Fatalf("LinkOIDCIdentity = %+v, %v", got, err)
 	}
 }

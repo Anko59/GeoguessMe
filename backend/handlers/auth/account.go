@@ -29,6 +29,10 @@ func (a *AuthAPI) Signup(w http.ResponseWriter, r *http.Request) {
 		handlers.MethodNotAllowed(w)
 		return
 	}
+	if a.cfg.OIDCEnabled {
+		handlers.WriteError(w, http.StatusGone, "legacy_signup_disabled", "Create accounts through Keycloak")
+		return
+	}
 	var req SignupRequest
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
@@ -101,7 +105,7 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := a.repos.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
-	if err != nil || user == nil || !authsvc.CheckPasswordHash(req.Password, user.Password) {
+	if err != nil || user == nil || !a.legacyPasswordAvailable(user) || !authsvc.CheckPasswordHash(req.Password, user.Password) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed")
 		return
 	}
@@ -309,16 +313,43 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Password string `json:"password"`
+		Password     string `json:"password"`
+		Confirmation string `json:"confirmation"`
 	}
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || subtle.ConstantTimeCompare([]byte{boolByte(authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) != 1 {
-		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Password confirmation failed")
+	if err != nil || user == nil {
+		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
 		return
+	}
+	passwordConfirmation := a.legacyPasswordAvailable(user)
+	confirmed := subtle.ConstantTimeCompare([]byte{boolByte(passwordConfirmation && authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) == 1
+	if !passwordConfirmation {
+		confirmed = subtle.ConstantTimeCompare([]byte(strings.TrimSpace(req.Confirmation)), []byte(user.Username)) == 1
+	}
+	if !confirmed {
+		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
+		return
+	}
+	if user.OIDCLinked {
+		if a.oidcAdmin == nil {
+			handlers.WriteError(w, http.StatusServiceUnavailable, "identity_deletion_unavailable", "Unable to delete the Keycloak account right now")
+			return
+		}
+		identities, identityErr := a.repos.OIDCIdentitiesByUserID(r.Context(), userID)
+		if identityErr != nil || len(identities) == 0 {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
+			return
+		}
+		for _, identity := range identities {
+			if identityErr := a.oidcAdmin.DeleteIdentity(r.Context(), identity.Issuer, identity.Subject); identityErr != nil {
+				handlers.WriteError(w, http.StatusBadGateway, "identity_deletion_failed", "Keycloak could not delete the identity; no GeoGuessMe data was removed")
+				return
+			}
+		}
 	}
 	if _, err := a.repos.DeleteUserCascade(r.Context(), userID); err != nil {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")

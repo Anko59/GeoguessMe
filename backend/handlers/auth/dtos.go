@@ -32,6 +32,9 @@ type AuthUser struct {
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	PendingEmail    *string    `json:"pending_email,omitempty"`
 	Avatar          string     `json:"avatar"`
+	PasswordEnabled bool       `json:"password_login_enabled"`
+	OIDCLinked      bool       `json:"oidc_linked"`
+	MigrationNeeded bool       `json:"migration_required"`
 }
 
 // AuthResponse is the session start payload.
@@ -101,12 +104,19 @@ type ProfileResponse struct {
 // Only non-empty addresses are exposed, so an unverified account has no email
 // key at all and a pending claim appears only while one exists.
 func userResponse(user *models.User) AuthUser {
-	response := AuthUser{ID: user.ID, Username: user.Username, EmailVerifiedAt: user.EmailVerifiedAt, Avatar: user.Avatar}
+	response := AuthUser{ID: user.ID, Username: user.Username, EmailVerifiedAt: user.EmailVerifiedAt, Avatar: user.Avatar, PasswordEnabled: user.PasswordEnabled, OIDCLinked: user.OIDCLinked}
 	if user.Email != "" {
 		response.Email = &user.Email
 	}
 	if user.PendingEmail != "" {
 		response.PendingEmail = &user.PendingEmail
 	}
+	return response
+}
+
+func (a *AuthAPI) userResponse(user *models.User) AuthUser {
+	response := userResponse(user)
+	response.PasswordEnabled = a.legacyPasswordAvailable(user)
+	response.MigrationNeeded = a.cfg.OIDCEnabled && !user.OIDCLinked
 	return response
 }

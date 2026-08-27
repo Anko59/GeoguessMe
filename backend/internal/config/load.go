@@ -179,19 +179,24 @@ func (l *loader) rateLimitPolicies(key, fallback string) []RateLimitBucket {
 func Load() (*Config, error) {
 	l := &loader{}
 	cfg := &Config{
-		Environment:      normalizeEnvironment(l.stringValue("APP_ENV", EnvDevelopment)),
-		Port:             l.stringValue("PORT", "8080"),
-		PublicURL:        l.stringValue("PUBLIC_URL", "http://localhost:5173"),
-		StorageDriver:    l.stringValue("STORAGE_DRIVER", ""),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		DatabaseMinConns: l.int32Value("DB_MIN_CONNS", 2),
-		DatabaseMaxConns: l.int32Value("DB_MAX_CONNS", 10),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:   l.durationValue("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  l.durationValue("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		VerificationTTL:  l.durationValue("VERIFICATION_TOKEN_TTL", 24*time.Hour),
-		ResetTTL:         l.durationValue("RESET_TOKEN_TTL", time.Hour),
-		PasswordHashCost: l.intValue("BCRYPT_COST", 12),
+		Environment:         normalizeEnvironment(l.stringValue("APP_ENV", EnvDevelopment)),
+		Port:                l.stringValue("PORT", "8080"),
+		PublicURL:           l.stringValue("PUBLIC_URL", "http://localhost:5173"),
+		StorageDriver:       l.stringValue("STORAGE_DRIVER", ""),
+		DatabaseURL:         os.Getenv("DATABASE_URL"),
+		DatabaseMinConns:    l.int32Value("DB_MIN_CONNS", 2),
+		DatabaseMaxConns:    l.int32Value("DB_MAX_CONNS", 10),
+		JWTSecret:           os.Getenv("JWT_SECRET"),
+		AccessTokenTTL:      l.durationValue("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:     l.durationValue("REFRESH_TOKEN_TTL", 30*24*time.Hour),
+		VerificationTTL:     l.durationValue("VERIFICATION_TOKEN_TTL", 24*time.Hour),
+		ResetTTL:            l.durationValue("RESET_TOKEN_TTL", time.Hour),
+		PasswordHashCost:    l.intValue("BCRYPT_COST", 12),
+		OIDCEnabled:         l.boolValue("OIDC_ENABLED", false),
+		OIDCIssuerURL:       strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL")),
+		OIDCClientID:        strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
+		OIDCClientSecret:    strings.TrimSpace(os.Getenv("OIDC_CLIENT_SECRET")),
+		OIDCSocialProviders: splitList(l.stringValue("OIDC_SOCIAL_PROVIDERS", "")),
 
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        l.intValue("SMTP_PORT", 1025),
@@ -258,6 +263,9 @@ func Load() (*Config, error) {
 
 	l.urlValue("PUBLIC_URL", cfg.PublicURL)
 	l.urlValue("S3_ENDPOINT", cfg.S3Endpoint)
+	if cfg.OIDCIssuerURL != "" {
+		l.urlValue("OIDC_ISSUER_URL", cfg.OIDCIssuerURL)
+	}
 	if len(l.problems) > 0 {
 		return cfg, errors.New(strings.Join(l.problems, "; "))
 	}

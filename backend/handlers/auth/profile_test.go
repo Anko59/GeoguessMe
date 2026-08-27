@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestGetPublicProfile(t *testing.T) {
 	requireStatus(t, api.GetPublicProfile, requestWithUser(http.MethodPost, "/", "", viewer.ID), http.StatusMethodNotAllowed)
 
 	// Unknown target player.
-	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}))
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, target.ID), http.StatusNotFound)
 
 	// Players without a shared group cannot view each other's profile.
@@ -236,4 +237,71 @@ func TestEmailChangeKeepsVerifiedAddress(t *testing.T) {
 	if !strings.Contains(body, "email_verified_at") {
 		t.Fatalf("verification state missing from response: %s", body)
 	}
+}
+
+type fakeIdentityAdmin struct {
+	err     error
+	issuer  string
+	subject string
+}
+
+func (f *fakeIdentityAdmin) DeleteIdentity(_ context.Context, issuer, subject string) error {
+	f.issuer = issuer
+	f.subject = subject
+	return f.err
+}
+
+func TestDeleteOIDCAccountPropagatesToKeycloakFirst(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	admin := &fakeIdentityAdmin{}
+	api.oidcAdmin = admin
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "!", Avatar: "avatar.png", OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT issuer, subject, email_at_link").WithArgs(user.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"issuer", "subject", "email_at_link"}).AddRow("https://login.example.test/realms/geoguessme", "subject-1", user.Email),
+	)
+	expectAccountCascadeDeletion(mock, user.ID)
+
+	recorder := performDeleteAccount(api, user.ID, `{"confirmation":"alice"}`)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d %q", recorder.Code, recorder.Body.String())
+	}
+	if admin.issuer != "https://login.example.test/realms/geoguessme" || admin.subject != "subject-1" {
+		t.Fatalf("deleted Keycloak identity = %q %q", admin.issuer, admin.subject)
+	}
+}
+
+func TestDeleteOIDCAccountKeepsLocalDataWhenKeycloakFails(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	api.oidcAdmin = &fakeIdentityAdmin{err: errors.New("Keycloak unavailable")}
+	now := time.Now().UTC()
+	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "!", Avatar: "avatar.png", OIDCLinked: true, CreatedAt: now, UpdatedAt: now}
+	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT issuer, subject, email_at_link").WithArgs(user.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"issuer", "subject", "email_at_link"}).AddRow("https://login.example.test/realms/geoguessme", "subject-1", user.Email),
+	)
+
+	recorder := performDeleteAccount(api, user.ID, `{"confirmation":"alice"}`)
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("delete status = %d %q, want 502", recorder.Code, recorder.Body.String())
+	}
+}
+
+func expectAccountCascadeDeletion(mock pgxmock.PgxPoolIface, userID string) {
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT storage_key FROM photos").WithArgs(userID).WillReturnRows(pgxmock.NewRows([]string{"storage_key"}))
+	for _, table := range []string{"refresh_sessions", "email_verification_tokens", "password_reset_tokens", "websocket_tickets"} {
+		mock.ExpectExec("DELETE FROM " + table).WithArgs(userID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	}
+	mock.ExpectExec("DELETE FROM users").WithArgs(userID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectCommit()
+}
+
+func performDeleteAccount(api *AuthAPI, userID, body string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	api.DeleteAccount(recorder, requestWithUser(http.MethodDelete, "/", body, userID))
+	return recorder
 }

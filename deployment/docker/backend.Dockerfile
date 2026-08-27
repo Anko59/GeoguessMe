@@ -3,12 +3,14 @@
 # backend and frontend images share one root .dockerignore.
 # Go 1.26.6-alpine (immutable index digest).
 FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS build
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./backend/
 WORKDIR /src/backend
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags='-s -w' -o /out/geoguessme .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags='-s -w' -o /out/geoguessme .
 
 # Alpine 3.24 runtime with ffmpeg 8.1.2 (immutable index digest). The in-process
 # media-processing worker (MEDIA_PROCESSING_WORKER) validates and transcodes

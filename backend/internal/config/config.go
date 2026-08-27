@@ -33,6 +33,20 @@ type Config struct {
 	ResetTTL         time.Duration
 	PasswordHashCost int
 
+	// OIDC enables the Keycloak token-exchange endpoints. OAuth2 Proxy keeps
+	// Keycloak tokens out of browser JavaScript; the backend independently
+	// verifies the forwarded token against this issuer and audience.
+	OIDCEnabled   bool
+	OIDCIssuerURL string
+	OIDCClientID  string
+	// OIDCClientSecret also lets the backend delete the matching Keycloak user
+	// before it removes an OIDC-linked GeoGuessMe account.
+	OIDCClientSecret string
+	// OIDCSocialProviders lists the Keycloak broker aliases that are actually
+	// configured in this environment. This rollout supports Google only;
+	// email/password remains available through Keycloak when the list is empty.
+	OIDCSocialProviders []string
+
 	SMTPHost        string
 	SMTPPort        int
 	SMTPUsername    string
@@ -62,17 +76,9 @@ type Config struct {
 	PhotoRetention  time.Duration
 	UploadDir       string
 
-	// PartyTimeDuration is how long a group party window stays active.
-	// PartyTimeCooldown is the recharge wait after a party ends before the
-	// next one may start (48h by default). See docs/gameplay.md.
-	PartyTimeDuration time.Duration
-	PartyTimeCooldown time.Duration
-
-	// MediaProcessingWorker starts the in-process media-processing worker
-	// goroutine (quarantined video promotion). Enabled by default now that the
-	// runtime image ships ffmpeg/ffprobe; deployments must provide the
-	// media-processing worker container bounds (see docs/video-processing.md).
-	MediaProcessingWorker bool
+	PartyTimeDuration     time.Duration // Active window for a group party (see docs/gameplay.md).
+	PartyTimeCooldown     time.Duration // Recharge after a party ends before the next may start (default 48h).
+	MediaProcessingWorker bool          // Enables the quarantined video promotion worker (requires ffmpeg/ffprobe).
 
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
@@ -187,6 +193,33 @@ func (c *Config) Validate() error {
 	}
 	if c.PasswordHashCost < 4 || c.PasswordHashCost > 31 {
 		problems = append(problems, "BCRYPT_COST must be between 4 and 31")
+	}
+	if c.OIDCEnabled {
+		issuer, err := url.Parse(strings.TrimSpace(c.OIDCIssuerURL))
+		if err != nil || issuer.Host == "" || (issuer.Scheme != "http" && issuer.Scheme != "https") {
+			problems = append(problems, "OIDC_ISSUER_URL must be a valid http(s) URL when OIDC is enabled")
+		}
+		if strings.TrimSpace(c.OIDCClientID) == "" {
+			problems = append(problems, "OIDC_CLIENT_ID is required when OIDC is enabled")
+		}
+		if strings.TrimSpace(c.OIDCClientSecret) == "" {
+			problems = append(problems, "OIDC_CLIENT_SECRET is required when OIDC is enabled")
+		}
+		if c.Environment == EnvProduction && (issuer == nil || issuer.Scheme != "https") {
+			problems = append(problems, "OIDC_ISSUER_URL must use HTTPS in production")
+		}
+	}
+	seenSocialProviders := make(map[string]bool, len(c.OIDCSocialProviders))
+	for _, provider := range c.OIDCSocialProviders {
+		switch provider {
+		case "google":
+		default:
+			problems = append(problems, fmt.Sprintf("OIDC_SOCIAL_PROVIDERS contains unsupported provider %q", provider))
+		}
+		if seenSocialProviders[provider] {
+			problems = append(problems, fmt.Sprintf("OIDC_SOCIAL_PROVIDERS contains duplicate provider %q", provider))
+		}
+		seenSocialProviders[provider] = true
 	}
 	if c.DatabaseMinConns < 0 {
 		problems = append(problems, "DB_MIN_CONNS must not be negative")

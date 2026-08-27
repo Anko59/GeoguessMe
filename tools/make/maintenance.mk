@@ -36,7 +36,7 @@ clean: build-cache-prune ## Remove generated artifacts and build cache without t
 
 reset-dev: ## Delete development volumes; requires CONFIRM=reset-dev.
 ifeq ($(CONFIRM),reset-dev)
-	$(COMPOSE_DEV) down -v --remove-orphans
+	$(COMPOSE_DEV) --profile social down -v --remove-orphans
 else
 	@echo "This deletes development database and media volumes. Re-run with CONFIRM=reset-dev."
 	@exit 2

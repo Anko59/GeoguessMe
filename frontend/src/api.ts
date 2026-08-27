@@ -3,6 +3,7 @@ import type { APIErrorBody, AuthResponse } from './types';
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
+let oidcExchangePromise: Promise<AuthResponse> | null = null;
 
 export const setAccessToken = (token: string | null): void => {
     accessToken = token;
@@ -18,6 +19,8 @@ const api = axios.create({
 const publicAuthPaths = new Set([
     '/auth/signup',
     '/auth/login',
+    '/auth/oidc/config',
+    '/auth/oidc/session',
     '/auth/verify',
     '/auth/password/forgot',
     '/auth/password/reset',
@@ -46,6 +49,29 @@ export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
             });
     }
     return refreshPromise;
+};
+
+export const exchangeOIDCSession = async (username?: string): Promise<AuthResponse> => {
+    if (!oidcExchangePromise) {
+        oidcExchangePromise = axios
+            .post<AuthResponse>('/api/v1/auth/oidc/session', username ? { username } : undefined, {
+                withCredentials: true,
+            })
+            .then((response) => {
+                setAccessToken(response.data.access_token);
+                return response.data;
+            })
+            .finally(() => {
+                oidcExchangePromise = null;
+            });
+    }
+    return oidcExchangePromise;
+};
+
+export const getAPIErrorCode = (error: unknown): string | undefined => {
+    if (typeof error !== 'object' || error === null) return undefined;
+    const data = (error as { response?: { data?: APIErrorBody } }).response?.data;
+    return data?.error?.code;
 };
 
 const refreshAccessToken = async (): Promise<string | null> => {

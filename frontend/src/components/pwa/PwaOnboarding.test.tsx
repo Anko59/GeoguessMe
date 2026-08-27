@@ -42,7 +42,15 @@ vi.mock('./usePwaInstall', async (importOriginal) => {
 import PwaOnboarding from './PwaOnboarding';
 
 const authBase: AuthContextValue = {
-    user: { id: 'u1', username: 'alice', email: 'alice@example.test', avatar: 'avatar.png' },
+    user: {
+        id: 'u1',
+        username: 'alice',
+        email: 'alice@example.test',
+        avatar: 'avatar.png',
+        password_login_enabled: true,
+        oidc_linked: false,
+        migration_required: false,
+    },
     loading: false,
     isAuthenticated: true,
     login: vi.fn(),
