@@ -95,11 +95,15 @@ if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$registry_secret"; then
 fi
 registry_username=$(sed -n 's/^GHCR_USERNAME=//p' "$registry_secret" | tail -1)
 registry_token=$(sed -n 's/^GHCR_TOKEN=//p' "$registry_secret" | tail -1)
-if [ -z "$registry_username" ] || [ -z "$registry_token" ]; then
-    die 'GHCR_USERNAME and GHCR_TOKEN are required'
+if [ -n "$registry_username" ] && [ -n "$registry_token" ]; then
+    if ! printf '%s' "$registry_token" | docker login ghcr.io \
+        --username "$registry_username" --password-stdin >/dev/null; then
+        echo 'warning: GHCR login failed for ghcr.io; continuing with anonymous pull (packages may be public)' >&2
+        docker logout ghcr.io >/dev/null 2>&1 || true
+    fi
+else
+    echo 'GHCR credentials not set; using anonymous pull (packages must be public)' >&2
 fi
-printf '%s' "$registry_token" | docker login ghcr.io \
-    --username "$registry_username" --password-stdin >/dev/null
 for image in "$backend_image" "$web_image"; do
     docker run --rm -v "$HOME/.docker:/root/.docker:ro" "$COSIGN_IMAGE" verify \
         --certificate-oidc-issuer https://token.actions.githubusercontent.com \
