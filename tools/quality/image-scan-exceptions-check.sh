@@ -181,10 +181,22 @@ validate_record() {
         case "$REF" in
             *@sha256:*) ref_digest="sha256:${REF##*@sha256:}" ;;
         esac
+        # Local remediation images (e.g. geoguessme/postgres-openssl) are
+        # audited by tag because a locally built image has no registry digest;
+        # their records pin the exact image-ID digest instead, so a match on
+        # the tag-only reference must verify the ID of the image in the daemon.
+        if [ -z "$ref_digest" ] && docker image inspect "$REF" >/dev/null 2>&1; then
+            ref_digest=$(docker image inspect --format '{{.Id}}' "$REF")
+        fi
         local match=0
         [ "$image" = "$REF" ] && match=1
         if [ "$match" -eq 0 ] && [ -n "$ref_digest" ]; then
-            [ "$digest" = "$ref_digest" ] && [ "$image" = "$ref_name" ] && match=1
+            # Compare on the name portion of both sides so a record written
+            # for a locally built image (image carries its image-ID digest)
+            # matches either a tag-only audit reference or the same reference
+            # with its registry digest.
+            local image_name=${image%%@sha256:*}
+            [ "$digest" = "$ref_digest" ] && [ "$image_name" = "$ref_name" ] && match=1
         fi
         if [ "$match" -eq 1 ]; then
             printf '# exception %s (owner %s, expires %s)\n%s\n' "$id" "$owner" "$expires" "$id" >>"$OUT"

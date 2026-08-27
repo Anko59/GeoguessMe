@@ -201,7 +201,8 @@ type Challenge = elo.Challenge
 // LoadChallenges returns every challenge (photo with guesses) for a group,
 // optionally limited to photos created at or after start, ordered by photo
 // creation time. Challenges with fewer than two guessers are dropped: they
-// produce no Elo comparisons. Guesses by deleted accounts are excluded.
+// produce no Elo comparisons. Guesses by deleted accounts and timed-out
+// guesses are excluded.
 func (r *Repository) LoadChallenges(ctx context.Context, groupID string, start *time.Time) ([]elo.Challenge, error) {
 	return r.loadChallenges(ctx, &groupID, start)
 }
@@ -212,16 +213,21 @@ func (r *Repository) GlobalChallenges(ctx context.Context) ([]elo.Challenge, err
 	return r.loadChallenges(ctx, nil, nil)
 }
 
+// loadChallenges loads every non-timed-out guess per photo, optionally
+// filtered by group and start time.
 func (r *Repository) loadChallenges(ctx context.Context, groupID *string, start *time.Time) ([]elo.Challenge, error) {
+	// Timed-out guesses carry no competitive result: their owners are not
+	// compared against other players in Elo (see docs/gameplay.md), so the
+	// loader excludes them via AND NOT g.timed_out.
+	// Placeholders are numbered by position so every filter combination is
+	// valid SQL: the time filter is $2 only when the group filter precedes
+	// it, and $1 when it is the sole argument.
 	query := `
 		SELECT p.id, p.created_at, g.user_id, g.score
 		FROM guesses g
 		JOIN photos p ON p.id = g.photo_id
 		JOIN users u ON u.id = g.user_id AND u.deleted_at IS NULL
-		WHERE TRUE`
-	// Placeholders are numbered by position so every filter combination is
-	// valid SQL: the time filter is $2 only when the group filter precedes
-	// it, and $1 when it is the sole argument.
+		WHERE TRUE AND NOT g.timed_out`
 	args := []any{}
 	if groupID != nil {
 		args = append(args, *groupID)

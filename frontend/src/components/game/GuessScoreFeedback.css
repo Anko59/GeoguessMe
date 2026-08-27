@@ -119,3 +119,16 @@
         transform: translateY(-0.75rem) scale(0.96);
     }
 }
+
+/* Party Time ×2 badge on the score card kicker. */
+.guess-feedback-party {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.5rem;
+    display: inline-block;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255, 182, 0, 0.25), rgba(0, 192, 255, 0.25));
+    border: 1px solid var(--brand-orange);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+}

@@ -62,6 +62,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/groupPhoto
   /group/notifications:
     $ref: ./openapi/paths/groups.yaml#/groupNotifications
+  /group/party:
+    $ref: ./openapi/paths/groups.yaml#/groupParty
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
   /group/reaction-usage:
@@ -84,6 +86,8 @@ paths:
     $ref: ./openapi/paths/challenges.yaml#/mediaDelivered
   /challenges/{photoID}/guess:
     $ref: ./openapi/paths/challenges.yaml#/guess
+  /challenges/{photoID}/timeout:
+    $ref: ./openapi/paths/challenges.yaml#/timeout
   /challenges/{photoID}/results:
     $ref: ./openapi/paths/challenges.yaml#/results
   /ws/ticket:

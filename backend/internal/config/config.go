@@ -76,11 +76,9 @@ type Config struct {
 	PhotoRetention  time.Duration
 	UploadDir       string
 
-	// MediaProcessingWorker starts the in-process media-processing worker
-	// goroutine (quarantined video promotion). Enabled by default now that the
-	// runtime image ships ffmpeg/ffprobe; deployments must provide the
-	// media-processing worker container bounds (see docs/video-processing.md).
-	MediaProcessingWorker bool
+	PartyTimeDuration     time.Duration // Active window for a group party (see docs/gameplay.md).
+	PartyTimeCooldown     time.Duration // Recharge after a party ends before the next may start (default 48h).
+	MediaProcessingWorker bool          // Enables the quarantined video promotion worker (requires ffmpeg/ffprobe).
 
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
@@ -265,6 +263,9 @@ func (c *Config) Validate() error {
 	}
 	if c.PhotoRetention < c.ChallengeTTL {
 		problems = append(problems, "PHOTO_RETENTION must be at least CHALLENGE_TTL")
+	}
+	if c.PartyTimeDuration <= 0 || c.PartyTimeCooldown < 0 {
+		problems = append(problems, "PARTY_TIME_DURATION must be positive and PARTY_TIME_COOLDOWN must not be negative")
 	}
 	if c.RateLimitRequests <= 0 || c.RateLimitWindow <= 0 {
 		problems = append(problems, "rate limit values must be positive")

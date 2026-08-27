@@ -26,14 +26,15 @@ clean-build: ## Build production images from scratch without any layer cache.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
-AUDIT_IMAGES ?= postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 \
+AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8 \
+	geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7 \
 	quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561 \
 	cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
 build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic
+	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
 audit-images: build-security-tool-images ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
@@ -56,7 +57,7 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	if [ -n "$${RESTIC_IMAGE:-}" ]; then \
 		images="$$images $${RESTIC_IMAGE}"; \
 	fi; \
-	for local_image in geoguessme/restic-tools:0.19.1-xnet-0.56.0; do \
+	for local_image in geoguessme/restic-tools:0.19.1-xnet-0.56.0 geoguessme/postgres-openssl:15.19-openssl-3.5.8 geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7; do \
 		if docker image inspect "$$local_image" >/dev/null 2>&1; then \
 			images="$$images $$local_image"; \
 		else \

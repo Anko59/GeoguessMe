@@ -7,6 +7,7 @@ import (
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository/chat"
 	"geoguessme/internal/repository/groups"
+	"geoguessme/internal/repository/party"
 )
 
 // Repository is the concrete PostgreSQL persistence collection. PR 4
@@ -32,12 +33,16 @@ type Repository struct {
 	// The application composition root hands it to the GameAPI through
 	// App.Repos.Groups.
 	Groups *groups.Repository
+	// Party is the Party Time persistence collection (group party windows and
+	// the double-points multiplier lookup). The application composition root
+	// hands it to the party handler slice through App.Repos.Party.
+	Party *party.Repository
 }
 
 // NewRepository returns a Repository bound to the given pool, including the
-// chat and gameplay persistence slices.
+// chat, gameplay, and party persistence slices.
 func NewRepository(pool database.Pool) *Repository {
-	return &Repository{pool: pool, Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool)}
+	return &Repository{pool: pool, Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool), Party: party.NewRepository(pool)}
 }
 
 // UserGroups returns the groups a user belongs to, newest first. It is the

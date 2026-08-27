@@ -123,9 +123,9 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	groupID := "00000000-0000-0000-0000-000000000001"
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, LifecycleStatus: "ready", HideLocation: true, CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	guessesRows := func() *pgxmock.Rows {
-		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).
-			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png").
-			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, now, "carol", "c.png")
+		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).
+			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png").
+			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, false, now, "carol", "c.png")
 	}
 	challengesRows := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
@@ -144,7 +144,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, viewerID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-		mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
+		mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
 	}
 	// A guesser sees scores, their own guessed point and distance, but not the
 	// actual location nor the other players' guessed points while it is hidden.
@@ -170,7 +170,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
 	recorder = fetch("user-1")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Count(body, `"lat":`) != 2 {
@@ -183,7 +183,7 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(guessesRows())
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(challengesRows())
 	recorder = fetch("user-2")
 	body = recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, "actual_lat") || strings.Contains(body, "location_hidden") || strings.Count(body, `"lat":`) != 2 {
@@ -199,8 +199,8 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, now, "bob", "b.png"))
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
+	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png"))
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
 	resultsRequest.SetPathValue("photoID", photo.ID)
@@ -368,7 +368,7 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(&expired))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectRollback()
 		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusGone)
@@ -381,7 +381,7 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
@@ -396,7 +396,7 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
 			WithArgs(photoID, "user-1").
@@ -413,13 +413,14 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses").
 			WithArgs(photoID, "user-1").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at, guess_expires_at FROM challenge_views").
 			WithArgs(photoID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).
 				AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(-time.Second)))
-		mock.ExpectRollback()
+		mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photoID, "user-1", photo.GroupID, 0, 0, 0, 0, true, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
 		gameAPI.SubmitChallengeGuess(recorder, guessRequest(`{"lat":48.8,"long":2.3}`))
 		if recorder.Code != http.StatusGone {
@@ -437,10 +438,10 @@ func TestSubmitChallengeGuessBranches(t *testing.T) {
 		mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(guessPhotoRow(photo))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, created_at FROM guesses").
+		mock.ExpectQuery("SELECT id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at FROM guesses").
 			WithArgs(photoID, "user-1").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "created_at"}).
-				AddRow("guess-1", photoID, "user-1", photo.GroupID, 48.8, 2.3, 4000, 100, now))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at"}).
+				AddRow("guess-1", photoID, "user-1", photo.GroupID, 48.8, 2.3, 4000, 100, false, now))
 		mock.ExpectCommit()
 		requireStatus(t, gameAPI.SubmitChallengeGuess, guessRequest(`{"lat":48.8,"long":2.3}`), http.StatusOK)
 	})

@@ -233,7 +233,12 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             // overlay, so the celebration is dispatched afterwards and shows
             // during the loading phase and the results view.
             const resultsPromise = loadResults(photoId);
-            if (!response.data.duplicate) dispatch({ type: 'show-feedback', score: response.data.score });
+            if (!response.data.duplicate)
+                dispatch({
+                    type: 'show-feedback',
+                    score: response.data.score,
+                    partyDoubled: response.data.party_doubled === true,
+                });
             onChallengeStatusChange?.(photoId, 'guessed');
             await resultsPromise;
         } catch (requestError: unknown) {
@@ -267,12 +272,16 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
 
     useEffect(() => {
         // The guess deadline is server-authoritative; once it passes, the
-        // player cannot guess anymore (the server refuses late submissions
-        // with guess_time_expired) and the challenge counts as 0 points.
+        // player cannot guess anymore. The server records a timed-out guess
+        // (score 0) so the player appears in results afterwards.
         if (state.status === 'guessing' && state.guessDeadline !== undefined && guessRemaining <= 0) {
+            const photoId = state.photoId;
             dispatch({ type: 'guess-timeout' });
+            if (photoId) {
+                void api.post(`/challenges/${photoId}/timeout`).catch(() => undefined);
+            }
         }
-    }, [guessRemaining, state.guessDeadline, state.status]);
+    }, [guessRemaining, state.guessDeadline, state.photoId, state.status]);
 
     useEffect(() => {
         const photoId = gameMessage?.photo_id;
@@ -304,6 +313,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         <GuessScoreFeedback
             feedback={state.feedback.feedback}
             score={state.feedback.score}
+            partyDoubled={state.feedback.partyDoubled}
             onDismiss={() => dispatch({ type: 'clear-feedback' })}
         />
     ) : null;

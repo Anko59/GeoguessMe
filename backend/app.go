@@ -7,6 +7,7 @@ import (
 
 	"geoguessme/handlers"
 	authhandlers "geoguessme/handlers/auth"
+	partyhandlers "geoguessme/handlers/party"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
@@ -66,6 +67,9 @@ type App struct {
 	// AuthAPI is the authentication/profile/avatar handler slice migrated
 	// onto injected dependencies (PR 7).
 	AuthAPI *authhandlers.AuthAPI
+	// Party is the Party Time handler slice (group party windows and the
+	// double-points announcement), served from injected dependencies.
+	Party *partyhandlers.API
 }
 
 // NewApp constructs an application instance from explicit dependencies. Each
@@ -100,6 +104,7 @@ func NewApp(
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
+		Party:   partyhandlers.NewAPI(repos.Groups, repos.Party, repos.Chat, repos, pushSvc, hub, cfg, clock),
 	}
 }
 
@@ -209,6 +214,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/leaderboard", protected(a.Game.GetLeaderboard))
 	mux.Handle("/api/v1/group/photo", protected(a.Game.GroupPhoto))
 	mux.Handle("/api/v1/group/notifications", protected(a.Game.GroupNotifications))
+	mux.Handle("/api/v1/group/party", protected(a.Party.HandleParty))
 	mux.Handle("/api/v1/group/messages", protected(a.Chat.GetGroupMessages))
 	mux.Handle("/api/v1/group/reaction-usage", protected(a.Chat.GetGroupReactionUsage))
 	mux.Handle("/api/v1/group/message-reactions/{messageID}", protected(a.Chat.SetMessageReaction))
@@ -225,6 +231,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(a.Game.AcceptChallenge))
 	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(a.Game.ConfirmChallengeMediaDelivered))
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(a.Game.SubmitChallengeGuess))
+	mux.Handle("/api/v1/challenges/{photoID}/timeout", protected(a.Game.TimeoutChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(a.Game.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(a.Game.ServeChallengeMedia))
 	mux.Handle("/api/v1/users/{userID}/avatar", protected(a.AuthAPI.ServeUserAvatar))

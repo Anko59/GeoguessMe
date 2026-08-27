@@ -105,13 +105,7 @@ Profile:
         total_points: { type: integer, minimum: 0 }
         guess_count: { type: integer, minimum: 0 }
         average_score: { type: number, minimum: 0 }
-        elo:
-          type: integer
-          minimum: 0
-          description: >-
-            Global all-time Elo rating, updated with a small factor so it
-            reflects long-run skill; 0 while never compared against another
-            guesser.
+        elo: { type: integer, minimum: 0, description: Global all-time Elo; 0 while never compared. }
         rank: { $ref: "#/ProgressionRank" }
         global_rank: { $ref: "#/GlobalRank" }
         global_average_rank: { $ref: "#/GlobalRank" }
@@ -243,15 +237,7 @@ LeaderboardEntry:
     guess_count: { type: integer }
     average_score: { type: number, description: Average guess score in the selected period. }
     total_points: { type: integer, minimum: 0, description: Lifetime guess points used for rank progression. }
-    elo:
-      type: integer
-      minimum: 0
-      description: >-
-        Elo rating computed from the selected period's challenges; 0 while
-        the player never compared against another guesser on a shared
-        challenge in the period. The update factor depends on the period:
-        weekly ladders move fastest, monthly moderately, and all-time
-        slowest.
+    elo: { type: integer, minimum: 0, description: Period Elo; 0 while not compared in the period. }
     rank: { $ref: "#/ProgressionRank" }
 
 Message:
@@ -431,14 +417,32 @@ ChallengeMediaDelivered:
       }
     server_time: { type: string, format: date-time }
 
+PartyStatus:
+  type: object
+  required: [active, server_time]
+  properties:
+    active: { type: boolean, description: True while a party window covers server_time; dates present when true }
+    started_at: { type: string, format: date-time, description: Present only while a party is active }
+    ends_at: { type: string, format: date-time, description: Present only while a party is active }
+    next_available_at:
+      {
+        type: string,
+        format: date-time,
+        description: Earliest instant the next party may start (previous ends_at plus PARTY_TIME_COOLDOWN); present while recharging or active.,
+      }
+    server_time: { type: string, format: date-time }
+
 GuessResponse:
   type: object
-  required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
+  required: [guess_id, photo_id, score, created_at, duplicate, server_time]
   properties:
     guess_id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
     score: { type: integer }
-    distance: { type: number }
+    distance: { type: number, description: Omitted when timed_out is true }
+    timed_out:
+      { type: boolean, description: True when the player let the guess window expire without guessing (score 0) }
+    party_doubled: { type: boolean, description: True when Party Time doubled this guess; omitted otherwise }
     created_at: { type: string, format: date-time }
     duplicate: { type: boolean }
     server_time: { type: string, format: date-time }
@@ -476,10 +480,9 @@ Guess:
       }
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
-    elo_delta:
-      type: integer
-      description: Signed change in the player's weekly Elo rating caused by this challenge; zero when the challenge has fewer than two guesses or was created before the current calendar week started.
-    distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
+    elo_delta: { type: integer, description: Weekly Elo change (0 when <2 guesses or before week start). }
+    distance: { type: number, description: Omitted while the location is hidden or when timed_out is true. }
+    timed_out: { type: boolean, description: True when the guess timed out (score 0). }
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }

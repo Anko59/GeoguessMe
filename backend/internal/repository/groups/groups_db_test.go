@@ -189,7 +189,7 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 		t.Fatalf("members = %+v, %v", members, err)
 	}
 	leaderboardQuery := `(?s)SELECT u\.id, u\.username, u\.avatar.*SUM\(g\.score\).*ORDER BY COALESCE\(SUM\(g\.score\), 0\) DESC`
-	challengesQuery := `(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`
+	challengesQuery := `(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out AND g\.group_id = \$1`
 	emptyChallenges := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"})
 	}
@@ -224,7 +224,7 @@ func TestLeaderboardPeriodStart(t *testing.T) {
 func TestLoadChallengesDropsSingleGuesserPhotos(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out AND g\.group_id = \$1 ORDER BY`).
 		WithArgs("g1").
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "u1", 4000).
@@ -245,7 +245,7 @@ func TestLoadChallengesDropsSingleGuesserPhotos(t *testing.T) {
 func TestGlobalEloRanksByComputedRating(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
@@ -261,7 +261,7 @@ func TestGlobalEloRanksByComputedRating(t *testing.T) {
 func TestGlobalEloUnratedPlayer(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
@@ -325,7 +325,7 @@ func TestLeaderboardFactorMapping(t *testing.T) {
 func TestWeeklyChallengeEloDeltas(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*AND p\.created_at >= \$1 ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).
 		WithArgs(pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).

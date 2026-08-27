@@ -30,7 +30,8 @@ COPY deployment/caddy/Caddyfile /etc/caddy/Caddyfile
 RUN addgroup -S -g 1000 caddy \
     && adduser -S -D -H -u 1000 -G caddy caddy \
     && setcap cap_net_bind_service=+ep /usr/bin/caddy \
-    && chown -R caddy:caddy /srv /data /config
+    && chown -R caddy:caddy /srv /data /config \
+    && apk add --no-cache 'openssl>=3.5.8-r0'
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD ["wget", "--spider", "--quiet", "http://localhost/health/live"]
 USER caddy
