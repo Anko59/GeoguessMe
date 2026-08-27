@@ -427,28 +427,7 @@
   reachable: "terraform binary embeds Go stdlib; mime DoS requires malicious MIME headers in a parsing path; no newer stable terraform exists"
   approved: true
   expires: 2026-09-09
-
-# --- geoguessme/restic-tools:0.19.1-xnet-0.56.0 (locally rebuilt restic
-#     0.19.1 with the golang.org/x/net v0.56.0 fix; same findings as the
-#     upstream base, which it replaces in the audit set) ---
-- id: CVE-2026-56852
-  image: geoguessme/restic-tools:0.19.1-xnet-0.56.0@sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  digest: sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  owner: security-program
-  reachable: "restic binary embeds golang.org/x/text 0.37.0; operator-run backup CLI with trusted repository input; no newer restic release exists"
-  approved: true
-  expires: 2026-09-09
-- id: GHSA-hrxh-6v49-42gf
-  image: geoguessme/restic-tools:0.19.1-xnet-0.56.0@sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  digest: sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  owner: security-program
-  reachable: "restic binary embeds grpc; xDS control plane is not configured; no newer restic release exists"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-39822
-  image: geoguessme/restic-tools:0.19.1-xnet-0.56.0@sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  digest: sha256:77d7d0cc1a0841b70bdf896191489e849ddd0f643853a31d1cc2ae93ab4c514b
-  owner: security-program
-  reachable: "restic binary embeds Go 1.26.4 stdlib; os.Root symlink traversal not reachable through backup CLI paths; no newer restic release exists"
-  approved: true
-  expires: 2026-09-09
+# geoguessme/restic-tools:0.19.1-xnet-0.56.0 is now rebuilt with
+# golang.org/x/net v0.56.0, golang.org/x/text v0.39.0 and
+# google.golang.org/grpc v1.82.1 on Go 1.26.6; no fixed HIGH/CRITICAL
+# findings remain, so no exception is required.
