@@ -132,6 +132,34 @@ guess:
           content: { application/json: { schema: { $ref: "../components/schemas.yaml#/APIError" } } },
         }
 
+timeout:
+  post:
+    operationId: timeoutChallengeGuess
+    summary: Record a timeout when the guess window expires without a guess.
+    tags: [Challenges]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { $ref: "../components/parameters.yaml#/photoID" }
+    responses:
+      "201":
+        {
+          description: Timeout recorded (score 0).,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+        }
+      "200":
+        {
+          description: Existing guess returned idempotently.,
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+        }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409":
+        {
+          description: "Viewing window is still open (viewing_window_open).",
+          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/APIError" } } },
+        }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 results:
   get:
     operationId: getChallengeResults

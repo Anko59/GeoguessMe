@@ -408,12 +408,14 @@ ChallengeMediaDelivered:
 
 GuessResponse:
   type: object
-  required: [guess_id, photo_id, score, distance, created_at, duplicate, server_time]
+  required: [guess_id, photo_id, score, created_at, duplicate, server_time]
   properties:
     guess_id: { type: string, format: uuid }
     photo_id: { type: string, format: uuid }
     score: { type: integer }
-    distance: { type: number }
+    distance: { type: number, description: Omitted when timed_out is true }
+    timed_out:
+      { type: boolean, description: True when the player let the guess window expire without guessing (score 0) }
     created_at: { type: string, format: date-time }
     duplicate: { type: boolean }
     server_time: { type: string, format: date-time }
@@ -452,12 +454,9 @@ Guess:
     long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
     score: { type: integer }
     elo_delta:
-      type: integer
-      description: >-
-        Signed change in the player's weekly Elo rating caused by this
-        challenge; zero when the challenge has fewer than two guesses or was
-        created before the current calendar week started.
-    distance: { type: number, description: Omitted alongside the coordinates while the location is hidden. }
+      { type: integer, description: Weekly Elo change for this challenge (0 when <2 guesses or before week start). }
+    distance: { type: number, description: Omitted while the location is hidden or when timed_out is true. }
+    timed_out: { type: boolean, description: True when the guess timed out (score 0). }
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }
