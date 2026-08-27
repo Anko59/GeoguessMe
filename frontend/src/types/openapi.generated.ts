@@ -641,6 +641,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/challenges/{photoID}/timeout': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a timeout when the guess window expires without a guess. */
+        post: operations['timeoutChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/challenges/{photoID}/results': {
         parameters: {
             query?: never;
@@ -803,7 +820,7 @@ export interface components {
             total_points: number;
             guess_count: number;
             average_score: number;
-            /** @description Global Elo rating; 0 while never compared against another guesser. */
+            /** @description Global all-time Elo; 0 while never compared. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
             global_rank: components['schemas']['GlobalRank'];
@@ -890,7 +907,7 @@ export interface components {
             average_score: number;
             /** @description Lifetime guess points used for rank progression. */
             total_points: number;
-            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. */
+            /** @description Period Elo; 0 while not compared in the period. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
         };
@@ -1102,7 +1119,10 @@ export interface components {
             /** Format: uuid */
             photo_id: string;
             score: number;
-            distance: number;
+            /** @description Omitted when timed_out is true */
+            distance?: number;
+            /** @description True when the player let the guess window expire without guessing (score 0) */
+            timed_out?: boolean;
             /** @description True when Party Time doubled this guess; omitted otherwise */
             party_doubled?: boolean;
             /** Format: date-time */
@@ -1131,10 +1151,12 @@ export interface components {
              */
             long?: number;
             score: number;
-            /** @description Elo rating points gained or lost on this challenge. */
+            /** @description Weekly Elo change for this challenge (0 when <2 guesses or before week start). */
             elo_delta: number;
-            /** @description Omitted alongside the coordinates while the location is hidden. */
+            /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
+            /** @description True when the guess timed out (score 0). */
+            timed_out?: boolean;
             /** Format: date-time */
             created_at: string;
             username?: string;
@@ -2361,6 +2383,49 @@ export interface operations {
                     'application/json': components['schemas']['APIError'];
                 };
             };
+        };
+    };
+    timeoutChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoID: components['parameters']['photoID'];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Existing guess returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GuessResponse'];
+                };
+            };
+            /** @description Timeout recorded (score 0). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GuessResponse'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            /** @description Viewing window is still open (viewing_window_open). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
+            410: components['responses']['ErrorResponse'];
         };
     };
     getChallengeResults: {

@@ -227,6 +227,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(a.Game.AcceptChallenge))
 	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(a.Game.ConfirmChallengeMediaDelivered))
 	mux.Handle("/api/v1/challenges/{photoID}/guess", protected(a.Game.SubmitChallengeGuess))
+	mux.Handle("/api/v1/challenges/{photoID}/timeout", protected(a.Game.TimeoutChallengeGuess))
 	mux.Handle("/api/v1/challenges/{photoID}/results", protected(a.Game.GetChallengeResults))
 	mux.Handle("/api/v1/challenges/{photoID}/media", protected(a.Game.ServeChallengeMedia))
 	mux.Handle("/api/v1/users/{userID}/avatar", protected(a.AuthAPI.ServeUserAvatar))

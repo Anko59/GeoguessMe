@@ -54,18 +54,22 @@ with standard competition ranking (equal totals share a rank), and
 never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
 average guess score, and `global_elo_rank` ranks the player among everyone who
 has been compared against another guesser on a shared challenge, ordered by Elo
-rating (`elo` is 0 and the rank is 0 for a player with no such challenge). Each
-rank object carries a `next_rank` with the following rank's name and badge key
-(omitted at the highest rank). Group leaderboard entries include the same rank
-object beneath each player's name while their `score` remains the selected
-period's sum; entries also carry `average_score` and `elo` for the same period.
+rating (`elo` is 0 and the rank is 0 for a player with no such challenge). The
+global rating is an all-time ladder and moves with a small update factor, so it
+tracks long-run skill rather than the most recent challenges. Each rank object
+carries a `next_rank` with the following rank's name and badge key (omitted at
+the highest rank). Group leaderboard entries include the same rank object
+beneath each player's name while their `score` remains the selected period's
+sum; entries also carry `average_score` and `elo` for the same period.
 
 The group leaderboard is ranked by one of three metrics — `total` (period score
 sum, the default), `average` (period average score), or `elo` (Elo rating
 computed from the period's challenges) — selected with the `metric` query
 parameter, and can be scoped to a calendar week, month, or all time with
 `period`. Elo ratings are recomputed from guess history on every read, so a late
-guess on an old challenge retroactively moves the whole ladder.
+guess on an old challenge retroactively moves the whole ladder. Each period uses
+its own Elo update factor: weekly ladders move fastest (`K = 40`), monthly
+ladders moderately (`K = 20`), and all-time ladders slowest (`K = 8`).
 
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must

@@ -233,8 +233,12 @@ function GameResultsView({
                                 >
                                     <div>
                                         <strong>{guess.user_id === currentUserId ? 'You' : guess.username}</strong>
-                                        {guess.distance !== undefined && (
-                                            <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                        {guess.timed_out ? (
+                                            <span>Timed out — 0 pts</span>
+                                        ) : (
+                                            guess.distance !== undefined && (
+                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                            )
                                         )}
                                     </div>
                                     <div className="score-card__value">
@@ -242,7 +246,8 @@ function GameResultsView({
                                         {guess.elo_delta !== 0 && (
                                             <span
                                                 className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
-                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} Elo`}
+                                                title="Weekly Elo change"
+                                                aria-label={`${guess.elo_delta > 0 ? 'Gained' : 'Lost'} ${Math.abs(guess.elo_delta)} weekly Elo`}
                                             >
                                                 {guess.elo_delta > 0 ? '+' : ''}
                                                 {guess.elo_delta} Elo

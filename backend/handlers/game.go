@@ -146,13 +146,60 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 			a.hub.BroadcastUpdate(*message)
 		}
 	}
-	response := map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now}
+	response := map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "timed_out": result.Guess.TimedOut, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now}
 	if result.PartyDoubled {
 		// Surfaced only when true so the optional contract field keeps its
 		// "party bonus applied" meaning for clients.
 		response["party_doubled"] = true
 	}
 	WriteJSON(w, status, response)
+}
+
+// TimeoutChallengeGuess records a timed-out guess (score 0) when the
+// server-authoritative guess window expired.
+func (a *GameAPI) TimeoutChallengeGuess(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		MethodNotAllowed(w)
+		return
+	}
+	photoID := r.PathValue("photoID")
+	if err := ValidateID(photoID, "photo_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
+		return
+	}
+	now := a.clock()
+	result, err := a.groups.TimeoutGuess(r.Context(), photoID, GetUserIDFromContext(r), now)
+	if err != nil {
+		switch {
+		case errors.Is(err, groups.ErrForbidden):
+			WriteError(w, http.StatusForbidden, "forbidden", "You cannot guess this challenge")
+		case errors.Is(err, groups.ErrOwnPhoto):
+			WriteError(w, http.StatusForbidden, "forbidden", "You cannot guess your own challenge")
+		case errors.Is(err, groups.ErrNotFound):
+			WriteError(w, http.StatusNotFound, "not_found", "Challenge not found")
+		case errors.Is(err, groups.ErrChallengeExpired):
+			WriteError(w, http.StatusGone, "challenge_expired", "This challenge has expired")
+		case errors.Is(err, groups.ErrViewNotFinished):
+			WriteError(w, http.StatusConflict, "viewing_window_open", "Wait until the viewing window ends before guessing")
+		default:
+			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to save guess")
+		}
+		return
+	}
+	status := http.StatusCreated
+	if result.Existing {
+		status = http.StatusOK
+	}
+	if !result.Existing && a.hub != nil {
+		message, messageErr := a.messages.GetChallengeMessageForViewer(r.Context(), photoID, "")
+		if messageErr != nil {
+			slog.Error("failed to load challenge message after timeout", "photo_id", photoID, "error", messageErr)
+		} else if message != nil {
+			message.ChallengeResolved = true
+			a.hub.BroadcastUpdate(*message)
+		}
+	}
+	WriteJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "timed_out": result.Guess.TimedOut, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now})
 }
 
 // GetChallengeResults returns the leaderboard of a challenge, hiding other
@@ -185,7 +232,9 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
 	}
-	eloDeltas, err := a.groups.GlobalChallengeEloDeltas(r.Context(), photoID)
+	// The results page shows the weekly Elo change only: the same all-group
+	// progression the weekly ladders use, driven by the weekly update factor.
+	eloDeltas, err := a.groups.WeeklyChallengeEloDeltas(r.Context(), photoID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return
@@ -210,15 +259,18 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 			UserID:    guess.UserID,
 			GroupID:   guess.GroupID,
 			Score:     guess.Score,
+			TimedOut:  guess.TimedOut,
 			CreatedAt: guess.CreatedAt,
 			Username:  guess.Username,
 			Avatar:    guess.Avatar,
 			EloDelta:  eloDelta,
 		}
 		if !hidden || guess.UserID == viewerID {
-			item.Lat = &guess.Lat
-			item.Long = &guess.Long
-			item.Distance = &guess.Distance
+			if !guess.TimedOut {
+				item.Lat = &guess.Lat
+				item.Long = &guess.Long
+				item.Distance = &guess.Distance
+			}
 		}
 		responseGuesses = append(responseGuesses, item)
 	}
@@ -239,8 +291,9 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 
 // resultsGuess is the results payload for a single guess. Lat, long, and
 // distance are optional and omitted while a hidden-location challenge keeps
-// other players' guessed points private. EloDelta reflects the rating points
-// gained or lost on this challenge.
+// other players' guessed points private. TimedOut marks a player who let the
+// guess window expire (score 0, no location). EloDelta is the signed change
+// in the player's weekly Elo rating caused by this challenge.
 type resultsGuess struct {
 	ID        string    `json:"id"`
 	PhotoID   string    `json:"photo_id"`
@@ -250,6 +303,7 @@ type resultsGuess struct {
 	Long      *float64  `json:"long,omitempty"`
 	Score     int       `json:"score"`
 	Distance  *float64  `json:"distance,omitempty"`
+	TimedOut  bool      `json:"timed_out"`
 	CreatedAt time.Time `json:"created_at"`
 	Username  string    `json:"username"`
 	Avatar    string    `json:"avatar"`

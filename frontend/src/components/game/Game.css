@@ -387,11 +387,11 @@
 }
 
 .elo-delta--gain {
-    color: var(--success);
+    color: var(--brand-orange-accessible);
 }
 
 .elo-delta--loss {
-    color: var(--danger);
+    color: var(--brand-blue-accessible);
 }
 
 .result-map {

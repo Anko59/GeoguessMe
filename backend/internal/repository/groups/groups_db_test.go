@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"geoguessme/internal/elo"
 	"geoguessme/internal/models"
 
 	"github.com/jackc/pgx/v5"
@@ -188,7 +189,7 @@ func TestGroupListsMembersAndLeaderboard(t *testing.T) {
 		t.Fatalf("members = %+v, %v", members, err)
 	}
 	leaderboardQuery := `(?s)SELECT u\.id, u\.username, u\.avatar.*SUM\(g\.score\).*ORDER BY COALESCE\(SUM\(g\.score\), 0\) DESC`
-	challengesQuery := `(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`
+	challengesQuery := `(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out AND g\.group_id = \$1`
 	emptyChallenges := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"})
 	}
@@ -223,7 +224,7 @@ func TestLeaderboardPeriodStart(t *testing.T) {
 func TestLoadChallengesDropsSingleGuesserPhotos(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND g\.group_id = \$1`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out AND g\.group_id = \$1 ORDER BY`).
 		WithArgs("g1").
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "u1", 4000).
@@ -244,7 +245,7 @@ func TestLoadChallengesDropsSingleGuesserPhotos(t *testing.T) {
 func TestGlobalEloRanksByComputedRating(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
@@ -260,7 +261,7 @@ func TestGlobalEloRanksByComputedRating(t *testing.T) {
 func TestGlobalEloUnratedPlayer(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
@@ -308,18 +309,51 @@ func TestSortLeaderboardByMetric(t *testing.T) {
 	}
 }
 
-func TestGlobalChallengeEloDeltas(t *testing.T) {
+func TestLeaderboardFactorMapping(t *testing.T) {
+	cases := map[LeaderboardPeriod]elo.Factor{
+		LeaderboardWeek:    elo.FactorWeekly,
+		LeaderboardMonth:   elo.FactorMonthly,
+		LeaderboardAllTime: elo.FactorAllTime,
+	}
+	for period, want := range cases {
+		if got := leaderboardFactor(period); got != want {
+			t.Fatalf("leaderboardFactor(%s) = %v, want %v", period, got, want)
+		}
+	}
+}
+
+func TestWeeklyChallengeEloDeltas(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
-	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE ORDER BY`).
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).
+		WithArgs(pgxmock.AnyArg()).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
 			AddRow("p1", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
-	deltas, err := repo.GlobalChallengeEloDeltas(context.Background(), "p1")
+	deltas, err := repo.WeeklyChallengeEloDeltas(context.Background(), "p1")
 	if err != nil {
-		t.Fatalf("GlobalChallengeEloDeltas = %v", err)
+		t.Fatalf("WeeklyChallengeEloDeltas = %v", err)
 	}
-	if deltas["alice"] != 16 || deltas["bob"] != -16 {
-		t.Fatalf("deltas = %+v, want alice: 16, bob: -16", deltas)
+	if deltas["alice"] != 20 || deltas["bob"] != -20 {
+		t.Fatalf("deltas = %+v, want alice: 20, bob: -20 (weekly factor)", deltas)
+	}
+}
+
+func TestWeeklyChallengeEloDeltasOutsideWeek(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	// The SQL window only returns this week's challenges, so a photo created
+	// before the week started is absent from the replay.
+	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*AND p\.created_at >= \$1 ORDER BY`).
+		WithArgs(pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
+			AddRow("p2", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "alice", 5000).
+			AddRow("p2", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), "bob", 0))
+	deltas, err := repo.WeeklyChallengeEloDeltas(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("WeeklyChallengeEloDeltas = %v", err)
+	}
+	if deltas != nil {
+		t.Fatalf("deltas = %+v, want nil for a challenge outside the weekly window", deltas)
 	}
 }
