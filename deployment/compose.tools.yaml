@@ -149,10 +149,14 @@ services:
     volumes:
       - *workspace
 
-  # cloudflared 2026.8.0 (multi-arch digest); used as an SSH ProxyCommand.
+  # cloudflared 2026.8.2 with the OpenSSL libraries refreshed to the fixed
+  # release (CVE-2026-14456); used as an SSH ProxyCommand.
   cloudflared:
     <<: *host-tools
-    image: cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969
+    build:
+      context: .
+      dockerfile: deployment/docker/cloudflared-tools.Dockerfile
+    image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
@@ -188,6 +192,19 @@ services:
       context: .
       dockerfile: deployment/docker/restic-tools.Dockerfile
     image: geoguessme/restic-tools:0.19.1-xnet-0.56.0
+    entrypoint: []
+    volumes:
+      - *workspace
+
+  # PostgreSQL 15.19 with the OpenSSL packages refreshed to the fixed release
+  # (CVE-2026-14456); scanned by `make audit-images` in place of the upstream
+  # base while it still ships libcrypto3/libssl3 3.5.7-r0.
+  postgres-openssl:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/postgres-openssl.Dockerfile
+    image: geoguessme/postgres-openssl:15.19-openssl-3.5.8
     entrypoint: []
     volumes:
       - *workspace

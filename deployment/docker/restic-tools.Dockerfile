@@ -14,7 +14,17 @@ RUN git clone --depth 1 --branch v0.19.1 https://github.com/restic/restic.git /s
     && go mod tidy \
     && go run build.go --output /out/restic
 
-FROM restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
-LABEL org.opencontainers.image.base.name="restic/restic:0.19.1" \
-    org.opencontainers.image.base.digest="sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510"
+# The upstream restic/restic base (and every published alpine image so far)
+# still ships libcrypto3 3.5.7-r0 with CVE-2026-14456; the fixed 3.5.8-r0
+# exists only in the alpine package repositories. Per
+# docs/security-scanning.md ("apply the fix in the shipped image"), the
+# runtime is therefore pinned alpine with the OpenSSL packages refreshed to at
+# least the fixed release; restic itself is a static binary, and the base
+# already carries the CA trust store it needs for TLS against object storage.
+FROM alpine:3.24@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f
+
+RUN apk add --no-cache 'openssl>=3.5.8-r0'
 COPY --from=restic-build /out/restic /usr/bin/restic
+
+LABEL org.opencontainers.image.base.name="alpine:3.24" \
+    org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"
