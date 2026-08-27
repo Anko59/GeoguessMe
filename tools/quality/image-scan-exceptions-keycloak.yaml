@@ -95,3 +95,17 @@
   reachable: "the downgrade requires TLS SCRAM-SHA-256-PLUS channel binding; Keycloak reaches PostgreSQL only on the isolated Compose network without TLS channel binding"
   approved: true
   expires: 2026-09-09
+- id: CVE-2026-11822
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "sqlite FTS5 arbitrary code execution requires attacker-controlled FTS5 queries; Keycloak backed by PostgreSQL does not use sqlite-libs and FTS5 is not exposed via any public API"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-11824
+  image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  digest: sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+  owner: security-program
+  reachable: "sqlite arbitrary code execution and crash via crafted input requires local sqlite FTS/query access; Keycloak uses PostgreSQL exclusively and sqlite-libs is a transitive RHEL base-layer dependency not reachable from the Keycloak runtime"
+  approved: true
+  expires: 2026-09-09
