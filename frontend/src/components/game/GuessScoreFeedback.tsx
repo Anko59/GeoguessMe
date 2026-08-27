@@ -5,10 +5,12 @@ import './GuessScoreFeedback.css';
 interface GuessScoreFeedbackProps {
     feedback: GuessFeedback;
     score: number;
+    /** True when Party Time doubled the displayed score. */
+    partyDoubled?: boolean;
     onDismiss: () => void;
 }
 
-export default function GuessScoreFeedback({ feedback, score, onDismiss }: GuessScoreFeedbackProps) {
+export default function GuessScoreFeedback({ feedback, score, partyDoubled, onDismiss }: GuessScoreFeedbackProps) {
     const handleAnimationEnd = (event: AnimationEvent<HTMLDivElement>) => {
         if (event.animationName === 'guessFeedbackExit') onDismiss();
     };
@@ -19,7 +21,14 @@ export default function GuessScoreFeedback({ feedback, score, onDismiss }: Guess
                 className={`guess-feedback-card guess-feedback-card--${feedback.tone}`}
                 onAnimationEnd={handleAnimationEnd}
             >
-                <span className="guess-feedback-kicker">Guess scored</span>
+                <span className="guess-feedback-kicker">
+                    Guess scored
+                    {partyDoubled && (
+                        <span className="guess-feedback-party" title="Party Time doubled this guess">
+                            🎉 ×2
+                        </span>
+                    )}
+                </span>
                 <strong>{feedback.label}</strong>
                 <span className="guess-feedback-score">{score.toLocaleString()} points</span>
                 <span className="guess-feedback-subtitle">{feedback.subtitle}</span>

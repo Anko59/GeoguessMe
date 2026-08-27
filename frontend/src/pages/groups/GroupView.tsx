@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -13,6 +13,8 @@ import SettingsModal from '../../components/settings/SettingsModal';
 import TabBar, { type TabType } from '../../components/navigation/TabBar';
 import Avatar from '../../components/common/Avatar';
 import { useGroupMessages } from '../../hooks/useGroupMessages';
+import { useGroupParty } from '../../hooks/useGroupParty';
+import PartyButton from './PartyButton';
 import Icon from '../../components/ui/Icon';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import './GroupView.css';
@@ -49,6 +51,29 @@ export default function GroupView() {
         loadingOlder,
     } = useGroupMessages(groupError ? undefined : id, user?.id);
     const groupPhotoURL = useGroupPhotoUrl(id ?? '', groupPhotoRefreshKey);
+    // Party Time state: fetched per group, refreshed when a persisted system
+    // message arrives (a member may have started a party) and after start
+    // conflicts. The active flag drives the neon border around the screen.
+    const { status: partyStatus, refresh: refreshParty } = useGroupParty(groupError ? undefined : id);
+    const lastSeenSystemMessageRef = useRef<{ groupId: string; messageId: string } | null>(null);
+    useEffect(() => {
+        if (!id) return;
+        let latest = '';
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+            if (messages[index].kind === 'system' && messages[index].id) {
+                latest = messages[index].id;
+                break;
+            }
+        }
+        const seen = lastSeenSystemMessageRef.current;
+        const firstPassForGroup = seen?.groupId !== id;
+        if (!firstPassForGroup && seen?.messageId === latest) return;
+        lastSeenSystemMessageRef.current = { groupId: id, messageId: latest };
+        // The history loaded on arrival already reflects reality (the party
+        // hook fetched authoritative state at the same time); only a system
+        // message that newly ARRIVES needs a refresh.
+        if (!firstPassForGroup && latest) refreshParty();
+    }, [id, messages, refreshParty]);
 
     useEffect(() => {
         if (!id) return;
@@ -117,6 +142,14 @@ export default function GroupView() {
                             <span>Group</span>
                             <h1 className="group-name">{group?.name ?? 'Group'}</h1>
                         </div>
+                        {id && (
+                            <PartyButton
+                                groupId={id}
+                                status={partyStatus}
+                                onStarted={refreshParty}
+                                onRefresh={refreshParty}
+                            />
+                        )}
                         {user && (
                             <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
                                 <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
@@ -178,6 +211,7 @@ export default function GroupView() {
                 </div>
                 <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
+            {partyStatus?.active && <div className="party-border" aria-hidden="true" />}
             <Game
                 gameMessage={gameMessage}
                 onChallengeStatusChange={updateChallengeStatus}

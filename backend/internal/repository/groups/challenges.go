@@ -8,6 +8,7 @@ import (
 
 	"geoguessme/internal/game"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository/party"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -172,11 +173,14 @@ func (r *Repository) ViewDeliveryStatus(ctx context.Context, photoID, userID str
 	return deliveredAt.Valid, viewExpiresAt, nil
 }
 
-// GuessResult is the outcome of a guess submission.
+// GuessResult is the outcome of a guess submission. PartyDoubled reports
+// that an active group party window doubled the stored score because the
+// guesser posted a challenge during the same window.
 type GuessResult struct {
-	Guess    models.Guess
-	Photo    *models.Photo
-	Existing bool
+	Guess        models.Guess
+	Photo        *models.Photo
+	Existing     bool
+	PartyDoubled bool
 }
 
 // CanViewResults reports whether a member may view a challenge's results:
@@ -313,6 +317,15 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 		guessWindow = 5 * time.Minute
 	}
 	score := game.CalculateScoreWithTime(distance, elapsed, guessWindow)
+	// Party Time: a guess made inside an active party window scores double
+	// when the guesser posted a challenge into this group during the same
+	// window. The lookup runs on the guess transaction so the stored score
+	// stays consistent with the window state at the recorded guess instant.
+	multiplier, partyDoubled, err := party.ScoreMultiplier(ctx, tx, photo.GroupID, userID, now)
+	if err != nil {
+		return nil, isRetryable(err), err
+	}
+	score *= multiplier
 	guess := models.Guess{ID: newID(), PhotoID: photoID, UserID: userID, GroupID: photo.GroupID, Lat: lat, Long: long, Score: score, Distance: distance, CreatedAt: now}
 	if _, err := tx.Exec(ctx, `INSERT INTO guesses(id, photo_id, user_id, group_id, lat, long, score, distance, timed_out, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, guess.ID, guess.PhotoID, guess.UserID, guess.GroupID, guess.Lat, guess.Long, guess.Score, guess.Distance, false, guess.CreatedAt); err != nil {
 		// A concurrent duplicate lost the race; read the persisted winner.
@@ -324,7 +337,7 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 	if err := tx.Commit(ctx); err != nil {
 		return nil, isRetryable(err), err
 	}
-	return &GuessResult{Guess: guess, Photo: photo}, false, nil
+	return &GuessResult{Guess: guess, Photo: photo, PartyDoubled: partyDoubled}, false, nil
 }
 
 // ensureTimeoutGuess records a timed-out guess (score 0) when the guess window

@@ -146,7 +146,13 @@ func (a *GameAPI) SubmitChallengeGuess(w http.ResponseWriter, r *http.Request) {
 			a.hub.BroadcastUpdate(*message)
 		}
 	}
-	WriteJSON(w, status, map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "timed_out": result.Guess.TimedOut, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now})
+	response := map[string]any{"guess_id": result.Guess.ID, "photo_id": result.Guess.PhotoID, "score": result.Guess.Score, "distance": result.Guess.Distance, "timed_out": result.Guess.TimedOut, "created_at": result.Guess.CreatedAt, "duplicate": result.Existing, "server_time": now}
+	if result.PartyDoubled {
+		// Surfaced only when true so the optional contract field keeps its
+		// "party bonus applied" meaning for clients.
+		response["party_doubled"] = true
+	}
+	WriteJSON(w, status, response)
 }
 
 // TimeoutChallengeGuess records a timed-out guess (score 0) when the

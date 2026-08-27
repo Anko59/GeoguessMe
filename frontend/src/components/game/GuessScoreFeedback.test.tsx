@@ -15,6 +15,16 @@ describe('GuessScoreFeedback', () => {
         expect(onDismiss).toHaveBeenCalledOnce();
     });
 
+    it('shows the party ×2 badge only when the guess was doubled', () => {
+        render(<GuessScoreFeedback feedback={feedbackForScore(4920)} score={4920} partyDoubled onDismiss={vi.fn()} />);
+        expect(screen.getByText('🎉 ×2')).toBeInTheDocument();
+
+        render(<GuessScoreFeedback feedback={feedbackForScore(100)} score={100} onDismiss={vi.fn()} />);
+        expect(screen.getAllByText('4,920 points').length).toBe(1);
+        // The second card (score 100) has no badge.
+        expect(screen.queryAllByText('🎉 ×2').length).toBe(1);
+    });
+
     it('lets players dismiss the feedback immediately', () => {
         const onDismiss = vi.fn();
         render(<GuessScoreFeedback feedback={feedbackForScore(100)} score={100} onDismiss={onDismiss} />);

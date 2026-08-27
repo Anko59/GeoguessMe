@@ -166,6 +166,7 @@ func validConfig() *Config {
 		GuessWindow:       2 * time.Minute,
 		LocationHide:      48 * time.Hour,
 		PhotoRetention:    30 * 24 * time.Hour,
+		PartyTimeDuration: time.Hour, PartyTimeCooldown: 48 * time.Hour,
 		RateLimitRequests: 10,
 		RateLimitWindow:   time.Minute,
 		RateLimitPolicies: []RateLimitPolicy{

@@ -209,7 +209,14 @@ describe('gameReducer', () => {
             expect(next.feedback).toEqual({
                 feedback: expect.objectContaining({ label: 'Masterstroke', tone: 'excellent' }),
                 score: 4920,
+                partyDoubled: false,
             });
+        });
+
+        it('show-feedback carries the Party Time doubling flag onto the card', () => {
+            const submitting = at('submitting', { photoId: 'photo-1' });
+            const next = reduce(submitting, { type: 'show-feedback', score: 9840, partyDoubled: true });
+            expect(next.feedback?.partyDoubled).toBe(true);
         });
 
         it('clear-feedback dismisses the overlay from any status', () => {

@@ -112,6 +112,8 @@ page reachable from chat and leaderboards.
 | POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                        |
 | GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
 | PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
+| GET    | `/api/v1/group/party?group_id=`                              | Bearer | Party Time state for the group (member only)                                           |
+| POST   | `/api/v1/group/party`                                        | Bearer | Start Party Time `{group_id}`; 409 while active or recharging                          |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`, backward via `before_id`)                    |
 | GET    | `/api/v1/group/reaction-usage?group_id=`                     | Bearer | Aggregate reaction counts ordered by popularity (member only)                          |
 | PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
@@ -179,33 +181,36 @@ Available metrics:
 
 ## API error codes
 
-| Code                    | Meaning                                        |
-| ----------------------- | ---------------------------------------------- |
-| `invalid_username`      | Username validation failed                     |
-| `invalid_email`         | Email validation failed                        |
-| `invalid_password`      | Password validation failed                     |
-| `username_taken`        | Username already in use                        |
-| `email_taken`           | Email already in use                           |
-| `authentication_failed` | Bad credentials                                |
-| `unauthorized`          | Missing or invalid auth                        |
-| `forbidden`             | Not a member of the required group             |
-| `not_found`             | Resource not found                             |
-| `group_not_found`       | Group not found                                |
-| `already_member`        | Already a member                               |
-| `invalid_group_name`    | Group name validation failed                   |
-| `invalid_group_code`    | Group code validation failed                   |
-| `invalid_upload`        | Upload too large or malformed                  |
-| `invalid_media`         | Photo or video type or size invalid            |
-| `invalid_coordinates`   | Invalid lat/long                               |
-| `invalid_request`       | Request body malformed                         |
-| `challenge_expired`     | Challenge is past its TTL                      |
-| `viewing_window_open`   | Must wait for view window to end               |
-| `guess_time_expired`    | Guess deadline passed: did not guess in time   |
-| `media_expired`         | Viewing window expired or media already viewed |
-| `media_removed`         | Original media no longer available             |
-| `results_not_available` | Results not yet visible                        |
-| `origin_not_allowed`    | WebSocket origin rejected                      |
-| `rate_limited`          | Rate limit exceeded                            |
-| `internal_error`        | Unexpected server error                        |
-| `storage_unavailable`   | Media storage unavailable                      |
-| `storage_error`         | Backend storage error                          |
+| Code                    | Meaning                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `invalid_username`      | Username validation failed                            |
+| `invalid_email`         | Email validation failed                               |
+| `invalid_password`      | Password validation failed                            |
+| `username_taken`        | Username already in use                               |
+| `email_taken`           | Email already in use                                  |
+| `authentication_failed` | Bad credentials                                       |
+| `unauthorized`          | Missing or invalid auth                               |
+| `forbidden`             | Not a member of the required group                    |
+| `not_found`             | Resource not found                                    |
+| `group_not_found`       | Group not found                                       |
+| `already_member`        | Already a member                                      |
+| `invalid_group_name`    | Group name validation failed                          |
+| `invalid_group_code`    | Group code validation failed                          |
+| `invalid_upload`        | Upload too large or malformed                         |
+| `invalid_media`         | Photo or video type or size invalid                   |
+| `invalid_coordinates`   | Invalid lat/long                                      |
+| `invalid_request`       | Request body malformed                                |
+| `challenge_expired`     | Challenge is past its TTL                             |
+| `viewing_window_open`   | Must wait for view window to end                      |
+| `guess_time_expired`    | Guess deadline passed: did not guess in time          |
+| `media_expired`         | Viewing window expired or media already viewed        |
+| `media_removed`         | Original media no longer available                    |
+| `results_not_available` | Results not yet visible                               |
+| `party_active`          | A party is already running for the group              |
+| `party_recharging`      | The 48h recharge after the last party has not elapsed |
+| `group_exists`          | Group creation conflict                               |
+| `origin_not_allowed`    | WebSocket origin rejected                             |
+| `rate_limited`          | Rate limit exceeded                                   |
+| `internal_error`        | Unexpected server error                               |
+| `storage_unavailable`   | Media storage unavailable                             |
+| `storage_error`         | Backend storage error                                 |

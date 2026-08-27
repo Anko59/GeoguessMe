@@ -233,7 +233,12 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             // overlay, so the celebration is dispatched afterwards and shows
             // during the loading phase and the results view.
             const resultsPromise = loadResults(photoId);
-            if (!response.data.duplicate) dispatch({ type: 'show-feedback', score: response.data.score });
+            if (!response.data.duplicate)
+                dispatch({
+                    type: 'show-feedback',
+                    score: response.data.score,
+                    partyDoubled: response.data.party_doubled === true,
+                });
             onChallengeStatusChange?.(photoId, 'guessed');
             await resultsPromise;
         } catch (requestError: unknown) {
@@ -308,6 +313,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         <GuessScoreFeedback
             feedback={state.feedback.feedback}
             score={state.feedback.score}
+            partyDoubled={state.feedback.partyDoubled}
             onDismiss={() => dispatch({ type: 'clear-feedback' })}
         />
     ) : null;

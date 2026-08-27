@@ -111,11 +111,16 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(2*time.Hour)))
+	// No party is active at the guess instant, so the base score stands.
+	mock.ExpectQuery("FROM group_party_times").WithArgs(photo.GroupID, "user-2", guessTime).WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), false, guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	result, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)
 	if err != nil || result == nil || result.Existing || result.Guess.ID == "" {
 		t.Fatalf("new guess = %+v, %v", result, err)
+	}
+	if result.PartyDoubled {
+		t.Fatal("a guess without an active party must not be flagged as doubled")
 	}
 
 	mock.ExpectBegin()
@@ -158,6 +163,7 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), nil))
+	mock.ExpectQuery("FROM group_party_times").WithArgs(photo.GroupID, "user-2", now).WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), false, now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	if _, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, now); err != nil {
@@ -165,8 +171,61 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	}
 }
 
-// timeoutRowsResult mirrors the persisted timed-out guess re-read by
-// TimeoutGuess after its idempotent insert.
+// TestPartyTimeDoubling pins the posting-incentive rule end to end at the
+// persistence layer: the same guess scores double exactly when a party
+// window is active at the guess instant AND the guesser posted a challenge
+// into the group since that window started. A party without a posted
+// challenge from the guesser leaves the score untouched.
+func TestPartyTimeDoubling(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	photo := &models.Photo{ID: "photo-1", UserID: "user-1", GroupID: "group-1", StorageKey: "photos/one", MIMEType: "image/jpeg", ByteSize: 10, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
+	guessTime := now.Add(30 * time.Minute)
+
+	submit := func(partyLookup func() *pgxmock.Rows) *GuessResult {
+		t.Helper()
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
+		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
+			WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), guessTime.Add(time.Minute)))
+		if partyLookup != nil {
+			mock.ExpectQuery("FROM group_party_times").WithArgs(photo.GroupID, "user-2", guessTime).WillReturnRows(partyLookup())
+		} else {
+			mock.ExpectQuery("FROM group_party_times").WithArgs(photo.GroupID, "user-2", guessTime).WillReturnError(pgx.ErrNoRows)
+		}
+		mock.ExpectExec("INSERT INTO guesses").WithArgs(pgxmock.AnyArg(), photo.ID, "user-2", photo.GroupID, 48.9, 2.4, pgxmock.AnyArg(), pgxmock.AnyArg(), false, guessTime).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectCommit()
+		result, err := repo.SubmitGuess(context.Background(), photo.ID, "user-2", 48.9, 2.4, guessTime)
+		if err != nil || result == nil {
+			t.Fatalf("submit = %+v, %v", result, err)
+		}
+		return result
+	}
+
+	base := submit(nil)
+	if base.PartyDoubled {
+		t.Fatal("no active party must not report doubling")
+	}
+	doubled := submit(func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"exists"}).AddRow(true)
+	})
+	if !doubled.PartyDoubled {
+		t.Fatal("an eligible party guess must be flagged as doubled")
+	}
+	if want := 2 * base.Guess.Score; doubled.Guess.Score != want {
+		t.Fatalf("doubled score = %d, want %d (base %d)", doubled.Guess.Score, want, base.Guess.Score)
+	}
+	ineligible := submit(func() *pgxmock.Rows {
+		return pgxmock.NewRows([]string{"exists"}).AddRow(false)
+	})
+	if ineligible.PartyDoubled || ineligible.Guess.Score != base.Guess.Score {
+		t.Fatalf("a guesser who did not post during the window must score the base %d, got %d (%v)", base.Guess.Score, ineligible.Guess.Score, ineligible.PartyDoubled)
+	}
+}
+
 func timeoutReReadRows(now time.Time) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at"}).
 		AddRow("timeout-1", "photo-1", "user-2", "group-1", 0.0, 0.0, 0, 0.0, true, now)
