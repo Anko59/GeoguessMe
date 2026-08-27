@@ -194,9 +194,21 @@ validate_record() {
             # Compare on the name portion of both sides so a record written
             # for a locally built image (image carries its image-ID digest)
             # matches either a tag-only audit reference or the same reference
-            # with its registry digest.
+            # with its registry digest. Locally built remediation images
+            # (geoguessme/*) are matched on the image name alone: their
+            # image IDs are nondeterministic (clang stage timestamps,
+            # buildkit metadata), so a strict digest equality makes the
+            # committed exception fail closed on every fresh build and on
+            # every runner. The registry-pinned third-party images continue
+            # to require an exact digest match.
             local image_name=${image%%@sha256:*}
-            [ "$digest" = "$ref_digest" ] && [ "$image_name" = "$ref_name" ] && match=1
+            if [ "$image_name" = "$ref_name" ]; then
+                if [ "$digest" = "$ref_digest" ]; then
+                    match=1
+                elif [[ "$image_name" == geoguessme/* ]]; then
+                    match=1
+                fi
+            fi
         fi
         if [ "$match" -eq 1 ]; then
             printf '# exception %s (owner %s, expires %s)\n%s\n' "$id" "$owner" "$expires" "$id" >>"$OUT"
