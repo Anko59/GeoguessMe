@@ -21,7 +21,7 @@ The target scans the following images (see `AUDIT_IMAGES` in
   released Caddy binary from the pinned official builder with that dependency
   override; the resulting application image is scanned directly.
 - **Deployment utilities** — `ghcr.io/getsops/sops` (digest-pinned) and
-  `geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7`, a locally rebuilt
+  `geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7`, a locally rebuilt
   cloudflared with the OpenSSL libraries refreshed to the fixed Debian release;
   the upstream distroless-based image cannot run package tools, so only the two
   OpenSSL libraries and their dpkg metadata are layered on top. The pinned

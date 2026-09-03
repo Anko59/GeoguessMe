@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 LABEL org.opencontainers.image.base.name="alpine:3.24" \
     org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
-RUN apk add --no-cache ffmpeg=8.1.2-r0 'openssl>=3.5.8-r0' \
+RUN apk add --no-cache ffmpeg=8.1.2-r0 'expat>=2.8.4-r0' 'openssl>=3.5.8-r0' \
     && addgroup -S -g 65532 appuser \
     && adduser -S -u 65532 -G appuser appuser
 COPY --from=build /out/geoguessme /usr/local/bin/geoguessme

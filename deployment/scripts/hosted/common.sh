@@ -65,6 +65,10 @@ environment_env_file() {
     printf '%s/%s.env\n' "$SECRET_ROOT" "$1"
 }
 
+oidc_enabled() {
+    grep -Eq '^OIDC_ENABLED=(true|1)$' "$1"
+}
+
 release_dir() {
     printf '%s/releases/%s\n' "$APP_ROOT" "$1"
 }
@@ -86,7 +90,7 @@ compose() {
     [ -n "$backend" ] || die "$environment has no active backend image metadata"
     [ -n "$web" ] || die "$environment has no active web image metadata"
     profiles=''
-    if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$env_file"; then
+    if oidc_enabled "$env_file"; then
         profiles=social
     fi
     COMPOSE_PROJECT_NAME=$(environment_project "$environment") \

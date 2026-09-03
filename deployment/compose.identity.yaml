@@ -32,7 +32,7 @@ services:
           pids: 256
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
     command: ["start", "--import-realm"]
     env_file:
       - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
@@ -72,7 +72,7 @@ services:
           pids: 256
 
   keycloak-config:
-    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
     entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
     env_file:
       - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}

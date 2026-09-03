@@ -67,7 +67,7 @@ if [ -n "$temporary_secret" ]; then
 fi
 [ -f "$registry_secret" ] || die "missing secret file: $registry_secret"
 oidc_enabled=false
-if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$registry_secret"; then
+if oidc_enabled "$registry_secret"; then
     oidc_enabled=true
     identity_encrypted="$release/deployment/secrets/identity.env.enc"
     [ -f "$identity_encrypted" ] || die 'OIDC is enabled but deployment/secrets/identity.env.enc is missing'
@@ -142,7 +142,7 @@ rollback() {
                 valid_image_reference "$old_web" &&
                 [ "$valid_revision" = true ] && [ "${#old_revision}" -eq 40 ]; then
                 old_release=$(release_dir "$old_revision")
-                if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$secret_file"; then
+                if oidc_enabled "$secret_file"; then
                     BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
                         compose "$environment" "$old_release" up -d --wait backend oauth2-proxy web postgres || true
                 else

@@ -252,6 +252,22 @@ printf '100\n' >"$marker"
 age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMMON" "$marker")
 [ "$age" -eq 7201 ] || fail 'backup marker age calculation is incorrect'
 
+# Hosted OIDC detection controls both the social Compose profile and shared
+# Keycloak startup. Match exact enabled values so the application can never be
+# activated without its identity dependencies.
+printf 'OIDC_ENABLED=true\n' >"$marker"
+sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker" ||
+    fail 'OIDC_ENABLED=true was not detected'
+printf 'OIDC_ENABLED=1\n' >"$marker"
+sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker" ||
+    fail 'OIDC_ENABLED=1 was not detected'
+for disabled in false 0 truex; do
+    printf 'OIDC_ENABLED=%s\n' "$disabled" >"$marker"
+    if sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker"; then
+        fail "OIDC_ENABLED=$disabled was incorrectly detected as enabled"
+    fi
+done
+
 # Cloudflare client IP replaces both forwarding headers at the only gateway.
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'

@@ -111,7 +111,7 @@ services:
       retries: 30
 
   local-keycloak:
-    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
     profiles: [social]
     command: ["start-dev", "--import-realm"]
     environment:
@@ -182,7 +182,7 @@ services:
       start_period: 30s
 
   local-keycloak-config:
-    image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+    image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
     profiles: [social-config]
     entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
     environment:
@@ -220,7 +220,7 @@ services:
     restart: "no"
 
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+    image: quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
     profiles: [social]
     command: ["--config=/etc/oauth2-proxy/oauth2-proxy.cfg", "--alpha-config=/etc/oauth2-proxy/oauth2-proxy-alpha.yaml"]
     environment:
