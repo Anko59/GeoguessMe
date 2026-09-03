@@ -1,82 +1,14 @@
 # Time-boxed oauth2-proxy exceptions for `make audit-images`.
-# v7.15.3 is the newest stable upstream image as of 2026-08-16. Keep the full
-# findings in report.json and remove these records when upstream publishes a
-# release built with Go 1.26.6 or later and refreshed dependencies.
+# v7.15.4 (2026-08-20, Go 1.26.7) is the newest stable upstream image as of
+# 2026-09-03; it refreshed the Go toolchain and dependencies, so every previous
+# Go-stdlib record was removed per the policy below. Keep the full findings in
+# report.json and remove the remaining record when upstream publishes a release
+# built with google.golang.org/grpc v1.83.1 or later.
 
-- id: CVE-2026-33818
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+- id: CVE-2026-84304
+  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+  digest: sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   owner: security-program
-  reachable: "ASN.1 decoding is limited to certificates and tokens from configured OIDC endpoints; no request body is decoded as ASN.1"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-39821
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "IDNA processing applies to operator-configured issuer and upstream hostnames, not arbitrary login input"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-39822
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "oauth2-proxy does not expose attacker-controlled os.Root filesystem operations in the authentication proxy path"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-46600
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "DNS parsing handles infrastructure-resolver replies for fixed service names and is not fed from browser requests"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56852
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "invalid UTF-8 processing is potentially reachable through claims; Cloudflare and Caddy request limits bound per-request work while no newer release exists"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56853
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "oauth2-proxy is reached through Caddy over HTTP/1.1 and has no directly exposed unencrypted HTTP/2 listener"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56858
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "template rendering may include bounded login error text; Cloudflare and Caddy request limits mitigate pathological input while no newer release exists"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56859
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "the OIDC proxy path processes JSON and form data and does not decode attacker-controlled XML"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56860
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "URL parsing is public-path reachable; Cloudflare and Caddy URL limits bound the quadratic input while no newer release exists"
-  approved: true
-  expires: 2026-09-09
-- id: CVE-2026-56862
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "TLS clients connect only to configured Keycloak endpoints; attackers cannot choose a peer that floods KeyUpdate messages"
-  approved: true
-  expires: 2026-09-09
-- id: GHSA-hrxh-6v49-42gf
-  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  digest: sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
-  owner: security-program
-  reachable: "gRPC xDS is bundled transitively but no xDS control plane or gRPC listener is configured"
+  reachable: "gRPC is bundled transitively and no gRPC or xDS control-plane listener is configured on the authentication proxy path; v7.15.4 is the newest upstream release"
   approved: true
   expires: 2026-09-09

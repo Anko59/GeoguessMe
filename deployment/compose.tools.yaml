@@ -184,14 +184,15 @@ services:
       - ./:/workspace
       - ./.tools-cache/terraform-plugins:/tf-plugin-cache
 
-  # Restic 0.19.1 with golang.org/x/net v0.56.0. Hosted backup and restore
+  # Restic 0.19.1 with the Go module set refreshed (x/net v0.56.0, x/text
+  # v0.39.0, grpc v1.83.1, x/crypto v0.55.0). Hosted backup and restore
   # scripts receive this image as an exact signed registry reference.
   restic:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/restic-tools.Dockerfile
-    image: geoguessme/restic-tools:0.19.1-xnet-0.56.0
+    image: geoguessme/restic-tools:0.19.1-go-deps-2026-09
     entrypoint: []
     volumes:
       - *workspace
