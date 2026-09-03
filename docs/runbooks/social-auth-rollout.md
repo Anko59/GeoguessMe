@@ -85,7 +85,7 @@ known production population without printing addresses.
 
 ## Phase 1: pre-provision verified legacy accounts
 
-Stock Keycloak 26.7.1 does not support the application's bcrypt hash format. Do
+Stock Keycloak 26.7.2 does not support the application's bcrypt hash format. Do
 not copy hashes into the Keycloak database and never write that database
 directly. After backups and the aggregate plan are reviewed, create only the
 eligible Keycloak users and send each one a Keycloak `UPDATE_PASSWORD` action:

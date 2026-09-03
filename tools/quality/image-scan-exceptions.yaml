@@ -253,74 +253,81 @@
   approved: true
   expires: 2026-09-09
 
-# --- geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7 (locally rebuilt
-#     2026.8.2 with CVE-2026-14456 OpenSSL fix layered on top) ---
-- id: GHSA-hrxh-6v49-42gf
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+# --- geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7 (locally rebuilt
+#     2026.8.3 with CVE-2026-14456 OpenSSL fix layered on top) ---
+- id: CVE-2026-56854
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
-  reachable: "cloudflared embeds grpc 1.81.1; xDS control plane is not configured; no newer cloudflared release exists"
+  reachable: "cloudflared invokes an SSH client, not an SSH server with authentication callbacks or source-address restrictions; no newer cloudflared release is published"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-84304
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  owner: security-program
+  reachable: "cloudflared does not expose a gRPC HTTP/2 listener on the tunnel or SSH ProxyCommand path; no newer cloudflared release is published"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39822
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; os.Root symlink traversal is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39821
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; punycode label processing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-46600
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; malformed DNS record parsing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-33818
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; recursive ASN.1 input is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56853
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; unencrypted HTTP/2 is not used by the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56858
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; html/template is not used by the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56859
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; recursive XML input is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56860
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; pathological URL parsing is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56862
-  image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7@sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
-  digest: sha256:239e169e52e5ebda023bf196fa24b77ca2ef147db787fbc157bc8de8ec38a674
+  image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7@sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
+  digest: sha256:b1d36c176aaaa84a3eb63a4e3b85478e1e05a716bccd5c3b12717fc271ab89f0
   owner: security-program
   reachable: "cloudflared embeds Go 1.26.4 stdlib; TLS KeyUpdate handling is not reachable through the tunnel/SSH ProxyCommand path; newest cloudflared release still ships it"
   approved: true

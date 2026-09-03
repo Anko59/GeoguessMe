@@ -149,14 +149,14 @@ services:
     volumes:
       - *workspace
 
-  # cloudflared 2026.8.2 with the OpenSSL libraries refreshed to the fixed
+  # cloudflared 2026.8.3 with the OpenSSL libraries refreshed to the fixed
   # release (CVE-2026-14456); used as an SSH ProxyCommand.
   cloudflared:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/cloudflared-tools.Dockerfile
-    image: geoguessme/cloudflared-tools:2026.8.2-openssl-3.5.7
+    image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
