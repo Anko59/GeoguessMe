@@ -13,7 +13,7 @@ release="$APP_ROOT/$environment/current"
 curl --fail --silent --show-error --max-time 10 \
     "http://127.0.0.1:$(environment_port "$environment")/health/ready" >/dev/null
 services='postgres backend web'
-if grep -Eq '^OIDC_ENABLED=(true|1)$$' "$(environment_env_file "$environment")"; then
+if oidc_enabled "$(environment_env_file "$environment")"; then
     services="$services oauth2-proxy"
 fi
 for service in $services; do
