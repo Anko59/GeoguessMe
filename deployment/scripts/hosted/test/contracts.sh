@@ -282,6 +282,7 @@ assert_contains "$RESTIC_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@
 assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
 assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"'
 assert_contains "$RESTIC_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
+assert_contains "$COMMON" '"$RESTIC_IMAGE" /usr/bin/restic "$@"'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
 assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
 assert_contains "$BACKEND_DOCKERFILE" "'openssl>=3.5.8-r0'"

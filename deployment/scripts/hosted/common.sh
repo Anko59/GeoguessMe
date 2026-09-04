@@ -148,5 +148,5 @@ restic() {
     docker run --rm --network host \
         --env-file "$secret_file" \
         -v "$backup_dir:/backup:ro" \
-        "$RESTIC_IMAGE" "$@"
+        "$RESTIC_IMAGE" /usr/bin/restic "$@"
 }
