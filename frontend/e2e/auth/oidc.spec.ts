@@ -39,6 +39,41 @@ async function waitForAuthCardVisuals(page: Page): Promise<void> {
     });
 }
 
+async function expectLightKeycloakTheme(
+    page: Page,
+    options: { control?: boolean; checkbox?: boolean; alert?: boolean } = {},
+): Promise<void> {
+    const palette = await page.evaluate(() => {
+        document.documentElement.classList.add('pf-v5-theme-dark');
+        const formControl = document.querySelector<HTMLElement>('.pf-v5-c-form-control');
+        const input = document.querySelector<HTMLInputElement>('input');
+        const checkboxLabel = document.querySelector<HTMLElement>('.pf-v5-c-check__label');
+        const alert = document.querySelector<HTMLElement>('.pf-v5-c-alert');
+        const style = (element: Element | null): CSSStyleDeclaration | null =>
+            element ? getComputedStyle(element) : null;
+
+        return {
+            colorScheme: getComputedStyle(document.documentElement).colorScheme,
+            formControlBackground: style(formControl)?.backgroundColor,
+            inputColor: style(input)?.color,
+            checkboxColor: style(checkboxLabel)?.color,
+            alertBackground: style(alert)?.backgroundColor,
+            alertColor: style(alert)?.color,
+        };
+    });
+
+    expect(palette.colorScheme).toBe('light');
+    if (options.control !== false) {
+        expect(palette.formControlBackground).toBe('rgb(255, 255, 255)');
+        expect(palette.inputColor).toBe('rgb(17, 26, 77)');
+    }
+    if (options.checkbox) expect(palette.checkboxColor).toBe('rgb(17, 26, 77)');
+    if (options.alert) {
+        expect(palette.alertBackground).toBe('rgb(255, 248, 229)');
+        expect(palette.alertColor).toBe('rgb(111, 77, 0)');
+    }
+}
+
 async function completeKeycloakEmailRegistration(
     page: Page,
     request: APIRequestContext,
@@ -52,7 +87,12 @@ async function completeKeycloakEmailRegistration(
     await expect(page.locator('#kc-passwd-update-form')).toBeVisible();
     await page.locator('#password-new').fill(password);
     await page.locator('#password-confirm').fill(password);
+    await expectLightKeycloakTheme(page, { checkbox: true });
     await page.getByRole('button', { name: 'Submit' }).click();
+    await expect(
+        page.getByText('You need to verify your email address to activate your account.', { exact: true }),
+    ).toBeVisible();
+    await expectLightKeycloakTheme(page, { control: false, alert: true });
 
     const verificationLink = await waitForKeycloakVerificationLink(request, email);
     await page.goto(verificationLink, { waitUntil: 'domcontentloaded' });
@@ -195,6 +235,7 @@ test.describe('Local social-auth visual validation', () => {
         await expect(page.locator('#firstName')).toHaveCount(0);
         await expect(page.locator('#lastName')).toHaveCount(0);
         await expect(page.locator('#kc-social-providers')).toHaveCount(0);
+        await expectLightKeycloakTheme(page);
         await page.screenshot({ path: testInfo.outputPath('03-keycloak-signup.png'), fullPage: true });
 
         await page.goto('/login');
@@ -210,6 +251,8 @@ test.describe('Local social-auth visual validation', () => {
         await expect(page.locator('#kc-form-login')).toBeVisible();
         await expect(page.locator('#username')).toHaveValue('visual-login@example.com');
         await expect(page.locator('#kc-social-providers')).toHaveCount(0);
+        await expect(page.locator('#kc-registration')).toContainText("Don't have an account?");
+        await expectLightKeycloakTheme(page, { checkbox: true });
         await page.screenshot({ path: testInfo.outputPath('04-keycloak-login.png'), fullPage: true });
 
         if (process.env.OIDC_VISUAL_AUTH_ONLY === 'true') return;
