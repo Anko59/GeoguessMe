@@ -36,7 +36,7 @@ export interface paths {
         put?: never;
         /**
          * Start a temporary legacy migration session.
-         * @description Hidden from normal login; accepts only an unmigrated legacy account and issues a read-only session while OIDC is enabled.
+         * @description Hidden from normal login; accepts an unmigrated legacy account by its username or verified/pending email address and issues a read-only session while OIDC is enabled.
          */
         post: operations['login'];
         delete?: never;
@@ -176,7 +176,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request a password reset. */
+        /**
+         * Request password recovery.
+         * @description Sends a reset link for a verified email address. For an unverified pending claim, sends an email verification link first; the address must be verified before a reset link can be requested. The response stays uniform to prevent email enumeration.
+         */
         post: operations['forgotPassword'];
         delete?: never;
         options?: never;
@@ -1345,6 +1348,7 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
+                    /** @description Legacy username or email address. */
                     username: string;
                     password: string;
                 };
@@ -1536,7 +1540,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Reset link sent if the email is registered. */
+            /** @description A reset or verification link was sent if the email is registered. */
             202: {
                 headers: {
                     [name: string]: unknown;

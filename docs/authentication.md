@@ -6,8 +6,8 @@ GeoGuessMe uses a split-token authentication scheme:
 
 1. A normal login or signup completes in Keycloak and is exchanged through
    `POST /api/v1/auth/oidc/session`. The hidden legacy migration page may call
-   `POST /api/v1/auth/login` once for an unmigrated account. Either path
-   returns:
+   `POST /api/v1/auth/login` once for an unmigrated account, using its username
+   or email address. Either path returns:
     - `access_token` (JWT, short-lived) in the JSON response body
     - `refresh_token` (opaque, long-lived) as an HttpOnly cookie
 2. The access token is sent on every authenticated request as
@@ -90,8 +90,8 @@ The first verified OIDC session resolves as follows:
    preserving its ID.
 3. A pending or unverified email match returns `account_link_required`. The
    callback reveals the dedicated migration route. The player uses the old
-   username/password there once and starts the link from Settings; an email
-   claim alone never controls an account.
+   username-or-email/password there once and starts the link from Settings; an
+   email claim alone never controls an account.
 4. With no match, the callback returns `username_required`. The verified player
    explicitly chooses an available GeoGuessMe username; no provider username is
    prefilled or silently suffixed. Native email and social signup then create
@@ -121,6 +121,9 @@ release and read-only policy are owned by the
   accepts the address as a pending claim, and verification later resolves
   ownership with a generic failure if the address is already claimed.
 - `POST /api/v1/auth/verify/request` (authenticated) sends a verification email.
+- `POST /api/v1/auth/password/forgot {email}` sends a verification email first
+  when the address is still pending, allowing users who forgot their legacy
+  username to complete recovery without exposing account state.
 - `POST /api/v1/auth/verify {token}` consumes a single-use opaque token.
 - Token TTL: `VERIFICATION_TOKEN_TTL` (default 24 hours).
 - Tokens are stored hashed (SHA-256) and bound to the exact normalized pending
@@ -130,7 +133,9 @@ release and read-only policy are owned by the
   database constraint guarantees concurrent requests cannot leave multiple
   unused verification tokens.
 
-Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`.
+Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`. Recovery verification
+links add `&next=password-reset` so the confirmation page leads directly back to
+the reset request.
 
 ## Legacy password reset
 
@@ -138,8 +143,10 @@ Normal email/password recovery is owned by Keycloak. The endpoints below are
 retained only for the OIDC-off compatibility UI and the hidden legacy migration
 support path during this rollout.
 
-- `POST /api/v1/auth/password/forgot {email}` sends a reset link (always returns
-  202 to prevent email enumeration).
+- `POST /api/v1/auth/password/forgot {email}` sends a reset link for a verified
+  address, or a verification link for a pending address (always returns 202 to
+  prevent email enumeration). After verifying a pending address, request a new
+  reset link.
 - `POST /api/v1/auth/password/reset {token, password}` atomically consumes the
   token, updates the password hash, bumps `auth_version`, and revokes all
   refresh sessions.

@@ -125,8 +125,9 @@ Enable OIDC only after the local and dev flows are green. During this phase:
 - An exact verified recovery-email match may link automatically. A pending or
   unverified match returns `account_link_required`, which is the only normal UI
   path that reveals `/migrate-account`.
-- The migration page accepts old credentials once and issues a read-only
-  session. Settings then starts the explicit Keycloak link.
+- The migration page accepts the old username or email address plus credentials
+  once and issues a read-only session. Settings then starts the explicit
+  Keycloak link.
 - Linking preserves the same `users.id`. The account remains fully usable and
   all old refresh sessions and WebSocket tickets are revoked. Password login is
   rejected for the linked account.

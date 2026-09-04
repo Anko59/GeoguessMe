@@ -126,7 +126,7 @@ describe('App shell — public routes', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('renders the signup page at /signup', async () => {
@@ -146,7 +146,7 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('renders the forgot-password page at /forgot-password', async () => {
@@ -156,7 +156,7 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-        expect(await screen.findByText('Send reset link')).toBeInTheDocument();
+        expect(await screen.findByText('Send reset or verification link')).toBeInTheDocument();
     });
 
     it('renders the reset-password page at /reset-password', async () => {
@@ -185,35 +185,35 @@ describe('App shell — protected routes redirect when unauthenticated', () => {
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
         // AuthProvider refresh rejects → ProtectedRoute redirects to /login
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/join to /login', async () => {
         routeRef.current = '/group/join';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/create to /login', async () => {
         routeRef.current = '/group/create';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/:id to /login', async () => {
         routeRef.current = '/group/some-id';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /settings to /login', async () => {
         routeRef.current = '/settings';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 });
 

@@ -26,11 +26,11 @@ describe('ForgotPassword', () => {
             </MemoryRouter>,
         );
         fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'alice@example.test' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Send reset link' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send reset or verification link' }));
         expect(await screen.findByText('Check your inbox')).toBeInTheDocument();
 
         mocks.post.mockRejectedValueOnce(new Error('mail unavailable'));
-        fireEvent.click(screen.getByRole('button', { name: 'Send reset link' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send reset or verification link' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('mail unavailable');
     });
 });

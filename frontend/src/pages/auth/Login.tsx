@@ -67,14 +67,14 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
                 <h2 className="auth-title gradient-text">{migrationMode ? 'Migrate your account' : 'Welcome Back!'}</h2>
                 <p className="auth-subtitle">
                     {migrationMode
-                        ? 'Use your old GeoGuessMe credentials once to connect Keycloak.'
+                        ? 'Use your old GeoGuessMe username or email address and password once to connect Keycloak.'
                         : 'Sign in securely to continue guessing'}
                 </p>
                 {migrationMode && (
                     <p className="auth-migration-notice" role="note">
                         This legacy session is read-only. Your groups and scores stay on the same account, and normal
                         access returns as soon as you connect a GeoGuessMe ID email/password or Google login in
-                        Settings.
+                        Settings. If you forgot your username, use the email address from your old account.
                     </p>
                 )}
                 {activeOIDCConfig?.enabled ? (
@@ -87,11 +87,11 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
                 ) : activeOIDCConfig ? (
                     <>
                         <form onSubmit={handleSubmit} className="auth-form">
-                            <label htmlFor="login-username">Username</label>
+                            <label htmlFor="login-username">Username or email</label>
                             <input
                                 id="login-username"
                                 type="text"
-                                placeholder="Username"
+                                placeholder="Username or email"
                                 value={username}
                                 onChange={(event) => setUsername(event.target.value)}
                                 required
@@ -118,7 +118,7 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
                         </form>
                         <p className="auth-footer">
                             <Link to="/forgot-password" className="auth-link">
-                                Forgot your password?
+                                Forgot your username or password?
                             </Link>
                         </p>
                     </>

@@ -90,6 +90,19 @@ func TestGetUserByVerifiedEmailOnlyMatchesVerified(t *testing.T) {
 	}
 }
 
+func TestGetUserByPendingEmailRejectsAmbiguousClaims(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	now := time.Now().UTC()
+	rows := userRows(&models.User{ID: "user-1", Username: "alice", PendingEmail: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now})
+	rows.AddRow("user-2", "bob", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test", true, false)
+	mock.ExpectQuery("pending_email_normalized").WithArgs("alice@example.test").WillReturnRows(rows)
+	got, err := repo.GetUserByPendingEmail(context.Background(), " Alice@Example.test ")
+	if !errors.Is(err, ErrAmbiguousEmailClaim) || got != nil {
+		t.Fatalf("ambiguous pending lookup = %+v, %v", got, err)
+	}
+}
+
 func promoteRows(pendingEmail, pendingNormalized string) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).
 		AddRow(pendingEmail, pendingNormalized)
