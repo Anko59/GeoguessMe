@@ -6,15 +6,36 @@ import './Auth.css';
 export default function VerifyEmail() {
     const [params] = useSearchParams();
     const token = params.get('token');
-    const [message, setMessage] = useState(token ? 'Verifying…' : 'Verification token is missing.');
+    const recovery = params.get('next') === 'password-reset';
+    const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
+    const [failure, setFailure] = useState<{ token: string; message: string } | null>(null);
+    const verified = verifiedToken === token;
+    const message = !token
+        ? 'Verification token is missing.'
+        : verified
+          ? 'Email verified.'
+          : failure?.token === token
+            ? failure.message
+            : 'Verifying…';
     useEffect(() => {
         if (!token) return;
+        let active = true;
         void api
             .post('/auth/verify', { token })
-            .then(() => setMessage('Email verified.'))
-            .catch((error: unknown) =>
-                setMessage(getAPIErrorMessage(error, 'Verification link is invalid or expired.')),
-            );
+            .then(() => {
+                if (!active) return;
+                setVerifiedToken(token);
+            })
+            .catch((error: unknown) => {
+                if (active)
+                    setFailure({
+                        token,
+                        message: getAPIErrorMessage(error, 'Verification link is invalid or expired.'),
+                    });
+            });
+        return () => {
+            active = false;
+        };
     }, [token]);
     return (
         <div className="auth-container">
@@ -22,9 +43,15 @@ export default function VerifyEmail() {
                 <h2 className="auth-title gradient-text">Email verification</h2>
                 <p role="status">{message}</p>
                 <p className="auth-footer">
-                    <Link to="/groups" className="auth-link">
-                        Continue to GeoGuessMe
-                    </Link>
+                    {verified && recovery ? (
+                        <Link to="/forgot-password" className="auth-link">
+                            Request a password reset
+                        </Link>
+                    ) : (
+                        <Link to="/groups" className="auth-link">
+                            Continue to GeoGuessMe
+                        </Link>
+                    )}
                 </p>
             </div>
         </div>

@@ -83,8 +83,9 @@ describe('Login Page', () => {
 
         expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
         expect(screen.getByRole('note')).toHaveTextContent('legacy session is read-only');
-        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Forgot your username or password?' })).toBeInTheDocument();
         expect(mockGet).not.toHaveBeenCalled();
     });
 
@@ -97,7 +98,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
     });
@@ -111,7 +112,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        const usernameInput = (await screen.findByPlaceholderText('Username')) as HTMLInputElement;
+        const usernameInput = (await screen.findByPlaceholderText('Username or email')) as HTMLInputElement;
         const passwordInput = screen.getByPlaceholderText('Password') as HTMLInputElement;
 
         fireEvent.change(usernameInput, { target: { value: 'testuser' } });
@@ -137,8 +138,8 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        await screen.findByPlaceholderText('Username');
-        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'testuser' } });
+        await screen.findByPlaceholderText('Username or email');
+        fireEvent.change(screen.getByPlaceholderText('Username or email'), { target: { value: 'testuser' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'password123' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
 
@@ -158,8 +159,8 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        await screen.findByPlaceholderText('Username');
-        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'wrong' } });
+        await screen.findByPlaceholderText('Username or email');
+        fireEvent.change(screen.getByPlaceholderText('Username or email'), { target: { value: 'wrong' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'wrong' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
 

@@ -27,6 +27,17 @@ describe('VerifyEmail', () => {
         );
         expect(await screen.findByText('Email verified.')).toBeInTheDocument();
 
+        mocks.post.mockResolvedValueOnce({ data: {} });
+        render(
+            <MemoryRouter initialEntries={['/verify-email?token=recovery-token&next=password-reset']}>
+                <VerifyEmail />
+            </MemoryRouter>,
+        );
+        expect(await screen.findByRole('link', { name: 'Request a password reset' })).toHaveAttribute(
+            'href',
+            '/forgot-password',
+        );
+
         mocks.post.mockRejectedValueOnce(new Error('expired verification'));
         render(
             <MemoryRouter initialEntries={['/verify-email?token=expired']}>

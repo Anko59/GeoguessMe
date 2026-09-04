@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -104,8 +105,22 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
 	}
-	user, err := a.repos.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
-	if err != nil || user == nil || !a.legacyPasswordAvailable(user) || !authsvc.CheckPasswordHash(req.Password, user.Password) {
+	users, err := a.repos.GetUsersByLoginIdentifier(r.Context(), req.Username)
+	var user *models.User
+	for _, candidate := range users {
+		if !a.legacyPasswordAvailable(candidate) || !authsvc.CheckPasswordHash(req.Password, candidate.Password) {
+			continue
+		}
+		// Pending email claims are intentionally not unique. If the same
+		// password matches more than one account, fail closed instead of
+		// choosing an account the email alone cannot identify.
+		if user != nil {
+			user = nil
+			break
+		}
+		user = candidate
+	}
+	if err != nil || user == nil {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed")
 		return
 	}
@@ -246,8 +261,9 @@ func (a *AuthAPI) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	handlers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Email verified"})
 }
 
-// ForgotPassword sends a reset link when the email is registered. The response
-// is identical whether or not the account exists.
+// ForgotPassword sends a reset link for a verified email or a verification link
+// for a pending email claim. The response is identical whether or not the
+// account exists so the endpoint cannot enumerate users.
 func (a *AuthAPI) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		handlers.MethodNotAllowed(w)
@@ -266,8 +282,16 @@ func (a *AuthAPI) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		if err := a.issueResetToken(r, user); err != nil {
 			slog.Warn("password recovery delivery failed", "error", err, "user_id", user.ID)
 		}
+	} else if pending, pendingErr := a.repos.GetUserByPendingEmail(r.Context(), req.Email); pendingErr != nil {
+		if !errors.Is(pendingErr, repository.ErrAmbiguousEmailClaim) {
+			slog.Error("pending password recovery lookup failed", "error", pendingErr)
+		}
+	} else if pending != nil && pending.PendingEmail != "" {
+		if err := a.issueRecoveryVerificationToken(r, pending, pending.PendingEmail); err != nil {
+			slog.Warn("password recovery verification delivery failed", "error", err, "user_id", pending.ID)
+		}
 	}
-	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the email is registered, a reset link has been sent"})
+	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the email is registered, a reset or verification link has been sent. If you receive a verification link, open it before requesting a password reset."})
 }
 
 // ResetPassword consumes a reset token and installs a new password.
@@ -369,6 +393,18 @@ func boolByte(value bool) byte {
 }
 
 func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User, target string) error {
+	return a.issueVerificationTokenWithURL(r, user, target, func(token string) string {
+		return a.tokenURL("verify-email", token)
+	})
+}
+
+func (a *AuthAPI) issueRecoveryVerificationToken(r *http.Request, user *models.User, target string) error {
+	return a.issueVerificationTokenWithURL(r, user, target, func(token string) string {
+		return a.tokenURLWithQuery("verify-email", token, url.Values{"next": {"password-reset"}})
+	})
+}
+
+func (a *AuthAPI) issueVerificationTokenWithURL(r *http.Request, user *models.User, target string, link func(string) string) error {
 	token, err := authsvc.GenerateOpaqueToken(32)
 	if err != nil {
 		return err
@@ -380,7 +416,7 @@ func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User, tar
 	if err := a.repos.InsertEmailVerificationToken(r.Context(), uuid.NewString(), user.ID, authsvc.HashToken(token), target, time.Now().Add(ttl)); err != nil {
 		return err
 	}
-	return a.mailer.Send(target, "Verify your GeoGuessMe email", a.tokenURL("verify-email", token))
+	return a.mailer.Send(target, "Verify your GeoGuessMe email", link(token))
 }
 
 func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
@@ -399,11 +435,19 @@ func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
 }
 
 func (a *AuthAPI) tokenURL(path, token string) string {
+	return a.tokenURLWithQuery(path, token, nil)
+}
+
+func (a *AuthAPI) tokenURLWithQuery(path, token string, extra url.Values) string {
 	base := "http://localhost:5173"
 	if a.cfg.PublicURL != "" {
 		base = a.cfg.PublicURL
 	}
-	return fmt.Sprintf("%s/%s?token=%s", strings.TrimRight(base, "/"), path, token)
+	query := extra.Encode()
+	if query == "" {
+		return fmt.Sprintf("%s/%s?token=%s", strings.TrimRight(base, "/"), path, url.QueryEscape(token))
+	}
+	return fmt.Sprintf("%s/%s?token=%s&%s", strings.TrimRight(base, "/"), path, url.QueryEscape(token), query)
 }
 
 func (a *AuthAPI) configuredCost() int {

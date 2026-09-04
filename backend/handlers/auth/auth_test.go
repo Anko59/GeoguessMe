@@ -276,7 +276,7 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: string(hash), Avatar: "avatar.png", AuthVersion: 3, CreatedAt: now, UpdatedAt: now}
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(handlerUserRows(user))
+	mock.ExpectQuery("SELECT .*FROM users").WithArgs("alice", "alice").WillReturnRows(handlerUserRows(user))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
 	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","password":"Password123"}`)))
@@ -332,7 +332,7 @@ func TestOIDCEnabledRetiresSignupAndLimitsPasswordLoginToMigration(t *testing.T)
 		t.Fatal(err)
 	}
 	legacy := &models.User{ID: "legacy-user", Username: "legacy", Password: string(hash), PasswordEnabled: true, Avatar: "avatar.png"}
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("legacy").WillReturnRows(handlerUserRows(legacy))
+	mock.ExpectQuery("SELECT .*FROM users").WithArgs("legacy", "legacy").WillReturnRows(handlerUserRows(legacy))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), legacy.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder = httptest.NewRecorder()
 	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"legacy","password":"Password123"}`)))
@@ -341,7 +341,7 @@ func TestOIDCEnabledRetiresSignupAndLimitsPasswordLoginToMigration(t *testing.T)
 	}
 
 	linked := &models.User{ID: "linked-user", Username: "linked", Password: string(hash), PasswordEnabled: true, OIDCLinked: true, Avatar: "avatar.png"}
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("linked").WillReturnRows(handlerUserRows(linked))
+	mock.ExpectQuery("SELECT .*FROM users").WithArgs("linked", "linked").WillReturnRows(handlerUserRows(linked))
 	recorder = httptest.NewRecorder()
 	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
 	if recorder.Code != http.StatusUnauthorized {
@@ -361,7 +361,7 @@ func TestOIDCDisabledRestoresLinkedLegacyPasswordLogin(t *testing.T) {
 		ID: "linked-user", Username: "linked", Password: string(hash), PasswordEnabled: true,
 		OIDCLinked: true, Avatar: "avatar.png",
 	}
-	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("linked").WillReturnRows(handlerUserRows(linked))
+	mock.ExpectQuery("SELECT .*FROM users").WithArgs("linked", "linked").WillReturnRows(handlerUserRows(linked))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), linked.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
 	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
