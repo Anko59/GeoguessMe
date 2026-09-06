@@ -6,7 +6,7 @@ import type { AuthResponse, OIDCConfig } from '../../types';
 import OIDCOptions from './OIDCOptions';
 import './Auth.css';
 
-export default function Login({ migrationMode = false }: { migrationMode?: boolean }) {
+export default function Login({ existingAccountMode = false }: { existingAccountMode?: boolean }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -20,13 +20,13 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
     // URL query. GroupJoin reads it from sessionStorage after login, so only a
     // bare /group/join is a valid post-auth target.
     const fromPath = rawFrom.split('?')[0].split('#')[0];
-    const returnTo = migrationMode ? '/settings' : fromPath === '/group/join' ? '/group/join' : '/groups';
-    const activeOIDCConfig = migrationMode
+    const returnTo = existingAccountMode ? '/settings' : fromPath === '/group/join' ? '/group/join' : '/groups';
+    const activeOIDCConfig = existingAccountMode
         ? { enabled: false, login_path: '/oauth2/start', social_providers: [] }
         : oidcConfig;
 
     useEffect(() => {
-        if (migrationMode) {
+        if (existingAccountMode) {
             return;
         }
         let active = true;
@@ -39,7 +39,7 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
         return () => {
             active = false;
         };
-    }, [migrationMode]);
+    }, [existingAccountMode]);
 
     const rememberSocialReturn = (): void => {
         sessionStorage.setItem('geoguessme_oidc_return_to', returnTo);
@@ -64,73 +64,67 @@ export default function Login({ migrationMode = false }: { migrationMode?: boole
         <div className="auth-container">
             <div className="auth-card fade-in">
                 <img src="/logo.png" alt="GeoGuessMe" className="auth-logo" />
-                <h2 className="auth-title gradient-text">{migrationMode ? 'Migrate your account' : 'Welcome Back!'}</h2>
+                <h2 className="auth-title gradient-text">Welcome Back!</h2>
                 <p className="auth-subtitle">
-                    {migrationMode
-                        ? 'Use your old GeoGuessMe username or email address and password once to connect Keycloak.'
-                        : 'Sign in securely to continue guessing'}
+                    {existingAccountMode
+                        ? 'Sign in with your existing username or email and password.'
+                        : 'Use your existing GeoGuessMe account or continue with Google.'}
                 </p>
-                {migrationMode && (
-                    <p className="auth-migration-notice" role="note">
-                        This legacy session is read-only. Your groups and scores stay on the same account, and normal
-                        access returns as soon as you connect a GeoGuessMe ID email/password or Google login in
-                        Settings. If you forgot your username, use the email address from your old account.
+                {existingAccountMode && (
+                    <p className="auth-account-notice" role="note">
+                        Your existing account works as usual. Connecting Google in Settings is optional.
                     </p>
                 )}
-                {activeOIDCConfig?.enabled ? (
-                    <OIDCOptions
-                        loginPath={activeOIDCConfig.login_path}
-                        intent="login"
-                        onStart={rememberSocialReturn}
-                        socialProviders={activeOIDCConfig.social_providers}
+                <form onSubmit={handleSubmit} className="auth-form">
+                    <label htmlFor="login-username">Username or email</label>
+                    <input
+                        id="login-username"
+                        type="text"
+                        placeholder="Username or email"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        required
+                        autoComplete="username"
                     />
-                ) : activeOIDCConfig ? (
+                    <label htmlFor="login-password">Password</label>
+                    <input
+                        id="login-password"
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                        autoComplete="current-password"
+                    />
+                    {error && (
+                        <div className="auth-error" role="alert">
+                            {error}
+                        </div>
+                    )}
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? 'Logging in…' : 'Login'}
+                    </button>
+                </form>
+                <p className="auth-footer">
+                    <Link to="/forgot-password" className="auth-link">
+                        Forgot your username or password?
+                    </Link>
+                </p>
+                {activeOIDCConfig?.enabled && (
                     <>
-                        <form onSubmit={handleSubmit} className="auth-form">
-                            <label htmlFor="login-username">Username or email</label>
-                            <input
-                                id="login-username"
-                                type="text"
-                                placeholder="Username or email"
-                                value={username}
-                                onChange={(event) => setUsername(event.target.value)}
-                                required
-                                autoComplete="username"
-                            />
-                            <label htmlFor="login-password">Password</label>
-                            <input
-                                id="login-password"
-                                type="password"
-                                placeholder="Password"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                required
-                                autoComplete="current-password"
-                            />
-                            {error && (
-                                <div className="auth-error" role="alert">
-                                    {error}
-                                </div>
-                            )}
-                            <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                {submitting ? 'Logging in…' : 'Login'}
-                            </button>
-                        </form>
-                        <p className="auth-footer">
-                            <Link to="/forgot-password" className="auth-link">
-                                Forgot your username or password?
-                            </Link>
-                        </p>
+                        <div className="auth-divider">or</div>
+                        <OIDCOptions
+                            loginPath={activeOIDCConfig.login_path}
+                            intent="login"
+                            onStart={rememberSocialReturn}
+                            socialProviders={activeOIDCConfig.social_providers}
+                        />
                     </>
-                ) : (
-                    <p className="auth-provider-note" role="status">
-                        Loading secure sign-in…
-                    </p>
                 )}
                 <p className="auth-footer">
-                    {migrationMode ? (
+                    {existingAccountMode ? (
                         <Link to="/login" className="auth-link">
-                            Back to Keycloak sign in
+                            Back to sign in
                         </Link>
                     ) : (
                         <>

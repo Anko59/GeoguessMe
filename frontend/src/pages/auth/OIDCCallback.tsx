@@ -95,11 +95,11 @@ export default function OIDCCallback() {
                             {error}
                         </p>
                         <p className="auth-subtitle">
-                            If you already play with a username, use the one-time migration sign-in and connect Keycloak
-                            from Settings. Your groups and scores will stay on that account.
+                            If you already play with a username, sign in to that same account. You can keep using your
+                            username and password, and connect Google later from Settings if you want to.
                         </p>
                         <Link className="btn btn-primary" to="/migrate-account">
-                            Migrate existing account
+                            Sign in to existing account
                         </Link>
                     </>
                 )}

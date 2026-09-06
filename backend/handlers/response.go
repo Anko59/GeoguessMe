@@ -66,10 +66,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 
 type contextKey string
 
-const (
-	userIDKey            contextKey = "userID"
-	migrationRequiredKey contextKey = "migrationRequired"
-)
+const userIDKey contextKey = "userID"
 
 // GetUserIDFromContext returns the authenticated user identifier carried by
 // the request context, or an empty string for anonymous requests.
@@ -84,17 +81,4 @@ func GetUserIDFromContext(r *http.Request) string {
 // context without depending on the unexported context key.
 func WithUserID(parent context.Context, userID string) context.Context {
 	return context.WithValue(parent, userIDKey, userID)
-}
-
-// MigrationRequired reports whether the authenticated account is still using
-// the read-only legacy migration session.
-func MigrationRequired(r *http.Request) bool {
-	required, _ := r.Context().Value(migrationRequiredKey).(bool)
-	return required
-}
-
-// WithMigrationRequired marks a request as read-only until its canonical user
-// is linked to Keycloak.
-func WithMigrationRequired(parent context.Context, required bool) context.Context {
-	return context.WithValue(parent, migrationRequiredKey, required)
 }

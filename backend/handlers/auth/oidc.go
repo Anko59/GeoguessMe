@@ -117,7 +117,7 @@ func (a *AuthAPI) ExchangeOIDCSession(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusConflict, "username_taken", "Username is already in use")
 		return
 	case errors.Is(userErr, repository.ErrOIDCAccountLinkRequired):
-		handlers.WriteError(w, http.StatusConflict, "account_link_required", "Use the account migration page once, then connect Keycloak from Settings")
+		handlers.WriteError(w, http.StatusConflict, "account_link_required", "Sign in to your existing account, then connect Google from Settings if you want to use it")
 		return
 	case errors.Is(userErr, repository.ErrOIDCIdentityConflict):
 		handlers.WriteError(w, http.StatusConflict, "identity_already_linked", "This Keycloak identity is linked to another account")

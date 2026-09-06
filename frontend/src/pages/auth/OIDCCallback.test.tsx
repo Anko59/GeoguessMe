@@ -59,8 +59,8 @@ describe('OIDCCallback', () => {
         expect(authValue.login).toHaveBeenCalledWith(response);
     });
 
-    it('explains how an existing account can be linked', async () => {
-        exchange.mockRejectedValueOnce(new Error('Use the account migration page once'));
+    it('explains that an existing account remains usable and can optionally be linked', async () => {
+        exchange.mockRejectedValueOnce(new Error('Sign in to your existing account'));
         render(
             <AuthContext.Provider value={authValue}>
                 <MemoryRouter>
@@ -68,8 +68,8 @@ describe('OIDCCallback', () => {
                 </MemoryRouter>
             </AuthContext.Provider>,
         );
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Use the account migration page once'));
-        expect(screen.getByRole('link', { name: 'Migrate existing account' })).toHaveAttribute(
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Sign in to your existing account'));
+        expect(screen.getByRole('link', { name: 'Sign in to existing account' })).toHaveAttribute(
             'href',
             '/migrate-account',
         );

@@ -139,13 +139,13 @@ describe('App shell — public routes', () => {
         expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
     });
 
-    it('renders legacy credentials only at /migrate-account', async () => {
+    it('keeps the existing-account fallback route available after an OIDC collision', async () => {
         routeRef.current = '/migrate-account';
         window.history.pushState({}, '', routeRef.current);
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Welcome Back!' })).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 

@@ -182,7 +182,7 @@ func (a *App) routes() http.Handler {
 		return limitedHandler.ServeHTTP
 	}
 	protected := func(handler http.HandlerFunc) http.Handler {
-		return a.AuthAPI.AuthMiddleware(a.AuthAPI.LegacyReadOnlyMiddleware(handler))
+		return a.AuthAPI.AuthMiddleware(handler)
 	}
 
 	mux.Handle("/api/v1/auth/signup", limit("signup")(http.HandlerFunc(a.AuthAPI.Signup)))

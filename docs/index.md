@@ -59,8 +59,8 @@ and submit one server-timed guess.
 - [Runtime hardening runbook](runbooks/runtime-hardening.md) — container
   hardening, mandatory rehearsal, host hash verification, closure checklist
 - [Social-auth rollout runbook](runbooks/social-auth-rollout.md) — Keycloak
-  launch, preservation of legacy user IDs, migration evidence, and the staged
-  read-only policy
+  launch, preservation of legacy user IDs and passwords, optional linking, and
+  rollout evidence
 - [July 2026 release recovery](runbooks/release-recovery-2026-07.md) — incident
   record, corrected safeguards, and release checklist
 

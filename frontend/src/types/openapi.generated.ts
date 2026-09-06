@@ -35,8 +35,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start a temporary legacy migration session.
-         * @description Hidden from normal login; accepts an unmigrated legacy account by its username or verified/pending email address and issues a read-only session while OIDC is enabled.
+         * Log in with an existing GeoGuessMe account.
+         * @description Accepts an existing account's username or verified/pending email address and application password. The resulting session has normal access whether or not Keycloak is enabled or linked.
          */
         post: operations['login'];
         delete?: never;
@@ -849,11 +849,11 @@ export interface components {
             /** Format: date-time */
             email_verified_at?: string | null;
             avatar?: string;
-            /** @description Whether the hidden migration flow may still confirm this legacy account's password. */
+            /** @description Whether the account can sign in with its GeoGuessMe username or email and application password. */
             password_login_enabled: boolean;
             /** @description Whether the account is linked to the configured Keycloak realm. */
             oidc_linked: boolean;
-            /** @description Whether the legacy account is read-only until a Keycloak identity is linked. */
+            /** @description Compatibility field that is always false. Linking a Keycloak identity is optional. */
             migration_required: boolean;
         };
         AuthResponse: {
@@ -1348,7 +1348,7 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    /** @description Legacy username or email address. */
+                    /** @description Existing GeoGuessMe username or email address. */
                     username: string;
                     password: string;
                 };
