@@ -1,11 +1,11 @@
 module geoguessme
 
-go 1.25.0
+go 1.26.0
 
 toolchain go1.26.6
 
 require (
-	github.com/coreos/go-oidc/v3 v3.20.0
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -13,7 +13,7 @@ require (
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/image v0.45.0
 )
 
