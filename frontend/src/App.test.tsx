@@ -177,6 +177,18 @@ describe('App shell — public routes', () => {
         });
         expect(await screen.findByText('Verification token is missing.')).toBeInTheDocument();
     });
+
+    it('renders a recovery page for an unknown route', async () => {
+        routeRef.current = '/place-that-does-not-exist';
+        window.history.pushState({}, '', routeRef.current);
+        await act(async () => {
+            render(<App />);
+        });
+
+        expect(await screen.findByRole('heading', { name: "This place isn't on the map" })).toBeInTheDocument();
+        expect(screen.getByText('The link may be outdated, or the address might have a typo.')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Back to GeoGuessMe' })).toHaveAttribute('href', '/');
+    });
 });
 
 describe('App shell — protected routes redirect when unauthenticated', () => {
