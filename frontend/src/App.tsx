@@ -13,6 +13,7 @@ import VerifyEmail from './pages/auth/VerifyEmail';
 import OIDCCallback from './pages/auth/OIDCCallback';
 import AccountSettings from './pages/account/AccountSettings';
 import ProfilePage from './pages/profile/ProfilePage';
+import NotFound from './pages/not-found/NotFound';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
@@ -97,6 +98,7 @@ function AppChrome() {
                         </ProtectedRoute>
                     }
                 />
+                <Route path="*" element={<NotFound />} />
             </Routes>
             <PwaOnboarding />
         </div>
