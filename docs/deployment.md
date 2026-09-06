@@ -21,8 +21,7 @@ Apple and GitHub remain disabled for this rollout.
 Generate `deployment/secrets/identity.env.enc` for both host age recipients with
 `make identity-secrets-generate`, then follow the
 [social-auth rollout runbook](runbooks/social-auth-rollout.md) for Keycloak
-provisioning, the read-only legacy-account migration phase, validation, and the
-later legacy-credential retirement PR.
+provisioning, existing-account continuity, optional linking, and validation.
 
 All operational actions use Dockerized Make targets:
 

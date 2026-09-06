@@ -324,7 +324,7 @@ describe('AccountSettings', () => {
         );
 
         expect(screen.queryByLabelText('Current password to save profile changes')).not.toBeInTheDocument();
-        expect(screen.getByText('Keycloak login is connected.')).toBeInTheDocument();
+        expect(screen.getByText('Google or GeoGuessMe ID is connected.')).toBeInTheDocument();
         expect(await screen.findByRole('link', { name: 'Manage 2FA and passkeys' })).toHaveAttribute(
             'href',
             'https://auth-dev.geoguessme.com/realms/geoguessme/account/',
@@ -342,6 +342,25 @@ describe('AccountSettings', () => {
         await waitFor(() =>
             expect(mocks.delete).toHaveBeenCalledWith('/auth/account', { data: { confirmation: 'alice' } }),
         );
+    });
+
+    it('keeps password controls available after an existing account links Keycloak', () => {
+        const linkedPasswordUser: User = { ...user, oidc_linked: true };
+        mocks.get.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
+        });
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: linkedPasswordUser }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(
+            screen.getByText('Google or GeoGuessMe ID is connected. Username and password login remains active.'),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument();
     });
 
     it('shows verification and deletion flows', async () => {
@@ -369,7 +388,7 @@ describe('AccountSettings', () => {
         vi.restoreAllMocks();
     });
 
-    it('shows only migration and deletion controls for a read-only legacy account', () => {
+    it('keeps all account controls available when an older response has the deprecated migration flag', () => {
         const migrationUser: User = { ...user, migration_required: true };
         render(
             <AuthContext.Provider value={{ ...authValue, user: migrationUser }}>
@@ -379,11 +398,10 @@ describe('AccountSettings', () => {
             </AuthContext.Provider>,
         );
 
-        expect(screen.getByRole('heading', { name: 'Finish account migration' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Continue with GeoGuessMe ID' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Change password' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Resend verification email' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Finish account migration' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save profile' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Resend verification email' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Delete account' })).toBeInTheDocument();
     });
 });

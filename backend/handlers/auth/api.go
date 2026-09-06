@@ -55,8 +55,8 @@ func (a *AuthAPI) SetIdentityAdmin(admin authsvc.IdentityAdmin) {
 	a.oidcAdmin = admin
 }
 
-func (a *AuthAPI) legacyPasswordAvailable(user *models.User) bool {
-	return user != nil && user.PasswordEnabled && (!a.cfg.OIDCEnabled || !user.OIDCLinked)
+func (a *AuthAPI) passwordLoginAvailable(user *models.User) bool {
+	return user != nil && user.PasswordEnabled
 }
 
 // kickDisconnectUser closes every live socket for a user after their

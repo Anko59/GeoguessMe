@@ -288,69 +288,32 @@ test.describe('Local social-auth visual validation', () => {
         await page.screenshot({ path: testInfo.outputPath('07-returning-keycloak-login.png'), fullPage: true });
     });
 
-    test('keeps legacy credentials hidden and completes the read-only migration flow', async ({
-        page,
-        request,
-    }, testInfo) => {
-        test.setTimeout(120_000);
+    test('keeps legacy username login and full account access alongside Google', async ({ page }, testInfo) => {
         test.skip(!legacyUsername || !legacyPassword, 'requires an unmigrated local application fixture');
 
         await page.goto('/login');
         await expect(page.getByRole('link', { name: 'Continue with Google' })).toBeVisible();
-        await expect(page.locator('#login-username')).toHaveCount(0);
-
-        await page.goto('/migrate-account');
-        await expect(page.getByRole('heading', { name: 'Migrate your account' })).toBeVisible();
-        await expect(page.getByRole('note')).toContainText('legacy session is read-only');
         await page.locator('#login-username').fill(legacyUsername ?? '');
         await page.locator('#login-password').fill(legacyPassword ?? '');
-        await page.screenshot({ path: testInfo.outputPath('07-hidden-migration-login.png'), fullPage: true });
+        await page.screenshot({ path: testInfo.outputPath('08-legacy-login-alongside-google.png'), fullPage: true });
 
         await Promise.all([
-            page.waitForURL(/\/settings$/, { timeout: 30_000 }),
+            page.waitForURL(/\/groups$/, { timeout: 30_000 }),
             page.getByRole('button', { name: 'Login' }).click(),
         ]);
-        await expect(page.getByText('This legacy account is read-only until Keycloak is connected.')).toBeVisible();
-        await expect(page.getByRole('heading', { name: 'Finish account migration' })).toBeVisible();
-        const continueWithIdentity = page.getByRole('button', { name: 'Continue with GeoGuessMe ID' });
-        await expect(continueWithIdentity).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save profile' })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: 'Change password' })).toHaveCount(0);
-        await page.screenshot({ path: testInfo.outputPath('08-read-only-migration-settings.png'), fullPage: true });
-
-        const migrationEmail = `legacy-migration-${Date.now()}@example.com`;
-        await Promise.all([
-            page.waitForURL(/https:\/\/auth-dev\.geoguessme\.com\//, {
-                waitUntil: 'domcontentloaded',
-                timeout: 30_000,
-            }),
-            continueWithIdentity.click(),
-        ]);
-        await page.locator('#kc-registration a').click();
-        await page.locator('#email').fill(migrationEmail);
-        await completeKeycloakEmailRegistration(page, request, migrationEmail, 'TestPass123!');
-        await page.waitForURL(/https:\/\/geoguessme\.localhost\/settings$/, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60_000,
-        });
-        await expect(page.getByText('This legacy account is read-only until Keycloak is connected.')).toHaveCount(0);
+        await page.goto('/settings');
         const saveProfile = page.getByRole('button', { name: 'Save profile' });
         await expect(saveProfile).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Change password' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Connect Google or GeoGuessMe ID' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Finish account migration' })).toHaveCount(0);
+        await page.getByLabel('Current password to save profile changes').fill(legacyPassword ?? '');
         const profileWrite = page.waitForResponse(
             (response) => response.url().endsWith('/api/v1/auth/profile') && response.request().method() === 'PATCH',
         );
         await saveProfile.click();
         expect((await profileWrite).status()).toBe(200);
         await expect(page.locator('.auth-success')).toHaveText('Profile updated.');
-        await page.screenshot({ path: testInfo.outputPath('09-migrated-account-unlocked.png'), fullPage: true });
-
-        await page.getByLabel(`Type ${legacyUsername ?? ''} to delete account`).fill(legacyUsername ?? '');
-        page.once('dialog', (dialog) => dialog.accept());
-        const deletion = page.waitForResponse(
-            (response) => response.url().endsWith('/api/v1/auth/account') && response.request().method() === 'DELETE',
-        );
-        await page.getByRole('button', { name: 'Delete account' }).click();
-        expect((await deletion).status()).toBe(204);
-        await page.waitForURL('https://geoguessme.localhost/', { timeout: 30_000 });
+        await page.screenshot({ path: testInfo.outputPath('09-legacy-account-full-access.png'), fullPage: true });
     });
 });

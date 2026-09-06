@@ -28,8 +28,6 @@ export default function AccountSettings() {
     const [saving, setSaving] = useState(false);
     const [linking, setLinking] = useState(false);
     const [keycloakAccountURL, setKeycloakAccountURL] = useState('');
-    const migrationRequired = Boolean(user?.migration_required);
-
     useEffect(() => {
         let active = true;
         if (!user?.oidc_linked) return () => undefined;
@@ -185,23 +183,7 @@ export default function AccountSettings() {
                     </div>
                 </div>
 
-                {migrationRequired && (
-                    <div className="account-section account-migration-required" role="status">
-                        <div className="account-section-heading">
-                            <h2>Finish account migration</h2>
-                            <p>
-                                This legacy account is read-only. Continue with GeoGuessMe ID using email/password or
-                                Google to restore normal access without moving or recreating your groups, scores, or
-                                history.
-                            </p>
-                        </div>
-                        <button className="btn btn-primary" disabled={linking} onClick={() => void linkSocialLogin()}>
-                            {linking ? 'Opening secure login…' : 'Continue with GeoGuessMe ID'}
-                        </button>
-                    </div>
-                )}
-
-                <div className="account-section" hidden={migrationRequired}>
+                <div className="account-section">
                     <div className="account-section-heading">
                         <h2>Profile</h2>
                         <p>How friends see you in groups and results.</p>
@@ -282,19 +264,23 @@ export default function AccountSettings() {
                     </button>
                 </div>
 
-                <div className="account-section" hidden={migrationRequired}>
+                <div className="account-section">
                     <div className="account-section-heading">
                         <h2>Sign-in methods</h2>
                         <p>
                             {user?.oidc_linked
-                                ? 'Email/password and optional Google sign-in are managed through Keycloak while GeoGuessMe keeps the same player ID and game history.'
-                                : 'Legacy password sign-in is active while Keycloak is disabled for rollback.'}
+                                ? user.password_login_enabled
+                                    ? 'Your existing GeoGuessMe password and Google or GeoGuessMe ID sign-in are all active on the same player account.'
+                                    : 'Google or GeoGuessMe ID sign-in is active on this player account.'
+                                : 'Keep using your existing username and password. Connecting Google is optional.'}
                         </p>
                     </div>
                     {user?.oidc_linked ? (
                         <>
                             <p className="account-identity-status" role="status">
-                                Keycloak login is connected.
+                                {user.password_login_enabled
+                                    ? 'Google or GeoGuessMe ID is connected. Username and password login remains active.'
+                                    : 'Google or GeoGuessMe ID is connected.'}
                             </p>
                             <p className="account-help">
                                 Two-factor authentication, recovery codes, and passkeys are optional. You can add or
@@ -312,9 +298,18 @@ export default function AccountSettings() {
                             )}
                         </>
                     ) : (
-                        <p className="account-identity-status">Legacy password login is active.</p>
+                        <>
+                            <p className="account-identity-status">Username and password login is active.</p>
+                            <button
+                                className="btn btn-secondary"
+                                disabled={linking}
+                                onClick={() => void linkSocialLogin()}
+                            >
+                                {linking ? 'Opening secure login…' : 'Connect Google or GeoGuessMe ID'}
+                            </button>
+                        </>
                     )}
-                    {!user?.oidc_linked && user?.password_login_enabled ? (
+                    {user?.password_login_enabled ? (
                         <>
                             <label htmlFor="new-password">New password</label>
                             <input
@@ -352,7 +347,7 @@ export default function AccountSettings() {
                         {error}
                     </p>
                 )}
-                <div className="account-verification" hidden={migrationRequired}>
+                <div className="account-verification">
                     <div>
                         {user?.email_verified_at && user?.email ? (
                             <>

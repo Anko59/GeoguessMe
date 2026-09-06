@@ -84,7 +84,7 @@ page reachable from chat and leaderboards.
 | Method | Path                           | Auth   | Description                               | Status codes       |
 | ------ | ------------------------------ | ------ | ----------------------------------------- | ------------------ |
 | POST   | `/api/v1/auth/signup`          | No     | Create account                            | 200, 400, 409      |
-| POST   | `/api/v1/auth/login`           | No     | Log in with legacy username or email      | 200, 401           |
+| POST   | `/api/v1/auth/login`           | No     | Log in with existing username or email    | 200, 401           |
 | POST   | `/api/v1/auth/refresh`         | Cookie | Rotate refresh session                    | 200, 401           |
 | POST   | `/api/v1/auth/logout`          | No     | Revoke session; `?all=1` revokes all      | 204                |
 | POST   | `/api/v1/auth/verify/request`  | Bearer | Send verification email                   | 202                |

@@ -30,7 +30,7 @@ describe('Login Page', () => {
         mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
     });
 
-    it('offers distinct Keycloak social and native email login when enabled', async () => {
+    it('keeps username login alongside Keycloak social and native email login', async () => {
         mockGet.mockResolvedValueOnce({
             data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
         });
@@ -49,8 +49,8 @@ describe('Login Page', () => {
         expect(screen.queryByRole('link', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
         expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
         expect(screen.getByRole('button', { name: 'Continue to password' })).toBeInTheDocument();
-        expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
-        expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
         fireEvent.click(google);
         expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
     });
@@ -72,17 +72,17 @@ describe('Login Page', () => {
         expect(screen.getByText(/Social sign-in is not configured in this environment/)).toBeInTheDocument();
     });
 
-    it('only exposes legacy credentials on the dedicated migration page', async () => {
+    it('explains optional linking on the existing-account fallback page', async () => {
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
-                    <Login migrationMode />
+                    <Login existingAccountMode />
                 </BrowserRouter>
             </AuthContext.Provider>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Migrate your account' })).toBeInTheDocument();
-        expect(screen.getByRole('note')).toHaveTextContent('legacy session is read-only');
+        expect(await screen.findByRole('heading', { name: 'Welcome Back!' })).toBeInTheDocument();
+        expect(screen.getByRole('note')).toHaveTextContent('Connecting Google in Settings is optional');
         expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Forgot your username or password?' })).toBeInTheDocument();

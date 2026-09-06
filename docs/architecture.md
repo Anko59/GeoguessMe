@@ -80,22 +80,20 @@ At registration time, selected handlers are additionally wrapped by `RateLimit`
 routes — validates the Bearer token, then checks account activity and
 `auth_version` against the database).
 
-### Keycloak login, signup, and migration
+### Keycloak and existing-account login
 
-Normal login and signup both redirect through OAuth2 Proxy to the shared
-Keycloak realm, where native email/password or optional Google can authenticate
-the player. Apple and GitHub are deferred. The exact callback exchange resolves
-the durable `(issuer, subject)` mapping and issues the application's existing
-access and refresh session. A first Keycloak identity either reuses an exact
-verified-email user or atomically creates a passwordless app user.
+The login page keeps the application's existing username-or-email/password form
+and adds Keycloak native email and optional Google as alternative methods.
+Existing password sessions retain normal access whether or not the account is
+linked. New signup goes through Keycloak. Apple and GitHub are deferred.
 
-If only a pending/unverified legacy claim matches, the callback exposes the
-otherwise hidden migration route. That legacy password session is backend-
-enforced read-only: GET/HEAD, account deletion/recovery, and starting the OIDC
-link remain available; other writes return `403 migration_required`. Linking
-adds the identity to the same `users.id`, bumps `auth_version`, revokes old
-sessions/tickets, and restores normal writes through the new Keycloak-backed
-session.
+The callback exchange resolves the durable `(issuer, subject)` mapping and
+issues the application's existing access and refresh session. A first Keycloak
+identity either reuses an exact verified-email user or atomically creates a
+passwordless app user. A pending/unverified email match cannot auto-link: the
+player may sign in to the existing account normally and optionally initiate a
+proof-of-possession link from Settings. Linking preserves the same `users.id`,
+groups, scores, and history, and does not disable its application password.
 
 ### WebSocket chat
 

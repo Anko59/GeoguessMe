@@ -108,7 +108,7 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 	users, err := a.repos.GetUsersByLoginIdentifier(r.Context(), req.Username)
 	var user *models.User
 	for _, candidate := range users {
-		if !a.legacyPasswordAvailable(candidate) || !authsvc.CheckPasswordHash(req.Password, candidate.Password) {
+		if !a.passwordLoginAvailable(candidate) || !authsvc.CheckPasswordHash(req.Password, candidate.Password) {
 			continue
 		}
 		// Pending email claims are intentionally not unique. If the same
@@ -349,7 +349,7 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
 		return
 	}
-	passwordConfirmation := a.legacyPasswordAvailable(user)
+	passwordConfirmation := a.passwordLoginAvailable(user)
 	confirmed := subtle.ConstantTimeCompare([]byte{boolByte(passwordConfirmation && authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) == 1
 	if !passwordConfirmation {
 		confirmed = subtle.ConstantTimeCompare([]byte(strings.TrimSpace(req.Confirmation)), []byte(user.Username)) == 1

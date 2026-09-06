@@ -105,7 +105,7 @@
     line-height: 1.5;
 }
 
-.auth-migration-notice {
+.auth-account-notice {
     margin: 0 0 var(--space-5);
     padding: var(--space-4);
     color: var(--brand-navy);

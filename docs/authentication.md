@@ -4,10 +4,9 @@
 
 GeoGuessMe uses a split-token authentication scheme:
 
-1. A normal login or signup completes in Keycloak and is exchanged through
-   `POST /api/v1/auth/oidc/session`. The hidden legacy migration page may call
-   `POST /api/v1/auth/login` once for an unmigrated account, using its username
-   or email address. Either path returns:
+1. An existing account signs in with its username or email and application
+   password through `POST /api/v1/auth/login`. Keycloak and Google sign-in is
+   exchanged through `POST /api/v1/auth/oidc/session`. Either path returns:
     - `access_token` (JWT, short-lived) in the JSON response body
     - `refresh_token` (opaque, long-lived) as an HttpOnly cookie
 2. The access token is sent on every authenticated request as
@@ -55,9 +54,9 @@ chat records.
 
 ## Keycloak login, signup, and social providers
 
-When `OIDC_ENABLED=true`, both normal login and signup use Keycloak exclusively.
-Native email/password is a first-class Keycloak method; Google is the optional
-social method enabled for this rollout. Apple and GitHub are deliberately
+When `OIDC_ENABLED=true`, the normal login page keeps username-or-email and
+application-password login for existing accounts and adds Keycloak native email
+and optional Google. New signup uses Keycloak. Apple and GitHub are deliberately
 deferred. A provider button starts a fresh authorization request with an
 allow-listed `kc_idp_hint`. The email path carries only `login_hint`; Keycloak's
 branded page collects the password, so the application never receives or relays
@@ -70,14 +69,13 @@ providers backed by placeholder values and keeps every broker hidden on its
 native email/password screen. A player therefore chooses Google or email exactly
 once; the Keycloak continuation never repeats the provider menu.
 
-No legacy credential fields or application password-recovery links are rendered
-on the normal pages. OAuth2 Proxy completes the authorization-code flow and
-keeps its encrypted session out of frontend JavaScript. It forwards only
-configured allow-listed provider aliases, `prompt=create`, and a validated
-email-shaped `login_hint`. The backend independently verifies the Keycloak token
-forwarded to the exact OIDC session-exchange route, resolves the application
-account, and then issues the normal GeoGuessMe access/refresh session described
-above.
+The existing-account form and application password-recovery link remain on the
+normal login page. OAuth2 Proxy completes the authorization-code flow and keeps
+its encrypted session out of frontend JavaScript. It forwards only configured
+allow-listed provider aliases, `prompt=create`, and a validated email-shaped
+`login_hint`. The backend independently verifies the Keycloak token forwarded to
+the exact OIDC session-exchange route, resolves the application account, and
+then issues the normal GeoGuessMe access/refresh session described above.
 
 `user_identities` stores the durable `(issuer, subject) -> users.id` mapping.
 The existing `users.id` always remains canonical, so linking a Keycloak identity
@@ -89,8 +87,8 @@ The first verified OIDC session resolves as follows:
 2. An exact verified recovery-email match links to that existing user while
    preserving its ID.
 3. A pending or unverified email match returns `account_link_required`. The
-   callback reveals the dedicated migration route. The player uses the old
-   username-or-email/password there once and starts the link from Settings; an
+   player can sign in to the existing account with its username or email and
+   password, then optionally start a proof-of-possession link from Settings; an
    email claim alone never controls an account.
 4. With no match, the callback returns `username_required`. The verified player
    explicitly chooses an available GeoGuessMe username; no provider username is
@@ -98,18 +96,15 @@ The first verified OIDC session resolves as follows:
    the new application user and identity in one transaction. Any password
    belongs only to Keycloak.
 
-An unmigrated legacy session can read its groups and history, start the OIDC
-link, request recovery mail, or delete the account. Every other write is
-rejected by the backend with HTTP 403 and `migration_required`. Linking adds the
-Keycloak subject to the same `users.id`, revokes old sessions, and restores full
-access through the newly issued Keycloak-backed session. The application legacy
-password is rejected after linking while OIDC is enabled; native Keycloak
-email/password remains available. Setting `OIDC_ENABLED=false` restores the
-retained legacy hash for rollback without removing the identity mapping.
+Existing password accounts keep full application access before and after OIDC is
+enabled. Linking adds the Keycloak subject to the same `users.id` and revokes
+old sessions as a security boundary, but it is optional and does not disable the
+application password. The `migration_required` response field is retained
+temporarily for wire compatibility and is always false.
 
 Keycloak offers TOTP, recovery codes, and passkeys from account settings, but
 none is a default action. MFA remains opt-in for this social game. The staged
-release and read-only policy are owned by the
+release is owned by the
 [social-auth rollout runbook](runbooks/social-auth-rollout.md).
 
 ## Verification
@@ -137,11 +132,10 @@ Token URL format: `{PUBLIC_URL}/verify-email?token={raw}`. Recovery verification
 links add `&next=password-reset` so the confirmation page leads directly back to
 the reset request.
 
-## Legacy password reset
+## Existing-account password reset
 
-Normal email/password recovery is owned by Keycloak. The endpoints below are
-retained only for the OIDC-off compatibility UI and the hidden legacy migration
-support path during this rollout.
+The application recovery endpoints remain available to existing password
+accounts when Keycloak is enabled.
 
 - `POST /api/v1/auth/password/forgot {email}` sends a reset link for a verified
   address, or a verification link for a pending address (always returns 202 to
@@ -152,15 +146,15 @@ support path during this rollout.
   refresh sessions.
 - Token TTL: `RESET_TOKEN_TTL` (default 1 hour).
 
-Fully migrated users can update their username, pending recovery-email claim, or
-selected profile avatar through `PATCH /api/v1/auth/profile`; their Keycloak
-session authorizes the change. A verified recovery address remains active until
-its replacement is verified, and omitting email cancels only the pending claim.
-A custom profile photo is uploaded separately through
+Users can update their username, pending recovery-email claim, or selected
+profile avatar through `PATCH /api/v1/auth/profile`; their Keycloak session
+authorizes the change. A verified recovery address remains active until its
+replacement is verified, and omitting email cancels only the pending claim. A
+custom profile photo is uploaded separately through
 `POST /api/v1/auth/profile/avatar`; the web client sends the original selected
 file, and the backend accepts JPG, PNG, or WebP up to 25 MiB before resizing and
-stripping metadata. The legacy password-change route is unavailable after
-Keycloak linking.
+stripping metadata. Password-enabled users may also change their application
+password after linking Keycloak.
 
 ## Logout
 
@@ -187,9 +181,9 @@ tokens immediately, even before the short-lived JWT would have expired.
 
 ## Account deletion
 
-`DELETE /api/v1/auth/account` is authenticated and requires the current password
-when legacy authentication is active. An OIDC-linked account instead requires
-exact username confirmation while OIDC is enabled.
+`DELETE /api/v1/auth/account` is authenticated and requires the current
+application password when password login is enabled, including after optional
+OIDC linking. A Keycloak-only account requires exact username confirmation.
 
 1. Verifies the password.
 2. For an OIDC-linked user, obtains a short-lived Keycloak service-account token

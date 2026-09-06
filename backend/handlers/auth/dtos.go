@@ -34,7 +34,7 @@ type AuthUser struct {
 	Avatar          string     `json:"avatar"`
 	PasswordEnabled bool       `json:"password_login_enabled"`
 	OIDCLinked      bool       `json:"oidc_linked"`
-	MigrationNeeded bool       `json:"migration_required"`
+	MigrationNeeded bool       `json:"migration_required"` // Deprecated compatibility field; always false.
 }
 
 // AuthResponse is the session start payload.
@@ -116,7 +116,6 @@ func userResponse(user *models.User) AuthUser {
 
 func (a *AuthAPI) userResponse(user *models.User) AuthUser {
 	response := userResponse(user)
-	response.PasswordEnabled = a.legacyPasswordAvailable(user)
-	response.MigrationNeeded = a.cfg.OIDCEnabled && !user.OIDCLinked
+	response.PasswordEnabled = a.passwordLoginAvailable(user)
 	return response
 }

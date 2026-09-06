@@ -109,7 +109,7 @@ native-account verification and password-reset mail; it may use the same Brevo
 account as the application while remaining independently configured. Commit only
 the three encrypted dotenv files. Follow the
 [social-auth rollout runbook](social-auth-rollout.md) before enabling OIDC; it
-defines the exact Google callback, the legacy read-only migration phase, and the
+defines the exact Google callback, existing-account continuity requirements, and
 provider-specific checks. The generator writes inert placeholders for Apple and
 GitHub until their separately reviewed rollout.
 
