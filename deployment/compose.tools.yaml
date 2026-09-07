@@ -197,15 +197,15 @@ services:
     volumes:
       - *workspace
 
-  # PostgreSQL 15.19 with the OpenSSL packages refreshed to the fixed release
-  # (CVE-2026-14456); scanned by `make audit-images` in place of the upstream
-  # base while it still ships libcrypto3/libssl3 3.5.7-r0.
+  # PostgreSQL 15.19 with the OpenSSL and libuuid packages refreshed to fixed
+  # releases (CVE-2026-14456 and CVE-2026-53612 family); scanned by
+  # `make audit-images` in place of the upstream base.
   postgres-openssl:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/postgres-openssl.Dockerfile
-    image: geoguessme/postgres-openssl:15.19-openssl-3.5.8
+    image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3
     entrypoint: []
     volumes:
       - *workspace

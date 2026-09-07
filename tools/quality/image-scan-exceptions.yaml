@@ -30,165 +30,166 @@
 # is fixed in a newer Go/grpc/x-text release that upstream has not yet rebuilt
 # into any published image (no newer tag exists). Revisit before 2026-09-09.
 
-# --- geoguessme/postgres-openssl:15.19-openssl-3.5.8 (locally rebuilt
-#     15.19-alpine with CVE-2026-14456 OpenSSL fix layered on top; gosu entrypoint
+# --- geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 (locally
+#     rebuilt 15.19-alpine with CVE-2026-14456 OpenSSL and CVE-2026-53612-family
+#     libuuid fixes layered on top; gosu entrypoint
 #     helper embeds Go stdlib with fixed-but-unpublished rebuilds) ---
 - id: CVE-2025-68121
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2025-61726
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2025-61729
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-25679
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-27145
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-32280
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-32281
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-32283
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-33811
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-33814
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39820
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39822
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39836
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-42499
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-42504
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-39821
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-46600
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-33818
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56853
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56858
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56859
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56860
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
   approved: true
   expires: 2026-09-09
 - id: CVE-2026-56862
-  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
+  image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3@sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   digest: sha256:085361a98bf34346322b832fcc9ff05370d100a7075bf96f1601f6af0e6f6e84
   owner: security-program
   reachable: "gosu setuid entrypoint helper embeds Go stdlib; not exercised by database client traffic; newest 15.x image still ships it"
@@ -333,7 +334,22 @@
   approved: true
   expires: 2026-09-09
 
-# --- ghcr.io/getsops/sops:v3.13.3 (newest published SOPS image) ---
+# --- ghcr.io/getsops/sops:v3.13.3 (newest published SOPS image; the hosted
+#     deployment invokes it with age keys and does not use its libssh2 package) ---
+- id: CVE-2026-58050
+  image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  digest: sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  owner: security-program
+  reachable: "libssh2 is an unused base-image package; hosted deployment invokes SOPS with age keys and no SSH/libssh2 path; no newer SOPS image is published"
+  approved: true
+  expires: 2026-09-09
+- id: CVE-2026-7598
+  image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  digest: sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  owner: security-program
+  reachable: "libssh2 is an unused base-image package; hosted deployment invokes SOPS with age keys and no SSH/libssh2 path; no newer SOPS image is published"
+  approved: true
+  expires: 2026-09-09
 - id: CVE-2026-39821
   image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
   digest: sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea

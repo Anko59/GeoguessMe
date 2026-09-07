@@ -26,7 +26,7 @@ clean-build: ## Build production images from scratch without any layer cache.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
-AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8 \
+AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7 \
 	quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
@@ -57,7 +57,7 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	if [ -n "$${RESTIC_IMAGE:-}" ]; then \
 		images="$$images $${RESTIC_IMAGE}"; \
 	fi; \
-	for local_image in geoguessme/restic-tools:0.19.1-go-deps-2026-09 geoguessme/postgres-openssl:15.19-openssl-3.5.8 geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7; do \
+	for local_image in geoguessme/restic-tools:0.19.1-go-deps-2026-09 geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7; do \
 		if docker image inspect "$$local_image" >/dev/null 2>&1; then \
 			images="$$images $$local_image"; \
 		else \
