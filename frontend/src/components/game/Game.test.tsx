@@ -27,6 +27,9 @@ const user: User = {
     email: 'alice@example.test',
     avatar: 'avatar.png',
     email_verified_at: null,
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 const authValue = {
@@ -190,10 +193,10 @@ describe('Game', () => {
         const bobRow = screen.getByText('bob').closest('.score-card') as HTMLElement;
         expect(bobRow).not.toHaveTextContent(/km away/);
         expect(bobRow).toHaveTextContent('80 pts');
-        expect(screen.getByLabelText('Gained 3 Elo')).toHaveClass('elo-delta--gain');
-        expect(screen.getByLabelText('Gained 3 Elo')).toHaveTextContent('+3 Elo');
-        expect(screen.getByLabelText('Lost 5 Elo')).toHaveClass('elo-delta--loss');
-        expect(screen.getByLabelText('Lost 5 Elo')).toHaveTextContent('-5 Elo');
+        expect(screen.getByLabelText('Gained 3 weekly Elo')).toHaveClass('elo-delta--gain');
+        expect(screen.getByLabelText('Gained 3 weekly Elo')).toHaveTextContent('+3 Elo');
+        expect(screen.getByLabelText('Lost 5 weekly Elo')).toHaveClass('elo-delta--loss');
+        expect(screen.getByLabelText('Lost 5 weekly Elo')).toHaveTextContent('-5 Elo');
     });
 
     it('derives the reveal duration from location_reveals_at instead of hardcoding it', async () => {

@@ -19,6 +19,7 @@ const { routeRef, apiMocks, mockModule } = vi.hoisted(() => {
                     .post('/auth/refresh')
                     .then((response: { data?: AuthResponse } | undefined) => response?.data ?? null)
                     .catch(() => null),
+            exchangeOIDCSession: vi.fn(),
             setAccessToken: vi.fn(),
         },
     };
@@ -33,7 +34,15 @@ import { AuthContext } from './context/AuthContext';
 const authResponse: AuthResponse = {
     access_token: 'access-token',
     expires_in: 900,
-    user: { id: 'u1', username: 'alice', email: 'alice@example.test', avatar: 'avatar.png' },
+    user: {
+        id: 'u1',
+        username: 'alice',
+        email: 'alice@example.test',
+        avatar: 'avatar.png',
+        password_login_enabled: true,
+        oidc_linked: false,
+        migration_required: false,
+    },
 };
 
 beforeEach(() => {
@@ -47,6 +56,8 @@ beforeEach(() => {
     apiMocks.delete.mockReset();
     // By default, fail auth refresh so the shell is in an unauthenticated state.
     apiMocks.post.mockRejectedValue(new Error('no session'));
+    // Public route tests exercise the intentionally supported OIDC-off mode.
+    apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
 });
 
 describe('Home Page', () => {
@@ -115,7 +126,7 @@ describe('App shell — public routes', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('renders the signup page at /signup', async () => {
@@ -128,6 +139,16 @@ describe('App shell — public routes', () => {
         expect(await screen.findByText('Join the Fun!')).toBeInTheDocument();
     });
 
+    it('keeps the existing-account fallback route available after an OIDC collision', async () => {
+        routeRef.current = '/migrate-account';
+        window.history.pushState({}, '', routeRef.current);
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByRole('heading', { name: 'Welcome Back!' })).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
+    });
+
     it('renders the forgot-password page at /forgot-password', async () => {
         routeRef.current = '/forgot-password';
         window.history.pushState({}, '', routeRef.current);
@@ -135,7 +156,7 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-        expect(await screen.findByText('Send reset link')).toBeInTheDocument();
+        expect(await screen.findByText('Send reset or verification link')).toBeInTheDocument();
     });
 
     it('renders the reset-password page at /reset-password', async () => {
@@ -156,6 +177,18 @@ describe('App shell — public routes', () => {
         });
         expect(await screen.findByText('Verification token is missing.')).toBeInTheDocument();
     });
+
+    it('renders a recovery page for an unknown route', async () => {
+        routeRef.current = '/place-that-does-not-exist';
+        window.history.pushState({}, '', routeRef.current);
+        await act(async () => {
+            render(<App />);
+        });
+
+        expect(await screen.findByRole('heading', { name: "This place isn't on the map" })).toBeInTheDocument();
+        expect(screen.getByText('The link may be outdated, or the address might have a typo.')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Back to GeoGuessMe' })).toHaveAttribute('href', '/');
+    });
 });
 
 describe('App shell — protected routes redirect when unauthenticated', () => {
@@ -164,35 +197,35 @@ describe('App shell — protected routes redirect when unauthenticated', () => {
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
         // AuthProvider refresh rejects → ProtectedRoute redirects to /login
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/join to /login', async () => {
         routeRef.current = '/group/join';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/create to /login', async () => {
         routeRef.current = '/group/create';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /group/:id to /login', async () => {
         routeRef.current = '/group/some-id';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 
     it('redirects /settings to /login', async () => {
         routeRef.current = '/settings';
         window.history.pushState({}, '', routeRef.current);
         render(<App />);
-        expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
     });
 });
 

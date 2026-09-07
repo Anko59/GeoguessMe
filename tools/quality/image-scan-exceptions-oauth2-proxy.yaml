@@ -1,0 +1,14 @@
+# Time-boxed oauth2-proxy exceptions for `make audit-images`.
+# v7.15.4 (2026-08-20, Go 1.26.7) is the newest stable upstream image as of
+# 2026-09-03; it refreshed the Go toolchain and dependencies, so every previous
+# Go-stdlib record was removed per the policy below. Keep the full findings in
+# report.json and remove the remaining record when upstream publishes a release
+# built with google.golang.org/grpc v1.83.1 or later.
+
+- id: CVE-2026-84304
+  image: quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+  digest: sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+  owner: security-program
+  reachable: "gRPC is bundled transitively and no gRPC or xDS control-plane listener is configured on the authentication proxy path; v7.15.4 is the newest upstream release"
+  approved: true
+  expires: 2026-09-09

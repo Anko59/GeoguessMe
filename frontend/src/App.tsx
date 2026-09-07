@@ -10,8 +10,10 @@ import AuthProvider from './context/AuthProvider';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
+import OIDCCallback from './pages/auth/OIDCCallback';
 import AccountSettings from './pages/account/AccountSettings';
 import ProfilePage from './pages/profile/ProfilePage';
+import NotFound from './pages/not-found/NotFound';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
@@ -27,9 +29,11 @@ function AppChrome() {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/migrate-account" element={<Login existingAccountMode />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/auth/oidc/callback" element={<OIDCCallback />} />
                 <Route
                     path="/groups"
                     element={
@@ -86,6 +90,7 @@ function AppChrome() {
                         </ProtectedRoute>
                     }
                 />
+                <Route path="*" element={<NotFound />} />
             </Routes>
             <PwaOnboarding />
         </div>

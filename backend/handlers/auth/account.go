@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,10 @@ import (
 func (a *AuthAPI) Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		handlers.MethodNotAllowed(w)
+		return
+	}
+	if a.cfg.OIDCEnabled {
+		handlers.WriteError(w, http.StatusGone, "legacy_signup_disabled", "Create accounts through Keycloak")
 		return
 	}
 	var req SignupRequest
@@ -100,8 +105,22 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
 	}
-	user, err := a.repos.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
-	if err != nil || user == nil || !authsvc.CheckPasswordHash(req.Password, user.Password) {
+	users, err := a.repos.GetUsersByLoginIdentifier(r.Context(), req.Username)
+	var user *models.User
+	for _, candidate := range users {
+		if !a.passwordLoginAvailable(candidate) || !authsvc.CheckPasswordHash(req.Password, candidate.Password) {
+			continue
+		}
+		// Pending email claims are intentionally not unique. If the same
+		// password matches more than one account, fail closed instead of
+		// choosing an account the email alone cannot identify.
+		if user != nil {
+			user = nil
+			break
+		}
+		user = candidate
+	}
+	if err != nil || user == nil {
 		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed")
 		return
 	}
@@ -242,8 +261,9 @@ func (a *AuthAPI) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	handlers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Email verified"})
 }
 
-// ForgotPassword sends a reset link when the email is registered. The response
-// is identical whether or not the account exists.
+// ForgotPassword sends a reset link for a verified email or a verification link
+// for a pending email claim. The response is identical whether or not the
+// account exists so the endpoint cannot enumerate users.
 func (a *AuthAPI) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		handlers.MethodNotAllowed(w)
@@ -262,8 +282,16 @@ func (a *AuthAPI) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		if err := a.issueResetToken(r, user); err != nil {
 			slog.Warn("password recovery delivery failed", "error", err, "user_id", user.ID)
 		}
+	} else if pending, pendingErr := a.repos.GetUserByPendingEmail(r.Context(), req.Email); pendingErr != nil {
+		if !errors.Is(pendingErr, repository.ErrAmbiguousEmailClaim) {
+			slog.Error("pending password recovery lookup failed", "error", pendingErr)
+		}
+	} else if pending != nil && pending.PendingEmail != "" {
+		if err := a.issueRecoveryVerificationToken(r, pending, pending.PendingEmail); err != nil {
+			slog.Warn("password recovery verification delivery failed", "error", err, "user_id", pending.ID)
+		}
 	}
-	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the email is registered, a reset link has been sent"})
+	handlers.WriteJSON(w, http.StatusAccepted, map[string]string{"message": "If the email is registered, a reset or verification link has been sent. If you receive a verification link, open it before requesting a password reset."})
 }
 
 // ResetPassword consumes a reset token and installs a new password.
@@ -309,16 +337,43 @@ func (a *AuthAPI) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Password string `json:"password"`
+		Password     string `json:"password"`
+		Confirmation string `json:"confirmation"`
 	}
 	if !handlers.DecodeJSON(w, r, &req) {
 		return
 	}
 	userID := handlers.GetUserIDFromContext(r)
 	user, err := a.repos.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil || subtle.ConstantTimeCompare([]byte{boolByte(authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) != 1 {
-		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Password confirmation failed")
+	if err != nil || user == nil {
+		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
 		return
+	}
+	passwordConfirmation := a.passwordLoginAvailable(user)
+	confirmed := subtle.ConstantTimeCompare([]byte{boolByte(passwordConfirmation && authsvc.CheckPasswordHash(req.Password, user.Password))}, []byte{1}) == 1
+	if !passwordConfirmation {
+		confirmed = subtle.ConstantTimeCompare([]byte(strings.TrimSpace(req.Confirmation)), []byte(user.Username)) == 1
+	}
+	if !confirmed {
+		handlers.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Account confirmation failed")
+		return
+	}
+	if user.OIDCLinked {
+		if a.oidcAdmin == nil {
+			handlers.WriteError(w, http.StatusServiceUnavailable, "identity_deletion_unavailable", "Unable to delete the Keycloak account right now")
+			return
+		}
+		identities, identityErr := a.repos.OIDCIdentitiesByUserID(r.Context(), userID)
+		if identityErr != nil || len(identities) == 0 {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
+			return
+		}
+		for _, identity := range identities {
+			if identityErr := a.oidcAdmin.DeleteIdentity(r.Context(), identity.Issuer, identity.Subject); identityErr != nil {
+				handlers.WriteError(w, http.StatusBadGateway, "identity_deletion_failed", "Keycloak could not delete the identity; no GeoGuessMe data was removed")
+				return
+			}
+		}
 	}
 	if _, err := a.repos.DeleteUserCascade(r.Context(), userID); err != nil {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to delete account")
@@ -338,6 +393,18 @@ func boolByte(value bool) byte {
 }
 
 func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User, target string) error {
+	return a.issueVerificationTokenWithURL(r, user, target, func(token string) string {
+		return a.tokenURL("verify-email", token)
+	})
+}
+
+func (a *AuthAPI) issueRecoveryVerificationToken(r *http.Request, user *models.User, target string) error {
+	return a.issueVerificationTokenWithURL(r, user, target, func(token string) string {
+		return a.tokenURLWithQuery("verify-email", token, url.Values{"next": {"password-reset"}})
+	})
+}
+
+func (a *AuthAPI) issueVerificationTokenWithURL(r *http.Request, user *models.User, target string, link func(string) string) error {
 	token, err := authsvc.GenerateOpaqueToken(32)
 	if err != nil {
 		return err
@@ -349,7 +416,7 @@ func (a *AuthAPI) issueVerificationToken(r *http.Request, user *models.User, tar
 	if err := a.repos.InsertEmailVerificationToken(r.Context(), uuid.NewString(), user.ID, authsvc.HashToken(token), target, time.Now().Add(ttl)); err != nil {
 		return err
 	}
-	return a.mailer.Send(target, "Verify your GeoGuessMe email", a.tokenURL("verify-email", token))
+	return a.mailer.Send(target, "Verify your GeoGuessMe email", link(token))
 }
 
 func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
@@ -368,11 +435,19 @@ func (a *AuthAPI) issueResetToken(r *http.Request, user *models.User) error {
 }
 
 func (a *AuthAPI) tokenURL(path, token string) string {
+	return a.tokenURLWithQuery(path, token, nil)
+}
+
+func (a *AuthAPI) tokenURLWithQuery(path, token string, extra url.Values) string {
 	base := "http://localhost:5173"
 	if a.cfg.PublicURL != "" {
 		base = a.cfg.PublicURL
 	}
-	return fmt.Sprintf("%s/%s?token=%s", strings.TrimRight(base, "/"), path, token)
+	query := extra.Encode()
+	if query == "" {
+		return fmt.Sprintf("%s/%s?token=%s", strings.TrimRight(base, "/"), path, url.QueryEscape(token))
+	}
+	return fmt.Sprintf("%s/%s?token=%s&%s", strings.TrimRight(base, "/"), path, url.QueryEscape(token), query)
 }
 
 func (a *AuthAPI) configuredCost() int {

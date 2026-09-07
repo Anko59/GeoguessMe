@@ -199,3 +199,151 @@
         padding-top: max(0.65rem, env(safe-area-inset-top));
     }
 }
+
+/* --- Party Time ----------------------------------------------------------- */
+
+.party-button-anchor {
+    flex: none;
+    display: grid;
+    place-items: center;
+}
+
+.party-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        transform var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease,
+        filter var(--duration-fast) ease;
+}
+
+.party-btn:hover:not(:disabled) {
+    border-color: var(--brand-orange);
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px rgba(255, 182, 0, 0.45);
+}
+
+.party-btn:focus-visible {
+    outline: 2px solid var(--brand-blue-accessible, var(--brand-blue));
+    outline-offset: 2px;
+}
+
+.party-btn:disabled {
+    cursor: default;
+}
+
+/* Recharging: the party icon grays out until the cooldown elapses. */
+.party-btn.party-recharging {
+    filter: grayscale(1);
+    opacity: 0.55;
+}
+
+.party-btn.party-active {
+    border-color: var(--brand-orange);
+}
+
+.party-btn .party-emoji {
+    display: block;
+}
+
+/* While a party is live the emoji itself bounces; disabled buttons keep the
+   affordance visible without inviting clicks. */
+.party-live .party-btn.party-active .party-emoji {
+    animation: partyEmojiBounce 1s var(--ease-in-out, ease-in-out) infinite;
+}
+
+@keyframes partyEmojiBounce {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-4deg);
+    }
+    50% {
+        transform: translateY(-3px) rotate(4deg);
+    }
+}
+
+/* The neon ring: a viewport-fixed, pointer-transparent frame that pulses
+   orange and blue while a party is running. Two layered effects keep broad
+   browser support: a universally supported glow pulse plus a rotating
+   conic-gradient ring where @property is available. The overlay is rendered
+   above every in-app surface (header, tabs, and the challenge view) but
+   never intercepts input. */
+.party-border {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    pointer-events: none;
+    animation:
+        partyGlowPulse 1.6s ease-in-out infinite,
+        partyRingSpin 5s linear infinite;
+    background: linear-gradient(
+            var(--party-ring-angle, 0deg),
+            var(--brand-orange),
+            var(--brand-blue),
+            var(--brand-orange)
+        )
+        border-box;
+    border: 6px solid transparent;
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+}
+
+@property --party-ring-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+
+@keyframes partyGlowPulse {
+    0%,
+    100% {
+        box-shadow:
+            inset 0 0 18px rgba(255, 182, 0, 0.55),
+            inset 0 0 6px rgba(0, 192, 255, 0.35);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 18px rgba(0, 192, 255, 0.55),
+            inset 0 0 6px rgba(255, 182, 0, 0.35);
+    }
+}
+
+@keyframes partyRingSpin {
+    to {
+        --party-ring-angle: 360deg;
+    }
+}
+
+/* Reduced motion keeps the celebration visible without any movement or
+   pulsing: a static two-tone neon frame. */
+@media (prefers-reduced-motion: reduce) {
+    .party-border {
+        animation: none;
+        border-color: var(--brand-orange);
+        box-shadow:
+            inset 0 0 14px rgba(255, 182, 0, 0.45),
+            inset 0 0 14px rgba(0, 192, 255, 0.35);
+        -webkit-mask: none;
+        mask: none;
+    }
+
+    .party-live .party-btn.party-active .party-emoji {
+        animation: none;
+    }
+}

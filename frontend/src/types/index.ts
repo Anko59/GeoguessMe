@@ -21,6 +21,7 @@ export type GlobalRank = components['schemas']['GlobalRank'];
 export type Profile = components['schemas']['Profile'];
 export type PublicProfile = components['schemas']['PublicProfile'];
 export type AuthResponse = components['schemas']['AuthResponse'];
+export type OIDCConfig = components['schemas']['OIDCConfig'];
 export type Group = components['schemas']['Group'];
 export type Member = components['schemas']['Member'];
 export type LeaderboardEntry = components['schemas']['LeaderboardEntry'];
@@ -36,6 +37,7 @@ export type InvitePreviewRequest = components['schemas']['InvitePreviewRequest']
 export type InvitePreview = components['schemas']['InvitePreview'];
 export type InviteListItem = components['schemas']['InviteListItem'];
 export type MediaProcessingJob = components['schemas']['MediaProcessingJob'];
+export type PartyStatus = components['schemas']['PartyStatus'];
 
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 

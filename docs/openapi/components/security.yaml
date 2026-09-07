@@ -8,3 +8,8 @@ cookieAuth:
   in: cookie
   name: refresh_token
   description: HttpOnly refresh cookie.
+oidcProxyAuth:
+  type: apiKey
+  in: cookie
+  name: __Host-geoguessme_oidc
+  description: Encrypted OAuth2 Proxy session; the proxy forwards a verified Keycloak token only to the session exchange endpoint.

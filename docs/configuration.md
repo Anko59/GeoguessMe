@@ -19,6 +19,10 @@ validated. Never commit a real `.env` or production secret.
 | `VERIFICATION_TOKEN_TTL`          | duration | `24h`                                          | All        | Must be positive                                                                                                                                                                                                                                                                                  |
 | `RESET_TOKEN_TTL`                 | duration | `1h`                                           | All        | Must be positive                                                                                                                                                                                                                                                                                  |
 | `BCRYPT_COST`                     | int      | `12`                                           | All        | Must be 4–31                                                                                                                                                                                                                                                                                      |
+| `OIDC_ENABLED`                    | bool     | `false`                                        | All        | Adds Keycloak and configured social login methods; existing application username/email and password login remains available, while new signup uses Keycloak                                                                                                                                       |
+| `OIDC_ISSUER_URL`                 | URL      | —                                              | OIDC       | Required when OIDC is enabled; must use HTTPS in production                                                                                                                                                                                                                                       |
+| `OIDC_CLIENT_ID`                  | string   | —                                              | OIDC       | Required when OIDC is enabled; must match the Keycloak audience                                                                                                                                                                                                                                   |
+| `OIDC_SOCIAL_PROVIDERS`           | list     | —                                              | OIDC       | Configured broker aliases exposed by the UI; this rollout accepts only `google`, without duplicates. Apple and GitHub are deferred; email/password remains available through Keycloak even when the list is empty                                                                                 |
 | `SMTP_HOST`                       | string   | — (empty)                                      | All        | Required in production                                                                                                                                                                                                                                                                            |
 | `SMTP_PORT`                       | int      | `1025`                                         | All        | Must be 1–65535 if host is set                                                                                                                                                                                                                                                                    |
 | `SMTP_USERNAME`                   | string   | —                                              | All        | Optional, but must be supplied together with `SMTP_PASSWORD`; authenticated SMTP requires TLS                                                                                                                                                                                                     |
@@ -41,8 +45,10 @@ validated. Never commit a real `.env` or production secret.
 | `CHALLENGE_TTL`                   | duration | `24h`                                          | All        | Must be positive, > PHOTO_VIEW_WINDOW                                                                                                                                                                                                                                                             |
 | `LOCATION_HIDE_DURATION`          | duration | `48h`                                          | All        | Must be positive; how long a hidden challenge location stays hidden                                                                                                                                                                                                                               |
 | `PHOTO_VIEW_WINDOW`               | duration | `10s`                                          | All        | Must be positive, < CHALLENGE_TTL                                                                                                                                                                                                                                                                 |
-| `GUESS_WINDOW`                    | duration | `2m`                                           | All        | Must be positive; how long a member has to submit a guess after the view window ends (server-authoritative deadline)                                                                                                                                                                              |
+| `GUESS_WINDOW`                    | duration | `5m`                                           | All        | Must be positive; how long a member has to submit a guess after the view window ends (server-authoritative deadline)                                                                                                                                                                              |
 | `PHOTO_RETENTION`                 | duration | `720h` (30d)                                   | All        | Must be ≥ CHALLENGE_TTL                                                                                                                                                                                                                                                                           |
+| `PARTY_TIME_DURATION`             | duration | `1h`                                           | All        | Must be positive; how long a started party stays active                                                                                                                                                                                                                                           |
+| `PARTY_TIME_COOLDOWN`             | duration | `48h`                                          | All        | Must not be negative; recharge wait after a party ends before the next start                                                                                                                                                                                                                      |
 | `UPLOAD_DIR`                      | string   | `./uploads`                                    | All        | Only used when `STORAGE_DRIVER=local`                                                                                                                                                                                                                                                             |
 | `MEDIA_PROCESSING_WORKER`         | bool     | `true`                                         | All        | Starts the in-process media-processing worker that promotes quarantined video uploads; the runtime image must ship ffmpeg/ffprobe (see [video-processing](video-processing.md))                                                                                                                   |
 | `RATE_LIMIT_REQUESTS`             | int      | `10`                                           | All        | Must be > 0                                                                                                                                                                                                                                                                                       |
@@ -91,6 +97,7 @@ When `APP_ENV=production`, the following additional checks apply:
   negative values reject startup so a misconfiguration can never disable the
   subscription cap or remove the delivery deadlines.
 - S3 endpoint must use HTTPS and must not be local MinIO
+- `OIDC_ISSUER_URL` must use HTTPS when OIDC is enabled
 
 `APP_ENV` itself must be one of `development`, `production`, or `test` in every
 environment; any other value is rejected at startup so the metrics
@@ -107,6 +114,19 @@ to the private backup bucket. Both remote environments deliberately use
 `APP_ENV=production`; dev is distinguished by its URL, project, port, bucket,
 credentials, and tighter resource limits.
 
+The application environment carries the matching `OIDC_ISSUER_URL`,
+`OIDC_CLIENT_ID`, `OIDC_SOCIAL_PROVIDERS`, and `OIDC_CLIENT_SECRET`; OAuth2
+Proxy reads those same values through its alpha provider configuration. The
+backend uses the client secret only to obtain short-lived service-account tokens
+for verified legacy-account pre-provisioning and for upstream-first deletion of
+an OIDC-linked player. Its cookie secret and callback remain
+`OAUTH2_PROXY_COOKIE_SECRET` and `OAUTH2_PROXY_REDIRECT_URL`. Shared Keycloak
+values live separately in the encrypted identity environment described by
+`deployment/env/identity.env.example`: its own PostgreSQL/admin credentials,
+SMTP credentials for native-account verification/reset mail, the production/dev
+client secrets, and Google credentials. Apple and GitHub variables remain
+placeholder-only reservations until a separately reviewed provider rollout.
+
 ## Example `.env` for development
 
 ```bash
@@ -122,6 +142,7 @@ S3_SECRET_KEY=minioadmin
 SMTP_HOST=localhost
 SMTP_PORT=1025
 SMTP_FROM=no-reply@localhost
+OIDC_ENABLED=false
 ```
 
 ## Startup validation

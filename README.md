@@ -83,6 +83,9 @@ illustrations below are part of GeoGuessMe’s own visual language.
   distance-based scoring, and resolved challenge states.
 - **Stay in the loop** with installable PWA support and optional Web Push
   notifications.
+- **Celebrate together** with Party Time: any member can start an hour-long
+  group celebration that doubles the points of everyone who posts a challenge
+  while it runs — once per 48 hours per group.
 
 <details>
 <summary><strong>🔐 Privacy and retention</strong></summary>

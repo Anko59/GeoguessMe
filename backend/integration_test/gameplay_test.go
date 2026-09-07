@@ -64,8 +64,8 @@ func TestConcurrentMediaDeliveryConfirmation(t *testing.T) {
 // TestGuessRejectedAfterGuessWindowExpiry pins the server-authoritative guess
 // deadline end-to-end: accept and delivery publish guess_expires_at (view end
 // + GUESS_WINDOW), and a guess submitted after it is refused with 410
-// guess_time_expired without creating a guess row (the challenge counts as 0
-// points for that member). The recorded deadline is pushed into the past
+// guess_time_expired while recording a timed_out guess (score 0) so the player
+// still appears in results. The recorded deadline is pushed into the past
 // directly so the test does not wait for the configured GUESS_WINDOW.
 func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 	alice := signup(t, unique("gwalice"), unique("gwalice")+"@example.test", "StrongPassword123")
@@ -76,10 +76,10 @@ func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 
 	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoID))
 	require.True(t, strings.HasPrefix(acc.MediaURL, "/api/v1/challenges/"), "media must be same-origin, got %q", acc.MediaURL)
-	// The guess deadline is the view end plus the default GUESS_WINDOW (2m),
+	// The guess deadline is the view end plus the default GUESS_WINDOW (5m),
 	// published by both the accept and the delivery responses.
 	require.False(t, acc.GuessExpiresAt.IsZero(), "accept/delivery must publish guess_expires_at")
-	require.WithinDuration(t, acc.ViewExpiresAt.Add(2*time.Minute), acc.GuessExpiresAt, time.Second,
+	require.WithinDuration(t, acc.ViewExpiresAt.Add(5*time.Minute), acc.GuessExpiresAt, time.Second,
 		"guess deadline must be view end + GUESS_WINDOW")
 
 	waitUntilViewExpires(t, acc.ViewExpiresAt)
@@ -103,10 +103,12 @@ func TestGuessRejectedAfterGuessWindowExpiry(t *testing.T) {
 		map[string]float64{"lat": 51.505, "long": -0.09}, bob.access, nil)
 	require.Equal(t, http.StatusGone, resp.StatusCode)
 	require.Contains(t, string(data), "guess_time_expired")
-	var count int
+	var score int
+	var timedOut bool
 	require.NoError(t, db.QueryRow(t.Context(),
-		`SELECT count(*) FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID2, bob.userID).Scan(&count))
-	require.Zero(t, count, "a refused late guess must not create a guess row")
+		`SELECT score, timed_out FROM guesses WHERE photo_id = $1 AND user_id = $2`, photoID2, bob.userID).Scan(&score, &timedOut))
+	require.Zero(t, score, "a late guess records a 0-point timeout")
+	require.True(t, timedOut, "a late guess must be marked timed_out")
 }
 
 // TestLeaderboardRankingDeterminism pins ranking determinism: reading the same
@@ -157,4 +159,104 @@ func TestLeaderboardRankingDeterminism(t *testing.T) {
 	require.Greaterf(t, bobElo, 0, "bob must be rated")
 	require.Greaterf(t, carolElo, 0, "carol must be rated")
 	require.Greaterf(t, bobElo, carolElo, "closer guess must rank above the farther one (bob=%d, carol=%d)", bobElo, carolElo)
+}
+
+// submitPartyGuess submits a guess and returns its recorded score plus the
+// party_doubled flag from the wire response.
+func submitPartyGuess(t *testing.T, bearer, photoID string) (score int, partyDoubled bool) {
+	t.Helper()
+	accepted := deliverChallengeMedia(t, bearer, acceptChallenge(t, bearer, photoID))
+	waitUntilViewExpires(t, accepted.ViewExpiresAt)
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/challenges/"+photoID+"/guess",
+		map[string]float64{"lat": 51.5055, "long": -0.0905}, bearer, nil)
+	require.Containsf(t, []int{http.StatusCreated, http.StatusOK}, resp.StatusCode, "guess %d: %s", resp.StatusCode, data)
+	var body struct {
+		Score        int  `json:"score"`
+		PartyDoubled bool `json:"party_doubled"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &body))
+	return body.Score, body.PartyDoubled
+}
+
+// TestPartyTimeDoublePointsForChallengePosters pins the Party Time feature
+// end to end against a live database: any member may start a party, a second
+// start while one is active is refused, the persisted system message
+// announces the starter by name, and — the core rule — a member who posted a
+// challenge during the active window scores exactly double on their guess,
+// while a member who posted nothing scores the base value. The recharge
+// branch (48h measured from the previous end) is pinned by repository unit
+// tests; no test endpoint can fast-forward the server clock.
+func TestPartyTimeDoublePointsForChallengePosters(t *testing.T) {
+	alice := signup(t, unique("ptalice"), unique("ptalice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("ptbob"), unique("ptbob")+"@example.test", "StrongPassword123")
+	carol := signup(t, unique("ptcarol"), unique("ptcarol")+"@example.test", "StrongPassword123")
+	groupID, inviteToken := createGroup(t, alice.access, "Party Group")
+	joinGroup(t, bob.access, inviteToken)
+	joinGroup(t, carol.access, inviteToken)
+
+	// A fresh group is immediately startable: no active flag, no cooldown.
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/group/party?group_id="+groupID, nil, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var initial map[string]any
+	require.NoError(t, jsonUnmarshal(data, &initial))
+	require.Equal(t, false, initial["active"])
+	require.NotContains(t, initial, "next_available_at")
+
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/party", map[string]string{"group_id": groupID}, alice.access, nil)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "start %d: %s", resp.StatusCode, data)
+	var started struct {
+		Active    bool   `json:"active"`
+		EndsAt    string `json:"ends_at"`
+		ServerNow string `json:"server_time"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &started))
+	require.True(t, started.Active)
+	endsAt, err := time.Parse(time.RFC3339Nano, started.EndsAt)
+	require.NoError(t, err)
+	serverStart, err := time.Parse(time.RFC3339Nano, started.ServerNow)
+	require.NoError(t, err)
+	require.WithinDurationf(t, serverStart.Add(57*time.Minute), endsAt, 3*time.Minute+30*time.Second,
+		"party must run roughly PARTY_TIME_DURATION (ends_at %s)", started.EndsAt)
+
+	// The status endpoint reports the same window to other members.
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/party?group_id="+groupID, nil, carol.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), `"active":true`)
+
+	// A second start while one is running is refused with the dedicated code.
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/group/party", map[string]string{"group_id": groupID}, bob.access, nil)
+	require.Equalf(t, http.StatusConflict, resp.StatusCode, "second start %d: %s", resp.StatusCode, data)
+	require.Contains(t, string(data), "party_active")
+
+	// The announcement lands as a persisted system chat message naming the starter.
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/messages?group_id="+groupID+"&limit=50", nil, carol.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var page struct {
+		Items []struct {
+			Kind    string `json:"kind"`
+			Content string `json:"content"`
+		} `json:"items"`
+	}
+	require.NoError(t, jsonUnmarshal(data, &page))
+	foundAnnouncement := false
+	for _, item := range page.Items {
+		if item.Kind == "system" && strings.Contains(item.Content, "started Party Time!") {
+			foundAnnouncement = true
+		}
+	}
+	require.True(t, foundAnnouncement, "the party announcement system message must be in history")
+
+	// Both members post a challenge into the group during the window.
+	alicePhoto := uploadPhoto(t, alice.access, groupID)
+	_ = uploadPhoto(t, bob.access, groupID)
+
+	// carol never posts: her identical guess records the base score without
+	// the party flag. bob posted during the window: his identical guess on
+	// alice's challenge scores exactly double.
+	baseScore, baseDoubled := submitPartyGuess(t, carol.access, alicePhoto)
+	posterScore, posterDoubled := submitPartyGuess(t, bob.access, alicePhoto)
+	require.False(t, baseDoubled, "a member who did not post must not be doubled")
+	require.True(t, posterDoubled, "a member who posted during the window must be doubled")
+	require.Greater(t, baseScore, 0, "the scenario needs a non-trivial base score")
+	require.Equalf(t, 2*baseScore, posterScore, "doubled score %d must equal twice the base %d", posterScore, baseScore)
 }

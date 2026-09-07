@@ -13,6 +13,8 @@ type User struct {
 	Password        string     `json:"-"`
 	Avatar          string     `json:"avatar"`
 	AuthVersion     int        `json:"-"`
+	PasswordEnabled bool       `json:"-"`
+	OIDCLinked      bool       `json:"-"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
@@ -77,5 +79,6 @@ type Guess struct {
 	Long      float64   `json:"long"`
 	Score     int       `json:"score"`
 	Distance  float64   `json:"distance"` // in meters
+	TimedOut  bool      `json:"timed_out"`
 	CreatedAt time.Time `json:"created_at"`
 }

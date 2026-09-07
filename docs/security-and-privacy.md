@@ -61,7 +61,9 @@ through authenticated handlers:
 ## Account deletion
 
 `DELETE /api/v1/auth/account` requires password confirmation and runs
-`DeleteUserCascade` which:
+upstream-first for OIDC-linked accounts: the stored Keycloak issuer/subject is
+deleted with a short-lived service-account token, and any upstream failure keeps
+all local data intact. It then runs `DeleteUserCascade`, which:
 
 1. Enqueues all authored media for S3 deletion via `media_deletion_jobs`
 2. Deletes all tokens and sessions (refresh, verification, password reset, WS)

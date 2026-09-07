@@ -373,6 +373,32 @@ func (s *Service) NotifyNewMessage(ctx context.Context, groupID, senderUserID, c
 	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_message", groupID: groupID})
 }
 
+// NotifyPartyStarted alerts a group that one of its members started Party
+// Time. The starter is excluded (they performed the action inside the app);
+// every other member with push subscriptions and an enabled group
+// notification preference receives the fan-out.
+func (s *Service) NotifyPartyStarted(ctx context.Context, groupID, excludeUserID, starterUsername string) {
+	if s.keys == nil {
+		return
+	}
+	groupName, err := s.store.GroupName(ctx, groupID)
+	if err != nil {
+		s.logger.Warn("push group name lookup failed", "group_id", groupID, "error", err)
+		groupName = "a group"
+	}
+	targets, err := s.store.GroupTargets(ctx, groupID, excludeUserID)
+	if err != nil {
+		s.logger.Error("push target lookup failed", "group_id", groupID, "error", err)
+		return
+	}
+	if len(targets) == 0 {
+		return
+	}
+	body := starterUsername + " started Party Time in " + groupName + "! Post a challenge to double your points."
+	payload := newPayload("Party Time!", body, groupURL(groupID), "party:"+groupID)
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "party_started", groupID: groupID})
+}
+
 func (s *Service) resolveChallenge(ctx context.Context, groupID, excludeUserID, photoID string) (targets []NotificationTarget, groupName, uploader string) {
 	groupName, err := s.store.GroupName(ctx, groupID)
 	if err != nil {

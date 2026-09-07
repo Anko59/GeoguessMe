@@ -10,6 +10,7 @@
 #   6. Enforces image healthcheck check
 #   7. Validates production compose
 #   8. Uses explicit test-only environment values (no production credentials)
+#   9. Rejects a backend executable that does not match its image architecture
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/deployment/scripts/prod-container-verify.sh"
@@ -99,6 +100,15 @@ if grep -q 'no image healthcheck' "$SCRIPT"; then
     pass "explicit missing-healthcheck message"
 else
     fail "no missing-healthcheck message"
+fi
+
+# ── Test 6b: Backend executable architecture enforcement ────────────────────
+echo "--- Test 6b: Backend executable architecture ---"
+if grep -q 'Config.*Architecture\|\.Architecture' "$SCRIPT" &&
+    grep -q 'binary architecture mismatch' "$SCRIPT"; then
+    pass "rejects backend image/executable architecture mismatches"
+else
+    fail "does not enforce matching backend image and executable architectures"
 fi
 
 # ── Test 7: Production compose validation ────────────────────────────────────
@@ -232,6 +242,12 @@ echo "--- Test 14: No contradictory SMTP environment ---"
 # Verify the script uses an unauthenticated local SMTP fixture with a non-off
 # TLS mode that satisfies production validation.
 prod_env_block=$(sed -n '/^cat.*production.env/,/^ENVEOF$/p' "$SCRIPT")
+
+if grep -Eq 'sed[[:space:]]+-i([[:space:]]|$)' "$SCRIPT"; then
+    fail "production env substitution uses non-portable sed -i"
+else
+    pass "production env substitution is portable across GNU and BSD sed"
+fi
 
 # SMTP_USERNAME and SMTP_PASSWORD must not appear (unauthenticated fixture).
 if grep -qE '^SMTP_USERNAME=' <<<"$prod_env_block"; then

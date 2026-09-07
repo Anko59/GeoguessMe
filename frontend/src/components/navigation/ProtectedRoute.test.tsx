@@ -22,6 +22,9 @@ const user: User = {
     username: 'alice',
     email: 'alice@example.test',
     avatar: 'avatar.png',
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 describe('ProtectedRoute', () => {

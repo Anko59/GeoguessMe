@@ -14,6 +14,17 @@ COMPOSE_FILE="deployment/compose.test.yaml"
 
 cleanup() {
     status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "integration backend state (failure):" >&2
+        docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" \
+            ps --all --format json backend >&2 || true
+        echo "integration backend logs (failure):" >&2
+        docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" \
+            logs --no-color --tail=400 backend >&2 || true
+        echo "integration dependency logs (failure):" >&2
+        docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" \
+            logs --no-color --tail=80 web migration db minio toxiproxy mailpit >&2 || true
+    fi
     docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans
     exit "$status"
 }

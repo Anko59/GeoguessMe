@@ -105,5 +105,16 @@ else
     PASS=$((PASS + 1))
 fi
 
+# The runner uses the host UID rather than root. Firefox and fontconfig still
+# need a writable home for their ephemeral caches inside the mounted staging
+# directory, especially with Docker Desktop or Colima on ARM hosts.
+if ! grep -q 'HOME=/tmp/playwright' "$SCRIPT"; then
+    echo "FAIL: browser-home - Playwright HOME is not writable"
+    FAIL=$((FAIL + 1))
+else
+    echo "PASS: browser-home"
+    PASS=$((PASS + 1))
+fi
+
 echo "e2e-regression results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

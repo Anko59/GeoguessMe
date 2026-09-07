@@ -7,6 +7,7 @@
     --brand-blue-accessible: #006399;
     --brand-green: #00ff80;
     --brand-orange: #ffb600;
+    --brand-orange-accessible: #b45309;
     --brand-yellow: #ffd700;
     --gradient-orange: linear-gradient(135deg, var(--brand-orange), var(--brand-yellow));
     --gradient-blue: linear-gradient(135deg, var(--brand-blue), var(--brand-green));

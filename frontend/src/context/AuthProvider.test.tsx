@@ -34,6 +34,9 @@ const authResponse: AuthResponse = {
         email: 'alice@example.test',
         avatar: 'avatar.png',
         email_verified_at: null,
+        password_login_enabled: true,
+        oidc_linked: false,
+        migration_required: false,
     },
 };
 

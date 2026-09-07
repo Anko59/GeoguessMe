@@ -1,0 +1,293 @@
+{
+  "realm": "geoguessme",
+  "enabled": true,
+  "sslRequired": "${GEOGUESSME_KEYCLOAK_SSL_REQUIRED}",
+  "displayName": "GeoGuessMe",
+  "loginTheme": "geoguessme",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": true,
+  "rememberMe": true,
+  "passwordPolicy": "length(8)",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA256",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "webAuthnPolicyRpEntityName": "GeoGuessMe",
+  "webAuthnPolicyRpId": "${GEOGUESSME_WEBAUTHN_RP_ID}",
+  "webAuthnPolicyUserVerificationRequirement": "required",
+  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256", "EdDSA"],
+  "webAuthnPolicyAcceptableAaguids": [],
+  "webAuthnPolicyPasswordlessRpEntityName": "GeoGuessMe",
+  "webAuthnPolicyPasswordlessRpId": "${GEOGUESSME_WEBAUTHN_RP_ID}",
+  "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+  "webAuthnPolicyPasswordlessRequireResidentKey": "Yes",
+  "webAuthnPolicyPasswordlessSignatureAlgorithms": ["ES256", "RS256", "EdDSA"],
+  "smtpServer": {
+    "host": "${GEOGUESSME_KEYCLOAK_SMTP_HOST}",
+    "port": "${GEOGUESSME_KEYCLOAK_SMTP_PORT}",
+    "from": "${GEOGUESSME_KEYCLOAK_SMTP_FROM}",
+    "fromDisplayName": "GeoGuessMe",
+    "auth": "${GEOGUESSME_KEYCLOAK_SMTP_AUTH}",
+    "starttls": "${GEOGUESSME_KEYCLOAK_SMTP_STARTTLS}",
+    "ssl": "${GEOGUESSME_KEYCLOAK_SMTP_SSL}",
+    "user": "${GEOGUESSME_KEYCLOAK_SMTP_USER}",
+    "password": "${GEOGUESSME_KEYCLOAK_SMTP_PASSWORD}"
+  },
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10,
+      "config": { "addRecoveryCodes": "true" }
+    },
+    {
+      "alias": "CONFIGURE_RECOVERY_AUTHN_CODES",
+      "name": "Recovery Authentication Codes",
+      "providerId": "CONFIGURE_RECOVERY_AUTHN_CODES",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 20,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 30,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 40,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 50,
+      "config": {}
+    },
+    {
+      "alias": "webauthn-register",
+      "name": "Webauthn Register",
+      "providerId": "webauthn-register",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 70,
+      "config": {}
+    },
+    {
+      "alias": "webauthn-register-passwordless",
+      "name": "WebAuthn Register Passwordless",
+      "providerId": "webauthn-register-passwordless",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 80,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 90,
+      "config": {}
+    },
+    {
+      "alias": "delete_credential",
+      "name": "Delete Credential",
+      "providerId": "delete_credential",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 100,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_EMAIL",
+      "name": "Update Email",
+      "providerId": "UPDATE_EMAIL",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 110,
+      "config": {}
+    },
+    {
+      "alias": "idp_link",
+      "name": "Linking Identity Provider",
+      "providerId": "idp_link",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 120,
+      "config": {}
+    },
+    {
+      "alias": "update_user_locale",
+      "name": "Update User Locale",
+      "providerId": "update_user_locale",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 1000,
+      "config": {}
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "geoguessme-production",
+      "name": "GeoGuessMe production BFF",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "frontchannelLogout": true,
+      "redirectUris": ["${GEOGUESSME_PRODUCTION_REDIRECT_URL}", "${GEOGUESSME_PRODUCTION_ORIGIN}/login"],
+      "webOrigins": ["${GEOGUESSME_PRODUCTION_ORIGIN}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${GEOGUESSME_PRODUCTION_POST_LOGOUT_URLS}"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "geoguessme-production",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "geoguessme-dev",
+      "name": "GeoGuessMe development BFF",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${GEOGUESSME_DEV_OIDC_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "frontchannelLogout": true,
+      "redirectUris": ["${GEOGUESSME_DEV_REDIRECT_URL}", "${GEOGUESSME_DEV_ORIGIN}/login"],
+      "webOrigins": ["${GEOGUESSME_DEV_ORIGIN}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${GEOGUESSME_DEV_POST_LOGOUT_URLS}"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "geoguessme-dev",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "google",
+      "displayName": "Google",
+      "providerId": "google",
+      "enabled": false,
+      "hideOnLogin": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${GEOGUESSME_GOOGLE_CLIENT_ID}",
+        "clientSecret": "${GEOGUESSME_GOOGLE_CLIENT_SECRET}",
+        "defaultScope": "openid profile email",
+        "guiOrder": "1",
+        "syncMode": "FORCE",
+        "useJwksUrl": "true"
+      }
+    },
+    {
+      "alias": "github",
+      "displayName": "GitHub",
+      "providerId": "github",
+      "enabled": false,
+      "hideOnLogin": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${GEOGUESSME_GITHUB_CLIENT_ID}",
+        "clientSecret": "${GEOGUESSME_GITHUB_CLIENT_SECRET}",
+        "defaultScope": "user:email",
+        "guiOrder": "3",
+        "syncMode": "FORCE"
+      }
+    },
+    {
+      "alias": "apple",
+      "displayName": "Apple",
+      "providerId": "oidc",
+      "enabled": false,
+      "hideOnLogin": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "authorizationUrl": "https://appleid.apple.com/auth/authorize",
+        "tokenUrl": "https://appleid.apple.com/auth/token",
+        "issuer": "https://appleid.apple.com",
+        "jwksUrl": "https://appleid.apple.com/auth/keys",
+        "useJwksUrl": "true",
+        "validateSignature": "true",
+        "clientAuthMethod": "client_secret_post",
+        "clientId": "${GEOGUESSME_APPLE_CLIENT_ID}",
+        "clientSecret": "${GEOGUESSME_APPLE_CLIENT_SECRET}",
+        "defaultScope": "openid email name",
+        "guiOrder": "2",
+        "pkceEnabled": "true",
+        "pkceMethod": "S256",
+        "syncMode": "FORCE"
+      }
+    }
+  ]
+}

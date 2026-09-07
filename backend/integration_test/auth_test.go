@@ -76,6 +76,17 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+func TestLegacyLoginAcceptsPendingEmail(t *testing.T) {
+	resetRateLimiter(t)
+	user := unique("email-login")
+	email := user + "@example.test"
+	signup(t, user, email, "StrongPassword123")
+
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/login",
+		map[string]string{"username": email, "password": "StrongPassword123"}, "", nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "email login: %s", data)
+}
+
 func TestPasswordResetRevokesSessions(t *testing.T) {
 	resetRateLimiter(t)
 	user := unique("resetter")
@@ -212,19 +223,20 @@ func TestRefreshRotationSingleUse(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
-// TestPendingEmailClaimsPromoteFirstAndFailSecondGenerically proves multiple
-// accounts may hold the same pending address, the first claim to verify wins,
-// and the losing claim gets a generic verification failure that reveals
-// neither the conflict nor the owning account.
+// Pending claims can overlap, but verification must stay generic.
 func TestPendingEmailClaimsPromoteFirstAndFailSecondGenerically(t *testing.T) {
 	resetRateLimiter(t)
 	sharedEmail := unique("claim") + "@example.test"
 	signup(t, unique("claimant-a"), sharedEmail, "StrongPassword123")
 	signup(t, unique("claimant-b"), sharedEmail, "StrongPassword123")
 
-	// Both signups succeeded: a pending claim never collides with another
-	// pending claim, only with a verified address. Collect the two distinct
-	// verification tokens addressed to the shared claim (one per claimant).
+	// Shared email plus matching passwords must fail closed until verification.
+	resetRateLimiter(t)
+	resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/login",
+		map[string]string{"username": sharedEmail, "password": "StrongPassword123"}, "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Collect both pending verification tokens.
 	tokens := tokensFromMailpitTo(t, "Verify your GeoGuessMe email", "/verify-email", sharedEmail, 2)
 	require.Len(t, tokens, 2)
 
@@ -245,24 +257,28 @@ func TestPendingEmailClaimsPromoteFirstAndFailSecondGenerically(t *testing.T) {
 	require.NotContains(t, string(data), sharedEmail)
 }
 
-// TestForgotPasswordRequiresVerifiedEmail proves password recovery only acts
-// on confirmed addresses: an unverified (pending) address receives the uniform
-// 202 but never a reset link, while the verified address receives one.
-func TestForgotPasswordRequiresVerifiedEmail(t *testing.T) {
+// TestForgotPasswordRecoveryByEmailState proves a pending address receives a
+// verification link first and a verified address receives a reset link.
+func TestForgotPasswordRecoveryByEmailState(t *testing.T) {
 	resetRateLimiter(t)
 	user := unique("recover")
 	email := user + "@example.test"
 	const pass = "StrongPassword123"
 	signup(t, user, email, pass)
 
-	// Pending-only address: uniform 202, no reset mail is ever addressed to it.
-	resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": email}, "", nil)
+	// A pending-only address can identify the legacy account for login, and
+	// recovery sends a verification link before any reset link.
+	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/login",
+		map[string]string{"username": email, "password": pass}, "", nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "pending email login: %s", data)
+
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": email}, "", nil)
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 	require.False(t, mailpitHasResetTo(t, email), "reset mail must not be sent to an unverified address")
+	verifyToken := tokenFromMailpit(t, "Verify your GeoGuessMe email", "/verify-email")
 
 	// Verify the address, then recovery issues a reset link for it.
-	verifyToken := tokensFromMailpitTo(t, "Verify your GeoGuessMe email", "/verify-email", email, 1)[0]
-	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": verifyToken}, "", nil)
+	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": verifyToken}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "verify: %s", data)
 
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/password/forgot", map[string]string{"email": email}, "", nil)

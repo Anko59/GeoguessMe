@@ -1,7 +1,8 @@
 signup:
   post:
     operationId: signup
-    summary: Create an account
+    summary: Create a legacy account when Keycloak is disabled.
+    description: Normal signup uses Keycloak. This compatibility endpoint returns 410 while OIDC is enabled.
     tags: [Authentication]
     security: []
     requestBody:
@@ -21,11 +22,13 @@ signup:
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "410": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 login:
   post:
     operationId: login
-    summary: Log in
+    summary: Log in with an existing GeoGuessMe account.
+    description: Accepts an existing account's username or verified/pending email address and application password. The resulting session has normal access whether or not Keycloak is enabled or linked.
     tags: [Authentication]
     security: []
     requestBody:
@@ -36,13 +39,64 @@ login:
             type: object
             required: [username, password]
             properties:
-              username: { type: string }
+              username: { type: string, description: Existing GeoGuessMe username or email address. }
               password: { type: string }
     responses:
       "200":
         description: Session issued.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+oidcConfig:
+  get:
+    operationId: getOIDCConfig
+    summary: Report whether Keycloak sign-in is enabled.
+    tags: [Authentication]
+    security: []
+    responses:
+      "200":
+        description: Runtime identity capability.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/OIDCConfig" } } }
+      "405": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+oidcSession:
+  post:
+    operationId: exchangeOIDCSession
+    summary: Exchange the OAuth2 Proxy Keycloak session for an application session.
+    description: Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript. A genuinely new identity receives username_required until it submits an explicit GeoGuessMe username; existing identities and verified-email migrations do not need one.
+    tags: [Authentication]
+    security: [{ oidcProxyAuth: [] }]
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              username:
+                type: string
+                minLength: 3
+                maxLength: 30
+                pattern: "^[A-Za-z0-9_-]+$"
+    responses:
+      "200":
+        description: Existing identity resolved, verified-email account linked, or new account provisioned with its chosen username.
+        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthResponse" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "503": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+oidcLink:
+  post:
+    operationId: startOIDCLink
+    summary: Start linking Keycloak to the authenticated application account.
+    tags: [Authentication]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "204": { description: Single-use link intent stored in an HttpOnly cookie. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "503": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 refresh:
   post:
@@ -96,7 +150,8 @@ verify:
 forgotPassword:
   post:
     operationId: forgotPassword
-    summary: Request a password reset.
+    summary: Request password recovery.
+    description: Sends a reset link for a verified email address. For an unverified pending claim, sends an email verification link first; the address must be verified before a reset link can be requested. The response stays uniform to prevent email enumeration.
     tags: [Authentication]
     security: []
     requestBody:
@@ -105,7 +160,7 @@ forgotPassword:
         application/json:
           schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
     responses:
-      "202": { description: Reset link sent if the email is registered. }
+      "202": { description: A reset or verification link was sent if the email is registered. }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 resetPassword:
@@ -148,6 +203,7 @@ changePassword:
       "204": { description: Password changed; all sessions are revoked. }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 profile:
   get:
@@ -171,7 +227,7 @@ profile:
         application/json:
           schema:
             type: object
-            required: [username, avatar, current_password]
+            required: [username, avatar]
             properties:
               username: { type: string, minLength: 3, maxLength: 30 }
               email:
@@ -197,13 +253,16 @@ profile:
                       avatar10.png,
                     ],
                 }
-              current_password: { type: string }
+              current_password:
+                type: string
+                description: Required when password_login_enabled is true; omitted for passwordless social accounts.
     responses:
       "200":
         description: Updated profile.
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthUser" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 uploadAvatar:
@@ -228,6 +287,7 @@ uploadAvatar:
         content: { application/json: { schema: { $ref: "../components/schemas.yaml#/AuthUser" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
 deleteAccount:
   delete:
@@ -239,7 +299,11 @@ deleteAccount:
       required: true
       content:
         application/json:
-          schema: { type: object, required: [password], properties: { password: { type: string } } }
+          schema:
+            type: object
+            properties:
+              password: { type: string, description: Required for accounts with legacy password login enabled. }
+              confirmation: { type: string, description: Exact username required for passwordless social accounts. }
     responses:
       "204": { description: Account deleted. }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }

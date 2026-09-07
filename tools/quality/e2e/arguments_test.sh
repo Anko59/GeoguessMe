@@ -10,7 +10,8 @@ assert_args() {
     local expected=$2
     shift 2
     local -a actual
-    build_e2e_test_args actual "$@"
+    build_e2e_test_args "$@"
+    actual=("${E2E_TEST_ARGS[@]}")
     local rendered
     printf -v rendered '%s\n' "${actual[@]}"
     rendered=${rendered%$'\n'}
@@ -24,8 +25,7 @@ assert_args() {
 assert_fails() {
     local name=$1
     shift
-    local -a actual
-    if build_e2e_test_args actual "$@" >/dev/null 2>&1; then
+    if build_e2e_test_args "$@" >/dev/null 2>&1; then
         printf 'FAIL: %s unexpectedly succeeded\n' "$name" >&2
         exit 1
     fi

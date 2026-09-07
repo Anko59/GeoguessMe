@@ -54,18 +54,22 @@ with standard competition ranking (equal totals share a rank), and
 never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
 average guess score, and `global_elo_rank` ranks the player among everyone who
 has been compared against another guesser on a shared challenge, ordered by Elo
-rating (`elo` is 0 and the rank is 0 for a player with no such challenge). Each
-rank object carries a `next_rank` with the following rank's name and badge key
-(omitted at the highest rank). Group leaderboard entries include the same rank
-object beneath each player's name while their `score` remains the selected
-period's sum; entries also carry `average_score` and `elo` for the same period.
+rating (`elo` is 0 and the rank is 0 for a player with no such challenge). The
+global rating is an all-time ladder and moves with a small update factor, so it
+tracks long-run skill rather than the most recent challenges. Each rank object
+carries a `next_rank` with the following rank's name and badge key (omitted at
+the highest rank). Group leaderboard entries include the same rank object
+beneath each player's name while their `score` remains the selected period's
+sum; entries also carry `average_score` and `elo` for the same period.
 
 The group leaderboard is ranked by one of three metrics — `total` (period score
 sum, the default), `average` (period average score), or `elo` (Elo rating
 computed from the period's challenges) — selected with the `metric` query
 parameter, and can be scoped to a calendar week, month, or all time with
 `period`. Elo ratings are recomputed from guess history on every read, so a late
-guess on an old challenge retroactively moves the whole ladder.
+guess on an old challenge retroactively moves the whole ladder. Each period uses
+its own Elo update factor: weekly ladders move fastest (`K = 40`), monthly
+ladders moderately (`K = 20`), and all-time ladders slowest (`K = 8`).
 
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must
@@ -77,22 +81,22 @@ page reachable from chat and leaderboards.
 
 ### Authentication
 
-| Method | Path                           | Auth   | Description                             | Status codes       |
-| ------ | ------------------------------ | ------ | --------------------------------------- | ------------------ |
-| POST   | `/api/v1/auth/signup`          | No     | Create account                          | 200, 400, 409      |
-| POST   | `/api/v1/auth/login`           | No     | Log in                                  | 200, 401           |
-| POST   | `/api/v1/auth/refresh`         | Cookie | Rotate refresh session                  | 200, 401           |
-| POST   | `/api/v1/auth/logout`          | No     | Revoke session; `?all=1` revokes all    | 204                |
-| POST   | `/api/v1/auth/verify/request`  | Bearer | Send verification email                 | 202                |
-| POST   | `/api/v1/auth/verify`          | No     | Verify email with `{token}`             | 200, 400           |
-| POST   | `/api/v1/auth/password/forgot` | No     | Send reset link `{email}`               | 202                |
-| POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`      | 200, 400           |
-| POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions   | 204, 400, 401      |
-| GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank | 200, 401           |
-| GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression       | 200, 401, 403, 404 |
-| PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar       | 200, 400, 401, 409 |
-| POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)       | 200, 400, 401      |
-| DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`             | 204, 401           |
+| Method | Path                           | Auth   | Description                               | Status codes       |
+| ------ | ------------------------------ | ------ | ----------------------------------------- | ------------------ |
+| POST   | `/api/v1/auth/signup`          | No     | Create account                            | 200, 400, 409      |
+| POST   | `/api/v1/auth/login`           | No     | Log in with existing username or email    | 200, 401           |
+| POST   | `/api/v1/auth/refresh`         | Cookie | Rotate refresh session                    | 200, 401           |
+| POST   | `/api/v1/auth/logout`          | No     | Revoke session; `?all=1` revokes all      | 204                |
+| POST   | `/api/v1/auth/verify/request`  | Bearer | Send verification email                   | 202                |
+| POST   | `/api/v1/auth/verify`          | No     | Verify email with `{token}`               | 200, 400           |
+| POST   | `/api/v1/auth/password/forgot` | No     | Send reset or verification link `{email}` | 202                |
+| POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`        | 200, 400           |
+| POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions     | 204, 400, 401      |
+| GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank   | 200, 401           |
+| GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression         | 200, 401, 403, 404 |
+| PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar         | 200, 400, 401, 409 |
+| POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)         | 200, 400, 401      |
+| DELETE | `/api/v1/auth/account`         | Bearer | Delete account `{password}`               | 204, 401           |
 
 ### Groups
 
@@ -108,6 +112,8 @@ page reachable from chat and leaderboards.
 | POST   | `/api/v1/group/photo`                                        | Bearer | Replace group photo `multipart(group_id,photo)`                                        |
 | GET    | `/api/v1/group/notifications?group_id=`                      | Bearer | Read this member's group notification preference                                       |
 | PUT    | `/api/v1/group/notifications?group_id=`                      | Bearer | Set `{enabled}` for this member's group notifications                                  |
+| GET    | `/api/v1/group/party?group_id=`                              | Bearer | Party Time state for the group (member only)                                           |
+| POST   | `/api/v1/group/party`                                        | Bearer | Start Party Time `{group_id}`; 409 while active or recharging                          |
 | GET    | `/api/v1/group/messages?group_id=&cursor=&before_id=&limit=` | Bearer | Paginated messages (forward via `cursor`, backward via `before_id`)                    |
 | GET    | `/api/v1/group/reaction-usage?group_id=`                     | Bearer | Aggregate reaction counts ordered by popularity (member only)                          |
 | PUT    | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Add a reaction key to a group message                                                  |
@@ -175,33 +181,36 @@ Available metrics:
 
 ## API error codes
 
-| Code                    | Meaning                                        |
-| ----------------------- | ---------------------------------------------- |
-| `invalid_username`      | Username validation failed                     |
-| `invalid_email`         | Email validation failed                        |
-| `invalid_password`      | Password validation failed                     |
-| `username_taken`        | Username already in use                        |
-| `email_taken`           | Email already in use                           |
-| `authentication_failed` | Bad credentials                                |
-| `unauthorized`          | Missing or invalid auth                        |
-| `forbidden`             | Not a member of the required group             |
-| `not_found`             | Resource not found                             |
-| `group_not_found`       | Group not found                                |
-| `already_member`        | Already a member                               |
-| `invalid_group_name`    | Group name validation failed                   |
-| `invalid_group_code`    | Group code validation failed                   |
-| `invalid_upload`        | Upload too large or malformed                  |
-| `invalid_media`         | Photo or video type or size invalid            |
-| `invalid_coordinates`   | Invalid lat/long                               |
-| `invalid_request`       | Request body malformed                         |
-| `challenge_expired`     | Challenge is past its TTL                      |
-| `viewing_window_open`   | Must wait for view window to end               |
-| `guess_time_expired`    | Guess deadline passed: did not guess in time   |
-| `media_expired`         | Viewing window expired or media already viewed |
-| `media_removed`         | Original media no longer available             |
-| `results_not_available` | Results not yet visible                        |
-| `origin_not_allowed`    | WebSocket origin rejected                      |
-| `rate_limited`          | Rate limit exceeded                            |
-| `internal_error`        | Unexpected server error                        |
-| `storage_unavailable`   | Media storage unavailable                      |
-| `storage_error`         | Backend storage error                          |
+| Code                    | Meaning                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `invalid_username`      | Username validation failed                            |
+| `invalid_email`         | Email validation failed                               |
+| `invalid_password`      | Password validation failed                            |
+| `username_taken`        | Username already in use                               |
+| `email_taken`           | Email already in use                                  |
+| `authentication_failed` | Bad credentials                                       |
+| `unauthorized`          | Missing or invalid auth                               |
+| `forbidden`             | Not a member of the required group                    |
+| `not_found`             | Resource not found                                    |
+| `group_not_found`       | Group not found                                       |
+| `already_member`        | Already a member                                      |
+| `invalid_group_name`    | Group name validation failed                          |
+| `invalid_group_code`    | Group code validation failed                          |
+| `invalid_upload`        | Upload too large or malformed                         |
+| `invalid_media`         | Photo or video type or size invalid                   |
+| `invalid_coordinates`   | Invalid lat/long                                      |
+| `invalid_request`       | Request body malformed                                |
+| `challenge_expired`     | Challenge is past its TTL                             |
+| `viewing_window_open`   | Must wait for view window to end                      |
+| `guess_time_expired`    | Guess deadline passed: did not guess in time          |
+| `media_expired`         | Viewing window expired or media already viewed        |
+| `media_removed`         | Original media no longer available                    |
+| `results_not_available` | Results not yet visible                               |
+| `party_active`          | A party is already running for the group              |
+| `party_recharging`      | The 48h recharge after the last party has not elapsed |
+| `group_exists`          | Group creation conflict                               |
+| `origin_not_allowed`    | WebSocket origin rejected                             |
+| `rate_limited`          | Rate limit exceeded                                   |
+| `internal_error`        | Unexpected server error                               |
+| `storage_unavailable`   | Media storage unavailable                             |
+| `storage_error`         | Backend storage error                                 |

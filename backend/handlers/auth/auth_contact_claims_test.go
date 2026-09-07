@@ -149,10 +149,10 @@ func TestVerifyEmailDatabaseFailureIsInternal(t *testing.T) {
 	}
 }
 
-// TestForgotPasswordVerifiedOnly proves recovery only ever acts on confirmed
-// addresses: a pending or unknown address gets the uniform 202 with no reset
-// token issued.
-func TestForgotPasswordVerifiedOnly(t *testing.T) {
+// TestForgotPasswordRecoveryByEmailState proves verified addresses receive a
+// reset link while pending addresses receive a verification link first. Both
+// cases retain the uniform 202 response used to prevent email enumeration.
+func TestForgotPasswordRecoveryByEmailState(t *testing.T) {
 	now := time.Now().UTC()
 
 	t.Run("Verified Address", func(t *testing.T) {
@@ -172,18 +172,32 @@ func TestForgotPasswordVerifiedOnly(t *testing.T) {
 		}
 	})
 
-	t.Run("Pending Or Unknown Address", func(t *testing.T) {
-		// A pending-only account and a completely unknown address both return
-		// the uniform 202 with no token issued: the lookup query runs, finds
-		// nothing (the verified-email filter excludes pending claims), and no
-		// reset-token write follows.
+	t.Run("Pending Address", func(t *testing.T) {
 		mock := newAuthMockPool(t)
 		api := newAuthAPI(t, mock, nil)
 		mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("alice@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+		pending := &models.User{ID: "user-1", Username: "alice", PendingEmail: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
+		mock.ExpectQuery("pending_email_normalized").WithArgs("alice@example.test").WillReturnRows(handlerUserRows(pending))
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM email_verification_tokens").WithArgs(pending.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), pending.ID, pgxmock.AnyArg(), "alice@example.test", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
 		api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
 		if recorder.Code != http.StatusAccepted {
 			t.Fatalf("pending recovery status = %d", recorder.Code)
+		}
+	})
+
+	t.Run("Unknown Address", func(t *testing.T) {
+		mock := newAuthMockPool(t)
+		api := newAuthAPI(t, mock, nil)
+		mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("nobody@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+		mock.ExpectQuery("pending_email_normalized").WithArgs("nobody@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
+		recorder := httptest.NewRecorder()
+		api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"nobody@example.test"}`)))
+		if recorder.Code != http.StatusAccepted {
+			t.Fatalf("unknown recovery status = %d", recorder.Code)
 		}
 	})
 }

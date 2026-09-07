@@ -1,0 +1,12 @@
+# Time-boxed Keycloak exceptions for `make audit-images`.
+# Keycloak 26.7.2 fixes the Keycloak-services account-takeover CVE and removes
+# the obsolete dependency findings. The remaining Microsoft SQL Server driver
+# is bundled upstream but not used: this deployment uses PostgreSQL only.
+
+- id: CVE-2025-59250
+  image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
+  digest: sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
+  owner: security-program
+  reachable: "the vulnerable Microsoft SQL Server driver is bundled but this deployment uses only PostgreSQL"
+  approved: true
+  expires: 2026-09-09

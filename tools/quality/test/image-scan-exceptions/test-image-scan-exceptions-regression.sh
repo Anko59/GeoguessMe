@@ -11,6 +11,7 @@
 #   6. An image/digest mismatch is rejected.
 #   7. Append mode preserves direct-image exceptions while adding base-image
 #      exceptions for a derived image.
+#   8. Multiple exception files are validated and emitted together.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
@@ -51,12 +52,24 @@ validator_output() {
     IMAGE_SCAN_EXCEPTIONS="$file" bash "$SCRIPT" "$@" 2>&1
 }
 
+date_utc_days_from_today() {
+    local days=$1
+    if date -u -d "$days days" +%F 2>/dev/null; then
+        return
+    fi
+    if [ "$days" -ge 0 ]; then
+        date -u -v+"${days}"d +%F
+    else
+        date -u -v"${days}"d +%F
+    fi
+}
+
 TMP="$(mktemp -d)"
 DIGEST="$(printf 'a%.0s' {1..64})"
 IMAGE="postgres:15-alpine@sha256:${DIGEST}"
-VALID_EXPIRY="$(date -u -d "+7 days" +%F)"
-PAST_EXPIRY="$(date -u -d "-1 day" +%F)"
-FAR_EXPIRY="$(date -u -d "+31 days" +%F)"
+VALID_EXPIRY="$(date_utc_days_from_today 7)"
+PAST_EXPIRY="$(date_utc_days_from_today -1)"
+FAR_EXPIRY="$(date_utc_days_from_today 31)"
 
 echo "image-scan exceptions regression tests:"
 
@@ -116,6 +129,16 @@ cat >"$TMP/digest-mismatch.yaml" <<EOF
   digest: sha256:$(printf 'b%.0s' {1..64})
   owner: platform@geoguessme.dev
   reachable: regression fixture rationale
+  approved: true
+  expires: $VALID_EXPIRY
+EOF
+
+cat >"$TMP/valid-second.yaml" <<EOF
+- id: CVE-2026-00007
+  image: $IMAGE
+  digest: sha256:$DIGEST
+  owner: platform@geoguessme.dev
+  reachable: second regression fixture rationale
   approved: true
   expires: $VALID_EXPIRY
 EOF
@@ -232,6 +255,20 @@ if grep -qx 'CVE-2026-DIRECT' "$ignore" && grep -qx 'CVE-2026-00001' "$ignore"; 
     pass "append preserves direct entry and adds base entry"
 else
     fail "append did not preserve and extend ignorefile"
+fi
+
+# ── Test 8: validate and emit multiple exception files together ────────────
+echo "--- Test 8: multiple exception files ---"
+multiple_ignore="$TMP/multiple-ignore.trivy"
+if IMAGE_SCAN_EXCEPTIONS="$TMP/valid.yaml $TMP/valid-second.yaml" bash "$SCRIPT" --emit "$IMAGE" "$multiple_ignore" >/dev/null 2>&1; then
+    pass "multiple exception files validate and emit"
+else
+    fail "multiple exception files rejected"
+fi
+if grep -qx 'CVE-2026-00001' "$multiple_ignore" && grep -qx 'CVE-2026-00007' "$multiple_ignore"; then
+    pass "emit includes records from every exception file"
+else
+    fail "emit omitted a record from multiple exception files"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

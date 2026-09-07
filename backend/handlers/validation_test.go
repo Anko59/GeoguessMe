@@ -11,6 +11,7 @@ import (
 	"geoguessme/internal/repository"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/pashagolub/pgxmock/v4"
 )
 
 func TestGameHandlersRejectUnsupportedMethods(t *testing.T) {
@@ -84,4 +85,32 @@ func TestGroupAndUploadValidation(t *testing.T) {
 	if mediaURL(&models.Photo{ID: "photo-1"}, false) != "/api/v1/challenges/photo-1/media" || mediaURL(&models.Photo{ID: "photo-1"}, true) == mediaURL(&models.Photo{ID: "photo-1"}, false) {
 		t.Fatal("media URLs are not distinct")
 	}
+}
+
+func TestWithUserID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	if got := GetUserIDFromContext(req); got != "" {
+		t.Fatalf("GetUserIDFromContext empty = %q, want empty", got)
+	}
+	ctx := WithUserID(req.Context(), "user-123")
+	req2 := req.WithContext(ctx)
+	if got := GetUserIDFromContext(req2); got != "user-123" {
+		t.Fatalf("GetUserIDFromContext = %q, want user-123", got)
+	}
+}
+
+func TestTimeoutChallengeGuessMethodAndNotFound(t *testing.T) {
+	mock := newMockPool(t)
+	gameAPI := newGameAPI(t, mock)
+	requireStatus(t, gameAPI.TimeoutChallengeGuess, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusMethodNotAllowed)
+	requireStatus(t, gameAPI.TimeoutChallengeGuess, func() *http.Request {
+		r := requestWithUser(http.MethodPost, "/", "", "user-1")
+		r.SetPathValue("photoID", "not-a-uuid")
+		return r
+	}(), http.StatusBadRequest)
+	photoID := "00000000-0000-0000-0000-000000000099"
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(pgxmock.NewRows([]string{"id"}))
+	req := requestWithUser(http.MethodPost, "/", "", "user-1")
+	req.SetPathValue("photoID", photoID)
+	requireStatus(t, gameAPI.TimeoutChallengeGuess, req, http.StatusNotFound)
 }

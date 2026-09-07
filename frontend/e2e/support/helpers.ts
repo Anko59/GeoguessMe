@@ -1,5 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
+import {
+    expect,
+    type APIRequestContext,
+    type Browser,
+    type BrowserContext,
+    type BrowserContextOptions,
+    type Page,
+} from '@playwright/test';
 
 function secureSuffix(): string {
     return randomBytes(3).toString('hex');
@@ -271,6 +278,36 @@ export async function getMailpitLink(subject: string, pathFragment: string): Pro
         )
         .toBeTruthy();
     return link!;
+}
+
+/** Extract the Keycloak verification action sent to one exact recipient. */
+export async function waitForKeycloakVerificationLink(request: APIRequestContext, email: string): Promise<string> {
+    const mailpitBaseURL = process.env.MAILPIT_BASE_URL || 'http://localhost:8025';
+    const query = encodeURIComponent(`to:"${email}"`);
+    let verificationLink = '';
+    await expect
+        .poll(
+            async () => {
+                const searchResponse = await request.get(`${mailpitBaseURL}/api/v1/search?query=${query}`);
+                if (!searchResponse.ok()) return '';
+                const search = (await searchResponse.json()) as { messages?: Array<{ ID: string }> };
+                for (const message of search.messages ?? []) {
+                    const messageResponse = await request.get(`${mailpitBaseURL}/api/v1/message/${message.ID}`);
+                    if (!messageResponse.ok()) continue;
+                    const body = (await messageResponse.json()) as { Text?: string; HTML?: string };
+                    verificationLink =
+                        `${body.Text ?? ''}\n${body.HTML ?? ''}`
+                            .match(/https?:\/\/[^\s<"]+/g)
+                            ?.map((url) => url.replaceAll('&amp;', '&'))
+                            .find((url) => url.includes('/login-actions/action-token')) ?? '';
+                    if (verificationLink) return verificationLink;
+                }
+                return '';
+            },
+            { timeout: 30_000, intervals: [250, 500, 1_000] },
+        )
+        .toBeTruthy();
+    return verificationLink;
 }
 
 /**

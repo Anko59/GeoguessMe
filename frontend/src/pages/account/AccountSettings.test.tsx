@@ -23,6 +23,9 @@ const user: User = {
     pending_email: 'alice@example.test',
     avatar: 'avatar.png',
     email_verified_at: null,
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 const refresh = vi.fn(async () => true);
@@ -220,6 +223,9 @@ describe('AccountSettings', () => {
                 email: 'alice@example.test',
                 avatar: 'avatar.png',
                 email_verified_at: '2026-01-01T00:00:00Z',
+                password_login_enabled: true,
+                oidc_linked: false,
+                migration_required: false,
             },
         };
         render(
@@ -254,6 +260,9 @@ describe('AccountSettings', () => {
             email: 'alice@example.test',
             avatar: 'avatar.png',
             email_verified_at: '2026-01-01T00:00:00Z',
+            password_login_enabled: true,
+            oidc_linked: false,
+            migration_required: false,
         };
         mocks.patch.mockResolvedValueOnce({ data: { ...verified, pending_email: 'new@example.test' } });
         mocks.post.mockResolvedValueOnce({ data: { message: 'Verification sent' } });
@@ -286,6 +295,74 @@ describe('AccountSettings', () => {
         expect(screen.getByText('No verified email')).toBeInTheDocument();
     });
 
+    it('supports profile and deletion confirmation for a Keycloak account', async () => {
+        const socialUser: User = {
+            ...user,
+            pending_email: undefined,
+            email: 'alice@example.test',
+            password_login_enabled: false,
+            oidc_linked: true,
+            migration_required: false,
+        };
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                enabled: true,
+                login_path: '/oauth2/start',
+                social_providers: ['google'],
+                account_url: 'https://auth-dev.geoguessme.com/realms/geoguessme/account/',
+            },
+        });
+        mocks.patch.mockResolvedValueOnce({ data: socialUser });
+        mocks.delete.mockResolvedValueOnce({ data: {} });
+        vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: socialUser }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(screen.queryByLabelText('Current password to save profile changes')).not.toBeInTheDocument();
+        expect(screen.getByText('Google or GeoGuessMe ID is connected.')).toBeInTheDocument();
+        expect(await screen.findByRole('link', { name: 'Manage 2FA and passkeys' })).toHaveAttribute(
+            'href',
+            'https://auth-dev.geoguessme.com/realms/geoguessme/account/',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+        await waitFor(() =>
+            expect(mocks.patch).toHaveBeenCalledWith('/auth/profile', {
+                username: 'alice',
+                email: 'alice@example.test',
+                avatar: 'avatar.png',
+            }),
+        );
+        fireEvent.change(screen.getByLabelText('Type alice to delete account'), { target: { value: 'alice' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delete account' }));
+        await waitFor(() =>
+            expect(mocks.delete).toHaveBeenCalledWith('/auth/account', { data: { confirmation: 'alice' } }),
+        );
+    });
+
+    it('keeps password controls available after an existing account links Keycloak', () => {
+        const linkedPasswordUser: User = { ...user, oidc_linked: true };
+        mocks.get.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
+        });
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: linkedPasswordUser }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(
+            screen.getByText('Google or GeoGuessMe ID is connected. Username and password login remains active.'),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument();
+    });
+
     it('shows verification and deletion flows', async () => {
         mocks.post.mockResolvedValueOnce({ data: { message: 'Verification sent' } });
         mocks.delete.mockResolvedValueOnce({ data: {} });
@@ -309,5 +386,22 @@ describe('AccountSettings', () => {
         await waitFor(() => expect(refresh).toHaveBeenCalled());
 
         vi.restoreAllMocks();
+    });
+
+    it('keeps all account controls available when an older response has the deprecated migration flag', () => {
+        const migrationUser: User = { ...user, migration_required: true };
+        render(
+            <AuthContext.Provider value={{ ...authValue, user: migrationUser }}>
+                <MemoryRouter>
+                    <AccountSettings />
+                </MemoryRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(screen.queryByRole('heading', { name: 'Finish account migration' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save profile' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Resend verification email' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Delete account' })).toBeInTheDocument();
     });
 });

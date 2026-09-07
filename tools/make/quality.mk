@@ -16,6 +16,12 @@ format: ## Format tracked source/configuration files in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff-write sqlfluff fix --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) shfmt-write shfmt -w -i 4 -ci
 
+fmt: format ## Compatibility alias for format.
+
+mod-tidy: ## Reconcile backend Go module metadata in Docker after dependency changes.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps --user 0:0 go-tools-write sh -c 'cd backend && GOCACHE=/tmp/go-build-cache go mod tidy && chown $(shell id -u):$(shell id -g) go.mod go.sum'
+
+
 format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
@@ -29,7 +35,7 @@ lint-frontend: ## Run ESLint with zero warnings.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint -- --max-warnings=0
 
 lint-dead-code: ## Reject unused frontend files, exports, and dependencies.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend run lint:dead-code
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps -e KNIP_DISABLE_RAW_TRANSFER=1 node-tools npm --prefix /workspace/frontend run lint:dead-code
 
 lint-debt-markers: ## Require durable ownership for deferred code work.
 	tools/quality/debt/check-markers.sh
@@ -52,6 +58,8 @@ lint-sql: ## Run SQLFluff against migrations.
 lint-caddy: ## Validate and format-check Caddy configuration.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy adapt --config /workspace/deployment/caddy/Caddyfile.dev >/dev/null
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile.dev
 
 lint-openapi: ## Validate the split OpenAPI contract with Redocly.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend exec -- redocly lint /workspace/docs/openapi.yaml
@@ -74,7 +82,7 @@ audit: ## Run dependency vulnerability audits in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
 deps-go-security-update: ## Update vulnerable Go security modules and normalize metadata.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get golang.org/x/crypto@v0.54.0 golang.org/x/image@v0.45.0 golang.org/x/text@v0.41.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get github.com/go-jose/go-jose/v4@v4.1.4 golang.org/x/crypto@v0.54.0 golang.org/x/image@v0.45.0 golang.org/x/text@v0.41.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
 
 deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only

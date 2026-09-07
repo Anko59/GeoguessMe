@@ -18,6 +18,9 @@ const user: User = {
     email: 'alice@example.test',
     email_verified_at: null,
     avatar: 'avatar.png',
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 const authValue = {

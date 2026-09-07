@@ -134,6 +134,17 @@ assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE t
 # auth_version default
 assert_eq "$(psql_query "SELECT auth_version FROM users WHERE id='legacy-001'")" \
     "0" "legacy-001 auth_version=0"
+# The OIDC migration is additive: all legacy users keep password access and no
+# identity is invented before they complete a verified login or explicit link.
+assert_eq "$(psql_query "SELECT count(*) FROM users WHERE legacy_password_enabled")" \
+    "4" "all legacy users retain password login"
+assert_eq "$(psql_query "SELECT count(*) FROM user_identities")" \
+    "0" "no social identities inferred during migration"
+assert_eq "$(psql_query "SELECT count(*) FROM oidc_link_intents")" \
+    "0" "no account-link intents inferred during migration"
+assert_eq "$(psql_query "SELECT string_agg(id, ',' ORDER BY id) FROM users")" \
+    "legacy-001,legacy-002,legacy-003,legacy-004" \
+    "legacy user IDs remain unchanged"
 # updated_at and deleted_at exist
 assert_eq "$(psql_query "SELECT count(*) FROM information_schema.columns WHERE table_name='users' AND column_name='updated_at'")" \
     "1" "updated_at column exists"
