@@ -25,6 +25,10 @@ RUN xcaddy build v2.11.4 \
     --replace 'google.golang.org/grpc@v1.81.0=google.golang.org/grpc@v1.83.1'
 
 # Caddy 2.11.4-alpine (immutable index digest), with the patched binary above.
+# The pinned image currently carries curl/libcurl 8.19.0-r0; refresh both
+# packages so the shipped gateway does not retain the fixed curl findings
+# (CVE-2026-11352, CVE-2026-11586, CVE-2026-12064, CVE-2026-8286,
+# CVE-2026-8458, CVE-2026-8925, CVE-2026-8927, and CVE-2026-9547).
 FROM caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
 LABEL org.opencontainers.image.base.name="caddy:2.11.4-alpine" \
     org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
@@ -35,7 +39,9 @@ RUN addgroup -S -g 1000 caddy \
     && adduser -S -D -H -u 1000 -G caddy caddy \
     && setcap cap_net_bind_service=+ep /usr/bin/caddy \
     && chown -R caddy:caddy /srv /data /config \
-    && apk add --no-cache 'openssl>=3.5.8-r0'
+    && apk add --no-cache 'openssl>=3.5.8-r0' \
+        'curl>=8.22.0-r0' \
+        'libcurl>=8.22.0-r0'
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD ["wget", "--spider", "--quiet", "http://localhost/health/live"]
 USER caddy
