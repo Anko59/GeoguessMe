@@ -20,6 +20,7 @@ IDENTITY_COMPOSE="$ROOT/deployment/compose.identity.yaml"
 KEYCLOAK_CONFIG="$ROOT/deployment/keycloak/apply-realm-config.sh"
 KEYCLOAK_REALM="$ROOT/deployment/keycloak/realm-geoguessme.json"
 OAUTH2_PROXY_ALPHA="$ROOT/deployment/oauth2-proxy/oauth2-proxy-alpha.yaml"
+RELEASE_VERSION=$(tr -d '[:space:]' <"$ROOT/.release-version")
 
 fail() {
     printf 'contract test failed: %s\n' "$1" >&2
@@ -120,7 +121,9 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAG
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
-assert_contains "$ROOT/.release-version" '0.3.2'
+printf '%s\n' "$RELEASE_VERSION" |
+    grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' ||
+    fail "$ROOT/.release-version must contain MAJOR.MINOR.PATCH"
 assert_contains "$ROOT/.github/workflows/release.yml" 'release_version=$(tr -d'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
