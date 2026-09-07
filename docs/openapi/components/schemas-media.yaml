@@ -1,0 +1,22 @@
+# Media-processing job schema, kept here so schemas.yaml stays under the
+# repository 500-line structure limit. Referenced directly by the API path
+# fragments and resolved as a component schema of docs/openapi.yaml.
+MediaProcessingJob:
+  type: object
+  required: [id, kind, status, queued_at]
+  description: Owner-only status of an asynchronous video-processing job. Storage keys and upload metadata are never serialized.
+  properties:
+    id: { type: string, format: uuid }
+    kind: { type: string, enum: [challenge, chat] }
+    status: { type: string, enum: [queued, processing, ready, failed] }
+    queued_at: { type: string, format: date-time }
+    started_at: { type: [string, "null"], format: date-time }
+    completed_at: { type: [string, "null"], format: date-time }
+    result:
+      description: Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned.
+      oneOf:
+        - { $ref: "./schemas.yaml#/ChallengeCreated" }
+        - { $ref: "./schemas.yaml#/Message" }
+    error_code:
+      type: string
+      description: Stable, non-sensitive failure code (for example invalid_video, authorization_revoked, output_too_large, or transcode_failed); present only when the job failed.

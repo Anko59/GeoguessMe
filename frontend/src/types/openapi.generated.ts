@@ -14,7 +14,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create an account */
+        /**
+         * Create a legacy account when Keycloak is disabled.
+         * @description Normal signup uses Keycloak. This compatibility endpoint returns 410 while OIDC is enabled.
+         */
         post: operations['signup'];
         delete?: never;
         options?: never;
@@ -31,8 +34,65 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Log in */
+        /**
+         * Log in with an existing GeoGuessMe account.
+         * @description Accepts an existing account's username or verified/pending email address and application password. The resulting session has normal access whether or not Keycloak is enabled or linked.
+         */
         post: operations['login'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/config': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report whether Keycloak sign-in is enabled. */
+        get: operations['getOIDCConfig'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/session': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the OAuth2 Proxy Keycloak session for an application session.
+         * @description Keycloak tokens are forwarded server-to-server by OAuth2 Proxy and are never returned to browser JavaScript. A genuinely new identity receives username_required until it submits an explicit GeoGuessMe username; existing identities and verified-email migrations do not need one.
+         */
+        post: operations['exchangeOIDCSession'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/auth/oidc/link': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start linking Keycloak to the authenticated application account. */
+        post: operations['startOIDCLink'];
         delete?: never;
         options?: never;
         head?: never;
@@ -116,7 +176,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request a password reset. */
+        /**
+         * Request password recovery.
+         * @description Sends a reset link for a verified email address. For an unverified pending claim, sends an email verification link first; the address must be verified before a reset link can be requested. The response stays uniform to prevent email enumeration.
+         */
         post: operations['forgotPassword'];
         delete?: never;
         options?: never;
@@ -426,6 +489,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/group/party': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the group's Party Time state.
+         * @description Returns whether a party window is currently active and, while the recharge cooldown still blocks a new start, the earliest instant the next party may begin. `server_time` lets clients correct for clock skew. Requires group membership.
+         */
+        get: operations['getPartyStatus'];
+        put?: never;
+        /**
+         * Start Party Time for the group.
+         * @description Any current member may start a party. The window stays active for PARTY_TIME_DURATION (default 1h); a persisted system message announces the starter by name, and every other member receives a push notification. While a party is active, a member's guesses score double when they posted at least one challenge during the same window. A new party is refused with 409 party_active while one is running, and with 409 party_recharging until PARTY_TIME_COOLDOWN (default 48h, measured from the previous end) has elapsed.
+         */
+        post: operations['startParty'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/messages': {
         parameters: {
             query?: never;
@@ -617,6 +704,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/challenges/{photoID}/timeout': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a timeout when the guess window expires without a guess. */
+        post: operations['timeoutChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/challenges/{photoID}/results': {
         parameters: {
             query?: never;
@@ -745,6 +849,12 @@ export interface components {
             /** Format: date-time */
             email_verified_at?: string | null;
             avatar?: string;
+            /** @description Whether the account can sign in with its GeoGuessMe username or email and application password. */
+            password_login_enabled: boolean;
+            /** @description Whether the account is linked to the configured Keycloak realm. */
+            oidc_linked: boolean;
+            /** @description Compatibility field that is always false. Linking a Keycloak identity is optional. */
+            migration_required: boolean;
         };
         AuthResponse: {
             access_token: string;
@@ -756,6 +866,17 @@ export interface components {
                 code: string;
                 message: string;
             };
+        };
+        OIDCConfig: {
+            enabled: boolean;
+            login_path: string;
+            /**
+             * Format: uri
+             * @description Runtime-specific Keycloak account console used for optional 2FA, recovery codes, and passkeys.
+             */
+            account_url?: string;
+            /** @description Social brokers configured in this environment; email/password is always handled by Keycloak. */
+            social_providers: ('google' | 'apple' | 'github')[];
         };
         ProgressionRank: {
             level: number;
@@ -779,7 +900,7 @@ export interface components {
             total_points: number;
             guess_count: number;
             average_score: number;
-            /** @description Global Elo rating; 0 while never compared against another guesser. */
+            /** @description Global all-time Elo; 0 while never compared. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
             global_rank: components['schemas']['GlobalRank'];
@@ -866,7 +987,7 @@ export interface components {
             average_score: number;
             /** @description Lifetime guess points used for rank progression. */
             total_points: number;
-            /** @description Elo rating computed from the selected period's challenges; 0 while the player never compared against another guesser on a shared challenge in the period. */
+            /** @description Period Elo; 0 while not compared in the period. */
             elo: number;
             rank: components['schemas']['ProgressionRank'];
         };
@@ -881,6 +1002,27 @@ export interface components {
         };
         GroupNotificationPreference: {
             enabled: boolean;
+        };
+        PartyStatus: {
+            /** @description True while a party window covers server_time; dates present when true */
+            active: boolean;
+            /**
+             * Format: date-time
+             * @description Present only while a party is active
+             */
+            started_at?: string;
+            /**
+             * Format: date-time
+             * @description Present only while a party is active
+             */
+            ends_at?: string;
+            /**
+             * Format: date-time
+             * @description Earliest instant the next party may start (previous ends_at plus PARTY_TIME_COOLDOWN); present while recharging or active.
+             */
+            next_available_at?: string;
+            /** Format: date-time */
+            server_time: string;
         };
         /**
          * @description Reaction identity. The twenty-four named keys map to custom artwork shown in the UI; the six legacy emoji values are still accepted so existing reactions keep working.
@@ -1057,7 +1199,12 @@ export interface components {
             /** Format: uuid */
             photo_id: string;
             score: number;
-            distance: number;
+            /** @description Omitted when timed_out is true */
+            distance?: number;
+            /** @description True when the player let the guess window expire without guessing (score 0) */
+            timed_out?: boolean;
+            /** @description True when Party Time doubled this guess; omitted otherwise */
+            party_doubled?: boolean;
             /** Format: date-time */
             created_at: string;
             duplicate: boolean;
@@ -1084,10 +1231,12 @@ export interface components {
              */
             long?: number;
             score: number;
-            /** @description Elo rating points gained or lost on this challenge. */
+            /** @description Weekly Elo change (0 when <2 guesses or before week start). */
             elo_delta: number;
-            /** @description Omitted alongside the coordinates while the location is hidden. */
+            /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
+            /** @description True when the guess timed out (score 0). */
+            timed_out?: boolean;
             /** Format: date-time */
             created_at: string;
             username?: string;
@@ -1186,6 +1335,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
         };
     };
     login: {
@@ -1198,6 +1348,7 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
+                    /** @description Existing GeoGuessMe username or email address. */
                     username: string;
                     password: string;
                 };
@@ -1214,6 +1365,77 @@ export interface operations {
                 };
             };
             401: components['responses']['ErrorResponse'];
+        };
+    };
+    getOIDCConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime identity capability. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['OIDCConfig'];
+                };
+            };
+            405: components['responses']['ErrorResponse'];
+        };
+    };
+    exchangeOIDCSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                'application/json': {
+                    username?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing identity resolved, verified-email account linked, or new account provisioned with its chosen username. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['AuthResponse'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    startOIDCLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Single-use link intent stored in an HttpOnly cookie. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
         };
     };
     refreshSession: {
@@ -1318,7 +1540,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Reset link sent if the email is registered. */
+            /** @description A reset or verification link was sent if the email is registered. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -1379,6 +1601,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
         };
     };
     getProfile: {
@@ -1430,7 +1653,8 @@ export interface operations {
                         | 'avatar8.png'
                         | 'avatar9.png'
                         | 'avatar10.png';
-                    current_password: string;
+                    /** @description Required when password_login_enabled is true; omitted for passwordless social accounts. */
+                    current_password?: string;
                 };
             };
         };
@@ -1446,6 +1670,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
         };
     };
@@ -1476,6 +1701,7 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
         };
     };
     deleteAccount: {
@@ -1488,7 +1714,10 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    password: string;
+                    /** @description Required for accounts with legacy password login enabled. */
+                    password?: string;
+                    /** @description Exact username required for passwordless social accounts. */
+                    confirmation?: string;
                 };
             };
         };
@@ -1881,6 +2110,61 @@ export interface operations {
             403: components['responses']['ErrorResponse'];
         };
     };
+    getPartyStatus: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Party state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PartyStatus'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+        };
+    };
+    startParty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: uuid */
+                    group_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Party started; the response carries the active window. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PartyStatus'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+        };
+    };
     listGroupMessages: {
         parameters: {
             query: {
@@ -2259,6 +2543,49 @@ export interface operations {
                     'application/json': components['schemas']['APIError'];
                 };
             };
+        };
+    };
+    timeoutChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoID: components['parameters']['photoID'];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Existing guess returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GuessResponse'];
+                };
+            };
+            /** @description Timeout recorded (score 0). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GuessResponse'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            /** @description Viewing window is still open (viewing_window_open). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['APIError'];
+                };
+            };
+            410: components['responses']['ErrorResponse'];
         };
     };
     getChallengeResults: {

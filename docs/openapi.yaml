@@ -12,6 +12,12 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/signup
   /auth/login:
     $ref: ./openapi/paths/auth.yaml#/login
+  /auth/oidc/config:
+    $ref: ./openapi/paths/auth.yaml#/oidcConfig
+  /auth/oidc/session:
+    $ref: ./openapi/paths/auth.yaml#/oidcSession
+  /auth/oidc/link:
+    $ref: ./openapi/paths/auth.yaml#/oidcLink
   /auth/refresh:
     $ref: ./openapi/paths/auth.yaml#/refresh
   /auth/logout:
@@ -56,6 +62,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/groupPhoto
   /group/notifications:
     $ref: ./openapi/paths/groups.yaml#/groupNotifications
+  /group/party:
+    $ref: ./openapi/paths/groups.yaml#/groupParty
   /group/messages:
     $ref: ./openapi/paths/groups.yaml#/messages
   /group/reaction-usage:
@@ -78,6 +86,8 @@ paths:
     $ref: ./openapi/paths/challenges.yaml#/mediaDelivered
   /challenges/{photoID}/guess:
     $ref: ./openapi/paths/challenges.yaml#/guess
+  /challenges/{photoID}/timeout:
+    $ref: ./openapi/paths/challenges.yaml#/timeout
   /challenges/{photoID}/results:
     $ref: ./openapi/paths/challenges.yaml#/results
   /ws/ticket:
@@ -96,6 +106,8 @@ components:
       $ref: ./openapi/components/security.yaml#/bearerAuth
     cookieAuth:
       $ref: ./openapi/components/security.yaml#/cookieAuth
+    oidcProxyAuth:
+      $ref: ./openapi/components/security.yaml#/oidcProxyAuth
   schemas:
     $ref: ./openapi/components/schemas.yaml
   responses:

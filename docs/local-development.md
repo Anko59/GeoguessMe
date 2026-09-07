@@ -20,6 +20,49 @@ repeated make dev invocations do not strand anonymous node_modules volumes.
 Frontend startup updates that volume from package-lock.json before starting
 Vite, keeping dependency changes current without allocating another volume.
 
+To launch the complete identity path instead, use:
+
+```text
+mkcert -install
+make dev-social
+```
+
+This adds Caddy, local Keycloak, its separate PostgreSQL database, and OAuth2
+Proxy. `mkcert -install` is a one-time host setup; the target then generates an
+ignored certificate for the local application and identity names. Map
+`auth-dev.geoguessme.com` to `127.0.0.1` in `/etc/hosts`, then open
+`https://geoguessme.localhost`; Keycloak is at
+`https://auth-dev.geoguessme.com`, and verification mail is visible in Mailpit
+at `http://localhost:8025`. Caddy is the only browser-facing entrypoint for the
+identity path and redirects the matching HTTP names to HTTPS.
+
+Login and signup always display the native Keycloak email path and display the
+Google button only when local Google credentials are supplied. After email is
+selected, Keycloak owns only the password or registration form; it does not
+repeat social providers. Registration and reset mail stays fully local in
+Mailpit. Normal pages never render the hidden legacy credential form while OIDC
+is enabled.
+
+The checked-in provider values are deliberate placeholders; Keycloak disables
+them and the application does not render their buttons. To activate the
+downloaded Google Web OAuth client without copying its secret into the
+repository, pass its ignored JSON file to the target:
+
+```text
+GEOGUESSME_GOOGLE_CLIENT_JSON=/absolute/path/to/client_secret.json make dev-social
+```
+
+The target reads the ID and secret with `jq`, enables the Google alias for that
+run, and never prints either value. Its local broker callback is
+`https://auth-dev.geoguessme.com/realms/geoguessme/broker/google/endpoint`.
+Apple and GitHub remain disabled until a later provider rollout.
+`make dev-social-down` stops the stack but keeps the named application and
+identity volumes.
+
+A genuinely new Google or Keycloak email identity must choose an
+empty-by-default GeoGuessMe username after verification. Keycloak's provider
+username is never silently copied into the public player profile.
+
 ## Useful targets
 
 ```text
@@ -28,6 +71,8 @@ make logs
 make logs-backend
 make logs-frontend
 make restart
+make dev-social
+make dev-social-down
 make down
 make format
 make quality

@@ -51,8 +51,8 @@ func TestScanUserNullEmail(t *testing.T) {
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").
-		WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email"}).
-			AddRow("user-1", "alice", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test"))
+		WillReturnRows(pgxmock.NewRows([]string{"id", "username", "email", "password", "avatar", "verified", "auth_version", "created_at", "updated_at", "pending_email", "legacy_password_enabled", "oidc_linked"}).
+			AddRow("user-1", "alice", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test", true, false))
 	user, err := repo.GetUserByID(context.Background(), "user-1")
 	if err != nil || user == nil {
 		t.Fatalf("GetUserByID = %+v, %v", user, err)
@@ -87,6 +87,19 @@ func TestGetUserByVerifiedEmailOnlyMatchesVerified(t *testing.T) {
 	got, err = repo.GetUserByVerifiedEmail(context.Background(), "nobody@example.test")
 	if err != nil || got != nil {
 		t.Fatalf("unmatched verified lookup = %+v, %v", got, err)
+	}
+}
+
+func TestGetUserByPendingEmailRejectsAmbiguousClaims(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	now := time.Now().UTC()
+	rows := userRows(&models.User{ID: "user-1", Username: "alice", PendingEmail: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now})
+	rows.AddRow("user-2", "bob", nil, "hash", "avatar.png", nil, 0, now, now, "alice@example.test", true, false)
+	mock.ExpectQuery("pending_email_normalized").WithArgs("alice@example.test").WillReturnRows(rows)
+	got, err := repo.GetUserByPendingEmail(context.Background(), " Alice@Example.test ")
+	if !errors.Is(err, ErrAmbiguousEmailClaim) || got != nil {
+		t.Fatalf("ambiguous pending lookup = %+v, %v", got, err)
 	}
 }
 
@@ -186,5 +199,27 @@ func TestResendTargetEmail(t *testing.T) {
 	}
 	if got := ResendTargetEmail(&models.User{}); got != nil {
 		t.Fatalf("no-address target = %v, want nil", got)
+	}
+}
+
+func TestLegacyIdentityMigrationInventoryClassifiesWithoutExposingClaims(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	mock.ExpectQuery("SELECT u.email, u.email_verified_at IS NOT NULL").WillReturnRows(
+		pgxmock.NewRows([]string{"email", "verified", "pending_email", "linked"}).
+			AddRow(" Verified@Example.test ", true, nil, false).
+			AddRow(nil, false, "pending@example.test", false).
+			AddRow(nil, false, nil, false).
+			AddRow("linked@example.test", true, nil, true),
+	)
+	inventory, err := repo.LegacyIdentityMigrationInventory(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inventory.Total != 4 || inventory.Linked != 1 || inventory.Verified != 1 || inventory.Pending != 1 || inventory.Missing != 1 {
+		t.Fatalf("unexpected inventory: %+v", inventory)
+	}
+	if len(inventory.VerifiedEmails) != 1 || inventory.VerifiedEmails[0] != "verified@example.test" {
+		t.Fatalf("verified candidates = %v", inventory.VerifiedEmails)
 	}
 }

@@ -107,7 +107,7 @@ func (a *AuthAPI) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to fetch user profile")
 		return
 	}
-	handlers.WriteJSON(w, http.StatusOK, userResponse(updated))
+	handlers.WriteJSON(w, http.StatusOK, a.userResponse(updated))
 }
 
 func isRequestTooLarge(err error) bool {

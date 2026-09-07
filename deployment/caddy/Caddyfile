@@ -10,6 +10,22 @@
 :80 {
 	encode gzip zstd
 
+	handle /oauth2/* {
+		reverse_proxy oauth2-proxy:4180 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	handle /api/v1/auth/oidc/session {
+		reverse_proxy oauth2-proxy:4180 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+			header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}
+		}
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8080 {
 			header_up Host {host}

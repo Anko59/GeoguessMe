@@ -26,12 +26,15 @@ clean-build: ## Build production images from scratch without any layer cache.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
-AUDIT_IMAGES ?= postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 \
-	cloudflare/cloudflared:2026.8.0@sha256:2535e54b16adf1d50630f99d0886471926c5ef3f6b328100ec6589f731c48969 \
+AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
+	geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7 \
+	quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067 \
+	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
+	cloudflare/cloudflared:2026.8.3@sha256:9be48e4b4e996da851bf78f7782bfab150dd4d8889e469d004802e7d7afb63b1 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
 build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic
+	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
 audit-images: build-security-tool-images ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
@@ -54,7 +57,7 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	if [ -n "$${RESTIC_IMAGE:-}" ]; then \
 		images="$$images $${RESTIC_IMAGE}"; \
 	fi; \
-	for local_image in geoguessme/restic-tools:0.19.1-xnet-0.56.0; do \
+	for local_image in geoguessme/restic-tools:0.19.1-go-deps-2026-09 geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7; do \
 		if docker image inspect "$$local_image" >/dev/null 2>&1; then \
 			images="$$images $$local_image"; \
 		else \
@@ -94,10 +97,11 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	echo 'audit-images: complete'
 
 compose-validate: ## Validate every Compose file.
-	docker compose -f deployment/compose.dev.yaml --project-directory . config --quiet
+	docker compose --profile social -f deployment/compose.dev.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.test.yaml --project-directory . config --quiet
-	BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose -f deployment/compose.production.yaml --project-directory . config --quiet
-	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
+	GEOGUESSME_IDENTITY_ENV_FILE=deployment/env/identity.env.example docker compose -f deployment/compose.identity.yaml --project-directory . config --quiet
+	BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml --project-directory . config --quiet
+	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.tools.yaml --project-directory . config --quiet
 
 migrate-up: ## Apply pending migrations through the backend container.
@@ -153,11 +157,22 @@ prod-config: ## Validate production image and secret configuration.
 prod-migrate: prod-config ## Run the production migration job.
 	$(COMPOSE_PROD) run --rm migration migrate up
 
+prod-legacy-identity-plan: prod-config ## Count legacy migration categories without changing Keycloak.
+	$(COMPOSE_PROD) run --rm migration legacy-identity-migration plan
+
+prod-legacy-identity-provision: prod-config ## Provision verified legacy emails in Keycloak; requires CONFIRM=provision.
+	@test "$(CONFIRM)" = provision || { echo "Refusing without CONFIRM=provision"; exit 2; }
+	$(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
+
 prod-up: prod-config ## Start the production stack.
-	$(COMPOSE_PROD) up -d
+	@if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
+		$(COMPOSE_PROD) --profile social up -d; \
+	else \
+		$(COMPOSE_PROD) up -d; \
+	fi
 
 prod-down: ## Stop production services and keep data volumes.
-	$(COMPOSE_PROD) down
+	$(COMPOSE_PROD) --profile social down
 
 prod-logs: ## Tail production logs.
 	$(COMPOSE_PROD) logs -f
@@ -239,6 +254,7 @@ secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plai
 		-e TARGET_ENV=$(ENV) -e BREVO_SMTP_USERNAME -e BREVO_SMTP_PASSWORD \
 		-e GHCR_USERNAME -e GHCR_TOKEN -e MEDIA_ACCESS_KEY_ID -e MEDIA_SECRET_ACCESS_KEY \
 		-e BACKUP_ACCESS_KEY_ID -e BACKUP_SECRET_ACCESS_KEY -e CLOUDFLARE_ACCOUNT_ID \
+		-e KEYCLOAK_CLIENT_SECRET \
 		-e VAPID_PUBLIC_KEY -e VAPID_PRIVATE_KEY -e VAPID_SUBJECT \
 		go-tools sh /workspace/deployment/scripts/generate-hosted-secret.sh | \
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \
@@ -247,6 +263,24 @@ secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plai
 	test -s "$$temporary"; \
 	chmod 0600 "$$temporary"; \
 	mv "$$temporary" deployment/secrets/$(ENV).env.enc; \
+	trap - EXIT INT TERM
+
+identity-secrets-generate: ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
+	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT must contain both host age recipients'; exit 2; }
+	@mkdir -p deployment/secrets
+	@temporary=$$(mktemp deployment/secrets/.identity.env.enc.XXXXXX); \
+	trap 'rm -f "$$temporary"' EXIT INT TERM; \
+	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
+		-e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
+		-e KEYCLOAK_SMTP_USERNAME -e KEYCLOAK_SMTP_PASSWORD \
+		-e PRODUCTION_OIDC_CLIENT_SECRET -e DEV_OIDC_CLIENT_SECRET \
+		go-tools sh /workspace/deployment/scripts/hosted/generate-identity-secret.sh | \
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --config /dev/null --encrypt \
+		--input-type dotenv --output-type dotenv --age "$(RECIPIENT)" /dev/stdin' \
+		>"$$temporary"; \
+	test -s "$$temporary"; \
+	chmod 0600 "$$temporary"; \
+	mv "$$temporary" deployment/secrets/identity.env.enc; \
 	trap - EXIT INT TERM
 
 smoke: build-images ## Run the smoke test against a selected disposable/staging URL.

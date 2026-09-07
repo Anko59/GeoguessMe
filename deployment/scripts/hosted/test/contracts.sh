@@ -15,6 +15,12 @@ FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
 BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
 RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
 SECRET_GENERATOR="$ROOT/deployment/scripts/generate-hosted-secret.sh"
+IDENTITY_SECRET_GENERATOR="$ROOT/deployment/scripts/hosted/generate-identity-secret.sh"
+IDENTITY_COMPOSE="$ROOT/deployment/compose.identity.yaml"
+KEYCLOAK_CONFIG="$ROOT/deployment/keycloak/apply-realm-config.sh"
+KEYCLOAK_REALM="$ROOT/deployment/keycloak/realm-geoguessme.json"
+OAUTH2_PROXY_ALPHA="$ROOT/deployment/oauth2-proxy/oauth2-proxy-alpha.yaml"
+RELEASE_VERSION=$(tr -d '[:space:]' <"$ROOT/.release-version")
 
 fail() {
     printf 'contract test failed: %s\n' "$1" >&2
@@ -25,6 +31,10 @@ assert_contains() {
     grep -Fq -e "$2" "$1" || fail "$1 does not contain: $2"
 }
 
+assert_not_contains() {
+    ! grep -Fq -e "$2" "$1" || fail "$1 unexpectedly contains: $2"
+}
+
 line_of() {
     grep -n -m1 "$2" "$1" | cut -d: -f1
 }
@@ -32,8 +42,37 @@ line_of() {
 # Environment isolation and loopback-only ingress.
 assert_contains "$COMPOSE" 'name: ${COMPOSE_PROJECT_NAME:-geoguessme-prod}'
 assert_contains "$COMPOSE" '127.0.0.1:${GEOGUESSME_WEB_PORT:-8081}:80'
+assert_contains "$IDENTITY_COMPOSE" '127.0.0.1:${GEOGUESSME_IDENTITY_PORT:-8083}:8080'
+assert_contains "$IDENTITY_COMPOSE" 'realm-geoguessme.json:/opt/keycloak/data/import/realm-geoguessme.json:ro'
+assert_contains "$IDENTITY_COMPOSE" 'keycloak-config:'
 assert_contains "$HOSTED" 'database:/var/lib/postgresql/data'
 assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}'
+
+# OIDC start parameters are forwarded only through explicit allowlists, and
+# existing Keycloak realms are reconciled instead of relying on import-once.
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: kc_idp_hint'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: google'
+assert_not_contains "$OAUTH2_PROXY_ALPHA" 'value: apple'
+assert_not_contains "$OAUTH2_PROXY_ALPHA" 'value: github'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: prompt'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'value: create'
+assert_contains "$OAUTH2_PROXY_ALPHA" 'name: login_hint'
+assert_contains "$KEYCLOAK_REALM" '"registrationAllowed": true'
+assert_contains "$KEYCLOAK_REALM" '"verifyEmail": true'
+assert_contains "$KEYCLOAK_REALM" '"providerId": "VERIFY_EMAIL"'
+assert_contains "$KEYCLOAK_REALM" '"hideOnLogin": true'
+assert_contains "$KEYCLOAK_CONFIG" '-s hideOnLogin=true'
+assert_contains "$KEYCLOAK_CONFIG" 'has_real_credentials'
+assert_contains "$KEYCLOAK_CONFIG" 'configure_client geoguessme-production'
+assert_contains "$KEYCLOAK_CONFIG" 'configure_client geoguessme-dev'
+assert_contains "$KEYCLOAK_CONFIG" 'ensure_required_action VERIFY_EMAIL "Verify Email" 50'
+assert_contains "$KEYCLOAK_CONFIG" 'update users/profile'
+
+# BuildKit target-platform arguments must be declared inside the build stage;
+# otherwise TARGETARCH is empty and the shell fallback always emits amd64.
+assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETOS'
+assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETARCH'
+assert_contains "$BACKEND_DOCKERFILE" 'GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}'
 
 # Forced commands cannot select another environment or obtain a shell.
 assert_contains "$FORCED" '[ "$#" -eq 4 ]'
@@ -66,6 +105,7 @@ fi
 
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.production.yaml"'
 assert_contains "$COMMON" '-f "$CONFIG_ROOT/compose.hosted.yaml"'
+assert_contains "$COMMON" '-f "$release/deployment/compose.identity.yaml"'
 assert_contains "$DEPLOY" 'workflows/deploy\.yml@refs/heads/dev'
 assert_contains "$DEPLOY" 'workflows/release\.yml@refs/heads/main'
 assert_contains "$DEPLOY" 'github.com/Anko59/GeoguessMe/.github/workflows/deploy'
@@ -81,7 +121,9 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAG
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
-assert_contains "$ROOT/.release-version" '0.3.2'
+printf '%s\n' "$RELEASE_VERSION" |
+    grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' ||
+    fail "$ROOT/.release-version must contain MAJOR.MINOR.PATCH"
 assert_contains "$ROOT/.github/workflows/release.yml" 'release_version=$(tr -d'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
@@ -137,7 +179,8 @@ if ! cat "$ROOT"/Makefile "$ROOT"/tools/make/*.mk | grep -Fq 'generate-hosted-se
     fail "$ROOT/Makefile does not contain: generate-hosted-secret.sh |"
 fi
 assert_contains "$ROOT/deployment/scripts/hosted/restore-rehearsal.sh" 'docker rm -f'
-assert_contains "$HEALTH" 'for service in postgres backend web'
+assert_contains "$HEALTH" "services='postgres backend web'"
+assert_contains "$HEALTH" 'for service in keycloak-db keycloak'
 assert_contains "$HEALTH" '.State.Health.Status'
 assert_contains "$HEALTH" 'verify-deployment-hashes.sh" "$environment"'
 assert_contains "$COMMON" 'BACKEND_IMAGE="$backend"'
@@ -150,6 +193,7 @@ generated=$(TARGET_ENV=dev \
     MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
     BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
     CLOUDFLARE_ACCOUNT_ID=account-id \
+    KEYCLOAK_CLIENT_SECRET=keycloak-client-secret \
     VAPID_PUBLIC_KEY=vapid-public VAPID_PRIVATE_KEY=vapid-private \
     VAPID_SUBJECT=mailto:contract@example.invalid "$SECRET_GENERATOR")
 case "$generated" in
@@ -163,6 +207,31 @@ printf '%s\n' "$generated" | grep -Fq 'geoguessme-database-backups/dev' ||
     fail 'generated secret payload omitted the isolated backup prefix'
 printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
     fail 'generated secret payload omitted the supplied Web Push keypair'
+printf '%s\n' "$generated" | grep -Fq 'OIDC_CLIENT_SECRET=keycloak-client-secret' ||
+    fail 'generated secret payload omitted the selected Keycloak client secret'
+printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
+    fail 'generated secret payload omitted a random OAuth2 Proxy cookie secret'
+
+identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
+    GOOGLE_OAUTH_CLIENT_SECRET=google-secret \
+    KEYCLOAK_SMTP_USERNAME=smtp-user KEYCLOAK_SMTP_PASSWORD=smtp-password \
+    PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret \
+    DEV_OIDC_CLIENT_SECRET=dev-oidc-secret "$IDENTITY_SECRET_GENERATOR")
+case "$identity_generated" in *replace-*) fail 'generated identity payload contains a template placeholder' ;; esac
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_PRODUCTION_OIDC_CLIENT_SECRET=production-oidc-secret' ||
+    fail 'generated identity payload omitted the production client secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_DEV_OIDC_CLIENT_SECRET=dev-oidc-secret' ||
+    fail 'generated identity payload omitted the dev client secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_GOOGLE_CLIENT_SECRET=google-secret' ||
+    fail 'generated identity payload omitted the Google provider secret'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_GITHUB_CLIENT_ID=local-github-placeholder' ||
+    fail 'generated identity payload did not keep GitHub disabled'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_APPLE_CLIENT_ID=local-apple-placeholder' ||
+    fail 'generated identity payload did not keep Apple disabled'
+printf '%s\n' "$identity_generated" | grep -Fq 'GEOGUESSME_KEYCLOAK_SMTP_PASSWORD=smtp-password' ||
+    fail 'generated identity payload omitted the Keycloak SMTP secret'
+assert_contains "$ROOT/tools/make/deployment.mk" 'generate-identity-secret.sh |'
+assert_contains "$ROOT/tools/make/deployment.mk" '-e KEYCLOAK_SMTP_USERNAME -e KEYCLOAK_SMTP_PASSWORD'
 
 # A missing Web Push key must stop generation rather than emit the template
 # placeholder, which is non-empty and so would satisfy the backend's production
@@ -172,7 +241,8 @@ if VAPID_PUBLIC_KEY='' TARGET_ENV=dev \
     GHCR_USERNAME=registry-user GHCR_TOKEN=registry-token \
     MEDIA_ACCESS_KEY_ID=media-key MEDIA_SECRET_ACCESS_KEY=media-secret \
     BACKUP_ACCESS_KEY_ID=backup-key BACKUP_SECRET_ACCESS_KEY=backup-secret \
-    CLOUDFLARE_ACCOUNT_ID=account-id VAPID_PRIVATE_KEY=vapid-private \
+    CLOUDFLARE_ACCOUNT_ID=account-id KEYCLOAK_CLIENT_SECRET=keycloak-client-secret \
+    VAPID_PRIVATE_KEY=vapid-private \
     VAPID_SUBJECT=mailto:contract@example.invalid \
     "$SECRET_GENERATOR" >/dev/null 2>&1; then
     fail 'secret generation accepted a missing Web Push public key'
@@ -185,6 +255,22 @@ printf '100\n' >"$marker"
 age=$(GEOGUESSME_NOW_EPOCH=7301 sh -c '. "$1"; backup_age_seconds "$2"' _ "$COMMON" "$marker")
 [ "$age" -eq 7201 ] || fail 'backup marker age calculation is incorrect'
 
+# Hosted OIDC detection controls both the social Compose profile and shared
+# Keycloak startup. Match exact enabled values so the application can never be
+# activated without its identity dependencies.
+printf 'OIDC_ENABLED=true\n' >"$marker"
+sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker" ||
+    fail 'OIDC_ENABLED=true was not detected'
+printf 'OIDC_ENABLED=1\n' >"$marker"
+sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker" ||
+    fail 'OIDC_ENABLED=1 was not detected'
+for disabled in false 0 truex; do
+    printf 'OIDC_ENABLED=%s\n' "$disabled" >"$marker"
+    if sh -c '. "$1"; oidc_enabled "$2"' _ "$COMMON" "$marker"; then
+        fail "OIDC_ENABLED=$disabled was incorrectly detected as enabled"
+    fi
+done
+
 # Cloudflare client IP replaces both forwarding headers at the only gateway.
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
@@ -193,12 +279,16 @@ assert_contains "$FRONTEND_DOCKERFILE" 'caddy:2.11.4-builder-alpine@sha256:8e896
 assert_contains "$FRONTEND_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
 assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
+assert_contains "$FRONTEND_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
 assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
 assert_contains "$RESTIC_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
-assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="restic/restic:0.19.1"'
-assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
+assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
+assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"'
+assert_contains "$RESTIC_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
+assert_contains "$COMMON" '"$RESTIC_IMAGE" /usr/bin/restic "$@"'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
 assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
+assert_contains "$BACKEND_DOCKERFILE" "'openssl>=3.5.8-r0'"
 assert_contains "$BACKEND_DOCKERFILE" 'USER appuser:appuser'
 
 # Terraform plans may contain sensitive values. Re-running the target must

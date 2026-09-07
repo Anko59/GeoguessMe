@@ -6,8 +6,10 @@ import { AuthContext } from '../../context/AuthContext';
 
 // Mock the API module
 const mockPost = vi.fn();
+const mockGet = vi.fn();
 vi.mock('../../api', () => ({
     default: {
+        get: (...args: unknown[]) => mockGet(...args),
         post: (...args: unknown[]) => mockPost(...args),
     },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
@@ -25,9 +27,13 @@ const authValue = {
 describe('Login Page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockGet.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
     });
 
-    it('renders login form', () => {
+    it('keeps username login alongside Keycloak social and native email login', async () => {
+        mockGet.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
+        });
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -36,12 +42,68 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+        const google = await screen.findByRole('link', { name: 'Continue with Google' });
+        expect(google).toHaveAttribute('href', '/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback&kc_idp_hint=google');
+        expect(google.querySelector('.auth-provider-logo-google')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Continue with Apple' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
+        expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
+        expect(screen.getByRole('button', { name: 'Continue to password' })).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
+        fireEvent.click(google);
+        expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
+    });
+
+    it('hides unconfigured social providers while keeping native email available', async () => {
+        mockGet.mockResolvedValueOnce({ data: { enabled: true, login_path: '/oauth2/start', social_providers: [] } });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByRole('button', { name: 'Continue to password' })).toBeInTheDocument();
+        expect(screen.queryByText('Continue with Google')).not.toBeInTheDocument();
+        expect(screen.queryByText('Continue with Apple')).not.toBeInTheDocument();
+        expect(screen.queryByText('Continue with GitHub')).not.toBeInTheDocument();
+        expect(screen.getByText(/Social sign-in is not configured in this environment/)).toBeInTheDocument();
+    });
+
+    it('explains optional linking on the existing-account fallback page', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login existingAccountMode />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Welcome Back!' })).toBeInTheDocument();
+        expect(screen.getByRole('note')).toHaveTextContent('Connecting Google in Settings is optional');
+        expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Forgot your username or password?' })).toBeInTheDocument();
+        expect(mockGet).not.toHaveBeenCalled();
+    });
+
+    it('renders login form when OIDC is explicitly disabled', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Login />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByPlaceholderText('Username or email')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
     });
 
-    it('handles input changes', () => {
+    it('handles input changes', async () => {
         render(
             <AuthContext.Provider value={authValue}>
                 <BrowserRouter>
@@ -50,7 +112,7 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        const usernameInput = screen.getByPlaceholderText('Username') as HTMLInputElement;
+        const usernameInput = (await screen.findByPlaceholderText('Username or email')) as HTMLInputElement;
         const passwordInput = screen.getByPlaceholderText('Password') as HTMLInputElement;
 
         fireEvent.change(usernameInput, { target: { value: 'testuser' } });
@@ -76,7 +138,8 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'testuser' } });
+        await screen.findByPlaceholderText('Username or email');
+        fireEvent.change(screen.getByPlaceholderText('Username or email'), { target: { value: 'testuser' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'password123' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
 
@@ -96,7 +159,8 @@ describe('Login Page', () => {
             </AuthContext.Provider>,
         );
 
-        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'wrong' } });
+        await screen.findByPlaceholderText('Username or email');
+        fireEvent.change(screen.getByPlaceholderText('Username or email'), { target: { value: 'wrong' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'wrong' } });
         fireEvent.click(screen.getByRole('button', { name: /login/i }));
 

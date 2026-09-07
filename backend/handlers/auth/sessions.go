@@ -26,7 +26,7 @@ func (a *AuthAPI) writeSession(w http.ResponseWriter, user *models.User, refresh
 		return
 	}
 	a.setRefreshCookie(w, refreshToken)
-	handlers.WriteJSON(w, http.StatusOK, AuthResponse{AccessToken: accessToken, ExpiresIn: int64(a.cfg.AccessTokenTTL.Seconds()), User: userResponse(user)})
+	handlers.WriteJSON(w, http.StatusOK, AuthResponse{AccessToken: accessToken, ExpiresIn: int64(a.cfg.AccessTokenTTL.Seconds()), User: a.userResponse(user)})
 }
 
 func (a *AuthAPI) newRefreshMaterial(userID string) (raw, hash, id string, expiresAt time.Time, err error) {

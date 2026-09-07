@@ -28,6 +28,14 @@ export default defineConfig({
     server: {
         host: true,
         proxy: {
+            '/api/v1/auth/oidc/session': {
+                target: 'http://oauth2-proxy:4180',
+                changeOrigin: false,
+            },
+            '/oauth2': {
+                target: 'http://oauth2-proxy:4180',
+                changeOrigin: false,
+            },
             '/api': {
                 target: 'http://backend:8080', // Docker service name
                 changeOrigin: true,

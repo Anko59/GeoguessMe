@@ -95,7 +95,7 @@ fi
 # 6. Every documented target is declared .PHONY in the root Makefile.
 # The .PHONY declaration spans backslash-continuation lines, so join them
 # first, then extract the names after the keyword.
-sed -E ':a; /\\$/N; s/\\\n/ /; ta' Makefile |
+sed -E -e ':a' -e '/\\$/N' -e 's/\\\n/ /' -e 'ta' Makefile |
     grep '^\.PHONY:' |
     sed 's/^\.PHONY:[[:space:]]*//' |
     tr ' \t' '\n' | sed '/^$/d' | sort -u >"$tmpdir/phony.txt"

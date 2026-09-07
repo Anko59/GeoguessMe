@@ -1,0 +1,157 @@
+.not-found-page {
+    min-height: 100dvh;
+    padding: clamp(1rem, 4vw, 3rem);
+    display: grid;
+    place-items: center;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background:
+        linear-gradient(145deg, rgba(246, 248, 252, 0.9), rgba(238, 250, 255, 0.94)),
+        url('/app_background.png') center / 640px;
+}
+
+.not-found-page::before,
+.not-found-page::after {
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    content: '';
+    pointer-events: none;
+}
+
+.not-found-page::before {
+    width: min(34rem, 76vw);
+    aspect-ratio: 1;
+    top: -17rem;
+    right: -8rem;
+    background: var(--gradient-blue);
+    opacity: 0.16;
+}
+
+.not-found-page::after {
+    width: min(26rem, 68vw);
+    aspect-ratio: 1;
+    bottom: -15rem;
+    left: -7rem;
+    background: var(--gradient-orange);
+    opacity: 0.16;
+}
+
+.not-found-card {
+    width: min(100%, 35rem);
+    padding: clamp(1.75rem, 5vw, 3.25rem);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.not-found-visual {
+    width: 12rem;
+    height: 10.5rem;
+    margin: 0 auto var(--space-4);
+    display: grid;
+    place-items: start center;
+    position: relative;
+}
+
+.not-found-orbit {
+    width: 10.5rem;
+    aspect-ratio: 1;
+    position: absolute;
+    top: 0;
+    border: 2px dashed rgba(0, 119, 182, 0.24);
+    border-radius: 50%;
+    transform: rotate(-14deg);
+}
+
+.not-found-orbit::after {
+    width: 0.85rem;
+    aspect-ratio: 1;
+    position: absolute;
+    top: 0.8rem;
+    right: 1.25rem;
+    background: var(--gradient-orange);
+    border: 3px solid var(--surface);
+    border-radius: 50%;
+    box-shadow: var(--shadow-xs);
+    content: '';
+}
+
+.not-found-logo-frame {
+    width: 7.25rem;
+    aspect-ratio: 1;
+    margin-top: 1.15rem;
+    display: grid;
+    place-items: center;
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+}
+
+.not-found-logo {
+    width: 5.25rem;
+    height: 5.25rem;
+    display: block;
+    object-fit: contain;
+}
+
+.not-found-code {
+    align-self: end;
+    position: relative;
+    z-index: 2;
+    font-size: 3.6rem;
+    font-weight: 950;
+    letter-spacing: -0.08em;
+    line-height: 0.8;
+}
+
+.not-found-eyebrow {
+    margin-bottom: var(--space-2);
+    color: var(--brand-blue-accessible);
+    font-size: 0.75rem;
+    font-weight: 850;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+
+.not-found-card h1 {
+    margin-bottom: var(--space-3);
+    font-size: clamp(1.85rem, 6vw, 2.6rem);
+    font-weight: 900;
+    letter-spacing: -0.045em;
+}
+
+.not-found-copy {
+    max-width: 28rem;
+    margin: 0 auto var(--space-6);
+    color: var(--ink-muted);
+}
+
+.not-found-action {
+    min-width: min(100%, 15rem);
+}
+
+@media (max-width: 480px) {
+    .not-found-page {
+        padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+            max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    }
+
+    .not-found-card {
+        padding-inline: 1.25rem;
+    }
+
+    .not-found-copy {
+        font-size: 0.95rem;
+    }
+
+    .not-found-action {
+        width: 100%;
+    }
+}

@@ -16,7 +16,7 @@ readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
 # This is the exact signed Restic image published and scanned with the
 # currently deployed development revision. Keep the reference immutable; the
 # release workflow scans this exact value before production promotion.
-readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2e38ff4ffd5e644977a9dab73d3565202acf5b5b@sha256:b5b7f07ab8686f39388f15402206e0b5faa2a232a3bfbe00a7bd823aab34db4d'
+readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-485231d90e45dfd0e5988c93f24412d9eb2ba04e@sha256:321ffe05069a513cecb5022d29beaa82a380fc7333abb6e9412091b423980c53'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
 # shellcheck disable=SC2034
@@ -65,6 +65,10 @@ environment_env_file() {
     printf '%s/%s.env\n' "$SECRET_ROOT" "$1"
 }
 
+oidc_enabled() {
+    grep -Eq '^OIDC_ENABLED=(true|1)$' "$1"
+}
+
 release_dir() {
     printf '%s/releases/%s\n' "$APP_ROOT" "$1"
 }
@@ -85,7 +89,12 @@ compose() {
     fi
     [ -n "$backend" ] || die "$environment has no active backend image metadata"
     [ -n "$web" ] || die "$environment has no active web image metadata"
+    profiles=''
+    if oidc_enabled "$env_file"; then
+        profiles=social
+    fi
     COMPOSE_PROJECT_NAME=$(environment_project "$environment") \
+    COMPOSE_PROFILES="$profiles" \
     GEOGUESSME_ENV_FILE="$env_file" \
     GEOGUESSME_WEB_PORT=$(environment_port "$environment") \
     BACKEND_IMAGE="$backend" \
@@ -94,6 +103,22 @@ compose() {
         --project-directory "$release" \
         -f "$CONFIG_ROOT/compose.production.yaml" \
         -f "$CONFIG_ROOT/compose.hosted.yaml" "$@"
+}
+
+identity_env_file() {
+    printf '%s/identity.env\n' "$SECRET_ROOT"
+}
+
+compose_identity() {
+    release=$1
+    shift
+    env_file=$(identity_env_file)
+    [ -f "$env_file" ] || die "missing identity secret file: $env_file"
+    COMPOSE_PROJECT_NAME=geoguessme-identity \
+        GEOGUESSME_IDENTITY_ENV_FILE="$env_file" \
+        docker compose \
+        --project-directory "$release" \
+        -f "$release/deployment/compose.identity.yaml" "$@"
 }
 
 backup_age_seconds() {
@@ -123,5 +148,5 @@ restic() {
     docker run --rm --network host \
         --env-file "$secret_file" \
         -v "$backup_dir:/backup:ro" \
-        "$RESTIC_IMAGE" "$@"
+        "$RESTIC_IMAGE" /usr/bin/restic "$@"
 }

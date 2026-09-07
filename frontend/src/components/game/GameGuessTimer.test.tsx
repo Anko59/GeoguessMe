@@ -27,6 +27,9 @@ const user: User = {
     email: 'alice@example.test',
     avatar: 'avatar.png',
     email_verified_at: null,
+    password_login_enabled: true,
+    oidc_linked: false,
+    migration_required: false,
 };
 
 const authValue = {
@@ -116,6 +119,9 @@ describe('Game guess timer', () => {
             },
         });
         const onClose = vi.fn();
+        // The timeout endpoint is called when the deadline passes; allow it
+        // to resolve so the missed view stays visible.
+        mocks.post.mockResolvedValueOnce({ data: {} });
         withGame('photo-12', onClose);
 
         expect(await screen.findByText('You did not guess in time')).toBeInTheDocument();

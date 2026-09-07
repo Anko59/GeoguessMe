@@ -11,18 +11,35 @@ which cannot be remediated by bumping a version.
 The target scans the following images (see `AUDIT_IMAGES` in
 `tools/make/deployment.mk`):
 
-- **Database** — `postgres:15-alpine` (digest-pinned).
-- **Web server** — the digest-pinned Caddy 2.11.4 frontend image. Until the
-  official image includes the `golang.org/x/net` v0.56.0 fix, the Dockerfile
-  rebuilds the released Caddy binary from the pinned official builder with that
-  dependency override; the resulting application image is scanned directly.
-- **Deployment utilities** — `cloudflare/cloudflared` and `ghcr.io/getsops/sops`
-  (all digest-pinned). The pinned Restic release is rebuilt with the fixed
-  `golang.org/x/net` module and the remediation image is scanned. The Restic
-  image is published and signed with the exact development revision because
-  hosted backup and restore operations run it on deployment hosts. Terraform is
-  rebuilt with the same dependency fix and covered by `make terraform-test`; it
-  is a local planning tool, not a shipped runtime.
+- **Database** —
+  `geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3`, a locally
+  rebuilt `postgres:15-alpine` (digest-pinned base) that layers the OpenSSL and
+  libuuid packages refreshed to fixed releases (CVE-2026-14456 and the
+  CVE-2026-53612 family). The upstream postgres image still ships the vulnerable
+  package versions.
+- **Web server** — the digest-pinned Caddy 2.11.4 frontend image, which also
+  refreshes curl/libcurl to 8.22.0-r0 and OpenSSL to the fixed releases at build
+  time. Until the official image includes the `golang.org/x/net` v0.56.0 fix,
+  the Dockerfile rebuilds the released Caddy binary from the pinned official
+  builder with that dependency override; the resulting application image is
+  scanned directly.
+- **Deployment utilities** — the newest published `ghcr.io/getsops/sops` image
+  (digest-pinned) and `geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7`, a
+  locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed
+  Debian release; the upstream distroless-based image cannot run package tools,
+  so only the two OpenSSL libraries and their dpkg metadata are layered on top.
+  The pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
+  refreshed in the same way plus the fixed `golang.org/x/net` module, and the
+  remediation images are scanned by their exact image-ID digest — refreshing a
+  remediation layer changes that ID and requires the committed exceptions to be
+  reviewed and repointed, failing closed otherwise. The SOPS base image
+  currently has two time-boxed exceptions for unused `libssh2` findings because
+  no newer SOPS image is published; the hosted deployment uses age keys and does
+  not invoke that package. The Restic image is published and signed with the
+  exact development revision because hosted backup and restore operations run it
+  on deployment hosts. Terraform is rebuilt with the same dependency fix and
+  covered by `make terraform-test`; it is a local planning tool, not a shipped
+  runtime.
 - **Application images** — appended automatically:
     - from the `BACKEND_IMAGE` / `WEB_IMAGE` environment variables when set (CI
       publishes and release promotion scan the exact `name@sha256` digests);
@@ -58,8 +75,10 @@ All passes run through the Dockerized Trivy tool service
 
 ## Exceptions
 
-Committed exceptions live in `tools/quality/image-scan-exceptions.yaml` and are
-validated by `tools/quality/image-scan-exceptions-check.sh`. Each entry requires
+Committed exceptions live in `tools/quality/image-scan-exceptions.yaml` and the
+component-specific `tools/quality/image-scan-exceptions-keycloak.yaml` and
+`tools/quality/image-scan-exceptions-oauth2-proxy.yaml`. They are validated
+together by `tools/quality/image-scan-exceptions-check.sh`. Each entry requires
 all of the following fields:
 
 - `id` — the CVE/GHSA identifier;
