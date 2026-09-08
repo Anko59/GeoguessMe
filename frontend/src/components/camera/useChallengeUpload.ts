@@ -3,7 +3,9 @@ import api from '../../api';
 import type { Group } from '../../types';
 import type React from 'react';
 import { getAPIErrorMessage } from '../../api';
-import { dataURLToBlob, getCurrentPosition, uploadPhoto } from './cameraUtils';
+import { dataURLToBlob, uploadPhoto } from './cameraUtils';
+import { getCurrentPosition } from '../../platform/location';
+import { successFeedback } from '../../platform/haptics';
 import { drawTextBanner, type TextBanner } from './textBanner';
 import type { FaceFrame } from './lenses/facePose';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
@@ -134,6 +136,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
             setCapturedPhoto(null);
             discardRecording();
             setFileMode(false);
+            void successFeedback();
             onUploadComplete();
         } catch (requestError: unknown) {
             const message = requestError instanceof Error ? requestError.message : String(requestError);

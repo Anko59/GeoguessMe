@@ -17,8 +17,10 @@ import NotFound from './pages/not-found/NotFound';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
+import { useNativeAppLifecycle } from './platform/useNativeAppLifecycle';
 
 function AppChrome() {
+    useNativeAppLifecycle();
     usePushBootstrap();
     // Captures #invite=TOKEN fragments into sessionStorage before any auth
     // redirect so the token survives the login/signup hop.

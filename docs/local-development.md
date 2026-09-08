@@ -92,3 +92,6 @@ configuration.md for the complete variable reference.
 Running the backend outside Docker is unsupported. If a new workflow needs a
 tool, add a pinned tool image and a Dockerized Make target instead of
 documenting a host command.
+
+For the Capacitor Android toolchain and the unattended emulator journey, see
+[Mobile application](mobile.md).

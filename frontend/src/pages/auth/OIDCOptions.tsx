@@ -1,3 +1,5 @@
+import { backendURL } from '../../platform/endpoints';
+
 type OIDCOptionsProps = {
     loginPath: string;
     intent: 'login' | 'signup';
@@ -56,7 +58,7 @@ function ProviderLogo({ provider }: { provider: ProviderAlias }) {
 
 function startURL(loginPath: string, parameters: Record<string, string>): string {
     const query = new URLSearchParams({ rd: callbackPath, ...parameters });
-    return `${loginPath}?${query.toString()}`;
+    return backendURL(`${loginPath}?${query.toString()}`);
 }
 
 export default function OIDCOptions({ loginPath, intent, onStart, socialProviders }: OIDCOptionsProps) {

@@ -29,10 +29,10 @@ GeoGuessMe is a multiplayer location game for the moments that deserve a story.
 Create a private group, send a photo or video challenge, and let your friends
 guess where it was taken. Every guess becomes part of the group’s leaderboard.
 
-The app is a responsive, installable web app: open
-**[geoguessme.com](https://geoguessme.com)** in a browser, or add it to your
-phone’s home screen for a more app-like experience. No native install is
-required.
+The app is a responsive, installable web app at
+**[geoguessme.com](https://geoguessme.com)** and shares that React application
+with its Capacitor Android distribution. A browser or PWA installation remains
+fully supported; native installation is optional.
 
 ## 🎥 See it in action
 
@@ -182,6 +182,7 @@ on CI or infrastructure.
 | Play the game               | [geoguessme.com](https://geoguessme.com)                                      |
 | Learn the rules             | [Gameplay](docs/gameplay.md)                                                  |
 | Run it locally              | [Local development](docs/local-development.md)                                |
+| Build or test Android       | [Mobile application](docs/mobile.md)                                          |
 | Understand the system       | [Architecture](docs/architecture.md)                                          |
 | Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)        |
 | Test a change               | [Testing guide](docs/testing.md)                                              |

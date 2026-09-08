@@ -6,6 +6,7 @@ import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
 import type { OIDCConfig } from '../../types';
+import { backendURL } from '../../platform/endpoints';
 import './AccountSettings.css';
 
 const avatars = Array.from({ length: 10 }, (_, index) => (index === 0 ? 'avatar.png' : `avatar${index + 1}.png`));
@@ -148,7 +149,7 @@ export default function AccountSettings() {
         try {
             await api.post('/auth/oidc/link');
             sessionStorage.setItem('geoguessme_oidc_return_to', '/settings');
-            window.location.assign('/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback');
+            window.location.assign(backendURL('/oauth2/start?rd=%2Fauth%2Foidc%2Fcallback'));
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Unable to start Keycloak login setup'));
             setLinking(false);
@@ -162,7 +163,10 @@ export default function AccountSettings() {
             const data = user?.password_login_enabled ? { password } : { confirmation: password };
             await api.delete('/auth/account', { data });
             if (typeof fetch === 'function') {
-                await fetch('/oauth2/sign_out', { credentials: 'include', redirect: 'manual' }).catch(() => undefined);
+                await fetch(backendURL('/oauth2/sign_out'), {
+                    credentials: 'include',
+                    redirect: 'manual',
+                }).catch(() => undefined);
             }
             await refresh();
             navigate('/', { replace: true });

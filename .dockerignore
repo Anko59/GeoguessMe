@@ -4,6 +4,7 @@
 .git
 .github
 .pi
+.local
 docs
 backups
 *.log
@@ -33,6 +34,9 @@ frontend/test-results
 frontend/playwright-report
 frontend/coverage
 frontend/e2e/.auth
+frontend/android
+frontend/mobile-e2e
+frontend/capacitor.config.ts
 
 # Image audits retain reports and a reusable vulnerability database locally.
 # They are runtime verification artifacts, never application build inputs.

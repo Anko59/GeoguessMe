@@ -1,0 +1,58 @@
+appId: com.geoguessme.app
+name: GeoGuessMe Android core journey
+---
+- launchApp:
+    clearState: true
+- tapOn: "Already Playing? Login"
+- extendedWaitUntil:
+    visible: "Welcome Back!"
+    timeout: 30000
+- tapOn: "Username or email"
+- inputText: ${MOBILE_USERNAME}
+- tapOn: "Password"
+- inputText: ${MOBILE_PASSWORD}
+- tapOn: "Login"
+- extendedWaitUntil:
+    visible: "My Groups"
+    timeout: 30000
+- tapOn: ${MOBILE_GROUP_NAME}
+- extendedWaitUntil:
+    visible: "Connected"
+    timeout: 30000
+- tapOn: "Message"
+- inputText: "Hello from Android"
+- tapOn: "Send message"
+- assertVisible: "Hello from Android"
+- tapOn: "Accept challenge"
+- extendedWaitUntil:
+    visible: "Where was this taken?"
+    timeout: 30000
+- tapOn:
+    point: "50%,55%"
+- extendedWaitUntil:
+    visible: "Submit guess"
+    timeout: 10000
+- tapOn: "Submit guess"
+- extendedWaitUntil:
+    visible: "Challenge results"
+    timeout: 30000
+- tapOn: "Close"
+- tapOn: "Camera"
+- tapOn:
+    text: "While using the app"
+    optional: true
+- tapOn:
+    text: "Allow"
+    optional: true
+- tapOn:
+    text: "While using the app"
+    optional: true
+- extendedWaitUntil:
+    visible: "Take photo"
+    timeout: 30000
+- tapOn: "Take photo"
+- assertVisible: "Retake"
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "Challenge sent"
+    timeout: 30000

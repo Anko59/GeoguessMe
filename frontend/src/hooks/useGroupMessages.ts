@@ -9,6 +9,7 @@ import {
 import { chatStreamReducer, initialChatStreamState } from '../chat/chatStream';
 import type { Message, MessagesPage } from '../types';
 import { readCachedMessages, saveCachedMessages } from '../utils/pwaSessionCache';
+import { websocketURL } from '../platform/endpoints';
 
 export type ConnectionStatus = ChatConnectionStatus;
 
@@ -146,8 +147,8 @@ export function useGroupMessages(groupId: string | undefined, userID?: string): 
                 return response.data.ticket;
             },
             buildSocketURL: (ticket: string): string => {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                return `${protocol}//${window.location.host}/api/v1/ws?group_id=${encodeURIComponent(groupId)}&ticket=${encodeURIComponent(ticket)}`;
+                const params = new URLSearchParams({ group_id: groupId, ticket });
+                return websocketURL(`/api/v1/ws?${params.toString()}`);
             },
             fetchPage: async (query) => {
                 const response = await api.get<MessagesPage | Message[]>('/group/messages', {
