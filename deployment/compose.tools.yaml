@@ -16,6 +16,32 @@ x-host-tools: &host-tools
     - host.docker.internal:host-gateway
 
 services:
+  mobile-tools:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/tools/mobile-tools.Dockerfile
+    image: geoguessme/mobile-tools:android-36-maestro-2.10.0
+    network_mode: host
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - ./:/workspace
+      - ./.local/mobile/android-sdk:/opt/android-sdk
+      - ./.local/mobile/android-home:/root/.android
+      - ./.local/mobile/gradle:/root/.gradle
+      - frontend-node-modules:/workspace/frontend/node_modules
+    tmpfs:
+      - /emulator-data:size=8g,mode=1777
+
+  mobile-tools-kvm:
+    extends: mobile-tools
+    image: geoguessme/mobile-tools:android-36-maestro-2.10.0
+    devices:
+      - /dev/kvm:/dev/kvm
+
   go-tools:
     <<: *host-tools
     build:

@@ -3,6 +3,7 @@ import api, { refreshAuthSession, setAccessToken } from '../api';
 import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthResponse } from '../types';
 import { clearCachedSession, readSessionHint, saveSessionHint } from '../utils/pwaSessionCache';
+import { backendURL } from '../platform/endpoints';
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<AuthContextValue['user']>(() => readSessionHint());
@@ -30,7 +31,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             await api.post('/auth/logout');
         } finally {
             if (typeof fetch === 'function') {
-                await fetch('/oauth2/sign_out', { credentials: 'include', redirect: 'manual' }).catch(() => undefined);
+                await fetch(backendURL('/oauth2/sign_out'), {
+                    credentials: 'include',
+                    redirect: 'manual',
+                }).catch(() => undefined);
             }
             setAccessToken(null);
             setUser(null);

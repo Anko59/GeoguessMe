@@ -21,6 +21,8 @@ and submit one server-timed guess.
   matrix, canonical commands, invariants, and compatibility ledger for AI agents
 - [Local development](local-development.md) — prerequisites, `make dev`, hot
   reload
+- [Mobile application](mobile.md) — Capacitor architecture, Android build and
+  emulator testing, and the iOS enablement path
 - [Configuration](configuration.md) — every environment variable, defaults,
   validation
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility

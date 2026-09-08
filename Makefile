@@ -16,6 +16,7 @@
 include tools/make/setup.mk
 include tools/make/quality.mk
 include tools/make/tests.mk
+include tools/make/mobile.mk
 include tools/make/deployment.mk
 include tools/make/maintenance.mk
 include tools/make/docs-agent-config.mk
@@ -30,6 +31,7 @@ include tools/make/openapi-contract.mk
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
+	mobile-init mobile-prepare mobile-sync mobile-build mobile-test test-mobile \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
 	audit deps-go-security-update deps-npm-security-update deps-npm-lock \

@@ -1,5 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { APIErrorBody, AuthResponse } from './types';
+import { apiBaseURL } from './platform/endpoints';
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
@@ -12,7 +13,7 @@ export const setAccessToken = (token: string | null): void => {
 export const getAccessToken = (): string | null => accessToken;
 
 const api = axios.create({
-    baseURL: '/api/v1',
+    baseURL: apiBaseURL,
     withCredentials: true,
 });
 
@@ -35,7 +36,7 @@ function isPublicAuthRequest(url: string | undefined): boolean {
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
         refreshPromise = axios
-            .post<AuthResponse>('/api/v1/auth/refresh', undefined, { withCredentials: true })
+            .post<AuthResponse>(`${apiBaseURL}/auth/refresh`, undefined, { withCredentials: true })
             .then((response) => {
                 setAccessToken(response.data.access_token);
                 return response.data;
@@ -54,7 +55,7 @@ export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
 export const exchangeOIDCSession = async (username?: string): Promise<AuthResponse> => {
     if (!oidcExchangePromise) {
         oidcExchangePromise = axios
-            .post<AuthResponse>('/api/v1/auth/oidc/session', username ? { username } : undefined, {
+            .post<AuthResponse>(`${apiBaseURL}/auth/oidc/session`, username ? { username } : undefined, {
                 withCredentials: true,
             })
             .then((response) => {
