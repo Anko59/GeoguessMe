@@ -96,6 +96,38 @@ native version code/name, build an AAB from the validated revision, and retain
 the signed artifact digest with release evidence. Store submission and signing
 are outside the automated debug workflow.
 
+The Dockerized release flow keeps the upload key under ignored `.local/` and
+passes passwords only as environment variables. In a private shell, export two
+passwords without putting them in the command history, then create the key once:
+
+```text
+read -r -s -p 'Keystore password: ' MOBILE_KEYSTORE_PASSWORD
+export MOBILE_KEYSTORE_PASSWORD
+read -r -s -p 'Key password: ' MOBILE_KEY_PASSWORD
+export MOBILE_KEY_PASSWORD
+make mobile-keystore
+unset MOBILE_KEYSTORE_PASSWORD MOBILE_KEY_PASSWORD
+```
+
+Keep the keystore and both passwords in separate secure backups. To build a
+release bundle, export the passwords again and run the build from the validated
+revision:
+
+```text
+read -r -s -p 'Keystore password: ' MOBILE_KEYSTORE_PASSWORD
+export MOBILE_KEYSTORE_PASSWORD
+read -r -s -p 'Key password: ' MOBILE_KEY_PASSWORD
+export MOBILE_KEY_PASSWORD
+make mobile-build-release
+unset MOBILE_KEYSTORE_PASSWORD MOBILE_KEY_PASSWORD
+```
+
+The resulting signed bundle is
+`frontend/android/app/build/outputs/bundle/release/app-release.aab`. The release
+task fails closed unless all signing values are present; no debug key fallback
+is allowed. The default package is `com.geoguessme.app` and the version comes
+from `.release-version`.
+
 App links recognize `https://geoguessme.com`, `https://www.geoguessme.com`, and
 the `geoguessme:` custom scheme. HTTPS app links become verified only after the
 production site serves an Android Digital Asset Links file for the actual

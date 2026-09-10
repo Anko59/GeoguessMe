@@ -6,6 +6,23 @@ if (releaseParts.size() != 3) {
     throw new GradleException('.release-version must contain major.minor.patch')
 }
 
+def releaseSigningEnvironment = [
+    'MOBILE_KEYSTORE_PATH',
+    'MOBILE_KEYSTORE_PASSWORD',
+    'MOBILE_KEY_ALIAS',
+    'MOBILE_KEY_PASSWORD'
+].collectEntries { name -> [name, System.getenv(name)?.trim()] }
+def missingReleaseSigning = releaseSigningEnvironment.findAll { name, value -> !value }.keySet()
+def releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase().contains('release')
+}
+if (releaseTaskRequested && !missingReleaseSigning.empty) {
+    throw new GradleException(
+        "Release signing is not configured. Set: ${missingReleaseSigning.join(', ')}"
+    )
+}
+def releaseSigningConfigured = missingReleaseSigning.empty
+
 android {
     namespace = "com.geoguessme.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -23,11 +40,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(releaseSigningEnvironment.MOBILE_KEYSTORE_PATH)
+                storePassword releaseSigningEnvironment.MOBILE_KEYSTORE_PASSWORD
+                keyAlias releaseSigningEnvironment.MOBILE_KEY_ALIAS
+                keyPassword releaseSigningEnvironment.MOBILE_KEY_PASSWORD
+            }
+        }
+    }
     buildTypes {
         debug {
             manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

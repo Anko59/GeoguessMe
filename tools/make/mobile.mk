@@ -5,9 +5,17 @@
 MOBILE_API_ORIGIN ?= https://geoguessme.com
 MOBILE_WEB_ORIGIN ?= https://geoguessme.com
 CAPACITOR_SERVER_URL ?=
+MOBILE_KEYSTORE_PATH ?= /workspace/.local/mobile/upload-keystore.jks
+MOBILE_KEY_ALIAS ?= geoguessme-upload
 MOBILE_TOOLS_SERVICE := $(if $(wildcard /dev/kvm),mobile-tools-kvm,mobile-tools)
 MOBILE_TOOLS_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) $(MOBILE_TOOLS_SERVICE)
+MOBILE_TOOLS_RELEASE_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
+	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) \
+	-e MOBILE_KEYSTORE_PATH=$(MOBILE_KEYSTORE_PATH) \
+	-e MOBILE_KEY_ALIAS=$(MOBILE_KEY_ALIAS) \
+	-e MOBILE_KEYSTORE_PASSWORD -e MOBILE_KEY_PASSWORD \
+	$(MOBILE_TOOLS_SERVICE)
 
 ##@ Mobile
 mobile-init: ## Generate the tracked Capacitor Android project when absent.
@@ -29,6 +37,14 @@ mobile-sync: mobile-init ## Build shared web assets and sync them into the Andro
 
 mobile-build: mobile-prepare mobile-sync ## Build a debug APK entirely through Docker.
 	$(MOBILE_TOOLS_RUN) tools/mobile/build-android.sh
+
+mobile-keystore: mobile-prepare ## Create a local upload keystore from exported passwords.
+	$(MOBILE_TOOLS_RELEASE_RUN) \
+		tools/mobile/create-upload-keystore.sh
+
+mobile-build-release: mobile-prepare mobile-sync ## Build the signed release AAB entirely through Docker.
+	$(MOBILE_TOOLS_RELEASE_RUN) \
+		tools/mobile/build-android-release.sh
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
