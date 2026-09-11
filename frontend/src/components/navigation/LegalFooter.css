@@ -5,6 +5,21 @@
     font-size: 0.8rem;
 }
 
+.app-root-home {
+    position: relative;
+}
+
+.app-root-home .legal-footer {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    padding-block: 0.55rem 0.8rem;
+    background: rgba(255, 255, 255, 0.84);
+    backdrop-filter: blur(12px);
+}
+
 .legal-footer-inner {
     width: min(100%, 70rem);
     margin-inline: auto;
@@ -40,5 +55,9 @@
 
     .legal-footer-links {
         justify-content: flex-start;
+    }
+
+    .app-root-home .legal-footer {
+        padding-block: 0.45rem 0.65rem;
     }
 }

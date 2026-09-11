@@ -118,6 +118,7 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
+        expect(document.querySelector('.app-root-home')).toBeInTheDocument();
     });
 
     it('renders the login page at /login', async () => {

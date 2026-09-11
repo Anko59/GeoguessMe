@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Home from './pages/home/Home';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
@@ -21,12 +21,13 @@ import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
 
 function AppChrome() {
+    const location = useLocation();
     usePushBootstrap();
     // Captures #invite=TOKEN fragments into sessionStorage before any auth
     // redirect so the token survives the login/signup hop.
     useInviteFragmentCapture();
     return (
-        <div className="app-root">
+        <div className={`app-root${location.pathname === '/' ? ' app-root-home' : ''}`}>
             <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
