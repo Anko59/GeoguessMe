@@ -33,6 +33,42 @@ afterEach(() => {
 });
 
 describe('Earth scene', () => {
+    it('releases partially initialized resources if observing the canvas fails', () => {
+        const texture = new THREE.Texture<HTMLImageElement>();
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(texture);
+        const releaseTexture = vi.spyOn(texture, 'dispose');
+        vi.stubGlobal(
+            'ResizeObserver',
+            class {
+                observe() {
+                    throw new Error('observe failed');
+                }
+                disconnect = mocks.disconnect;
+            },
+        );
+        const host = document.createElement('div');
+        expect(() => createGlobeScene(host, vi.fn(), vi.fn())).toThrow('observe failed');
+        expect(host.children).toHaveLength(0);
+        expect(releaseTexture).toHaveBeenCalledOnce();
+        expect(mocks.disconnect).toHaveBeenCalledOnce();
+        expect(mocks.dispose).toHaveBeenCalledOnce();
+    });
+
+    it('ignores a texture completing after the globe is closed', () => {
+        const texture = new THREE.Texture<HTMLImageElement>();
+        let complete: ((texture: THREE.Texture<HTMLImageElement>) => void) | undefined;
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            complete = onLoad;
+            return texture;
+        });
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn());
+        globe.dispose();
+        mocks.render.mockClear();
+        complete?.(texture);
+        expect(mocks.render).not.toHaveBeenCalled();
+        globe.dispose();
+        expect(mocks.dispose).toHaveBeenCalledOnce();
+    });
     it('aligns Greenwich, poles and the date line to the Earth texture', () => {
         expect(globePosition(0, 0).x).toBeCloseTo(1);
         expect(globePosition(90, 0).y).toBeCloseTo(1);
@@ -64,10 +100,18 @@ describe('Earth scene', () => {
             lat: 0,
             long: 0,
         };
-        globe.update([item, { ...item, photo_id: 'hidden', lat: undefined, long: undefined }], 'p');
+        const items = [item, { ...item, photo_id: 'hidden', lat: undefined, long: undefined }];
+        globe.update(items, 'p');
         const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
         const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
         expect(pins.count).toBe(1);
+        const matrixVersion = pins.instanceMatrix.version;
+        globe.update(items, null);
+        expect(scene.children).toContain(pins);
+        expect(pins.instanceMatrix.version).toBe(matrixVersion);
+        const pinColor = new THREE.Color();
+        pins.getColorAt(0, pinColor);
+        expect(pinColor.getHexString()).toBe('ffb638');
         globe.focus(item);
         expect(camera.position.x).toBeCloseTo(camera.position.length());
         globe.zoom(100);
@@ -121,21 +165,42 @@ describe('Earth scene', () => {
             width: 500,
             height: 400,
         } as DOMRect);
-        const click = (drag = false) => {
+        const click = (drag = false, offset = 0) => {
             scene.updateMatrixWorld(true);
             camera.updateMatrixWorld(true);
-            canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 250, clientY: 200, pointerId: 1 }));
+            canvas.dispatchEvent(
+                new PointerEvent('pointerdown', {
+                    clientX: 250 + offset,
+                    clientY: 200,
+                    pointerId: 1,
+                    pointerType: 'touch',
+                }),
+            );
             if (drag)
                 canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 280, clientY: 200, pointerId: 1 }));
-            canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 250, clientY: 200, pointerId: 1 }));
+            canvas.dispatchEvent(
+                new PointerEvent('pointerup', {
+                    clientX: 250 + offset,
+                    clientY: 200,
+                    pointerId: 1,
+                    pointerType: 'touch',
+                }),
+            );
         };
         click();
         expect(select).toHaveBeenCalledWith('front');
         select.mockClear();
+        click(false, 18);
+        expect(select).toHaveBeenCalledWith('front');
+        select.mockClear();
+        click(false, 30);
+        expect(select).not.toHaveBeenCalled();
         click(true);
         expect(select).not.toHaveBeenCalled();
         globe.update([back], null);
         click();
+        expect(select).not.toHaveBeenCalled();
+        click(false, 18);
         expect(select).not.toHaveBeenCalled();
         globe.dispose();
         host.remove();

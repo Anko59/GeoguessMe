@@ -65,6 +65,7 @@ describe('GroupGlobe', () => {
         expect(screen.getByTestId('pins')).toHaveTextContent('p1');
         expect(screen.getByTestId('pins')).not.toHaveTextContent('p2');
         fireEvent.click(screen.getByRole('button', { name: /Alice/ }));
+        expect(screen.getByRole('region', { name: 'Selected challenge' })).toHaveFocus();
         fireEvent.click(screen.getByRole('button', { name: 'View results' }));
         expect(props.onChallenge).toHaveBeenCalledWith(
             expect.objectContaining({ photo_id: 'p1', group_id: 'g1', kind: 'challenge' }),
@@ -108,6 +109,18 @@ describe('GroupGlobe', () => {
         await screen.findByRole('alert');
         expect(get).toHaveBeenCalledTimes(2);
         expect(screen.queryByText('Alice')).toBeNull();
+    });
+
+    it('clears already displayed data immediately when refreshed access is denied', async () => {
+        get.mockResolvedValueOnce({ data: { items: [challenge] } }).mockRejectedValueOnce({
+            response: { status: 403 },
+        });
+        render(<GroupGlobe {...props} />);
+        await screen.findByText('Alice');
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        expect(screen.queryByText('Alice')).toBeNull();
+        await screen.findByRole('alert');
+        expect(screen.getByTestId('pins')).toBeEmptyDOMElement();
     });
 
     it('closes via Escape or the close button and restores focus on unmount', async () => {

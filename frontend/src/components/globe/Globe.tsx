@@ -34,9 +34,11 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
     }, [onSelect]);
     useEffect(() => {
         scene.current?.update(items, selectedID);
-        const selected = items.find((item) => item.photo_id === selectedID);
-        if (selected) scene.current?.focus(selected);
     }, [items, selectedID, ready]);
+    const selected = items.find((item) => item.photo_id === selectedID);
+    useEffect(() => {
+        if (selected) scene.current?.focus(selected);
+    }, [selected, ready]);
     return (
         <div className="globe-stage">
             <div ref={host} className="globe-canvas" />

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Globe from './Globe';
+import type { GroupChallenge } from '../../types';
 
 const mocks = vi.hoisted(() => ({
     create: vi.fn(),
@@ -16,6 +17,30 @@ beforeEach(() => {
     mocks.create.mockReturnValue(mocks);
 });
 describe('Globe', () => {
+    it('does not recenter an explored globe when another history page arrives', async () => {
+        const item: GroupChallenge = {
+            photo_id: 'p',
+            group_id: 'g',
+            user_id: 'u',
+            username: 'Alice',
+            created_at: '',
+            expires_at: '',
+            status: 'results',
+            lat: 48,
+            long: 2,
+        };
+        const onSelect = vi.fn();
+        const view = render(<Globe items={[item]} selectedID="p" onSelect={onSelect} />);
+        await screen.findByRole('button', { name: 'Rotate globe left' });
+        expect(mocks.focus).toHaveBeenCalledWith(item);
+        mocks.focus.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Rotate globe left' }));
+        view.rerender(<Globe items={[item, { ...item, photo_id: 'older' }]} selectedID="p" onSelect={onSelect} />);
+        expect(mocks.focus).not.toHaveBeenCalled();
+        view.rerender(<Globe items={[item]} selectedID={null} onSelect={onSelect} />);
+        view.rerender(<Globe items={[item]} selectedID="p" onSelect={onSelect} />);
+        expect(mocks.focus).toHaveBeenCalledOnce();
+    });
     it('offers keyboard accessible rotation and zoom, then disposes on close', async () => {
         const onSelect = vi.fn();
         const view = render(<Globe items={[]} selectedID={null} onSelect={onSelect} />);

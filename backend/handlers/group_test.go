@@ -23,18 +23,23 @@ func TestGroupChallengeFeed(t *testing.T) {
 		status       int
 	}{
 		{"invalid group", "/?group_id=invalid", false, 400},
+		{"missing group", "/", false, 400},
 		{"outsider", "/?group_id=" + groupID, false, 403},
 		{"invalid cursor", "/?group_id=" + groupID + "&cursor=invalid", true, 400},
 		{"empty group", "/?group_id=" + groupID, true, 200},
+		{"database failure", "/?group_id=" + groupID, true, 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pool := newMockPool(t)
 			api := newGameAPI(t, pool)
-			if tc.name != "invalid group" {
+			if tc.name != "invalid group" && tc.name != "missing group" {
 				pool.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(tc.member))
 			}
 			if tc.status == 200 {
 				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}))
+			}
+			if tc.status == 500 {
+				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnError(errors.New("private database details"))
 			}
 			recorder := httptest.NewRecorder()
 			api.GetGroupChallenges(recorder, requestWithUser(http.MethodGet, tc.target, "", "viewer"))
@@ -43,6 +48,9 @@ func TestGroupChallengeFeed(t *testing.T) {
 			}
 			if tc.status == 200 && (!strings.Contains(recorder.Body.String(), `"items":[]`) || recorder.Header().Get("Cache-Control") != "private, no-store") {
 				t.Fatalf("invalid empty response: %s", recorder.Body.String())
+			}
+			if tc.status == 500 && strings.Contains(recorder.Body.String(), "private database details") {
+				t.Fatal("database details leaked in the response")
 			}
 		})
 	}

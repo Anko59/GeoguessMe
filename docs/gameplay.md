@@ -37,6 +37,12 @@ includes the group's full challenge history, even after media removal; it loads
 independently of the currently visible chat messages. Reopen the globe or select
 **Refresh** to fetch new challenges and newly revealed locations.
 
+Search the full history by player, or filter the list to challenges ready to
+play or locations already revealed. The list shows 50 challenges per page to
+keep long histories responsive; the globe still shows all revealed locations.
+Selecting a challenge brings its details into view and puts keyboard focus next
+to **Play challenge** or **View results**. Pins have expanded touch targets.
+
 Only locations the current member can view in results are pinned. Unplayed
 challenges stay in the list without coordinates. The poster's timed location
 privacy setting still applies after a guess or challenge expiry. An author can

@@ -7,11 +7,15 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"geoguessme/internal/repository/groups/atlas"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,6 +132,60 @@ func TestGroupGlobeHistoryAndPrivacy(t *testing.T) {
 	require.Equal(t, "guessed", played.Items[0].Status)
 	resp, _ := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupA, nil, "", nil)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestGroupGlobePaginationAndRevocation(t *testing.T) {
+	alice := signup(t, unique("globeowner"), unique("globeowner")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("globemember"), unique("globemember")+"@example.test", "StrongPassword123")
+	groupID, invite := createGroup(t, alice.access, "Globe history")
+	joinGroup(t, bob.access, invite)
+	db := testDB(t)
+	ids := make([]string, 102)
+	for i := range ids {
+		ids[i] = uuid.NewString()
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
+	created := time.Date(2020, 1, 1, 12, 0, 0, 123000, time.UTC)
+	// Tie every timestamp and omit chat messages/media to exercise actual SQL
+	// ordering and retained history independently of the chat and storage paths.
+	_, err := db.Exec(t.Context(), `INSERT INTO photos
+		(id, group_id, user_id, lat, long, lifecycle_status, created_at, expires_at, retention_at)
+		SELECT id, $2, $3, 0, 0, 'removed', $4, $4, $4 FROM unnest($1::text[]) AS id`, ids, groupID, alice.userID, created)
+	require.NoError(t, err)
+	read := func(cursor string) atlas.Page {
+		t.Helper()
+		resp, body := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupID+"&cursor="+url.QueryEscape(cursor), nil, bob.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+		var page atlas.Page
+		require.NoError(t, jsonUnmarshal(body, &page))
+		return page
+	}
+	first := read("")
+	require.Len(t, first.Items, 100)
+	require.NotEmpty(t, first.NextCursor)
+	for i, item := range first.Items {
+		require.Equal(t, ids[i], item.PhotoID)
+		require.Equal(t, "expired", item.Status)
+		require.NotNil(t, item.Lat)
+		require.Zero(t, *item.Lat)
+	}
+	// Pagination is stable even if the anchor disappears and a newer challenge
+	// arrives before the next request.
+	_, err = db.Exec(t.Context(), `DELETE FROM photos WHERE id = $1`, ids[99])
+	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO photos
+		(id, group_id, user_id, lat, long, lifecycle_status, created_at, expires_at, retention_at)
+		VALUES ($1, $2, $3, 0, 0, 'removed', $4, $4, $4)`, uuid.NewString(), groupID, alice.userID, created.Add(time.Hour))
+	require.NoError(t, err)
+	last := read(first.NextCursor)
+	require.Len(t, last.Items, 2)
+	require.Empty(t, last.NextCursor)
+	require.Equal(t, ids[100], last.Items[0].PhotoID)
+	require.Equal(t, ids[101], last.Items[1].PhotoID)
+	_, err = db.Exec(t.Context(), `DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, bob.userID)
+	require.NoError(t, err)
+	resp, body := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupID+"&cursor="+url.QueryEscape(first.NextCursor), nil, bob.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode, string(body))
 }
 
 func TestGroupPhotoAndNotificationSettings(t *testing.T) {

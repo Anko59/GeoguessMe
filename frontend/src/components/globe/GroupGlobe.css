@@ -6,14 +6,18 @@
     color: var(--ink);
     background: var(--surface, #fff);
     border: 1px solid var(--line);
-    border-radius: 24px;
-    box-shadow: 0 24px 80px #0006;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
 }
 
 .group-globe::backdrop {
     background: #07162be6;
 }
 .globe-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -24,6 +28,7 @@
     margin: 0 0 0.25rem;
     color: var(--ink-subtle);
     font-size: 0.8rem;
+    overflow-wrap: anywhere;
 }
 .globe-header h2 {
     margin: 0;
@@ -36,6 +41,9 @@
     width: 44px;
     height: 44px;
     flex: none;
+    color: var(--ink-muted);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
     border-radius: 50%;
 }
 .globe-layout {
@@ -64,8 +72,8 @@
     transform: translateX(-50%);
 }
 .globe-controls button {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     color: #fff;
     background: #102d49;
@@ -110,6 +118,9 @@
 .globe-history-heading button {
     min-height: 44px;
     padding: 0.5rem;
+    color: var(--brand-blue-accessible);
+    background: var(--surface-brand);
+    border-radius: var(--radius-sm);
 }
 .globe-summary {
     margin: 0.3rem 0 1rem;
@@ -126,6 +137,8 @@
     background: var(--surface-soft);
     border: 1px solid var(--brand-blue);
     border-radius: 16px;
+    scroll-margin-block: 7rem 1rem;
+    overflow-wrap: anywhere;
 }
 .globe-selection p {
     font-size: 0.85rem;
@@ -145,6 +158,14 @@
     border: 0;
     border-bottom: 1px solid var(--line);
     border-radius: 8px;
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+}
+.globe-challenge-list button > span:last-child {
+    min-width: 0;
+}
+.globe-challenge-list button:hover {
+    background: var(--surface-brand);
 }
 .globe-challenge-list button[aria-pressed='true'] {
     background: var(--surface-soft);
@@ -171,6 +192,54 @@
     border: 1px solid var(--ink-subtle);
 }
 
+.globe-history-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-block: 1rem;
+}
+.globe-history-filters input,
+.globe-history-filters select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0.5rem;
+    color: var(--ink-strong);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+.globe-history-filters select:focus-visible {
+    box-shadow: var(--focus-ring);
+}
+.globe-challenge-list .globe-challenge-status {
+    display: block;
+    color: var(--brand-blue-accessible);
+    font-weight: 600;
+}
+.globe-history-pages {
+    position: sticky;
+    bottom: -1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-block: 0.5rem;
+    background: var(--surface);
+    font-size: 0.85rem;
+}
+.globe-history-pages button {
+    min-height: 44px;
+    padding: 0.5rem;
+    color: var(--brand-blue-accessible);
+    background: var(--surface-brand);
+    border-radius: var(--radius-sm);
+}
+.globe-history-pages button:disabled {
+    opacity: 0.5;
+}
+
 @media (width <= 650px) {
     .group-globe {
         width: 100%;
@@ -188,6 +257,7 @@
     }
     .globe-history {
         max-height: none;
+        overflow-y: visible;
         padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
     }
     .globe-header {

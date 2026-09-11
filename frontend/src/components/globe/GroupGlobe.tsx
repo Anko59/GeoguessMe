@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { GroupChallenge, Message } from '../../types';
 import Icon from '../ui/Icon';
 import Globe from './Globe';
+import ChallengeHistory from './ChallengeHistory';
+import { challengeStatusLabel, locationLabel } from './challengeLabels';
 import { useGroupChallenges } from './useGroupChallenges';
 import './GroupGlobe.css';
 
@@ -12,18 +14,19 @@ interface GroupGlobeProps {
     onChallenge: (message: Message) => void;
 }
 
-function locationLabel(item: GroupChallenge) {
-    if (item.lat !== undefined && item.long !== undefined) return `${item.lat.toFixed(2)}°, ${item.long.toFixed(2)}°`;
-    if (item.location_reveals_at) return `Location hidden until ${new Date(item.location_reveals_at).toLocaleString()}`;
-    return 'Guess this challenge to reveal its location';
-}
-
 export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }: GroupGlobeProps) {
     const dialog = useRef<HTMLDialogElement>(null);
+    const selection = useRef<HTMLDivElement>(null);
     const { items, loading, error, refresh } = useGroupChallenges(groupID);
     const [selectedID, setSelectedID] = useState<string | null>(null);
     const selected = items.find((item) => item.photo_id === selectedID);
     const located = items.filter((item) => item.lat !== undefined && item.long !== undefined).length;
+    useEffect(() => {
+        if (selected) {
+            selection.current?.focus({ preventScroll: true });
+            selection.current?.scrollIntoView({ block: 'nearest' });
+        }
+    }, [selected]);
     useEffect(() => {
         const element = dialog.current;
         const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -83,43 +86,40 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
                     <p className="globe-hint">
                         Drag to explore, pinch or scroll to zoom. Select a pin or a challenge below.
                     </p>
+                    {items.length > located && (
+                        <p className="globe-hint">
+                            Hidden locations stay off the globe until you're allowed to see them.
+                        </p>
+                    )}
                     {loading && <p role="status">Loading group challenges…</p>}
                     {error && <p role="alert">{error}</p>}
                     {!loading && !error && items.length === 0 && (
                         <p>No geochallenges yet. Send your first one from the camera!</p>
                     )}
                     {selected && (
-                        <div className="globe-selection" aria-live="polite">
+                        <div
+                            ref={selection}
+                            className="globe-selection"
+                            role="region"
+                            aria-label="Selected challenge"
+                            tabIndex={-1}
+                        >
                             <strong>{selected.username}'s challenge</strong>
+                            <p>
+                                {challengeStatusLabel(selected)} ·{' '}
+                                <time dateTime={selected.created_at}>
+                                    {new Date(selected.created_at).toLocaleDateString()}
+                                </time>
+                            </p>
                             <p>{locationLabel(selected)}</p>
                             <button type="button" className="btn btn-primary" onClick={() => openChallenge(selected)}>
                                 {selected.status === 'available' ? 'Play challenge' : 'View results'}
                             </button>
                         </div>
                     )}
-                    <ul className="globe-challenge-list">
-                        {items.map((item) => (
-                            <li key={item.photo_id}>
-                                <button
-                                    type="button"
-                                    aria-pressed={selectedID === item.photo_id}
-                                    onClick={() => setSelectedID(item.photo_id)}
-                                >
-                                    <span
-                                        className={`globe-location-dot ${item.lat === undefined ? 'is-hidden' : ''}`}
-                                        aria-hidden="true"
-                                    />
-                                    <span>
-                                        <strong>{item.username}</strong>
-                                        <time dateTime={item.created_at}>
-                                            {new Date(item.created_at).toLocaleString()}
-                                        </time>
-                                        <span>{locationLabel(item)}</span>
-                                    </span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+                    {items.length > 0 && (
+                        <ChallengeHistory items={items} selectedID={selectedID} onSelect={setSelectedID} />
+                    )}
                 </section>
             </div>
         </dialog>
