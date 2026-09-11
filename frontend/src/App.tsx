@@ -14,7 +14,9 @@ import OIDCCallback from './pages/auth/OIDCCallback';
 import AccountSettings from './pages/account/AccountSettings';
 import ProfilePage from './pages/profile/ProfilePage';
 import NotFound from './pages/not-found/NotFound';
+import PrivacyPolicy from './pages/privacy/PrivacyPolicy';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
+import LegalFooter from './components/navigation/LegalFooter';
 import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
 
@@ -34,6 +36,7 @@ function AppChrome() {
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/auth/oidc/callback" element={<OIDCCallback />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route
                     path="/groups"
                     element={
@@ -92,6 +95,7 @@ function AppChrome() {
                 />
                 <Route path="*" element={<NotFound />} />
             </Routes>
+            <LegalFooter />
             <PwaOnboarding />
         </div>
     );

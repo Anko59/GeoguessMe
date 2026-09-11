@@ -1,0 +1,44 @@
+.legal-footer {
+    padding: 1rem clamp(1rem, 3vw, 2rem) 1.5rem;
+    color: var(--ink-subtle);
+    background: var(--surface-soft);
+    font-size: 0.8rem;
+}
+
+.legal-footer-inner {
+    width: min(100%, 70rem);
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.legal-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-4);
+}
+
+.legal-footer a {
+    color: var(--brand-blue-accessible);
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.legal-footer a:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+@media (max-width: 560px) {
+    .legal-footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .legal-footer-links {
+        justify-content: flex-start;
+    }
+}
