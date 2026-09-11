@@ -8,6 +8,24 @@ servers:
   - url: /api/v1
     description: Same-origin API gateway prefix.
 paths:
+  /feed:
+    $ref: ./openapi/paths/feed.yaml#/feed
+  /feed/challenges:
+    $ref: ./openapi/paths/feed.yaml#/upload
+  /feed/challenges/{id}:
+    $ref: ./openapi/paths/feed.yaml#/post
+  /feed/challenges/{id}/media:
+    $ref: ./openapi/paths/feed.yaml#/media
+  /feed/challenges/{id}/play:
+    $ref: ./openapi/paths/feed.yaml#/play
+  /feed/challenges/{id}/guess:
+    $ref: ./openapi/paths/feed.yaml#/guess
+  /feed/challenges/{id}/reaction:
+    $ref: ./openapi/paths/feed.yaml#/reaction
+  /feed/challenges/{id}/comments:
+    $ref: ./openapi/paths/feed.yaml#/comments
+  /feed/challenges/{id}/comments/{commentID}:
+    $ref: ./openapi/paths/feed.yaml#/comment
   /auth/signup:
     $ref: ./openapi/paths/auth.yaml#/signup
   /auth/login:

@@ -141,6 +141,25 @@ slow connection gets the full viewing time instead of having the download
 consume it. A re-fetch after the window has closed is always denied, and
 guessing is only allowed once the window has ended — the media stays view-once.
 
+### Public feed
+
+All feed routes require bearer authentication and use the default authenticated
+rate limit. Posts and comments use a descending `(created_at, id)` cursor;
+`limit` defaults to 20 and accepts 1–50. Read
+[public feed behavior and rollout](public-feed.md) for visibility and retention.
+
+| Method      | Path                                                | Description                                                  |
+| ----------- | --------------------------------------------------- | ------------------------------------------------------------ |
+| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`               |
+| POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,lat,long)`                  |
+| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                              |
+| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer |
+| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt              |
+| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess       |
+| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                            |
+| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                      |
+| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                      |
+
 ### WebSocket
 
 | Method | Path                           | Auth   | Description               |

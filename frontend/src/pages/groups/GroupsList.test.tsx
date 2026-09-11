@@ -56,5 +56,7 @@ describe('GroupsList', () => {
 
         expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+        expect(screen.getByRole('link', { name: 'Explore feed' })).toHaveAttribute('href', '/feed');
+        expect(screen.getByRole('link', { name: 'Play public challenges' })).toHaveAttribute('href', '/feed');
     });
 });

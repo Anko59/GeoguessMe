@@ -1,5 +1,13 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import type { APIErrorBody, AuthResponse } from './types';
+import type {
+    APIErrorBody,
+    AuthResponse,
+    PublicChallenge,
+    PublicFeedPage,
+    PublicCommentsPage,
+    PublicComment,
+    PublicGuessResult,
+} from './types';
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
@@ -121,6 +129,41 @@ export const getAPIErrorMessage = (error: unknown, fallback: string): string => 
         if (message) return message;
     }
     return error instanceof Error ? error.message : fallback;
+};
+
+const publicPostPath = (id: string) => `/feed/challenges/${encodeURIComponent(id)}`;
+
+export const publicFeedAPI = {
+    list: async (cursor: string, signal: AbortSignal) =>
+        (await api.get<PublicFeedPage>('/feed', { params: { cursor }, signal })).data,
+    get: async (id: string, signal: AbortSignal) =>
+        (await api.get<PublicChallenge>(publicPostPath(id), { signal })).data,
+    publish: async (form: FormData, signal: AbortSignal) =>
+        (await api.post<{ id: string }>('/feed/challenges', form, { signal })).data,
+    remove: async (id: string, signal: AbortSignal) => {
+        await api.delete(publicPostPath(id), { signal });
+        return true;
+    },
+    media: async (id: string, playing: boolean, signal: AbortSignal) =>
+        (await api.get<Blob>(`${publicPostPath(id)}/${playing ? 'play' : 'media'}`, { responseType: 'blob', signal }))
+            .data,
+    guess: async (id: string, point: { lat: number; long: number }, signal: AbortSignal) =>
+        (await api.post<PublicGuessResult>(`${publicPostPath(id)}/guess`, point, { signal })).data,
+    result: async (id: string, signal: AbortSignal) =>
+        (await api.get<PublicGuessResult>(`${publicPostPath(id)}/guess`, { signal })).data,
+    react: async (id: string, liked: boolean, signal: AbortSignal) => {
+        if (liked) await api.put(`${publicPostPath(id)}/reaction`, undefined, { signal });
+        else await api.delete(`${publicPostPath(id)}/reaction`, { signal });
+        return true;
+    },
+    comments: async (id: string, cursor: string, signal: AbortSignal) =>
+        (await api.get<PublicCommentsPage>(`${publicPostPath(id)}/comments`, { params: { cursor }, signal })).data,
+    comment: async (id: string, content: string, signal: AbortSignal) =>
+        (await api.post<PublicComment>(`${publicPostPath(id)}/comments`, { content }, { signal })).data,
+    removeComment: async (id: string, commentID: string, signal: AbortSignal) => {
+        await api.delete(`${publicPostPath(id)}/comments/${encodeURIComponent(commentID)}`, { signal });
+        return true;
+    },
 };
 
 export default api;

@@ -1,0 +1,104 @@
+"PublicChallenge":
+  "type": "object"
+  "required":
+    [
+      "id",
+      "user_id",
+      "username",
+      "caption",
+      "created_at",
+      "is_owner",
+      "resolved",
+      "reaction_count",
+      "reacted",
+      "comment_count",
+    ]
+  "properties":
+    "id":
+      "type": "string"
+      "format": "uuid"
+    "user_id":
+      "type": "string"
+      "format": "uuid"
+    "username":
+      "type": "string"
+    "caption":
+      "type": "string"
+      "maxLength": 500
+    "created_at":
+      "type": "string"
+      "format": "date-time"
+    "is_owner":
+      "type": "boolean"
+    "resolved":
+      "type": "boolean"
+      "description": "True only after this viewer submits a guess."
+    "reaction_count":
+      "type": "integer"
+      "minimum": 0
+    "reacted":
+      "type": "boolean"
+    "comment_count":
+      "type": "integer"
+      "minimum": 0
+"PublicFeedPage":
+  "type": "object"
+  "required": ["items", "next_cursor"]
+  "properties":
+    "items":
+      "type": "array"
+      "items":
+        "$ref": "#/PublicChallenge"
+    "next_cursor":
+      "type": "string"
+"PublicComment":
+  "type": "object"
+  "required": ["id", "user_id", "username", "content", "created_at", "can_delete"]
+  "properties":
+    "id":
+      "type": "string"
+      "format": "uuid"
+    "user_id":
+      "type": "string"
+      "format": "uuid"
+    "username":
+      "type": "string"
+    "content":
+      "type": "string"
+      "minLength": 1
+      "maxLength": 1000
+    "created_at":
+      "type": "string"
+      "format": "date-time"
+    "can_delete":
+      "type": "boolean"
+"PublicCommentsPage":
+  "type": "object"
+  "required": ["items", "next_cursor"]
+  "properties":
+    "items":
+      "type": "array"
+      "items":
+        "$ref": "#/PublicComment"
+    "next_cursor":
+      "type": "string"
+"PublicGuessResult":
+  "type": "object"
+  "required": ["score", "distance", "lat", "long", "actual_lat", "actual_long"]
+  "properties":
+    "score":
+      "type": "integer"
+      "minimum": 0
+      "maximum": 5000
+    "distance":
+      "type": "number"
+      "minimum": 0
+      "description": "Distance in meters."
+    "lat":
+      "type": "number"
+    "long":
+      "type": "number"
+    "actual_lat":
+      "type": "number"
+    "actual_long":
+      "type": "number"

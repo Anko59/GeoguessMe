@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Home from './pages/home/Home';
+import Feed from './pages/feed/Feed';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import GroupsList from './pages/groups/GroupsList';
@@ -30,6 +31,22 @@ function AppChrome() {
         <div className={`app-root${location.pathname === '/' ? ' app-root-home' : ''}`}>
             <Routes>
                 <Route path="/" element={<Home />} />
+                <Route
+                    path="/feed"
+                    element={
+                        <ProtectedRoute>
+                            <Feed />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/feed/:id"
+                    element={
+                        <ProtectedRoute>
+                            <Feed />
+                        </ProtectedRoute>
+                    }
+                />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/migrate-account" element={<Login existingAccountMode />} />

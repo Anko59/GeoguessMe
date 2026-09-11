@@ -1,0 +1,39 @@
+ReactionKey:
+  type: string
+  enum:
+    [
+      like,
+      love,
+      laugh,
+      wow,
+      sad,
+      spot-on,
+      lost,
+      mind-blown,
+      wrong-way,
+      vacation,
+      dislike,
+      cry,
+      kiss,
+      wink,
+      grin,
+      heart-eyes,
+      sunglasses,
+      angry,
+      confused,
+      sleepy,
+      clap,
+      pray,
+      fire,
+      party,
+      👍,
+      ❤️,
+      😂,
+      😮,
+      😢,
+      🙏,
+    ]
+  description: >
+    Reaction identity. The twenty-four named keys map to custom artwork shown
+    in the UI; the six legacy emoji values are still accepted so existing
+    reactions keep working.

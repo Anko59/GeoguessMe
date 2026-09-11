@@ -169,6 +169,13 @@ canonical `reaction` primary key remain intact. After this migration,
 application rollback must use the pre-migration database backup; re-adding
 compatibility columns is not a supported downgrade.
 
+## Migration 026: Public feed
+
+Adds public photo challenges, immutable guesses, reactions, and comments in
+separate tables. A delete trigger records media cleanup jobs atomically,
+including account cascades. Existing private challenge rows are unaffected. See
+[public feed rollout and rollback](public-feed.md#storage-deployment-and-rollback).
+
 ## Status command
 
 `make migrate-status` prints each migration with its version, name, and applied
