@@ -1,0 +1,393 @@
+"feed":
+  "get":
+    "operationId": "getPublicFeed"
+    "summary": "Browse public challenges, newest first"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters":
+      [
+        { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 256 } },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        },
+      ]
+    "responses":
+      "200":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicFeedPage"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"upload":
+  "post":
+    "operationId": "createPublicChallenge"
+    "summary": "Publish a photo challenge visible to all signed-in users"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "requestBody":
+      "required": true
+      "content":
+        "multipart/form-data":
+          "schema":
+            "type": "object"
+            "required": ["photo", "lat", "long"]
+            "properties":
+              "photo":
+                "type": "string"
+                "format": "binary"
+                "description": "JPG, PNG or WebP, within configured upload limits."
+              "caption":
+                "type": "string"
+                "maxLength": 500
+              "lat":
+                "type": "number"
+                "minimum": -90
+                "maximum": 90
+              "long":
+                "type": "number"
+                "minimum": -180
+                "maximum": 180
+    "responses":
+      "201":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "required": ["id"]
+              "properties":
+                "id":
+                  "type": "string"
+                  "format": "uuid"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "502":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "503":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"post":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "getPublicChallenge"
+    "summary": "Read a public challenge without revealing its answer"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "200":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicChallenge"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+  "delete":
+    "operationId": "deletePublicChallenge"
+    "summary": "Delete your public post and its comments and reactions"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "204":
+        "description": "Deleted; physical photo deletion is queued."
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"media":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "getPublicChallengeMedia"
+    "summary": "Read a blurred preview, or the original for an owner or resolved viewer"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "200":
+        "description": "Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing."
+        "content":
+          "image/jpeg":
+            "schema":
+              "type": "string"
+              "format": "binary"
+          "image/png":
+            "schema":
+              "type": "string"
+              "format": "binary"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "410":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "503":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"play":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "playPublicChallenge"
+    "summary": "Open the original photo to make one untimed guess"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "200":
+        "description": "Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing."
+        "content":
+          "image/jpeg":
+            "schema":
+              "type": "string"
+              "format": "binary"
+          "image/png":
+            "schema":
+              "type": "string"
+              "format": "binary"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "410":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "503":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"guess":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "getPublicGuess"
+    "summary": "Read your completed guess and the answer"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "200":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicGuessResult"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+  "post":
+    "operationId": "guessPublicChallenge"
+    "summary": "Record one immutable guess and reveal the answer"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "description": "Repeated submissions return the original result. Public scores do not contribute to private group rankings or profile progression."
+    "requestBody":
+      "required": true
+      "content":
+        "application/json":
+          "schema":
+            "type": "object"
+            "required": ["lat", "long"]
+            "additionalProperties": false
+            "properties":
+              "lat":
+                "type": "number"
+                "minimum": -90
+                "maximum": 90
+              "long":
+                "type": "number"
+                "minimum": -180
+                "maximum": 180
+    "responses":
+      "200":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicGuessResult"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "403":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"reaction":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "put":
+    "operationId": "likePublicChallenge"
+    "summary": "Add your heart reaction"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "204":
+        "description": "Liked; repeat requests are idempotent."
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+  "delete":
+    "operationId": "unlikePublicChallenge"
+    "summary": "Remove your heart reaction"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "204":
+        "description": "Reaction removed; repeat requests are idempotent."
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"comments":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "getPublicComments"
+    "summary": "Read comments, newest first; comments may contain spoilers"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters":
+      [
+        { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 256 } },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        },
+      ]
+    "responses":
+      "200":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicCommentsPage"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+  "post":
+    "operationId": "commentPublicChallenge"
+    "summary": "Add a comment to a public challenge"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "requestBody":
+      "required": true
+      "content":
+        "application/json":
+          "schema":
+            "type": "object"
+            "required": ["content"]
+            "additionalProperties": false
+            "properties":
+              "content":
+                "type": "string"
+                "minLength": 1
+                "maxLength": 1000
+    "responses":
+      "201":
+        "description": "Success"
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicComment"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"comment":
+  "parameters":
+    [
+      { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      { "name": "commentID", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+    ]
+  "delete":
+    "operationId": "deletePublicComment"
+    "summary": "Remove your comment or moderate a comment on your post"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "204":
+        "description": "Comment deleted."
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"

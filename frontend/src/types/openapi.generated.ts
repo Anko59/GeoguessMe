@@ -25,6 +25,181 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/feed': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse public challenges, newest first */
+        get: operations['getPublicFeed'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a photo challenge visible to all signed-in users */
+        post: operations['createPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a public challenge without revealing its answer */
+        get: operations['getPublicChallenge'];
+        put?: never;
+        post?: never;
+        /** Delete your public post and its comments and reactions */
+        delete: operations['deletePublicChallenge'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/media': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a blurred preview, or the original for an owner or resolved viewer */
+        get: operations['getPublicChallengeMedia'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/play': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Open the original photo to make one untimed guess */
+        get: operations['playPublicChallenge'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/guess': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read your completed guess and the answer */
+        get: operations['getPublicGuess'];
+        put?: never;
+        /**
+         * Record one immutable guess and reveal the answer
+         * @description Repeated submissions return the original result. Public scores do not contribute to private group rankings or profile progression.
+         */
+        post: operations['guessPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/reaction': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Add your heart reaction */
+        put: operations['likePublicChallenge'];
+        post?: never;
+        /** Remove your heart reaction */
+        delete: operations['unlikePublicChallenge'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/comments': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read comments, newest first; comments may contain spoilers */
+        get: operations['getPublicComments'];
+        put?: never;
+        /** Add a comment to a public challenge */
+        post: operations['commentPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/comments/{commentID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove your comment or moderate a comment on your post */
+        delete: operations['deletePublicComment'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/auth/signup': {
         parameters: {
             query?: never;
@@ -886,6 +1061,50 @@ export interface components {
                 message: string;
             };
         };
+        PublicChallenge: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            caption: string;
+            /** Format: date-time */
+            created_at: string;
+            is_owner: boolean;
+            /** @description True only after this viewer submits a guess. */
+            resolved: boolean;
+            reaction_count: number;
+            reacted: boolean;
+            comment_count: number;
+        };
+        PublicFeedPage: {
+            items: components['schemas']['PublicChallenge'][];
+            next_cursor: string;
+        };
+        PublicGuessResult: {
+            score: number;
+            /** @description Distance in meters. */
+            distance: number;
+            lat: number;
+            long: number;
+            actual_lat: number;
+            actual_long: number;
+        };
+        PublicComment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            content: string;
+            /** Format: date-time */
+            created_at: string;
+            can_delete: boolean;
+        };
+        PublicCommentsPage: {
+            items: components['schemas']['PublicComment'][];
+            next_cursor: string;
+        };
         AuthUser: {
             /** Format: uuid */
             id: string;
@@ -1376,6 +1595,390 @@ export interface operations {
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
             403: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicFeed: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    createPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'multipart/form-data': {
+                    /**
+                     * Format: binary
+                     * @description JPG, PNG or WebP, within configured upload limits.
+                     */
+                    photo: string;
+                    caption?: string;
+                    lat: number;
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: uuid */
+                        id: string;
+                    };
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            502: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallenge'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    deletePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted; physical photo deletion is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallengeMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    playPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    guessPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    lat: number;
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    likePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Liked; repeat requests are idempotent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    unlikePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reaction removed; repeat requests are idempotent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicComments: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicCommentsPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    commentPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    content: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicComment'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    deletePublicComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comment deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
         };
     };
