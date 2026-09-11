@@ -118,6 +118,7 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
+        expect(document.querySelector('.app-root-home')).toBeInTheDocument();
     });
 
     it('renders the login page at /login', async () => {
@@ -176,6 +177,20 @@ describe('App shell — public routes', () => {
             render(<App />);
         });
         expect(await screen.findByText('Verification token is missing.')).toBeInTheDocument();
+    });
+
+    it('renders the public privacy policy at /privacy', async () => {
+        routeRef.current = '/privacy';
+        window.history.pushState({}, '', routeRef.current);
+        await act(async () => {
+            render(<App />);
+        });
+        expect(await screen.findByRole('heading', { name: /privacy at geoguessme/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Email the privacy team' })).toHaveAttribute(
+            'href',
+            'mailto:privacy@geoguessme.com',
+        );
+        expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy');
     });
 
     it('renders a recovery page for an unknown route', async () => {
