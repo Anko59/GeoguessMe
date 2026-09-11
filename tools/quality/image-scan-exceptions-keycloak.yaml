@@ -1,12 +1,21 @@
 # Time-boxed Keycloak exceptions for `make audit-images`.
-# Keycloak 26.7.2 fixes the Keycloak-services account-takeover CVE and removes
+# Keycloak 26.7.3 fixes the Keycloak-services account-takeover CVE and removes
 # the obsolete dependency findings. The remaining Microsoft SQL Server driver
-# is bundled upstream but not used: this deployment uses PostgreSQL only.
+# is bundled upstream but not used: this deployment uses PostgreSQL only. The
+# Netty SNI finding is not reachable because Keycloak serves plain HTTP behind
+# the TLS-terminating gateway and does not configure per-SNI mTLS.
 
 - id: CVE-2025-59250
-  image: quay.io/keycloak/keycloak:26.7.2@sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
-  digest: sha256:9d1f1b2b7261ff53c66cb1092dfcdc34a5fb77e81f9e6a6e75b8b6a795de8067
+  image: quay.io/keycloak/keycloak:26.7.3@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
+  digest: sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
   owner: security-program
   reachable: "the vulnerable Microsoft SQL Server driver is bundled but this deployment uses only PostgreSQL"
   approved: true
-  expires: 2026-09-09
+  expires: 2026-10-11
+- id: CVE-2026-75595
+  image: quay.io/keycloak/keycloak:26.7.3@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
+  digest: sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
+  owner: security-program
+  reachable: "Netty's SNI fallback bypass requires a per-SNI TLS server with mTLS enforced only by the selected context; Keycloak uses plain HTTP and the gateway terminates TLS"
+  approved: true
+  expires: 2026-10-11
