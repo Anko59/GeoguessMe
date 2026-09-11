@@ -71,6 +71,22 @@
     object-fit: contain;
 }
 
+.group-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+@media (width <= 480px) {
+    .header-content {
+        flex-wrap: wrap;
+    }
+    .group-header-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
 .back-btn,
 .settings-btn {
     width: 44px;

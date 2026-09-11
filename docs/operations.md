@@ -64,6 +64,12 @@ curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://backend:8080/metrics
 
 ## Logging
 
+The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
+`load group challenge map` with the group ID and database error; coordinates are
+not logged. If the challenge list works but the Earth does not render, check
+browser WebGL support and delivery of `/globe/earth.jpg` from the frontend. The
+list remains available when 3D rendering fails.
+
 The backend uses `slog` with JSON handler output. Every HTTP request is logged
 with:
 

@@ -100,11 +100,25 @@ page reachable from chat and leaderboards.
 
 ### Groups
 
+`GET /api/v1/group/challenges?group_id=&cursor=` serves the group globe's
+member-only challenge history, newest first by `(created_at, photo_id)`. Each
+page contains at most 100 `items`, a `server_time`, and an optional opaque
+`next_cursor`. Pass that cursor with the same group ID to read the next page; it
+is omitted at the end. Responses use `Cache-Control: private, no-store`.
+Malformed group IDs/cursors return 400, unauthenticated requests 401,
+non-members 403, and read failures 500.
+
+The feed includes expired challenges and challenges whose media was removed,
+without returning media URLs. Latitude and longitude are omitted unless the
+viewer has results access and the location hide period permits disclosure.
+`location_reveals_at` is returned while a poster's hide period is active;
+passing that time alone does not grant access to an unplayed active challenge.
+
 | Method | Path                                                         | Auth   | Description                                                                            |
 | ------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
 | GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                                     |
 | POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
-| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{code}`                                                                    |
+| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{invite_token}`                                                            |
 | GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |
 | GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                             |
 | GET    | `/api/v1/group/leaderboard?group_id=&period=&metric=`        | Bearer | Total, average, or Elo leaderboard for a calendar week/month or all time (member only) |

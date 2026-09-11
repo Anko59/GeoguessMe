@@ -212,6 +212,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/details", protected(a.Game.GetGroupDetails))
 	mux.Handle("/api/v1/group/members", protected(a.Game.GetGroupMembers))
 	mux.Handle("/api/v1/group/leaderboard", protected(a.Game.GetLeaderboard))
+	mux.Handle("/api/v1/group/challenges", protected(a.Game.GetGroupChallenges))
 	mux.Handle("/api/v1/group/photo", protected(a.Game.GroupPhoto))
 	mux.Handle("/api/v1/group/notifications", protected(a.Game.GroupNotifications))
 	mux.Handle("/api/v1/group/party", protected(a.Party.HandleParty))

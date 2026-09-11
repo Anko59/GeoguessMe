@@ -311,6 +311,14 @@ compatibility entries remain.
 
 ## Residual risks
 
+- The frontend `type-check` Make target invokes TypeScript without build mode
+  against `frontend/tsconfig.json`, whose root has no files and only project
+  references. It does not check the referenced app and tooling projects. Until a
+  dedicated quality-gate change corrects that target, use `make build-frontend`
+  for those checks; the production build already uses TypeScript build mode.
+  This was identified during the group globe change and is deferred because
+  changing a shared quality gate is a separate scope.
+
 - The frontend video-recording guard (`MAX_VIDEO_BYTES` in
   `frontend/src/components/camera/capture/useVideoRecording.ts`) mirrors the
   backend `UPLOAD_MAX_BYTES` default (10 MiB) as a pre-upload UX stop. The

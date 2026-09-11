@@ -8,9 +8,55 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"geoguessme/internal/models"
+
+	"github.com/pashagolub/pgxmock/v4"
 )
+
+func TestGroupChallengeFeed(t *testing.T) {
+	const groupID = "00000000-0000-0000-0000-000000000001"
+	for _, tc := range []struct {
+		name, target string
+		member       bool
+		status       int
+	}{
+		{"invalid group", "/?group_id=invalid", false, 400},
+		{"outsider", "/?group_id=" + groupID, false, 403},
+		{"invalid cursor", "/?group_id=" + groupID + "&cursor=invalid", true, 400},
+		{"empty group", "/?group_id=" + groupID, true, 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pool := newMockPool(t)
+			api := newGameAPI(t, pool)
+			if tc.name != "invalid group" {
+				pool.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(tc.member))
+			}
+			if tc.status == 200 {
+				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}))
+			}
+			recorder := httptest.NewRecorder()
+			api.GetGroupChallenges(recorder, requestWithUser(http.MethodGet, tc.target, "", "viewer"))
+			if recorder.Code != tc.status {
+				t.Fatalf("response: %d %s", recorder.Code, recorder.Body.String())
+			}
+			if tc.status == 200 && (!strings.Contains(recorder.Body.String(), `"items":[]`) || recorder.Header().Get("Cache-Control") != "private, no-store") {
+				t.Fatalf("invalid empty response: %s", recorder.Body.String())
+			}
+		})
+	}
+	pool := newMockPool(t)
+	api := newGameAPI(t, pool)
+	requireStatus(t, api.GetGroupChallenges, requestWithUser(http.MethodPost, "/", "", "viewer"), 405)
+	pool.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}).AddRow("photo", groupID, "poster", "Alice", time.Now(), time.Now().Add(time.Hour), 48.0, 2.0, false, false))
+	recorder := httptest.NewRecorder()
+	api.GetGroupChallenges(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "viewer"))
+	if recorder.Code != 200 || strings.Contains(recorder.Body.String(), `"lat"`) || strings.Contains(recorder.Body.String(), `"long"`) {
+		t.Fatalf("unplayed coordinates leaked: %s", recorder.Body.String())
+	}
+}
 
 // stubGroupReader is the fake persistence boundary for the migrated group read
 // handlers. It lets handler tests exercise GetUserGroups without swapping the

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"geoguessme/internal/repository/groups/atlas"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,6 +77,7 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 		{"members", http.MethodGet, "/api/v1/group/members?id=" + groupID, nil},
 		{"messages", http.MethodGet, "/api/v1/group/messages?group_id=" + groupID, nil},
 		{"leaderboard", http.MethodGet, "/api/v1/group/leaderboard?group_id=" + groupID, nil},
+		{"globe", http.MethodGet, "/api/v1/group/challenges?group_id=" + groupID, nil},
 		{"group_photo", http.MethodGet, "/api/v1/group/photo?group_id=" + groupID, nil},
 		{"group_notifications", http.MethodGet, "/api/v1/group/notifications?group_id=" + groupID, nil},
 		{"ws_ticket", http.MethodPost, "/api/v1/ws/ticket?group_id=" + groupID, map[string]string{}},
@@ -90,6 +93,41 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, attemptUpload(t, outsider.access, groupID), "upload")
 	photoResp, _ := uploadGroupPhoto(t, outsider.access, groupID)
 	require.Equal(t, http.StatusForbidden, photoResp.StatusCode, "group photo upload")
+}
+
+func TestGroupGlobeHistoryAndPrivacy(t *testing.T) {
+	alice := signup(t, unique("atlasalice"), unique("atlasalice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("atlasbob"), unique("atlasbob")+"@example.test", "StrongPassword123")
+	groupA, invite := createGroup(t, alice.access, "Globe A")
+	groupB, _ := createGroup(t, alice.access, "Globe B")
+	joinGroup(t, bob.access, invite)
+	photoA := uploadPhoto(t, alice.access, groupA)
+	uploadPhoto(t, alice.access, groupB)
+	read := func(bearer string) atlas.Page {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupA, nil, bearer, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+		require.Equal(t, "private, no-store", resp.Header.Get("Cache-Control"))
+		var page atlas.Page
+		require.NoError(t, jsonUnmarshal(data, &page))
+		return page
+	}
+	owner := read(alice.access)
+	require.Len(t, owner.Items, 1)
+	require.Equal(t, photoA, owner.Items[0].PhotoID)
+	require.Equal(t, groupA, owner.Items[0].GroupID)
+	require.NotNil(t, owner.Items[0].Lat)
+	unplayed := read(bob.access)
+	require.Len(t, unplayed.Items, 1)
+	require.Nil(t, unplayed.Items[0].Lat)
+	require.Nil(t, unplayed.Items[0].Long)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoA))
+	waitUntilViewExpires(t, acc.ViewExpiresAt)
+	require.Equal(t, http.StatusCreated, guess(t, bob.access, photoA, 51.5, -0.1))
+	played := read(bob.access)
+	require.NotNil(t, played.Items[0].Lat)
+	require.Equal(t, "guessed", played.Items[0].Status)
+	resp, _ := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupA, nil, "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestGroupPhotoAndNotificationSettings(t *testing.T) {
