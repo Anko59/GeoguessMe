@@ -15,6 +15,9 @@ and submit one server-timed guess.
 
 ## Documentation map
 
+- [Public challenge feed](public-feed.md) — publishing, guessing, reactions,
+  comments, storage, and rollout
+
 - [Architecture](architecture.md) — system components, trust boundaries, request
   flows
 - [Agent engineering guide](agent-engineering.md) — package map, change-impact

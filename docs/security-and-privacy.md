@@ -39,6 +39,21 @@ through authenticated handlers:
   request — a re-acceptance cannot extend access beyond the original window.
 - Object keys are UUIDs with no predictable naming.
 
+### Public feed access
+
+Public feed posts are explicitly published to all signed-in users. Their
+original photos still use authenticated proxies and private storage. Feed
+browsing serves a reduced-detail preview until the viewer submits a guess;
+opening the play endpoint explicitly reveals the original for an untimed
+attempt. Answer coordinates are returned only in that viewer's saved result. The
+author can always view their own photo. Private group challenges are never
+published automatically.
+
+Public posts and their previews, guesses, reactions, and comments remain until
+post or account deletion. They do not use the private photo retention policy
+listed below. Deleting a post also queues its original photo for durable object
+cleanup. See [public feed behavior and retention](public-feed.md).
+
 ## Private media architecture
 
 - S3 endpoints and object keys never reach the browser.

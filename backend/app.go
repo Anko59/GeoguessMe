@@ -7,6 +7,7 @@ import (
 
 	"geoguessme/handlers"
 	authhandlers "geoguessme/handlers/auth"
+	feedhandlers "geoguessme/handlers/feed"
 	partyhandlers "geoguessme/handlers/party"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
@@ -16,6 +17,7 @@ import (
 	"geoguessme/internal/middleware"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
+	feedrepo "geoguessme/internal/repository/feed"
 	"geoguessme/internal/storage"
 )
 
@@ -70,6 +72,7 @@ type App struct {
 	// Party is the Party Time handler slice (group party windows and the
 	// double-points announcement), served from injected dependencies.
 	Party *partyhandlers.API
+	Feed  *feedhandlers.API
 }
 
 // NewApp constructs an application instance from explicit dependencies. Each
@@ -105,6 +108,7 @@ func NewApp(
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
 		Party:   partyhandlers.NewAPI(repos.Groups, repos.Party, repos.Chat, repos, pushSvc, hub, cfg, clock),
+		Feed:    feedhandlers.NewAPI(feedrepo.NewRepository(db), store, repos, cfg, clock),
 	}
 }
 
@@ -221,6 +225,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(a.Game.UploadPhoto))
+	a.Feed.Routes(mux, func(handler http.HandlerFunc) http.Handler { return protected(limited("default", handler)) })
 	mux.Handle("/api/v1/media-processing/{jobID}", protected(a.Game.GetMediaProcessingJob))
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)

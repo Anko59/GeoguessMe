@@ -81,6 +81,9 @@ export default function GroupsList() {
                     <span>GeoGuessMe</span>
                 </Link>
                 <div className="groups-account-links">
+                    <Link to="/feed" className="groups-account-link">
+                        Explore feed
+                    </Link>
                     <Link to="/profile" className="groups-account-link" aria-label="Profile">
                         <Icon name="user" className="groups-account-icon" />
                         <span className="groups-account-label">Profile</span>
@@ -123,7 +126,10 @@ export default function GroupsList() {
                     <img src="/globe_icon.png" alt="" className="empty-icon" />
                     <h2>No groups yet</h2>
                     <p>You haven't joined any groups yet</p>
-                    <p className="empty-subtitle">Create or join a group to start playing!</p>
+                    <p className="empty-subtitle">Create or join a group to play with friends.</p>
+                    <Link to="/feed" className="btn btn-secondary">
+                        Play public challenges
+                    </Link>
                 </div>
             ) : (
                 <div className="groups-grid">
