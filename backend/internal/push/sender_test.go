@@ -53,7 +53,8 @@ func TestSenderSuccessAndHeaders(t *testing.T) {
 	}
 	sender := NewSender(keys, "mailto:ops@example.com", nil, server.Client())
 	sub := mustReceiverSubscription(t, server.URL+"/push/abc")
-	if err := sender.Send(context.Background(), sub, []byte(`{"title":"hi"}`)); err != nil {
+	payload := []byte(`{"title":"hi"}`)
+	if err := sender.Send(context.Background(), sub, payload); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	captured, ok := last.Load().(map[string]string)
@@ -69,9 +70,10 @@ func TestSenderSuccessAndHeaders(t *testing.T) {
 	if captured["ttl"] != "86400" {
 		t.Fatalf("ttl = %q", captured["ttl"])
 	}
-	// The body must start with the 16-byte salt, i.e. be non-empty and not the
-	// raw JSON payload (which would mean encryption was skipped).
-	if len(captured["body-prefix"]) == 0 || strings.HasPrefix(captured["body-prefix"], "{") {
+	// The body must be non-empty and must not be the raw JSON payload (which
+	// would mean encryption was skipped). Encrypted bytes are arbitrary, so a
+	// random first byte must not be interpreted as a plaintext marker.
+	if len(captured["body-prefix"]) == 0 || captured["body-prefix"] == string(payload) {
 		t.Fatalf("body was not encrypted: %q", captured["body-prefix"])
 	}
 }
