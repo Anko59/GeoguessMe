@@ -14,6 +14,11 @@ appear in the public feed automatically. Public uploads use the configured image
 byte and pixel limits and strip metadata during normalization. Videos continue
 to use the private group challenge flow.
 
+The composer accepts only JPG, PNG, and WebP files and renders decoded pixels on
+a bounded canvas, without exposing a URL for the raw upload. Publishing stays
+disabled until the preview succeeds; unsupported or unreadable files show an
+accessible error. Server-side validation and normalization remain authoritative.
+
 An unresolved viewer receives a small, reduced-detail preview from the server.
 Removing the visual blur cannot recover the original pixels. Choosing **Play
 challenge** opens the original photo for an untimed attempt; submitting **Guess
@@ -115,4 +120,13 @@ comment authorization, and migration cascade cleanup. The browser journey is in
   Scope the installed dependency volume to the worktree or lockfile so one
   task's install cannot invalidate another's tests. The feed verification uses
   the existing `COMPOSE_TOOLS` Make override with a separate named dependency
-  volume; its commands are unchanged.
+  volume; its commands are unchanged. Align cache ownership between the root
+  test runner and the user-owned build runner too: a root-owned `.vite-temp`
+  directory blocked the local build until the standard bootstrap reset it.
+- **Tooling ownership — check TypeScript project references in preflight.** The
+  existing `make type-check` runs `tsc --noEmit` on a root configuration with
+  `files: []`, so it does not check the referenced frontend projects. Switch
+  that gate to check both projects and add a failing-type fixture in a separate
+  tooling change. The public-feed review exposed this gap through two untyped
+  dialog mocks; `make build-frontend` checks the actual projects and validates
+  their fix.

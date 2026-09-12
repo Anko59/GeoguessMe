@@ -64,10 +64,17 @@ beforeEach(() => {
     mocks.react.mockResolvedValue(true);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function () {
+    vi.stubGlobal(
+        'createImageBitmap',
+        vi.fn().mockImplementation(async () => ({ width: 800, height: 600, close: vi.fn() })),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) {
         this.open = true;
     });
-    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function () {
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
         this.open = false;
     });
 });
