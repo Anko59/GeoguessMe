@@ -38,6 +38,8 @@ export type InvitePreview = components['schemas']['InvitePreview'];
 export type InviteListItem = components['schemas']['InviteListItem'];
 export type MediaProcessingJob = components['schemas']['MediaProcessingJob'];
 export type PartyStatus = components['schemas']['PartyStatus'];
+export type GroupChallenge = components['schemas']['GroupChallenge'];
+export type GroupChallengesPage = components['schemas']['GroupChallengesPage'];
 
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 

@@ -9,10 +9,14 @@ import (
 
 	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/config"
+	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/repository/groups"
+	"geoguessme/internal/repository/groups/atlas"
 	"geoguessme/internal/storage"
+
+	"github.com/google/uuid"
 )
 
 type GuessRequest struct {
@@ -243,7 +247,7 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	// until the hide duration has passed; the owner always sees their own spot.
 	// While hidden, other players' guessed points and distances are not sent at
 	// all (score-only), and only the viewer's own guessed point is returned.
-	hidden := photo.HideLocation && photo.UserID != viewerID && now.Before(photo.CreatedAt.Add(a.cfg.LocationHide))
+	hidden := game.LocationHidden(photo, viewerID, now, a.cfg.LocationHide)
 	if guesses == nil {
 		guesses = []groups.GuessWithUser{}
 	}
@@ -287,6 +291,35 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		response["media_type"] = photo.MIMEType
 	}
 	WriteJSON(w, http.StatusOK, response)
+}
+
+// GetGroupChallenges returns every challenge through a bounded private feed.
+func (a *GameAPI) GetGroupChallenges(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+	groupID := r.URL.Query().Get("group_id")
+	if _, err := uuid.Parse(groupID); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid_group_id", "group_id must be a UUID")
+		return
+	}
+	viewerID := GetUserIDFromContext(r)
+	if !a.requireMember(w, r, groupID, viewerID) {
+		return
+	}
+	page, err := a.groups.ChallengeMap(r.Context(), groupID, viewerID, r.URL.Query().Get("cursor"), a.clock(), a.cfg.LocationHide)
+	if errors.Is(err, atlas.ErrInvalidCursor) {
+		WriteError(w, http.StatusBadRequest, "invalid_cursor", "Invalid challenge cursor")
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(r.Context(), "load group challenge map", "group_id", groupID, "error", err)
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load group challenges")
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	WriteJSON(w, http.StatusOK, page)
 }
 
 // resultsGuess is the results payload for a single guess. Lat, long, and

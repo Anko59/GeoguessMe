@@ -46,11 +46,23 @@ infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
 `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
 `GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
 
+Development, integration/E2E, and the optional `local-minio` profile pull MinIO
+from its official `quay.io/minio/minio` registry. All three pin the same release
+and manifest digest. The registry change preserves the existing image contents
+and requires no data migration or volume reset.
+
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
 and rollback evidence.
 
 ## Live acceptance
+
+The group globe uses the standard application rollout and migration job.
+Migration 026 adds its history pagination index; allow for index creation time
+on large photo tables. It is compatible with previous application binaries. See
+[migration 026](database-migrations.md#migration-026-group-challenge-globe-index).
+The Earth texture is bundled with the frontend; no imagery API key or new
+environment variable is required.
 
 Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
 be validated on dev, and an isolated production backup restore must be

@@ -54,14 +54,13 @@ illustrations below are part of GeoGuessMe’s own visual language.
 <table>
   <tr>
     <td width="50%"><img src="docs/assets/geoguessme-signup.png" alt="GeoGuessMe account creation screen" /></td>
-    <td width="50%"><strong>Ready for your group?</strong><br /><br />Create an account, invite friends with a private group code, and start sending places worth guessing.</td>
+    <td width="50%"><strong>Ready for your group?</strong><br /><br />Create an account, invite friends with a private invite link, and start sending places worth guessing.</td>
   </tr>
 </table>
 
 ## 🎮 How a round works
 
-1. **Create or join a group.** Share the group code or invite link with your
-   friends.
+1. **Create or join a group.** Share a private invite link with your friends.
 2. **Capture a moment.** Send a photo or a short video from the camera, with
    optional face-tracking lenses and banners.
 3. **Accept the challenge.** Each member gets a server-controlled viewing window
@@ -73,6 +72,8 @@ illustrations below are part of GeoGuessMe’s own visual language.
 ## ✨ What you can do
 
 - **Challenge your people** with private, short-lived photo and video prompts.
+- **Explore your group's world** on a rotatable 3D Earth, opened from the globe
+  icon in group chat. Browse all challenges while hidden locations stay private.
 - **Keep the conversation moving** with messenger-style hidden message actions,
   emoji reactions, and replies.
 - **Make groups feel like yours** with a group photo and independent

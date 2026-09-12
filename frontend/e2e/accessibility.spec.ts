@@ -163,7 +163,7 @@ test.describe('Keyboard navigation', () => {
         }
     });
 
-    test('group view back, party, profile, and settings controls are Tab-reachable', async ({
+    test('group view back, party, profile, globe, and settings controls are Tab-reachable', async ({
         browser,
         contextOptions,
     }) => {
@@ -181,16 +181,19 @@ test.describe('Keyboard navigation', () => {
             const backLink = page.locator('.back-btn');
             const partyBtn = page.getByRole('button', { name: 'Start party time' });
             const profileLink = page.getByRole('link', { name: 'Open your profile' });
+            const globeBtn = page.getByRole('button', { name: 'Open group globe' });
             const settingsBtn = page.getByRole('button', { name: /settings/i });
             await expect(settingsBtn).toBeVisible();
 
-            // Back link → party button → own-profile link → settings button
+            // Back link → party button → own-profile link → globe → settings
             // are the first focusable elements in the group header.
             await backLink.focus();
             await page.keyboard.press('Tab');
             await expect(partyBtn).toBeFocused();
             await page.keyboard.press('Tab');
             await expect(profileLink).toBeFocused();
+            await page.keyboard.press('Tab');
+            await expect(globeBtn).toBeFocused();
             await page.keyboard.press('Tab');
             await expect(settingsBtn).toBeFocused();
 

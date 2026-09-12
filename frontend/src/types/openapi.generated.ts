@@ -5,6 +5,26 @@
  */
 
 export interface paths {
+    '/group/challenges': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group challenges for the globe.
+         * @description Member-only history, newest first by creation time and photo ID, including challenges whose media was removed. Pages contain at most 100 items. Coordinates follow the results authorization and timed location privacy rules: owners, members who guessed, or members after challenge expiry can see a location, unless the poster's location hide period still applies. Unavailable coordinates are omitted entirely. No private media is returned.
+         */
+        get: operations['listGroupChallenges'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/auth/signup': {
         parameters: {
             query?: never;
@@ -832,6 +852,40 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        GroupChallenge: {
+            /** Format: uuid */
+            photo_id: string;
+            /** Format: uuid */
+            group_id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @enum {string} */
+            status: 'available' | 'results' | 'guessed' | 'expired';
+            lat?: number;
+            long?: number;
+            /**
+             * Format: date-time
+             * @description End of the poster's hide period; results access is still required.
+             */
+            location_reveals_at?: string;
+        };
+        GroupChallengesPage: {
+            items: components['schemas']['GroupChallenge'][];
+            next_cursor?: string;
+            /** Format: date-time */
+            server_time: string;
+        };
+        APIError: {
+            error: {
+                code: string;
+                message: string;
+            };
+        };
         AuthUser: {
             /** Format: uuid */
             id: string;
@@ -860,12 +914,6 @@ export interface components {
             access_token: string;
             expires_in: number;
             user: components['schemas']['AuthUser'];
-        };
-        APIError: {
-            error: {
-                code: string;
-                message: string;
-            };
         };
         OIDCConfig: {
             enabled: boolean;
@@ -1303,6 +1351,34 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listGroupChallenges: {
+        parameters: {
+            query: {
+                group_id: string;
+                /** @description Opaque next_cursor from the previous page in this group. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A private page. next_cursor is omitted on the last page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GroupChallengesPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
     signup: {
         parameters: {
             query?: never;

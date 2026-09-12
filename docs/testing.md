@@ -103,6 +103,17 @@ E2E style checks reject waitForTimeout, networkidle, positional selectors, and
 retry-based flake masking. Accessibility scenarios run real Axe scans and fail
 on serious or critical violations.
 
+The globe journey attaches viewport screenshots of its empty, populated,
+selected-challenge, and hidden-location states to the Playwright report on
+desktop and mobile. It waits for the Earth image response and fonts, checks
+horizontal overflow and visible controls, and captures the actual viewport so
+mobile scrolling remains visible. These are review artifacts, not pixel-diff
+baselines. PR CI retains `geoguessme-globe-<run-id>-<shard-id>` PNG artifacts
+for seven days even when tests pass; the full report and failure diagnostics
+retain their existing failure-only upload policy. PR runs capture desktop;
+mobile captures are produced when the mobile project runs. Local files are under
+`frontend/test-results/`; generated screenshots are not committed.
+
 `make test-e2e-pr` runs desktop Chromium for pull-request feedback. CI splits
 that project across two Playwright shards, each on its own runner and disposable
 Compose project; Playwright keeps one worker per shard. The complete desktop

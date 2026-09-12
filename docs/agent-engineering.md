@@ -311,6 +311,25 @@ compatibility entries remain.
 
 ## Residual risks
 
+- The Cloudflared security-tool build
+  (`deployment/docker/cloudflared-tools.Dockerfile`) pins an AMD64 runtime and
+  copies x86 library paths, but its Debian package stage follows the host's
+  default platform. On ARM hosts, `make verify` fails at
+  `build-security-tool-images` because those paths are absent. Selecting AMD64
+  for the entire audit also rebuilds Restic under emulation; that attempt hit a
+  Go runtime failure on the local ARM Docker VM. Declare consistent tool build
+  architectures in a separate tooling change and validate on ARM and AMD64. The
+  group-globe CI repair leaves this existing build configuration unchanged; its
+  complete local image audit remains unverified.
+
+- The frontend `type-check` Make target invokes TypeScript without build mode
+  against `frontend/tsconfig.json`, whose root has no files and only project
+  references. It does not check the referenced app and tooling projects. Until a
+  dedicated quality-gate change corrects that target, use `make build-frontend`
+  for those checks; the production build already uses TypeScript build mode.
+  This was identified during the group globe change and is deferred because
+  changing a shared quality gate is a separate scope.
+
 - The frontend video-recording guard (`MAX_VIDEO_BYTES` in
   `frontend/src/components/camera/capture/useVideoRecording.ts`) mirrors the
   backend `UPLOAD_MAX_BYTES` default (10 MiB) as a pre-upload UX stop. The
