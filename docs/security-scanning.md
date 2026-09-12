@@ -24,7 +24,7 @@ The target scans the following images (see `AUDIT_IMAGES` in
   builder with that dependency override; the resulting application image is
   scanned directly.
 - **Deployment utilities** — the newest published `ghcr.io/getsops/sops` image
-  (digest-pinned) and `geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7`, a
+  (digest-pinned) and `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7`, a
   locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed
   Debian release; the upstream distroless-based image cannot run package tools,
   so only the two OpenSSL libraries and their dpkg metadata are layered on top.
@@ -76,10 +76,12 @@ All passes run through the Dockerized Trivy tool service
 ## Exceptions
 
 Committed exceptions live in `tools/quality/image-scan-exceptions.yaml` and the
-component-specific `tools/quality/image-scan-exceptions-keycloak.yaml` and
-`tools/quality/image-scan-exceptions-oauth2-proxy.yaml`. They are validated
-together by `tools/quality/image-scan-exceptions-check.sh`. Each entry requires
-all of the following fields:
+component-specific `tools/quality/image-scan-exceptions-keycloak.yaml`,
+`tools/quality/image-scan-exceptions-oauth2-proxy.yaml`,
+`tools/quality/image-scan-exceptions-cloudflared.yaml`, and
+`tools/quality/image-scan-exceptions-sops.yaml`. They are validated together by
+`tools/quality/image-scan-exceptions-check.sh`. Each entry requires all of the
+following fields:
 
 - `id` — the CVE/GHSA identifier;
 - `image` — the exact scanned image reference (the same string passed to
