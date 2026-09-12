@@ -46,6 +46,11 @@ infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
 `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
 `GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
 
+Development, integration/E2E, and the optional `local-minio` profile pull MinIO
+from its official `quay.io/minio/minio` registry. All three pin the same release
+and manifest digest. The registry change preserves the existing image contents
+and requires no data migration or volume reset.
+
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
 and rollback evidence.
