@@ -221,6 +221,14 @@ jobs:
             rm -rf /tmp/.buildx-cache
             mv /tmp/.buildx-cache-new /tmp/.buildx-cache
           fi
+      - name: Upload globe screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: geoguessme-globe-${{ github.run_id }}-${{ matrix.shard_id }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: frontend/test-results/*/globe-*.png
       - name: Upload browser diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
