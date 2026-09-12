@@ -149,14 +149,14 @@ services:
     volumes:
       - *workspace
 
-  # cloudflared 2026.8.3 with the OpenSSL libraries refreshed to the fixed
+  # cloudflared 2026.9.1 with the OpenSSL libraries refreshed to the fixed
   # release (CVE-2026-14456); used as an SSH ProxyCommand.
   cloudflared:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/cloudflared-tools.Dockerfile
-    image: geoguessme/cloudflared-tools:2026.8.3-openssl-3.5.7
+    image: geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
@@ -185,7 +185,7 @@ services:
       - ./.tools-cache/terraform-plugins:/tf-plugin-cache
 
   # Restic 0.19.1 with the Go module set refreshed (x/net v0.56.0, x/text
-  # v0.39.0, grpc v1.83.1, x/crypto v0.55.0). Hosted backup and restore
+  # v0.39.0, grpc v1.83.2, x/crypto v0.55.0). Hosted backup and restore
   # scripts receive this image as an exact signed registry reference.
   restic:
     <<: *host-tools

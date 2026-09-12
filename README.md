@@ -177,16 +177,16 @@ on CI or infrastructure.
 
 ## 📚 Find your way around
 
-| If you want to…             | Start here                                                                    |
-| --------------------------- | ----------------------------------------------------------------------------- |
-| Play the game               | [geoguessme.com](https://geoguessme.com)                                      |
-| Learn the rules             | [Gameplay](docs/gameplay.md)                                                  |
-| Run it locally              | [Local development](docs/local-development.md)                                |
-| Understand the system       | [Architecture](docs/architecture.md)                                          |
-| Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)        |
-| Test a change               | [Testing guide](docs/testing.md)                                              |
-| Deploy or operate it        | [Deployment guide](deployment/README.md) and [Operations](docs/operations.md) |
-| Review privacy and security | [Security and privacy](docs/security-and-privacy.md)                          |
+| If you want to…             | Start here                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Play the game               | [geoguessme.com](https://geoguessme.com)                                                                      |
+| Learn the rules             | [Gameplay](docs/gameplay.md)                                                                                  |
+| Run it locally              | [Local development](docs/local-development.md)                                                                |
+| Understand the system       | [Architecture](docs/architecture.md)                                                                          |
+| Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)                                        |
+| Test a change               | [Testing guide](docs/testing.md)                                                                              |
+| Deploy or operate it        | [Deployment guide](deployment/README.md) and [Operations](docs/operations.md)                                 |
+| Review privacy and security | [Public privacy policy](https://geoguessme.com/privacy) and [security controls](docs/security-and-privacy.md) |
 
 The complete documentation map is in [`docs/index.md`](docs/index.md). Run
 `make help` to see every supported Dockerized workflow.
