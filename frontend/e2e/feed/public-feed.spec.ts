@@ -23,6 +23,7 @@ test('a public post can be guessed, liked, and commented on by someone outside t
                 'base64',
             ),
         });
+        await expect(composer.getByRole('img', { name: 'Photo to publish' })).toBeVisible();
         await composer.getByLabel('Caption').fill('A place worth discovering');
         await composer.getByLabel('Latitude').fill('48.8');
         await composer.getByLabel('Longitude').fill('2.3');
