@@ -31,8 +31,7 @@ describe('Globe', () => {
         };
         const onSelect = vi.fn();
         const view = render(<Globe items={[item]} selectedID="p" onSelect={onSelect} />);
-        await screen.findByRole('button', { name: 'Rotate globe left' });
-        expect(mocks.focus).toHaveBeenCalledWith(item);
+        await waitFor(() => expect(mocks.focus).toHaveBeenCalledWith(item));
         mocks.focus.mockClear();
         fireEvent.click(screen.getByRole('button', { name: 'Rotate globe left' }));
         view.rerender(<Globe items={[item, { ...item, photo_id: 'older' }]} selectedID="p" onSelect={onSelect} />);
