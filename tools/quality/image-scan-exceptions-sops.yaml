@@ -122,3 +122,17 @@
   reachable: "python3-pyasn1 is an unused base-image package; the hosted deployment invokes only the SOPS age-key CLI and does not execute Python; no newer SOPS image is published"
   approved: true
   expires: 2026-10-11
+- id: CVE-2026-86145
+  image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  digest: sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  owner: security-program
+  reachable: "libpcre2-8-0 is an unused base-image package; the hosted deployment invokes only the SOPS age-key CLI and does not execute its regex runtime; no newer SOPS image is published"
+  approved: true
+  expires: 2026-10-11
+- id: CVE-2026-89161
+  image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  digest: sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+  owner: security-program
+  reachable: "libpcre2-8-0 is an unused base-image package; the hosted deployment invokes only the SOPS age-key CLI and does not execute its regex runtime; no newer SOPS image is published"
+  approved: true
+  expires: 2026-10-11

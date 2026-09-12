@@ -16,7 +16,7 @@ readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
 # This is the exact signed Restic image published and scanned with the
 # currently deployed development revision. Keep the reference immutable; the
 # release workflow scans this exact value before production promotion.
-readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-485231d90e45dfd0e5988c93f24412d9eb2ba04e@sha256:321ffe05069a513cecb5022d29beaa82a380fc7333abb6e9412091b423980c53'
+readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
 # shellcheck disable=SC2034
