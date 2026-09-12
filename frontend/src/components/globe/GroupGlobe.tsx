@@ -57,6 +57,26 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
             ref={dialog}
             className="group-globe"
             aria-labelledby="group-globe-title"
+            onKeyDown={(event) => {
+                if (event.key !== 'Tab') return;
+                const controls = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLElement>(
+                        'button, input, select, textarea, a[href], [tabindex]',
+                    ),
+                ).filter(
+                    (element) =>
+                        element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0,
+                );
+                const first = controls[0];
+                const last = controls[controls.length - 1];
+                const target = event.shiftKey
+                    ? document.activeElement === first && last
+                    : document.activeElement === last && first;
+                if (target) {
+                    event.preventDefault();
+                    target.focus();
+                }
+            }}
             onCancel={(event) => {
                 event.preventDefault();
                 onClose();

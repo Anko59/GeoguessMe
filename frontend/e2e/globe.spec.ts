@@ -27,10 +27,12 @@ test('explores group challenges on Earth without revealing an unplayed location'
         await expect(globe.getByRole('region', { name: 'Selected challenge' })).toBeFocused();
         await uploader.keyboard.press('Tab');
         await expect(globe.getByRole('button', { name: 'View results' })).toBeFocused();
-        // Native modal focus wraps from the first control to the last.
+        // Keyboard focus wraps in both directions within the modal.
         await globe.getByRole('button', { name: 'Close group globe' }).focus();
         await uploader.keyboard.press('Shift+Tab');
         await expect(globe.locator('.globe-challenge-list button')).toBeFocused();
+        await uploader.keyboard.press('Tab');
+        await expect(globe.getByRole('button', { name: 'Close group globe' })).toBeFocused();
         await uploader.keyboard.press('Escape');
         await expect(globe).toHaveCount(0);
         await expect(globeButton).toBeFocused();

@@ -49,10 +49,11 @@ privacy setting still applies after a guess or challenge expiry. An author can
 always see their own locations. The server enforces these rules before sending
 data to the browser.
 
-The globe has no automatic motion and supports keyboard controls, modal focus,
-and Escape to close. When WebGL or the local Earth texture is unavailable, the
-challenge list remains usable. Earth imagery attribution is in the
-[asset documentation](../frontend/public/globe/README.md).
+The globe has no automatic motion and supports keyboard controls. Tab and
+Shift+Tab cycle through its visible, enabled controls; Escape closes the globe
+and restores focus to its header button. When WebGL or the local Earth texture
+is unavailable, the challenge list remains usable. Earth imagery attribution is
+in the [asset documentation](../frontend/public/globe/README.md).
 
 ## Timing
 

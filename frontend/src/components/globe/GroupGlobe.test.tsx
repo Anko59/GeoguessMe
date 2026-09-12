@@ -123,6 +123,28 @@ describe('GroupGlobe', () => {
         expect(screen.getByTestId('pins')).toBeEmptyDOMElement();
     });
 
+    it('wraps Tab focus in both directions and skips disabled or hidden controls', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        const last = await screen.findByRole('button', { name: /Alice/ });
+        const first = screen.getByRole('button', { name: 'Close group globe' });
+        const filter = screen.getByRole('combobox', { name: 'Filter challenge list' });
+        first.focus();
+        expect(fireEvent.keyDown(first, { key: 'Tab', shiftKey: true })).toBe(false);
+        expect(last).toHaveFocus();
+        expect(fireEvent.keyDown(last, { key: 'Tab' })).toBe(false);
+        expect(first).toHaveFocus();
+        expect(fireEvent.keyDown(first, { key: 'Tab' })).toBe(true);
+        last.setAttribute('disabled', '');
+        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+        expect(filter).toHaveFocus();
+        vi.spyOn(last, 'getClientRects').mockReturnValue({ length: 0 } as DOMRectList);
+        last.removeAttribute('disabled');
+        first.focus();
+        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+        expect(filter).toHaveFocus();
+    });
+
     it('closes via Escape or the close button and restores focus on unmount', async () => {
         get.mockResolvedValue({ data: { items: [] } });
         const trigger = document.createElement('button');
