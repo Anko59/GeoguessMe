@@ -68,6 +68,15 @@ assert_contains "$KEYCLOAK_CONFIG" 'configure_client geoguessme-dev'
 assert_contains "$KEYCLOAK_CONFIG" 'ensure_required_action VERIFY_EMAIL "Verify Email" 50'
 assert_contains "$KEYCLOAK_CONFIG" 'update users/profile'
 
+# SOPS keeps dotenv key names visible while encrypting their values. Keep the
+# tracked production payload aligned with the enabled OIDC contract; otherwise
+# a release can silently deploy the backend without OAuth2 Proxy or Google.
+for oidc_key in \
+    OIDC_ENABLED OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_SOCIAL_PROVIDERS \
+    OIDC_CLIENT_SECRET OAUTH2_PROXY_COOKIE_SECRET OAUTH2_PROXY_REDIRECT_URL; do
+    assert_contains "$ROOT/deployment/secrets/production.env.enc" "$oidc_key="
+done
+
 # BuildKit target-platform arguments must be declared inside the build stage;
 # otherwise TARGETARCH is empty and the shell fallback always emits amd64.
 assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETOS'
