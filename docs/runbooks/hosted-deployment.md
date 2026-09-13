@@ -119,6 +119,14 @@ defines the exact Google callback, existing-account continuity requirements, and
 provider-specific checks. The generator writes inert placeholders for Apple and
 GitHub until their separately reviewed rollout.
 
+The hosted deploy decrypts the tracked
+`deployment/secrets/{dev,production}.env.enc` payloads; it does not read the
+corresponding `*.env.example` templates. Whenever an environment template gains
+a runtime setting, regenerate and commit the matching encrypted payload as part
+of the same change. In particular, production OIDC requires the complete
+`OIDC_*` and `OAUTH2_PROXY_*` set so the deployment starts OAuth2 Proxy and
+exposes the configured social providers.
+
 Both environments set `APP_ENV=production`. The backend disables Push when all
 three VAPID variables are absent, but rejects a partial keypair or invalid
 contact subject. Store each configured environment's pair outside the

@@ -55,6 +55,8 @@ and submit one server-timed guess.
   account maintenance
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
+- [Google Play review access runbook](runbooks/google-play-review-access.md) —
+  dedicated reviewer account, keyring storage, and Play Console instructions
 - [Cloudflare Access service-token runbook](runbooks/access-tokens.md) — three
   isolated service tokens, GitHub secrets, rotation
 - [HSTS rollout runbook](runbooks/hsts-rollout.md) — staged HSTS max-age
@@ -74,19 +76,20 @@ and submit one server-timed guess.
 Each subject has exactly one canonical owner document; every other page routes
 to it instead of restating it:
 
-| Subject                               | Canonical owner                                                 |
-| ------------------------------------- | --------------------------------------------------------------- |
-| Deployment, upgrades, rollback        | [deployment](deployment.md)                                     |
-| Environment variables and defaults    | [configuration](configuration.md)                               |
-| Health, metrics, backups, incidents   | [operations](operations.md)                                     |
-| Gates, test strategy, local/CI parity | [testing](testing.md)                                           |
-| API conventions, errors, rate limits  | [api](api.md) (machine contract: [openapi.yaml](openapi.yaml))  |
-| Package map and agent guidance        | [agent-engineering](agent-engineering.md)                       |
-| Local development workflow            | [local-development](local-development.md)                       |
-| Troubleshooting                       | [troubleshooting](troubleshooting.md)                           |
-| Hosted deployment checklist           | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)     |
-| Google Play account and Android store | [runbooks/google-play-console](runbooks/google-play-console.md) |
-| Social-auth account migration         | [runbooks/social-auth-rollout](runbooks/social-auth-rollout.md) |
+| Subject                               | Canonical owner                                                             |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| Deployment, upgrades, rollback        | [deployment](deployment.md)                                                 |
+| Environment variables and defaults    | [configuration](configuration.md)                                           |
+| Health, metrics, backups, incidents   | [operations](operations.md)                                                 |
+| Gates, test strategy, local/CI parity | [testing](testing.md)                                                       |
+| API conventions, errors, rate limits  | [api](api.md) (machine contract: [openapi.yaml](openapi.yaml))              |
+| Package map and agent guidance        | [agent-engineering](agent-engineering.md)                                   |
+| Local development workflow            | [local-development](local-development.md)                                   |
+| Troubleshooting                       | [troubleshooting](troubleshooting.md)                                       |
+| Hosted deployment checklist           | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)                 |
+| Google Play account and Android store | [runbooks/google-play-console](runbooks/google-play-console.md)             |
+| Google Play review access             | [runbooks/google-play-review-access](runbooks/google-play-review-access.md) |
+| Social-auth account migration         | [runbooks/social-auth-rollout](runbooks/social-auth-rollout.md)             |
 
 Pages that used to duplicate a canonical subject route to it instead. Historical
 incident records live under `docs/runbooks/` and declare `status: archival`;
