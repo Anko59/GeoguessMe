@@ -13,6 +13,7 @@ import { EMPTY_TEXT_BANNER, type TextBanner } from './textBanner';
 import { useHoldToRecord } from './capture/useHoldToRecord';
 import { useVideoCapture } from './capture/useVideoCapture';
 import { useFaceTrackerPreload } from './lenses/useFaceTrackerPreload';
+import { captureFeedback } from '../../platform/haptics';
 
 const FLASH_DURATION_MS = 300;
 
@@ -139,6 +140,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             setFlashVisible(false);
         }, FLASH_DURATION_MS);
         setCapturedPhoto(photo);
+        void captureFeedback();
         destroyEffects();
         stopCamera();
     };

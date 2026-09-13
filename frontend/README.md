@@ -15,6 +15,8 @@ the host.
   motion policy.
 - `public/Identity.md` defines the brand and protected visualization colors.
 - `e2e` contains Playwright interaction, accessibility, and viewport coverage.
+- `src/platform` contains the narrow web/Capacitor runtime boundary; the
+  checked-in native Android project lives in `android`.
 
 Page-specific CSS should consume the shared tokens instead of introducing a new
 palette. Keep branded gradients focused on primary actions and meaningful
@@ -32,8 +34,12 @@ make lint-frontend
 make lint-css
 make type-check
 make build-frontend
+make mobile-build
+make test-mobile
 make verify
 ```
 
 The development application is exposed through the Docker Compose frontend
-service documented in the root README and local-development guide.
+service documented in the root README and local-development guide. See the
+[mobile guide](../docs/mobile.md) for Android emulator testing, configuration,
+native limitations, and the iOS enablement path.

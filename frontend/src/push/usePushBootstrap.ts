@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isPushSupported, syncPushSubscription } from './push';
 import { registerServiceWorker } from './serviceWorker';
+import { shouldUseWebPush } from '../platform/notifications';
 
 /**
  * Registers the service worker and keeps the push subscription reconciled with
@@ -13,6 +14,7 @@ export function usePushBootstrap(): void {
     const { isAuthenticated } = useAuth();
 
     useEffect(() => {
+        if (!shouldUseWebPush()) return;
         void registerServiceWorker();
         if (!isPushSupported()) {
             return;
@@ -29,7 +31,7 @@ export function usePushBootstrap(): void {
     }, []);
 
     useEffect(() => {
-        if (!isAuthenticated || !isPushSupported()) {
+        if (!shouldUseWebPush() || !isAuthenticated || !isPushSupported()) {
             return;
         }
         if (Notification.permission !== 'granted') {

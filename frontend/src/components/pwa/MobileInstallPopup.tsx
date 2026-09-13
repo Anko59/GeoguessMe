@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { isIosSafari, isStandaloneDisplay, usePwaInstall } from './usePwaInstall';
 import Icon from '../ui/Icon';
+import { isNativeRuntime } from '../../platform/runtime';
 import './MobileInstallPopup.css';
 
 export default function MobileInstallPopup() {
@@ -14,7 +15,7 @@ export default function MobileInstallPopup() {
         }
     });
 
-    if (!visible) return null;
+    if (!visible || isNativeRuntime()) return null;
 
     const isMobile =
         typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;

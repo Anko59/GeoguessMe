@@ -9,6 +9,7 @@ import {
 } from '../../push/push';
 import { isIosSafari, usePwaInstall } from './usePwaInstall';
 import Icon from '../ui/Icon';
+import { isNativeRuntime } from '../../platform/runtime';
 import './PwaOnboarding.css';
 
 export default function PwaOnboarding() {
@@ -25,7 +26,7 @@ export default function PwaOnboarding() {
     const canEnableNotifications = pushSupported && (installed || !isIosSafari());
     const showNotifications = canEnableNotifications && permission !== 'granted';
 
-    if (!auth.isAuthenticated || auth.loading || (dismissed && !installed)) {
+    if (isNativeRuntime() || !auth.isAuthenticated || auth.loading || (dismissed && !installed)) {
         return null;
     }
     if (!installable && !iosGuide && !showNotifications) {

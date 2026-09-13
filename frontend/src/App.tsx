@@ -19,8 +19,10 @@ import PwaOnboarding from './components/pwa/PwaOnboarding';
 import LegalFooter from './components/navigation/LegalFooter';
 import { usePushBootstrap } from './push/usePushBootstrap';
 import { useInviteFragmentCapture } from './hooks/useInviteFragmentCapture';
+import { useNativeAppLifecycle } from './platform/useNativeAppLifecycle';
 
 function AppChrome() {
+    useNativeAppLifecycle();
     const location = useLocation();
     usePushBootstrap();
     // Captures #invite=TOKEN fragments into sessionStorage before any auth
