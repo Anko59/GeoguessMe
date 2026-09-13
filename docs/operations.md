@@ -93,6 +93,12 @@ it without touching the active volume. The 15-minute host check fails when the
 latest backup is older than two hours, disk usage reaches 85%, the tunnel is
 down, or containers/readiness are unhealthy.
 
+An application deployment takes the same per-environment backup lock as the
+hourly job. If an hourly backup is already running, the deployment waits up to
+five minutes for it to finish before failing closed; scheduled backups remain
+fail-fast so they never queue behind another backup. The lock is released by the
+operating system when the backup process exits.
+
 Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).

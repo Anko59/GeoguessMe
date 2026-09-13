@@ -156,6 +156,8 @@ fi
 # Backup retention and isolated restore requirements.
 assert_contains "$BACKUP" '--keep-hourly 24 --keep-daily 14 --keep-weekly 8 --keep-monthly 6'
 assert_contains "$BACKUP" 'gzip -t'
+assert_contains "$BACKUP" 'flock -w "$PRE_DEPLOY_LOCK_WAIT_SECONDS" 8'
+assert_contains "$BACKUP" 'flock -n 8 || die "$environment backup is already running"'
 assert_contains "$ROOT/deployment/env/dev.env.example" 'geoguessme-database-backups/dev'
 assert_contains "$ROOT/deployment/env/production.env.example" 'geoguessme-database-backups/production'
 

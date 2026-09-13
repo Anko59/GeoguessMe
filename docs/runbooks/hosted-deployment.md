@@ -61,6 +61,12 @@ run `systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf` through the
 Access-protected operator route before rerunning a deployment. Do not broaden
 the restricted CI deployment key into shell access for this repair.
 
+The hourly backup keeps its nonblocking lock acquisition so overlapping timer
+runs fail and alert rather than queue. A deployment pre-backup waits up to five
+minutes for an already-running backup to finish; it then fails closed if the
+lock remains held. Do not remove the lock file manually: `flock` releases the
+lock when its owning process exits.
+
 Use the Access-protected operator SSH route. Store the corresponding private
 operator key in the team's password manager (not this repository) and retain a
 documented recovery copy. The server-only age identity is deliberately not an

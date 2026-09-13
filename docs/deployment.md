@@ -70,6 +70,11 @@ completed, before the first production promotion to `main`. There is no fixed
 24-hour soak or quarantine delay; promotion may proceed once this live evidence
 and every automated release gate pass for the exact deployed revision.
 
+Hosted application deployments wait up to five minutes for an in-progress hourly
+backup to release the per-environment backup lock. This avoids rejecting a valid
+deployment because the timer fired during the CI gate while retaining a bounded
+failure for a backup that does not complete.
+
 ## Compatibility-removal rollout
 
 The application compatibility PR removes the pre-GA inputs — the messages
