@@ -15,6 +15,7 @@ backups
 **/.env
 .env
 .env.*
+**/.local/mobile
 deployment/env/*.env
 
 # Go build/test artifacts.

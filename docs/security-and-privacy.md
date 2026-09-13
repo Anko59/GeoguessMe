@@ -1,8 +1,9 @@
 # Security and privacy
 
 This document describes the technical security, privacy, and operational
-controls. The public-facing data and retention summary is maintained in
-[PRIVACY.md](../PRIVACY.md).
+controls. The public-facing data and retention policy is maintained in
+[PRIVACY.md](../PRIVACY.md) and published at
+[geoguessme.com/privacy](https://geoguessme.com/privacy).
 
 ## Authorization model
 

@@ -1,0 +1,359 @@
+.privacy-page {
+    min-height: 100dvh;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background:
+        linear-gradient(145deg, rgba(246, 248, 252, 0.94), rgba(238, 250, 255, 0.95)),
+        url('/app_background.png') center / 720px;
+}
+
+.privacy-page::before,
+.privacy-page::after {
+    position: absolute;
+    z-index: -1;
+    content: '';
+    pointer-events: none;
+}
+
+.privacy-page::before {
+    width: min(44rem, 74vw);
+    height: 22rem;
+    top: 8rem;
+    left: -18rem;
+    background: var(--gradient-blue);
+    border-radius: 50%;
+    opacity: 0.1;
+    transform: rotate(-22deg);
+}
+
+.privacy-page::after {
+    width: min(42rem, 78vw);
+    height: 20rem;
+    right: -18rem;
+    bottom: 9rem;
+    background: var(--gradient-orange);
+    border-radius: 50%;
+    opacity: 0.12;
+    transform: rotate(18deg);
+}
+
+.privacy-orbit {
+    position: absolute;
+    z-index: -1;
+    border: 1px solid rgba(0, 119, 182, 0.16);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.privacy-orbit-one {
+    width: 28rem;
+    height: 28rem;
+    top: 12rem;
+    right: -17rem;
+}
+
+.privacy-orbit-two {
+    width: 19rem;
+    height: 19rem;
+    top: 16rem;
+    right: -12.5rem;
+    border-color: rgba(255, 182, 0, 0.2);
+}
+
+.privacy-header {
+    width: min(100%, 78rem);
+    margin-inline: auto;
+    padding: clamp(1rem, 3vw, 2rem) clamp(1rem, 4vw, 2.75rem);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.privacy-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--ink-strong);
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    text-decoration: none;
+}
+
+.privacy-brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    border-radius: 0.9rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.privacy-brand-mark img {
+    width: 1.85rem;
+    height: 1.85rem;
+    display: block;
+    object-fit: contain;
+}
+
+.privacy-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--brand-blue-accessible);
+    font-size: 0.9rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.privacy-back-link span {
+    transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.privacy-back-link:hover span {
+    transform: translate(2px, -2px);
+}
+
+.privacy-layout {
+    width: min(100%, 78rem);
+    margin-inline: auto;
+    padding: clamp(1.5rem, 4vw, 3.5rem) clamp(1rem, 4vw, 2.75rem) 4rem;
+    display: grid;
+    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(2rem, 6vw, 5.75rem);
+}
+
+.privacy-sidebar {
+    position: sticky;
+    top: 1.5rem;
+    padding-top: 0.35rem;
+}
+
+.privacy-sidebar-label,
+.privacy-section-kicker {
+    margin-bottom: 0.7rem;
+    color: var(--brand-blue-accessible);
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.privacy-sidebar nav {
+    display: grid;
+    gap: 0.15rem;
+    border-left: 1px solid var(--line-strong);
+}
+
+.privacy-sidebar a {
+    padding: 0.45rem 0 0.45rem 0.9rem;
+    color: var(--ink-muted);
+    font-size: 0.84rem;
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transform: translateX(-1px);
+    transition:
+        color var(--duration-fast) ease,
+        border-color var(--duration-fast) ease;
+}
+
+.privacy-sidebar a:hover {
+    color: var(--brand-navy);
+    border-color: var(--brand-orange-accessible);
+}
+
+.privacy-document {
+    width: min(100%, 54rem);
+}
+
+.privacy-hero {
+    padding: clamp(1rem, 2vw, 1.5rem) 0 clamp(2rem, 5vw, 3.75rem);
+}
+
+.privacy-eyebrow {
+    margin-bottom: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--brand-orange-accessible);
+    font-size: 0.75rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+
+.privacy-eyebrow-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    display: inline-block;
+    background: var(--gradient-orange);
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(255, 182, 0, 0.16);
+}
+
+.privacy-hero h1 {
+    max-width: 47rem;
+    margin-bottom: 1.25rem;
+    font-size: clamp(2.7rem, 7vw, 5.6rem);
+    font-weight: 950;
+    letter-spacing: -0.075em;
+    line-height: 0.98;
+}
+
+.privacy-lede {
+    max-width: 44rem;
+    margin-bottom: 1.4rem;
+    color: var(--ink-muted);
+    font-size: clamp(1.04rem, 2vw, 1.22rem);
+    line-height: 1.65;
+}
+
+.privacy-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem;
+    color: var(--ink-subtle);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+.privacy-meta-divider {
+    width: 0.25rem;
+    height: 0.25rem;
+    display: inline-block;
+    background: var(--brand-green);
+    border-radius: 50%;
+}
+
+.privacy-highlights {
+    margin-bottom: clamp(2.5rem, 6vw, 5rem);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.9rem;
+}
+
+.privacy-highlight {
+    min-height: 11.5rem;
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+}
+
+.privacy-highlight::after {
+    width: 6rem;
+    height: 6rem;
+    position: absolute;
+    right: -2rem;
+    bottom: -2.5rem;
+    border: 1px solid currentcolor;
+    border-radius: 50%;
+    content: '';
+    opacity: 0.16;
+}
+
+.privacy-highlight-orange {
+    color: var(--brand-orange-accessible);
+}
+
+.privacy-highlight-blue {
+    color: var(--brand-blue-accessible);
+}
+
+.privacy-highlight-green {
+    color: var(--success);
+}
+
+.privacy-highlight-number {
+    display: block;
+    margin-bottom: 1.5rem;
+    color: currentcolor;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+}
+
+.privacy-highlight h2 {
+    margin-bottom: 0.45rem;
+    color: var(--ink-strong);
+    font-size: 1.02rem;
+    letter-spacing: -0.03em;
+}
+
+.privacy-highlight p {
+    margin-bottom: 0;
+    color: var(--ink-muted);
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.privacy-callout {
+    margin-bottom: clamp(3rem, 7vw, 5.5rem);
+    padding: 1.25rem 1.4rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    color: var(--ink);
+    background: rgba(238, 250, 255, 0.86);
+    border: 1px solid rgba(0, 119, 182, 0.16);
+    border-radius: var(--radius-md);
+}
+
+.privacy-callout-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    display: grid;
+    flex: none;
+    place-items: center;
+    color: var(--brand-navy);
+    background: var(--gradient-blue);
+    border-radius: 0.55rem;
+    font-size: 0.9rem;
+}
+
+.privacy-callout p {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: 0.93rem;
+}
+
+.privacy-section {
+    scroll-margin-top: 1.5rem;
+    margin-bottom: clamp(3.5rem, 8vw, 6.5rem);
+}
+
+.privacy-section-heading {
+    margin-bottom: 1.45rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.95rem;
+}
+
+.privacy-section-number {
+    padding-top: 0.1rem;
+    color: var(--brand-orange-accessible);
+    font-size: 0.75rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+}
+
+.privacy-section h2 {
+    margin-bottom: 0;
+    font-size: clamp(1.7rem, 3.3vw, 2.45rem);
+    font-weight: 900;
+    letter-spacing: -0.055em;
+}
+
+.privacy-section-content {
+    padding-left: 2.2rem;
+}

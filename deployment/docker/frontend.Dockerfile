@@ -22,7 +22,7 @@ RUN xcaddy build v2.11.4 \
     --replace 'golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0' \
     --replace 'golang.org/x/crypto@v0.53.0=golang.org/x/crypto@v0.55.0' \
     --replace 'golang.org/x/crypto@v0.54.0=golang.org/x/crypto@v0.55.0' \
-    --replace 'google.golang.org/grpc@v1.81.0=google.golang.org/grpc@v1.83.1'
+    --replace 'google.golang.org/grpc@v1.81.0=google.golang.org/grpc@v1.83.2'
 
 # Caddy 2.11.4-alpine (immutable index digest), with the patched binary above.
 # The pinned image currently carries curl/libcurl 8.19.0-r0; refresh both
