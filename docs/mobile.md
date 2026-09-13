@@ -94,7 +94,9 @@ outputs, SDK files, AVD data, or generated test credentials. A release owner
 must configure Gradle signing from the deployment secret store, increment the
 native version code/name, build an AAB from the validated revision, and retain
 the signed artifact digest with release evidence. Store submission and signing
-are outside the automated debug workflow.
+are outside the automated debug workflow. Account access, Play API operations,
+testing tracks, policy declarations, and store maintenance are documented in the
+[Google Play developer account runbook](runbooks/google-play-console.md).
 
 The Dockerized release flow keeps the upload key under ignored `.local/` and
 passes passwords only as environment variables. In a private shell, export two
