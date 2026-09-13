@@ -50,6 +50,9 @@ and submit one server-timed guess.
 - [Troubleshooting](troubleshooting.md) — frequent issues and solutions
 - [PWA and Web Push](pwa-and-push.md) — installable app, push notifications, iOS
   guidance, VAPID key generation
+- [Google Play developer account runbook](runbooks/google-play-console.md) —
+  Android bundle publishing, Play API access, testing tracks, policy forms, and
+  account maintenance
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
 - [Cloudflare Access service-token runbook](runbooks/access-tokens.md) — three
@@ -82,6 +85,7 @@ to it instead of restating it:
 | Local development workflow            | [local-development](local-development.md)                       |
 | Troubleshooting                       | [troubleshooting](troubleshooting.md)                           |
 | Hosted deployment checklist           | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)     |
+| Google Play account and Android store | [runbooks/google-play-console](runbooks/google-play-console.md) |
 | Social-auth account migration         | [runbooks/social-auth-rollout](runbooks/social-auth-rollout.md) |
 
 Pages that used to duplicate a canonical subject route to it instead. Historical
