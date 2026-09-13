@@ -17,6 +17,7 @@ import { useGroupParty } from '../../hooks/useGroupParty';
 import PartyButton from './PartyButton';
 import Icon from '../../components/ui/Icon';
 import FullScreenImage from '../../components/ui/FullScreenImage';
+import GroupGlobe from '../../components/globe/GroupGlobe';
 import './GroupView.css';
 
 function isForbiddenError(error: unknown): boolean {
@@ -35,6 +36,7 @@ export default function GroupView() {
     }>({ id: '', group: null, error: '', accessDenied: false });
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [globeGroupID, setGlobeGroupID] = useState<string | null>(null);
     const [groupPhotoRefreshKey, setGroupPhotoRefreshKey] = useState(0);
     const group = groupState.id === id ? groupState.group : null;
     const groupError = groupState.id === id ? groupState.error : '';
@@ -142,28 +144,40 @@ export default function GroupView() {
                             <span>Group</span>
                             <h1 className="group-name">{group?.name ?? 'Group'}</h1>
                         </div>
-                        {id && (
-                            <PartyButton
-                                groupId={id}
-                                status={partyStatus}
-                                onStarted={refreshParty}
-                                onRefresh={refreshParty}
-                            />
-                        )}
-                        {user && (
-                            <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
-                                <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
-                            </Link>
-                        )}
-                        {group && !groupError && (
-                            <button
-                                className="settings-btn"
-                                onClick={() => setSettingsOpen(true)}
-                                aria-label="Open group settings"
-                            >
-                                <img src="/settings_gear_icon.png" alt="" />
-                            </button>
-                        )}
+                        <div className="group-header-actions">
+                            {id && (
+                                <PartyButton
+                                    groupId={id}
+                                    status={partyStatus}
+                                    onStarted={refreshParty}
+                                    onRefresh={refreshParty}
+                                />
+                            )}
+                            {user && (
+                                <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
+                                    <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
+                                </Link>
+                            )}
+                            {group && activeTab === 'chat' && (
+                                <button
+                                    className="settings-btn"
+                                    onClick={() => setGlobeGroupID(id)}
+                                    aria-label="Open group globe"
+                                    title="Group globe"
+                                >
+                                    <Icon name="globe" />
+                                </button>
+                            )}
+                            {group && !groupError && (
+                                <button
+                                    className="settings-btn"
+                                    onClick={() => setSettingsOpen(true)}
+                                    aria-label="Open group settings"
+                                >
+                                    <img src="/settings_gear_icon.png" alt="" />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
                 {error && (
@@ -212,6 +226,18 @@ export default function GroupView() {
                 <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
             {partyStatus?.active && <div className="party-border" aria-hidden="true" />}
+            {group && globeGroupID === id && (
+                <GroupGlobe
+                    key={id}
+                    groupID={id}
+                    groupName={group.name}
+                    onClose={() => setGlobeGroupID(null)}
+                    onChallenge={(message) => {
+                        setGlobeGroupID(null);
+                        setGameMessage(message);
+                    }}
+                />
+            )}
             <Game
                 gameMessage={gameMessage}
                 onChallengeStatusChange={updateChallengeStatus}

@@ -64,6 +64,12 @@ curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://backend:8080/metrics
 
 ## Logging
 
+The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
+`load group challenge map` with the group ID and database error; coordinates are
+not logged. If the challenge list works but the Earth does not render, check
+browser WebGL support and delivery of `/globe/earth.jpg` from the frontend. The
+list remains available when 3D rendering fails.
+
 The backend uses `slog` with JSON handler output. Every HTTP request is logged
 with:
 
@@ -330,6 +336,12 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 5. If objects were exposed, invalidate them; media URLs are short-lived
 
 ## Incident response
+
+If a local or CI stack fails before startup with `pull access denied` for
+`minio/minio`, check out the registry fix and rerun the failed Make target. The
+Compose files use the official `quay.io/minio/minio` repository with the same
+immutable digest; see the [deployment guide](deployment.md). Keep existing
+volumes intact; registry access failures do not require a storage reset.
 
 | Scenario          | Response                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |

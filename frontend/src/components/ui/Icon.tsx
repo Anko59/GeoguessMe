@@ -5,6 +5,7 @@ export type IconName =
     | 'chevron-right'
     | 'close'
     | 'gear'
+    | 'globe'
     | 'image'
     | 'logout'
     | 'send'
@@ -30,6 +31,13 @@ const paths: Record<IconName, React.ReactNode> = {
         </>
     ),
     check: <path d="M20 6 9 17l-5-5" />,
+    globe: (
+        <>
+            <circle cx="12" cy="12" r="9" />
+            <ellipse cx="12" cy="12" rx="4" ry="9" />
+            <path d="M3 12h18" />
+        </>
+    ),
     'chevron-right': <path d="m9 18 6-6-6-6" />,
     close: (
         <>

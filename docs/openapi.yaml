@@ -8,6 +8,8 @@ servers:
   - url: /api/v1
     description: Same-origin API gateway prefix.
 paths:
+  /group/challenges:
+    $ref: ./openapi/paths/atlas.yaml#/groupChallenges
   /auth/signup:
     $ref: ./openapi/paths/auth.yaml#/signup
   /auth/login:

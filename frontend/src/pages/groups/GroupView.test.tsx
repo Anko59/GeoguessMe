@@ -52,6 +52,26 @@ vi.mock('../../components/camera/Camera', () => ({
     default: () => <div data-testid="camera">Camera</div>,
 }));
 
+vi.mock('../../components/globe/GroupGlobe', () => ({
+    default: ({
+        groupID,
+        onClose,
+        onChallenge,
+    }: {
+        groupID: string;
+        onClose: () => void;
+        onChallenge: (message: unknown) => void;
+    }) => (
+        <div data-testid="globe">
+            <span>{groupID}</span>
+            <button onClick={onClose}>Close globe</button>
+            <button onClick={() => onChallenge({ id: 'globe-challenge', group_id: groupID })}>
+                Open globe challenge
+            </button>
+        </div>
+    ),
+}));
+
 vi.mock('../../components/game/Game', () => ({
     default: ({ gameMessage, onClose }: { gameMessage: unknown; onClose: () => void }) =>
         gameMessage ? (
@@ -143,6 +163,17 @@ beforeEach(() => {
 });
 
 describe('GroupView', () => {
+    it('opens the current group globe from chat and launches its challenges', async () => {
+        renderGroupView('group-1');
+        fireEvent.click(await screen.findByRole('button', { name: 'Open group globe' }));
+        expect(screen.getByTestId('globe')).toHaveTextContent('group-1');
+        fireEvent.click(screen.getByRole('button', { name: 'Close globe' }));
+        expect(screen.queryByTestId('globe')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open group globe' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open globe challenge' }));
+        expect(screen.queryByTestId('globe')).toBeNull();
+        expect(screen.getByTestId('game')).toBeInTheDocument();
+    });
     it('shows invalid group id message when id is missing', () => {
         render(
             <AuthContext.Provider value={authValue()}>
