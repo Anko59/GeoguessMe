@@ -13,6 +13,8 @@ MOBILE_SOURCE_SHA ?= $(shell git rev-parse HEAD)
 MOBILE_SOURCE_TREE ?= $(shell git rev-parse HEAD^{tree})
 MOBILE_EXPECTED_UPLOAD_CERT_SHA256 ?=
 MOBILE_REQUIRE_EXPECTED_CERT ?= false
+PLAY_API_PACKAGE_NAME ?= com.geoguessme.app
+PLAY_API_BASE_URL ?= https://androidpublisher.googleapis.com
 MOBILE_TOOLS_SERVICE := $(if $(wildcard /dev/kvm),mobile-tools-kvm,mobile-tools)
 MOBILE_TOOLS_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) $(MOBILE_TOOLS_SERVICE)
@@ -31,6 +33,11 @@ MOBILE_TOOLS_ARTIFACT_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e MOBILE_SOURCE_TREE="$(MOBILE_SOURCE_TREE)" \
 	-e MOBILE_REQUIRE_PROVENANCE=true \
 	$(MOBILE_TOOLS_SERVICE)
+PLAY_API_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
+	-e PLAY_ACCESS_TOKEN \
+	-e PLAY_API_BASE_URL="$(PLAY_API_BASE_URL)" \
+	-e PLAY_API_PACKAGE_NAME="$(PLAY_API_PACKAGE_NAME)" \
+	go-tools
 
 ##@ Mobile
 mobile-init: ## Generate the tracked Capacitor Android project when absent.
@@ -68,6 +75,10 @@ mobile-verify-release: mobile-prepare ## Verify the package, version, signature,
 mobile-release-manifest: mobile-verify-release ## Create non-secret provenance metadata for a verified release AAB.
 	$(MOBILE_TOOLS_ARTIFACT_RUN) \
 		tools/mobile/verify-release-bundle.sh manifest "$(MOBILE_RELEASE_ARTIFACT)" "$(MOBILE_RELEASE_MANIFEST)"
+
+play-api-check: ## Read the Play app identity with a caller-issued OAuth token.
+	@test -n "$${PLAY_ACCESS_TOKEN:-}" || { echo 'PLAY_ACCESS_TOKEN is required and must not be passed on the command line' >&2; exit 2; }
+	$(PLAY_API_RUN) sh -c 'cd /workspace/tools/mobile/play-publisher && go run . inspect-app --package-name "$$PLAY_API_PACKAGE_NAME"'
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \

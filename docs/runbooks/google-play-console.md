@@ -95,6 +95,13 @@ outside ordinary shell history:
   unavoidable, inject it only for the job, restrict the GitHub environment, and
   delete the temporary file in cleanup. Do not put the JSON in a repository
   secret if the platform offers a safer federated identity path.
+- The repository's **Play API access check** workflow uses the preferred
+  federated path. Set these as non-secret variables on the GitHub `production`
+  environment: `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` (the full Google WIF
+  provider resource) and `PLAY_GCP_SERVICE_ACCOUNT` (the exact service-account
+  email invited in Play Console). The workflow exchanges GitHub's OIDC identity
+  for a short-lived access token and passes it to the Dockerized client through
+  `PLAY_ACCESS_TOKEN`.
 - Do not commit service-account JSON, `google-services.json`, release keystores,
   passwords, access tokens, or generated AAB/APK files. Do not print them,
   include them in diagnostic artifacts, or pass them as command-line arguments.
@@ -136,6 +143,20 @@ The canonical API reference is
 [Google Play Android Publisher API v3](https://developers.google.com/android-publisher/api-ref/rest).
 Its edit workflow is described in
 [Edits](https://developers.google.com/android-publisher/edits).
+
+## Read-only integration check
+
+Before adding write access to a release workflow, run the repository's manual
+**Play API access check** workflow. It validates the WIF configuration, obtains
+an Android Publisher access token with the narrow API scope, and reads the app
+identity. A successful result must report package `com.geoguessme.app`; a
+different package means the configuration points at the wrong app and must be
+fixed before any edit is created.
+
+This check intentionally has no Play mutation capability. It does not create an
+edit, upload an AAB, change a track, or commit a release. Those operations must
+remain in the production release workflow and execute only after the exact
+signed bundle has passed the Android release contract.
 
 ## Android release preparation
 

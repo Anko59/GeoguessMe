@@ -158,6 +158,21 @@ values to the source commit and Git tree supplied by Make. It contains no
 passwords or private-key material. A future CI workflow must retain this
 manifest with the exact AAB and must never rebuild the bundle at promotion time.
 
+### Play API automation foundation
+
+The repository includes a read-only Play API access check for validating the
+service-account integration before enabling bundle publication. Configure the
+production environment variables `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` and
+`PLAY_GCP_SERVICE_ACCOUNT` in GitHub, then run the **Play API access check**
+workflow manually. It authenticates through GitHub OIDC, requests a short-lived
+Android Publisher token, and reads the configured app identity for
+`com.geoguessme.app`.
+
+The workflow deliberately does not accept a service-account JSON key, upload a
+bundle, modify a track, or commit a Play edit. Bundle upload and track
+publication will be added to the production release workflow only after the
+signed-artifact and release-evidence steps are wired and verified.
+
 App links recognize `https://geoguessme.com`, `https://www.geoguessme.com`, and
 the `geoguessme:` custom scheme. HTTPS app links become verified only after the
 production site serves an Android Digital Asset Links file for the actual

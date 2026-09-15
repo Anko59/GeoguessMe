@@ -47,9 +47,10 @@ CI=.github/workflows/ci.yml
 DEPLOY=.github/workflows/deploy.yml
 RELEASE=.github/workflows/release.yml
 NIGHTLY=.github/workflows/nightly.yml
+PLAY_API=.github/workflows/play-api-access.yml
 
 echo "tiered CI regression tests:"
-for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY"; do
+for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY" "$PLAY_API"; do
     if [ -f "$workflow" ]; then
         ok "$workflow exists"
     else
@@ -141,6 +142,21 @@ contains "$RELEASE" 'release_version=.*\.release-version' \
     "release reads the committed version manifest"
 contains "$RELEASE" 'requested_major' \
     "release validates semantic version ordering"
+
+contains "$PLAY_API" '^  workflow_dispatch:' "Play API access is an explicit manual operation"
+contains "$PLAY_API" 'id-token: write' "Play API access has narrowly scoped OIDC permission"
+contains "$PLAY_API" 'google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed' \
+    "Play API access pins the Google OIDC action"
+contains "$PLAY_API" 'token_format: access_token' "Play API access requests a short-lived token"
+contains "$PLAY_API" 'https://www.googleapis.com/auth/androidpublisher' \
+    "Play API access requests only the Android Publisher scope"
+contains "$PLAY_API" 'vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER' \
+    "Play API access reads the provider from environment configuration"
+contains "$PLAY_API" 'vars.PLAY_GCP_SERVICE_ACCOUNT' \
+    "Play API access reads the service account from environment configuration"
+contains "$PLAY_API" 'make play-api-check' "Play API access uses the Dockerized client target"
+absent "$PLAY_API" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "Play API workflow contains no long-lived JSON credential path"
 
 contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
 contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"
