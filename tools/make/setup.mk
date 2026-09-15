@@ -83,6 +83,11 @@ bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
 	$(COMPOSE_TOOLS) pull playwright
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
 
+bootstrap-mobile: ## Prepare only the Node and Android tools needed by mobile E2E CI.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build mobile-tools node-tools
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
 
