@@ -137,7 +137,7 @@ jobs:
           }
       - name: Authenticate to Google Cloud with GitHub OIDC
         id: auth
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
@@ -357,7 +357,7 @@ jobs:
             echo "web=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}"
           } >> "$GITHUB_OUTPUT"
       - name: Download verified Android release artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: android-release-${{ github.sha }}
           path: android-release
@@ -430,7 +430,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download verified Android release artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: android-release-${{ github.sha }}
           path: android-release
@@ -455,7 +455,7 @@ jobs:
              .aab_sha256 == $expected_sha' "$manifest" >/dev/null
       - name: Authenticate to Google Cloud with GitHub OIDC
         id: auth
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
