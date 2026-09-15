@@ -142,6 +142,36 @@ contains "$RELEASE" 'release_version=.*\.release-version' \
     "release reads the committed version manifest"
 contains "$RELEASE" 'requested_major' \
     "release validates semantic version ordering"
+contains "$RELEASE" 'name: Build and verify Android release bundle' \
+    "production release builds the Android bundle"
+contains "$RELEASE" 'needs: android' \
+    "image promotion waits for the verified Android bundle"
+contains "$RELEASE" 'MOBILE_UPLOAD_KEYSTORE_BASE64' \
+    "Android release materializes the upload key from a secret"
+contains "$RELEASE" 'MOBILE_KEYSTORE_PASSWORD' \
+    "Android release receives the keystore password as a secret"
+contains "$RELEASE" 'MOBILE_KEY_PASSWORD' \
+    "Android release receives the key password as a secret"
+contains "$RELEASE" 'MOBILE_UPLOAD_CERT_SHA256' \
+    "Android release requires the configured upload certificate"
+contains "$RELEASE" 'make bootstrap-mobile' \
+    "Android release prepares the pinned mobile toolchain"
+contains "$RELEASE" 'make mobile-build-release' \
+    "Android release builds the signed AAB through Make"
+contains "$RELEASE" 'make mobile-release-manifest' \
+    "Android release creates the provenance manifest through Make"
+contains "$RELEASE" 'MOBILE_REQUIRE_EXPECTED_CERT: true' \
+    "Android release fails closed on an unconfigured certificate"
+contains "$RELEASE" 'aab_sha256' \
+    "Android release checks the immutable bundle digest"
+contains "$RELEASE" 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' \
+    "Android release retains the verified bundle"
+contains "$RELEASE" 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' \
+    "release promotion consumes the verified bundle"
+contains "$RELEASE" 'android-release/app-release.aab' \
+    "GitHub release carries the verified Android bundle"
+absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "Android release contains no long-lived Google credential"
 
 contains "$PLAY_API" '^  workflow_dispatch:' "Play API access is an explicit manual operation"
 contains "$PLAY_API" 'id-token: write' "Play API access has narrowly scoped OIDC permission"

@@ -105,6 +105,11 @@ squash-history conflicts without rewriting either protected branch. Production
 compares the `main` and `dev` Git trees, verifies the development workflow
 signatures, promotes the exact manifests without rebuilding, verifies unchanged
 digests, adds the production workflow signature, and deploys those references.
+Before that promotion starts, the same workflow builds and verifies the signed
+Android App Bundle from the release commit, binds its provenance to the
+commit/tree, and retains the exact bundle and manifest. The GitHub release
+receives those verified files; later Play publication must consume that artifact
+rather than rebuild it.
 
 ## Generic first deploy
 
