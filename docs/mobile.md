@@ -184,22 +184,61 @@ Run the `gh secret set` commands from a private shell and provide each password
 interactively when prompted. The certificate variable is the SHA-256 fingerprint
 of the Play upload certificate, with or without colons. The separate Play OIDC
 variables documented below are used for API access and are not a replacement for
-the Android upload key.
+the Android upload key. The Play publication job consumes the exact retained
+artifact after the production deployment succeeds.
 
-### Play API automation foundation
+### Play API release automation
 
-The repository includes a read-only Play API access check for validating the
-service-account integration before enabling bundle publication. Configure the
-production environment variables `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` and
-`PLAY_GCP_SERVICE_ACCOUNT` in GitHub, then run the **Play API access check**
-workflow manually. It authenticates through GitHub OIDC, requests a short-lived
-Android Publisher token, and reads the configured app identity for
-`com.geoguessme.app`.
+The production release workflow now owns the complete Android distribution
+boundary. It builds and verifies the signed AAB, binds it to the release commit
+and Git tree, retains the AAB and manifest as one artifact, and waits for the
+production deployment to succeed. It then authenticates through GitHub OIDC with
+a short-lived Android Publisher token and performs one Play edit:
 
-The workflow deliberately does not accept a service-account JSON key, upload a
-bundle, modify a track, or commit a Play edit. Bundle upload and track
-publication will be added to the production release workflow only after the
-signed-artifact and release-evidence steps are wired and verified.
+1. confirm the app package identity;
+2. create an edit and upload the retained AAB;
+3. update the configured track with the manifest version code and release
+   status;
+4. validate the edit;
+5. commit the edit with changes sent for review; and
+6. read the track back and fail if Play does not report the submitted version
+   and status.
+
+The workflow does not rebuild or select a different bundle after the release
+artifact job. The API client verifies the local AAB SHA-256 against the manifest
+before it creates an edit, and verifies the Play-reported version code before
+changing the track.
+
+Configure these values in the GitHub `production` environment before running a
+production release:
+
+- `MOBILE_UPLOAD_KEYSTORE_BASE64` secret: the base64-encoded upload keystore;
+- `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD` secrets: signing
+  passwords;
+- `MOBILE_UPLOAD_CERT_SHA256` variable: the expected upload certificate
+  fingerprint;
+- `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` variable: the Google WIF provider
+  resource;
+- `PLAY_GCP_SERVICE_ACCOUNT` variable: the Play-authorized service-account
+  email; and
+- `PLAY_RELEASE_TRACK` variable: the target Play track, normally `internal`, a
+  closed-test track, or `production` after the account is eligible.
+
+`PLAY_RELEASE_STATUS` is an optional variable and defaults to `completed`; use
+`inProgress` only when the release process explicitly requires a staged rollout.
+The Google service account must separately have the required app-scoped Play
+permissions. The workflow accepts no JSON key and does not create a credential
+file.
+
+The repository also includes a read-only **Play API access check** workflow. Use
+it to validate OIDC and app identity without creating an edit or changing Play
+state. It is a diagnostic, not an alternative publication path.
+
+If the access preflight, artifact verification, production deployment, or
+post-commit track readback fails, the release stops and retains the failing
+workflow evidence. A successful commit is reported with the package, edit ID,
+track, version, digest, and source provenance; tokens and signing material are
+never printed or stored.
 
 App links recognize `https://geoguessme.com`, `https://www.geoguessme.com`, and
 the `geoguessme:` custom scheme. HTTPS app links become verified only after the

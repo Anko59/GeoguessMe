@@ -172,6 +172,22 @@ contains "$RELEASE" 'android-release/app-release.aab' \
     "GitHub release carries the verified Android bundle"
 absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
     "Android release contains no long-lived Google credential"
+contains "$RELEASE" '^  play-access:' "production release has a Play access preflight"
+contains "$RELEASE" 'needs: \[android, play-access\]' \
+    "image promotion waits for Android and Play access"
+contains "$RELEASE" 'google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed' \
+    "production Play jobs pin the Google OIDC action"
+contains "$RELEASE" 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER' \
+    "production Play jobs read the WIF provider"
+contains "$RELEASE" 'PLAY_GCP_SERVICE_ACCOUNT' \
+    "production Play jobs read the service account"
+contains "$RELEASE" '^  play-publish:' "production release has a Play publication job"
+contains "$RELEASE" 'needs: \[android, deploy\]' \
+    "Play publication waits for the deployed production release"
+contains "$RELEASE" 'make play-api-check' "Play access is checked before image promotion"
+contains "$RELEASE" 'make play-api-publish' "Play publication uses the Dockerized write target"
+absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "production Play jobs contain no long-lived JSON credential path"
 
 contains "$PLAY_API" '^  workflow_dispatch:' "Play API access is an explicit manual operation"
 contains "$PLAY_API" 'id-token: write' "Play API access has narrowly scoped OIDC permission"
