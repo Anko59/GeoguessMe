@@ -81,6 +81,16 @@ package/permission state, emulator log, and acceleration report where available.
 Credentials generated for the isolated fixture stay under ignored
 `.local/mobile/` paths.
 
+The pull-request workflow selects this journey for Android, backend, frontend,
+shared, deployment, and mobile-tooling changes. The post-merge development
+workflow runs it for every push to `dev`, before publishing development images
+or deploying the hosted development stack. A failed mobile gate blocks that
+publication and retains only the bounded diagnostic directory for seven days.
+This development gate validates the app/runtime integration; it does not create
+or upload a signed Play bundle. The production release workflow must build and
+verify the release-specific signed AAB after the release version and upload-key
+configuration are available, then retain its provenance with the artifact.
+
 Camera switching, held video recording, file-picker import, and advanced lenses
 remain covered by the existing browser tests and shared implementation but are
 not automated in the first native Maestro journey. They need device-matrix
