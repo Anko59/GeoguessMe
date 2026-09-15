@@ -71,6 +71,9 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
+      args:
+        TOOLS_UID: ${TOOLS_UID:-1000}
+        TOOLS_GID: ${TOOLS_GID:-1000}
     image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -85,6 +88,9 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
+      args:
+        TOOLS_UID: ${TOOLS_UID:-1000}
+        TOOLS_GID: ${TOOLS_GID:-1000}
     image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
