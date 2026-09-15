@@ -155,8 +155,36 @@ checks the fixed package name, compares the version name and calculated version
 code with `.release-version`, verifies the JAR signature, and records the AAB
 and upload-certificate SHA-256 values. The manifest additionally binds those
 values to the source commit and Git tree supplied by Make. It contains no
-passwords or private-key material. A future CI workflow must retain this
-manifest with the exact AAB and must never rebuild the bundle at promotion time.
+passwords or private-key material.
+
+The production release workflow now performs this build before image promotion.
+It materializes the keystore only on the ephemeral runner from the
+`MOBILE_UPLOAD_KEYSTORE_BASE64` production secret, passes the two signing
+passwords through `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD`, and
+requires the non-secret `MOBILE_UPLOAD_CERT_SHA256` production variable. It then
+verifies the source SHA/tree, package, version, signing certificate, and AAB
+SHA-256, retains the exact AAB plus manifest as a workflow artifact, and
+attaches both files to the GitHub release. The image-promotion job consumes that
+artifact; it never rebuilds the bundle. No Play edit is created or committed by
+this artifact job.
+
+Configure the production environment once, without committing any signing
+material. The keystore secret is binary data encoded as one base64 line; the two
+passwords remain separate secrets:
+
+```text
+base64 -w0 .local/mobile/upload-keystore.jks | \
+  gh secret set MOBILE_UPLOAD_KEYSTORE_BASE64 --env production
+gh secret set MOBILE_KEYSTORE_PASSWORD --env production
+gh secret set MOBILE_KEY_PASSWORD --env production
+gh variable set MOBILE_UPLOAD_CERT_SHA256 --env production
+```
+
+Run the `gh secret set` commands from a private shell and provide each password
+interactively when prompted. The certificate variable is the SHA-256 fingerprint
+of the Play upload certificate, with or without colons. The separate Play OIDC
+variables documented below are used for API access and are not a replacement for
+the Android upload key.
 
 ### Play API automation foundation
 
