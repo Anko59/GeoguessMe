@@ -83,6 +83,10 @@ type Track struct {
 	Releases []Release `json:"releases"`
 }
 
+type TrackList struct {
+	Tracks []Track `json:"tracks"`
+}
+
 // GetApplication performs the read-only identity check used before any edit.
 func (c *Client) GetApplication(ctx context.Context, packageName string) (Application, error) {
 	if err := validatePathPart(packageName, "package name"); err != nil {
@@ -94,6 +98,20 @@ func (c *Client) GetApplication(ctx context.Context, packageName string) (Applic
 		return Application{}, fmt.Errorf("get application %q: %w", packageName, err)
 	}
 	return application, nil
+}
+
+// ListTracks reads every committed track so publication can reject a bundle
+// whose version code was already uploaded anywhere in the app.
+func (c *Client) ListTracks(ctx context.Context, packageName string) ([]Track, error) {
+	if err := validatePathPart(packageName, "package name"); err != nil {
+		return nil, err
+	}
+	var tracks TrackList
+	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "tracks"), nil, &tracks)
+	if err != nil {
+		return nil, fmt.Errorf("list Play tracks: %w", err)
+	}
+	return tracks.Tracks, nil
 }
 
 // InsertEdit creates a new Play edit transaction.
@@ -157,6 +175,22 @@ func (c *Client) UpdateTrack(ctx context.Context, packageName, editID, track str
 		return Track{}, fmt.Errorf("update Play track %q: %w", track, err)
 	}
 	return updated, nil
+}
+
+// GetTrack reads the committed state of a track. Callers use this after an
+// edit commit to verify that Play accepted the intended version and status.
+func (c *Client) GetTrack(ctx context.Context, packageName, track string) (Track, error) {
+	for value, name := range map[string]string{packageName: "package name", track: "track"} {
+		if err := validatePathPart(value, name); err != nil {
+			return Track{}, err
+		}
+	}
+	var current Track
+	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "tracks", track), nil, &current)
+	if err != nil {
+		return Track{}, fmt.Errorf("get Play track %q: %w", track, err)
+	}
+	return current, nil
 }
 
 // ValidateEdit asks Play to validate all changes in an edit without publishing.

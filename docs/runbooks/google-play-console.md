@@ -85,16 +85,15 @@ and the available account permissions in
 Play API credentials are secrets. They must be kept outside the repository and
 outside ordinary shell history:
 
-- Local commands use the GNOME Keyring-backed agent environment. A future Play
-  API client may receive `GOOGLE_APPLICATION_CREDENTIALS` pointing to a mode
-  `0600` file outside the repository, or may materialize a short-lived file from
-  the approved keyring/vault entry. The agent must use
-  `direnv exec /home/anko/Work/projects/GeoguessMe <command>` for credentialed
-  commands.
-- CI should use a secret-managed file or workload identity. If a JSON key is
-  unavoidable, inject it only for the job, restrict the GitHub environment, and
-  delete the temporary file in cleanup. Do not put the JSON in a repository
-  secret if the platform offers a safer federated identity path.
+- Local commands use the GNOME Keyring-backed agent environment. The Play API
+  client accepts a caller-issued short-lived `PLAY_ACCESS_TOKEN`; the agent must
+  use `direnv exec /home/anko/Work/projects/GeoguessMe <command>` for
+  credentialed commands. It must not materialize a service-account key in the
+  repository or pass a token as a command-line argument.
+- CI uses GitHub OIDC and workload identity. The production environment stores
+  no Google JSON key and creates no credential file. This keeps token issuance
+  scoped to the release workflow and lets Google and GitHub audit the trust
+  relationship independently.
 - The repository's **Play API access check** workflow uses the preferred
   federated path. Set these as non-secret variables on the GitHub `production`
   environment: `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` (the full Google WIF
@@ -102,6 +101,12 @@ outside ordinary shell history:
   email invited in Play Console). The workflow exchanges GitHub's OIDC identity
   for a short-lived access token and passes it to the Dockerized client through
   `PLAY_ACCESS_TOKEN`.
+- The production environment also requires `PLAY_RELEASE_TRACK` as a variable;
+  `PLAY_RELEASE_STATUS` is optional and defaults to `completed`. Android signing
+  uses the separate `MOBILE_UPLOAD_KEYSTORE_BASE64`, `MOBILE_KEYSTORE_PASSWORD`,
+  and `MOBILE_KEY_PASSWORD` secrets plus the `MOBILE_UPLOAD_CERT_SHA256`
+  certificate variable. These values are consumed only by the production release
+  workflow.
 - Do not commit service-account JSON, `google-services.json`, release keystores,
   passwords, access tokens, or generated AAB/APK files. Do not print them,
   include them in diagnostic artifacts, or pass them as command-line arguments.
@@ -144,19 +149,37 @@ The canonical API reference is
 Its edit workflow is described in
 [Edits](https://developers.google.com/android-publisher/edits).
 
-## Read-only integration check
+## Play API checks and automated publication
 
-Before adding write access to a release workflow, run the repository's manual
-**Play API access check** workflow. It validates the WIF configuration, obtains
-an Android Publisher access token with the narrow API scope, and reads the app
-identity. A successful result must report package `com.geoguessme.app`; a
-different package means the configuration points at the wrong app and must be
-fixed before any edit is created.
+Run the repository's manual **Play API access check** workflow when diagnosing
+OIDC or Play permissions. It validates the WIF configuration, obtains an Android
+Publisher access token with the narrow API scope, and reads the app identity. A
+successful result must report package `com.geoguessme.app`; a different package
+means the configuration points at the wrong app and must be fixed before a
+release is attempted.
 
-This check intentionally has no Play mutation capability. It does not create an
-edit, upload an AAB, change a track, or commit a release. Those operations must
-remain in the production release workflow and execute only after the exact
-signed bundle has passed the Android release contract.
+Production publication is automated by `.github/workflows/release.yml`. After
+the Android release-artifact job verifies the signed AAB and provenance, the
+workflow checks Play access, promotes and deploys the exact backend/web image
+digests, and then runs the Play publication job. That job uses the retained AAB
+and manifest; it never rebuilds the bundle. The client performs this ordered
+edit transaction:
+
+1. read the app identity and all tracks, rejecting a version code that is not
+   newer than every version already uploaded for the app;
+2. create an edit and upload the exact AAB whose SHA-256 matches the manifest;
+3. update the configured track with the manifest version code and release
+   status;
+4. validate the edit;
+5. commit the edit with changes sent for review; and
+6. read the committed track back and fail if the submitted version and status
+   are not present.
+
+The workflow uses GitHub OIDC and a short-lived Android Publisher token. It does
+not accept a service-account JSON key, write a credential file, or pause for
+routine Console Save/Submit actions. An API failure stops the release and
+retains the workflow evidence; it does not retry a stale edit or upload a
+different artifact.
 
 ## Android release preparation
 
@@ -168,7 +191,10 @@ release process:
 2. Wait for the complete `dev` verification gate and successful development
    deployment. Run the source-blind hosted QA and retain its revision-bound
    report when the release checklist requires it.
-3. Perform the Android checks from that exact validated tree:
+3. The development workflow has already run the Android emulator journey. The
+   production release workflow builds the signed bundle from the exact release
+   revision and verifies its package, version, signature, certificate, digest,
+   source commit, and Git tree. To reproduce the checks locally from that tree:
 
     ```text
     make test-mobile
@@ -183,12 +209,12 @@ release process:
 4. For a production release, use the repository's short-lived `release/*` branch
    and normal `main` promotion flow. Build the AAB from the exact promoted
    revision; do not rebuild from a different checkout after the release gate.
-5. Confirm all of the following before uploading:
+5. The automated publication job confirms all of the following before and during
+   the upload:
 
     - package name is exactly `com.geoguessme.app`;
     - version name comes from `.release-version`;
-    - version code is greater than every version already present on the target
-      Play track or app;
+    - version code is greater than every version already present on the app;
     - the AAB is signed with the configured upload key, not the debug key;
     - the AAB SHA-256, Git revision, package, version code, and version name are
       recorded in restricted release evidence; and

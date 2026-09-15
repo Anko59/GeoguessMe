@@ -66,6 +66,24 @@ func TestGetApplicationSendsBearerAndUsesExpectedEndpoint(t *testing.T) {
 	}
 }
 
+func TestListTracksUsesApplicationTracksEndpoint(t *testing.T) {
+	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Write([]byte(`{"tracks":[{"track":"internal","releases":[{"versionCodes":["41"],"status":"completed"}]}]}`))
+	}))
+	defer server.Close()
+
+	tracks, err := client.ListTracks(context.Background(), "com.geoguessme.app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 1 || tracks[0].Track != "internal" {
+		t.Fatalf("tracks = %+v", tracks)
+	}
+}
+
 func TestInsertEditAndUpdateTrackEncodeRequests(t *testing.T) {
 	requests := 0
 	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +171,24 @@ func TestValidateAndCommitEditUseDistinctEndpoints(t *testing.T) {
 	}
 	if len(paths) != 2 || paths[0] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:validate" || paths[1] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit?changesNotSentForReview=true" {
 		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestGetTrackUsesCommittedTrackEndpoint(t *testing.T) {
+	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks/internal" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Write([]byte(`{"track":"internal","releases":[{"versionCodes":["42"],"status":"completed"}]}`))
+	}))
+	defer server.Close()
+
+	track, err := client.GetTrack(context.Background(), "com.geoguessme.app", "internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if track.Track != "internal" || len(track.Releases) != 1 || track.Releases[0].VersionCodes[0] != "42" {
+		t.Fatalf("track = %+v", track)
 	}
 }
 

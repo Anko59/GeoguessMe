@@ -15,6 +15,10 @@ MOBILE_EXPECTED_UPLOAD_CERT_SHA256 ?=
 MOBILE_REQUIRE_EXPECTED_CERT ?= false
 PLAY_API_PACKAGE_NAME ?= com.geoguessme.app
 PLAY_API_BASE_URL ?= https://androidpublisher.googleapis.com
+PLAY_API_AAB ?= android-release/app-release.aab
+PLAY_API_MANIFEST ?= android-release/android-release-manifest.json
+PLAY_RELEASE_TRACK ?=
+PLAY_RELEASE_STATUS ?= completed
 MOBILE_TOOLS_SERVICE := $(if $(wildcard /dev/kvm),mobile-tools-kvm,mobile-tools)
 MOBILE_TOOLS_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) $(MOBILE_TOOLS_SERVICE)
@@ -37,6 +41,8 @@ PLAY_API_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e PLAY_ACCESS_TOKEN \
 	-e PLAY_API_BASE_URL="$(PLAY_API_BASE_URL)" \
 	-e PLAY_API_PACKAGE_NAME="$(PLAY_API_PACKAGE_NAME)" \
+	-e PLAY_RELEASE_TRACK="$(PLAY_RELEASE_TRACK)" \
+	-e PLAY_RELEASE_STATUS="$(PLAY_RELEASE_STATUS)" \
 	go-tools
 
 ##@ Mobile
@@ -79,6 +85,18 @@ mobile-release-manifest: mobile-verify-release ## Create non-secret provenance m
 play-api-check: ## Read the Play app identity with a caller-issued OAuth token.
 	@test -n "$${PLAY_ACCESS_TOKEN:-}" || { echo 'PLAY_ACCESS_TOKEN is required and must not be passed on the command line' >&2; exit 2; }
 	$(PLAY_API_RUN) sh -c 'cd /workspace/tools/mobile/play-publisher && go run . inspect-app --package-name "$$PLAY_API_PACKAGE_NAME"'
+
+play-api-publish: ## Upload, validate, and commit the verified Android bundle to Play.
+	@test -n "$${PLAY_ACCESS_TOKEN:-}" || { echo 'PLAY_ACCESS_TOKEN is required and must not be passed on the command line' >&2; exit 2; }
+	@test -n "$(PLAY_RELEASE_TRACK)" || { echo 'PLAY_RELEASE_TRACK is required' >&2; exit 2; }
+	@test -f "$(PLAY_API_AAB)" || { echo 'PLAY_API_AAB does not point to a file' >&2; exit 2; }
+	@test -f "$(PLAY_API_MANIFEST)" || { echo 'PLAY_API_MANIFEST does not point to a file' >&2; exit 2; }
+	$(PLAY_API_RUN) sh -c 'cd /workspace/tools/mobile/play-publisher && go run . publish-bundle \
+		--package-name "$$PLAY_API_PACKAGE_NAME" \
+		--bundle "/workspace/$(PLAY_API_AAB)" \
+		--manifest "/workspace/$(PLAY_API_MANIFEST)" \
+		--track "$$PLAY_RELEASE_TRACK" \
+		--status "$$PLAY_RELEASE_STATUS"'
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
