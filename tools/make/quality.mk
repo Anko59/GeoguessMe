@@ -122,7 +122,7 @@ endif
 HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
 
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -130,7 +130,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 

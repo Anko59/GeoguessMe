@@ -47,6 +47,9 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
 
+test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
+	bash tools/mobile/test-release-bundle-contract.sh
+
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
