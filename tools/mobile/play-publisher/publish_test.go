@@ -104,7 +104,7 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)
 		case 7:
-			if r.Method != http.MethodPost || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit" || r.URL.RawQuery != "" {
+			if r.Method != http.MethodPost || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit" || r.URL.RawQuery != "changesInReviewBehavior=ERROR_IF_IN_REVIEW" {
 				t.Errorf("commit request = %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)

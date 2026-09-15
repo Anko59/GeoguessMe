@@ -208,8 +208,8 @@ func (c *Client) ValidateEdit(ctx context.Context, packageName, editID string) (
 	return edit, nil
 }
 
-// CommitEdit publishes a validated edit. The caller must explicitly choose
-// whether Play should send changes for review.
+// CommitEdit publishes a validated edit. It refuses to cancel another edit
+// already in review; the release workflow must handle that state explicitly.
 func (c *Client) CommitEdit(ctx context.Context, packageName, editID string, changesNotSentForReview bool) (AppEdit, error) {
 	for value, name := range map[string]string{packageName: "package name", editID: "edit ID"} {
 		if err := validatePathPart(value, name); err != nil {
@@ -219,10 +219,11 @@ func (c *Client) CommitEdit(ctx context.Context, packageName, editID string, cha
 	var edit AppEdit
 	endpoint := c.resourceURL("v3", "applications", packageName, "edits", editID+":commit")
 	query := endpoint.Query()
+	query.Set("changesInReviewBehavior", "ERROR_IF_IN_REVIEW")
 	if changesNotSentForReview {
 		query.Set("changesNotSentForReview", "true")
-		endpoint.RawQuery = query.Encode()
 	}
+	endpoint.RawQuery = query.Encode()
 	err := c.doJSON(ctx, http.MethodPost, endpoint, nil, &edit)
 	if err != nil {
 		return AppEdit{}, fmt.Errorf("commit Play edit: %w", err)

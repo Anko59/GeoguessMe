@@ -169,7 +169,7 @@ func TestValidateAndCommitEditUseDistinctEndpoints(t *testing.T) {
 	if _, err := client.CommitEdit(context.Background(), "com.geoguessme.app", "edit-123", true); err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 2 || paths[0] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:validate" || paths[1] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit?changesNotSentForReview=true" {
+	if len(paths) != 2 || paths[0] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:validate" || paths[1] != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW&changesNotSentForReview=true" {
 		t.Fatalf("paths = %v", paths)
 	}
 }
