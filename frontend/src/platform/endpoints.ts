@@ -1,4 +1,5 @@
 import { isNativeRuntime } from './runtime';
+import { productionOrigin } from './production';
 
 function normalizedOrigin(value: string | undefined): string | null {
     const candidate = value?.trim();
@@ -28,6 +29,6 @@ export function websocketURL(path: string): string {
 }
 
 export function publicWebURL(path: string): string {
-    const origin = configuredWebOrigin ?? (isNativeRuntime() ? 'https://geoguessme.com' : window.location.origin);
+    const origin = configuredWebOrigin ?? (isNativeRuntime() ? productionOrigin : window.location.origin);
     return new URL(path, origin).toString();
 }

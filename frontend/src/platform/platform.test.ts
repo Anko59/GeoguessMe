@@ -25,6 +25,7 @@ import { captureFeedback, successFeedback } from './haptics';
 import { getCurrentPosition } from './location';
 import { shouldUseWebPush } from './notifications';
 import { currentRuntime, isNativeRuntime } from './runtime';
+import { publicWebURL } from './endpoints';
 import { shareOrCopy } from './sharing';
 import { routeFromAppURL } from './useNativeAppLifecycle';
 
@@ -105,6 +106,12 @@ describe('platform runtime adapters', () => {
         await expect(shareOrCopy('Invite', 'Join me', 'https://geoguessme.com/groups/1')).resolves.toBe('shared');
         await expect(shareOrCopy('Invite', 'Join me', 'https://geoguessme.com/groups/1')).resolves.toBe('copied');
         expect(writeText).toHaveBeenCalledWith('https://geoguessme.com/groups/1');
+    });
+
+    it('uses the canonical production origin for native public URLs', () => {
+        mocks.platform = 'android';
+
+        expect(publicWebURL('/privacy')).toBe('https://geoguessme.com/privacy');
     });
 });
 
