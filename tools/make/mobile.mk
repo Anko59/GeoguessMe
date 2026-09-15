@@ -7,6 +7,12 @@ MOBILE_WEB_ORIGIN ?= https://geoguessme.com
 CAPACITOR_SERVER_URL ?=
 MOBILE_KEYSTORE_PATH ?= /workspace/.local/mobile/upload-keystore.jks
 MOBILE_KEY_ALIAS ?= geoguessme-upload
+MOBILE_RELEASE_ARTIFACT ?= frontend/android/app/build/outputs/bundle/release/app-release.aab
+MOBILE_RELEASE_MANIFEST ?= .local/mobile/artifacts/android-release-manifest.json
+MOBILE_SOURCE_SHA ?= $(shell git rev-parse HEAD)
+MOBILE_SOURCE_TREE ?= $(shell git rev-parse HEAD^{tree})
+MOBILE_EXPECTED_UPLOAD_CERT_SHA256 ?=
+MOBILE_REQUIRE_EXPECTED_CERT ?= false
 MOBILE_TOOLS_SERVICE := $(if $(wildcard /dev/kvm),mobile-tools-kvm,mobile-tools)
 MOBILE_TOOLS_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) $(MOBILE_TOOLS_SERVICE)
@@ -15,6 +21,15 @@ MOBILE_TOOLS_RELEASE_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e MOBILE_KEYSTORE_PATH=$(MOBILE_KEYSTORE_PATH) \
 	-e MOBILE_KEY_ALIAS=$(MOBILE_KEY_ALIAS) \
 	-e MOBILE_KEYSTORE_PASSWORD -e MOBILE_KEY_PASSWORD \
+	$(MOBILE_TOOLS_SERVICE)
+MOBILE_TOOLS_ARTIFACT_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
+	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) \
+	-e MOBILE_EXPECTED_UPLOAD_CERT_SHA256="$(MOBILE_EXPECTED_UPLOAD_CERT_SHA256)" \
+	-e MOBILE_REQUIRE_EXPECTED_CERT="$(MOBILE_REQUIRE_EXPECTED_CERT)" \
+	-e GITHUB_RUN_ID \
+	-e MOBILE_SOURCE_SHA="$(MOBILE_SOURCE_SHA)" \
+	-e MOBILE_SOURCE_TREE="$(MOBILE_SOURCE_TREE)" \
+	-e MOBILE_REQUIRE_PROVENANCE=true \
 	$(MOBILE_TOOLS_SERVICE)
 
 ##@ Mobile
@@ -45,6 +60,14 @@ mobile-keystore: mobile-prepare ## Create a local upload keystore from exported 
 mobile-build-release: mobile-prepare mobile-sync ## Build the signed release AAB entirely through Docker.
 	$(MOBILE_TOOLS_RELEASE_RUN) \
 		tools/mobile/build-android-release.sh
+
+mobile-verify-release: mobile-prepare ## Verify the package, version, signature, and certificate of a release AAB.
+	$(MOBILE_TOOLS_ARTIFACT_RUN) \
+		tools/mobile/verify-release-bundle.sh verify "$(MOBILE_RELEASE_ARTIFACT)"
+
+mobile-release-manifest: mobile-verify-release ## Create non-secret provenance metadata for a verified release AAB.
+	$(MOBILE_TOOLS_ARTIFACT_RUN) \
+		tools/mobile/verify-release-bundle.sh manifest "$(MOBILE_RELEASE_ARTIFACT)" "$(MOBILE_RELEASE_MANIFEST)"
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \

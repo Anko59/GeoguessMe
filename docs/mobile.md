@@ -130,6 +130,24 @@ task fails closed unless all signing values are present; no debug key fallback
 is allowed. The default package is `com.geoguessme.app` and the version comes
 from `.release-version`.
 
+Before a bundle is handed to a distribution workflow, verify it and generate the
+non-secret provenance manifest through the Dockerized Make targets:
+
+```text
+make mobile-verify-release \
+  MOBILE_EXPECTED_UPLOAD_CERT_SHA256=... \
+  MOBILE_REQUIRE_EXPECTED_CERT=true
+make mobile-release-manifest
+```
+
+The verifier reads the packaged manifest with the pinned Bundletool image,
+checks the fixed package name, compares the version name and calculated version
+code with `.release-version`, verifies the JAR signature, and records the AAB
+and upload-certificate SHA-256 values. The manifest additionally binds those
+values to the source commit and Git tree supplied by Make. It contains no
+passwords or private-key material. A future CI workflow must retain this
+manifest with the exact AAB and must never rebuild the bundle at promotion time.
+
 App links recognize `https://geoguessme.com`, `https://www.geoguessme.com`, and
 the `geoguessme:` custom scheme. HTTPS app links become verified only after the
 production site serves an Android Digital Asset Links file for the actual
