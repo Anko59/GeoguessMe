@@ -1,7 +1,7 @@
-# Development pipeline. The complete dev gate runs as four parallel jobs
-# (quality, backend integration, Chromium E2E, operational rehearsals); the
-# full browser matrix and the load profile remain part of the complete nightly
-# gate. Publishing waits for all four, then deploys the exact
+# Development pipeline. The complete dev gate runs as five parallel jobs
+# (quality, backend integration, Chromium E2E, Android emulator, operational
+# rehearsals); the full browser matrix and the load profile remain part of the
+# complete nightly gate. Publishing waits for all five, then deploys the exact
 # signed digest.
 name: Deploy development
 
@@ -126,6 +126,25 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
 
+  mobile:
+    name: Android emulator gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Bootstrap mobile tools
+        run: make bootstrap-mobile
+      - name: Run Android emulator journey
+        run: make test-mobile
+      - name: Upload Android diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: geoguessme-dev-mobile-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: .local/mobile/artifacts/
+
   operational:
     name: Operational gate
     runs-on: ubuntu-latest
@@ -162,7 +181,7 @@ jobs:
 
   publish:
     name: Publish signed development images
-    needs: [quality, integration, e2e, operational]
+    needs: [quality, integration, e2e, mobile, operational]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

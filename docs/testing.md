@@ -58,20 +58,21 @@ The harness self-test rows (`test-structure-regression`,
 
 The gates intentionally become broader as a change approaches deployment:
 
-| Event                     | Gate                                                                                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                                                   |
-| Local push                | `make preflight`                                                                                                                            |
-| Documentation-only PR     | `make preflight-docs`                                                                                                                       |
-| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                                                          |
-| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                                                            |
-| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                                                                |
-| Merge to `dev`            | Four parallel gate jobs (quality, backend integration, Chromium E2E, operational), then signed-image publication and development deployment |
-| Successful dev deployment | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                |
-| Before a release PR       | `make qa-agent-full` against deployed dev; retain the report with the release record                                                        |
-| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                    |
-| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                   |
-| Nightly                   | Complete `make verify`                                                                                                                      |
+| Event                        | Gate                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commit                       | Formatting, structure, and lint through `make pre-commit`                                                                                                     |
+| Local push                   | `make preflight`                                                                                                                                              |
+| Documentation-only PR        | `make preflight-docs`                                                                                                                                         |
+| Backend PR                   | `make preflight`, `make pr-backend`, and the Android emulator journey in parallel                                                                             |
+| Frontend PR                  | `make preflight`, two isolated Chromium `make pr-frontend` shards, and the Android emulator journey in parallel                                               |
+| Android or mobile-tooling PR | `make preflight` and the Android emulator journey in parallel                                                                                                 |
+| Shared or deployment PR      | Fast, backend integration, Chromium E2E, and Android emulator jobs in parallel                                                                                |
+| Merge to `dev`               | Five parallel gate jobs (quality, backend integration, Chromium E2E, Android emulator, operational), then signed-image publication and development deployment |
+| Successful dev deployment    | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                                  |
+| Before a release PR          | `make qa-agent-full` against deployed dev; retain the report with the release record                                                                          |
+| Release PR to `main`         | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                                      |
+| Merge to `main`              | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                                     |
+| Nightly                      | Complete `make verify`                                                                                                                                        |
 
 The aggregate required status remains `Dockerized verification gate`, so branch
 protection cannot be bypassed when path-selected jobs are skipped. Unknown paths
@@ -129,7 +130,12 @@ locally. It does not install Go, Node, Python, Playwright, or linters directly
 on the runner. The complete `make verify` target is intentionally reserved for
 the exact dev deployment revision and nightly verification, and must not be run
 locally for application or test-only changes; those are covered by PR CI and the
-dev gate.
+dev gate. Android changes, shared frontend/backend changes, and mobile tooling
+changes additionally run `make test-mobile` on a clean headless emulator; the
+job uploads only the ignored `.local/mobile/artifacts/` diagnostics with the
+same seven-day retention bound as browser diagnostics. The post-merge
+development pipeline runs the same Android journey before publishing development
+images and deploying the hosted development stack.
 
 Exploratory LLM QA is a separate local acceptance step because CI does not
 receive provider credentials. Its browser implementation still runs through the

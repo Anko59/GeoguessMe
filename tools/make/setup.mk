@@ -14,7 +14,10 @@ COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
 TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
-TOOLS_USER := --user $(shell id -u):$(shell id -g)
+TOOLS_UID := $(shell id -u)
+TOOLS_GID := $(shell id -g)
+export TOOLS_UID TOOLS_GID
+TOOLS_USER := --user $(TOOLS_UID):$(TOOLS_GID)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
 ARTIFACTS_USER := --user 0:0
@@ -59,7 +62,7 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy cloudflared terraform
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
@@ -68,7 +71,7 @@ bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR ga
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy terraform
 	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
 bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.
 	@mkdir -p frontend/node_modules
@@ -81,7 +84,12 @@ bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build node-tools
 	$(COMPOSE_TOOLS) pull playwright
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
+
+bootstrap-mobile: ## Prepare only the Node and Android tools needed by mobile E2E CI.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build mobile-tools node-tools
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
