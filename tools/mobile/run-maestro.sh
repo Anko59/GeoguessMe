@@ -107,6 +107,7 @@ done
 
 export MAESTRO_CLI_NO_ANALYTICS=1
 if ! maestro test \
+    --driver-host-port "${MAESTRO_DRIVER_HOST_PORT:-7001}" \
     -e "MOBILE_USERNAME=${MOBILE_USERNAME:?MOBILE_USERNAME is required}" \
     -e "MOBILE_PASSWORD=${MOBILE_PASSWORD:?MOBILE_PASSWORD is required}" \
     -e "MOBILE_GROUP_NAME=${MOBILE_GROUP_NAME:?MOBILE_GROUP_NAME is required}" \

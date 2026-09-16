@@ -5,7 +5,7 @@
 test-debt-markers-regression: ## Exercise owned and unowned maintenance-marker fixtures.
 	tools/quality/debt/check-markers-test.sh
 
-test-unit: test-backend test-frontend test-reconnect-harness ## Run application and operational-tool unit tests.
+test-unit: test-backend test-frontend test-reconnect-harness test-play-api ## Run application and operational-tool unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
@@ -15,6 +15,9 @@ test-frontend: ## Run frontend unit tests.
 
 test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/load/reconnect-rehearsal && go test ./...'
+
+test-play-api: ## Run the Google Play Publisher API client unit tests.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/mobile/play-publisher && go test ./...'
 
 test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
@@ -46,6 +49,9 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
+
+test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
+	bash tools/mobile/test-release-bundle-contract.sh
 
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh

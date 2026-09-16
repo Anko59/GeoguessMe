@@ -10,6 +10,16 @@ The concrete hosted implementation and launch checklist is in the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
 
+Android distribution is part of the production release boundary but remains a
+separate artifact from the hosted services. The production workflow builds and
+verifies the signed Android App Bundle before image promotion, retains its
+provenance manifest, and publishes that exact artifact to the configured Play
+track only after the production deployment succeeds. The Play publication job
+uses GitHub OIDC and fails closed on access, digest, version, edit-validation,
+or post-commit track checks. See the [mobile release guide](mobile.md) and
+[Google Play account runbook](runbooks/google-play-console.md) for the
+configuration and recovery procedure.
+
 The hosted system has three Compose projects: isolated dev and production game
 stacks on loopback ports `8082` and `8081`, plus shared Keycloak and its own
 PostgreSQL database on `8083` for `auth.geoguessme.com`. Each game stack keeps

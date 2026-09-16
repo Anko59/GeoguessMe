@@ -12,8 +12,150 @@ permissions:
   contents: read
 
 jobs:
+  android:
+    name: Build and verify Android release bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Bootstrap pinned mobile tools
+        run: make bootstrap-mobile
+      - name: Bind the bundle to the release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_tree=$(git rev-parse "${GITHUB_SHA}^{tree}")
+          {
+            echo "MOBILE_SOURCE_SHA=$GITHUB_SHA"
+            echo "MOBILE_SOURCE_TREE=$source_tree"
+          } >> "$GITHUB_ENV"
+      - name: Materialize the release upload key
+        env:
+          MOBILE_UPLOAD_KEYSTORE_BASE64: ${{ secrets.MOBILE_UPLOAD_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MOBILE_UPLOAD_KEYSTORE_BASE64"
+          install -d -m 0700 .local/mobile
+          umask 077
+          printf '%s' "$MOBILE_UPLOAD_KEYSTORE_BASE64" |
+            base64 --decode > .local/mobile/upload-keystore.jks
+          test -s .local/mobile/upload-keystore.jks
+      - name: Build the signed Android App Bundle
+        env:
+          MOBILE_KEYSTORE_PASSWORD: ${{ secrets.MOBILE_KEYSTORE_PASSWORD }}
+          MOBILE_KEY_PASSWORD: ${{ secrets.MOBILE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MOBILE_KEYSTORE_PASSWORD"
+          test -n "$MOBILE_KEY_PASSWORD"
+          make mobile-build-release
+      - name: Verify the bundle and create provenance
+        env:
+          MOBILE_EXPECTED_UPLOAD_CERT_SHA256: ${{ vars.MOBILE_UPLOAD_CERT_SHA256 }}
+          MOBILE_REQUIRE_EXPECTED_CERT: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MOBILE_EXPECTED_UPLOAD_CERT_SHA256"
+          make mobile-release-manifest
+      - name: Verify staged artifact provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=frontend/android/app/build/outputs/bundle/release/app-release.aab
+          manifest=.local/mobile/artifacts/android-release-manifest.json
+          jq -e \
+            --arg source_sha "$MOBILE_SOURCE_SHA" \
+            --arg source_tree "$MOBILE_SOURCE_TREE" \
+            --arg expected_sha "$(sha256sum "$bundle" | awk '{print $1}')" \
+            '.source_sha == $source_sha and
+             .source_tree == $source_tree and
+             .package_name == "com.geoguessme.app" and
+             .aab_sha256 == $expected_sha' "$manifest" >/dev/null
+          mkdir -p android-release
+          cp -- "$bundle" android-release/app-release.aab
+          cp -- "$manifest" android-release/android-release-manifest.json
+      - name: Upload verified Android release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-release-${{ github.sha }}
+          path: android-release/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Remove release signing material
+        if: always()
+        shell: bash
+        run: rm -f -- .local/mobile/upload-keystore.jks
+
+  play-access:
+    name: Verify Play publication access
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Validate Play release configuration
+        env:
+          PLAY_WIF_PROVIDER: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          PLAY_SERVICE_ACCOUNT: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
+          PLAY_TRACK: ${{ vars.PLAY_RELEASE_TRACK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PLAY_WIF_PROVIDER" || {
+            echo 'Missing production variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
+            exit 1
+          }
+          test -n "$PLAY_SERVICE_ACCOUNT" || {
+            echo 'Missing production variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
+            exit 1
+          }
+          test -n "$PLAY_TRACK" || {
+            echo 'Missing production variable PLAY_RELEASE_TRACK.' >&2
+            exit 1
+          }
+          [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
+            echo 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER is not a Google WIF provider resource.' >&2
+            exit 1
+          }
+          [[ "$PLAY_SERVICE_ACCOUNT" == *@*.iam.gserviceaccount.com ]] || {
+            echo 'PLAY_GCP_SERVICE_ACCOUNT is not a service-account email.' >&2
+            exit 1
+          }
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        id: auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Bootstrap API client tools
+        run: make bootstrap-preflight
+      - name: Inspect Play app identity
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PLAY_API_PACKAGE_NAME: com.geoguessme.app
+        run: make play-api-check
+
   promote:
     name: Promote verified development images
+    needs: [android, play-access]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -214,12 +356,20 @@ jobs:
             echo "backend=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}"
             echo "web=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}"
           } >> "$GITHUB_OUTPUT"
+      - name: Download verified Android release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: android-release-${{ github.sha }}
+          path: android-release
       - name: Create GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           tag_name: ${{ steps.source.outputs.tag }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
+          files: |
+            android-release/app-release.aab
+            android-release/android-release-manifest.json
           body: |
             Promoted from the exact signed development images tested and
             deployed at `${{ steps.source.outputs.dev_sha }}`.
@@ -264,3 +414,65 @@ jobs:
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
             deploy@deploy-prod.geoguessme.com \
             "deploy $BACKEND $WEB $GITHUB_SHA"
+
+  play-publish:
+    name: Publish verified Android bundle to Play
+    needs: [android, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Download verified Android release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: android-release-${{ github.sha }}
+          path: android-release
+      - name: Verify artifact provenance before publication
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=android-release/app-release.aab
+          manifest=android-release/android-release-manifest.json
+          test -s "$bundle"
+          test -s "$manifest"
+          source_tree=$(git rev-parse "${RELEASE_SHA}^{tree}")
+          jq -e \
+            --arg source_sha "$RELEASE_SHA" \
+            --arg source_tree "$source_tree" \
+            --arg expected_sha "$(sha256sum "$bundle" | awk '{print $1}')" \
+            '.source_sha == $source_sha and
+             .source_tree == $source_tree and
+             .package_name == "com.geoguessme.app" and
+             .aab_sha256 == $expected_sha' "$manifest" >/dev/null
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        id: auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Bootstrap API client tools
+        run: make bootstrap-preflight
+      - name: Publish the exact Android bundle
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PLAY_API_PACKAGE_NAME: com.geoguessme.app
+          PLAY_RELEASE_TRACK: ${{ vars.PLAY_RELEASE_TRACK }}
+          PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+        run: |
+          set -euo pipefail
+          make play-api-publish \
+            PLAY_API_AAB=android-release/app-release.aab \
+            PLAY_API_MANIFEST=android-release/android-release-manifest.json
