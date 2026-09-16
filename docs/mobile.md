@@ -14,13 +14,13 @@ adapters provide runtime detection, API and public URL construction,
 geolocation, sharing, haptics, app/deep-link lifecycle, and the Web Push
 transport boundary.
 
-The production native build uses bundled assets at `https://app.geoguessme.com`
-and talks to the normal production origin. Native HTTP, WebSocket,
-refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`; invite links
-are derived from `VITE_WEB_ORIGIN`. Both default to `https://geoguessme.com` in
-the Make workflow. The hosted backend must allow `https://app.geoguessme.com` in
-`ALLOWED_ORIGINS` before distributing the app. Do not weaken cookie flags or use
-a development server URL in a distributable build.
+The production native build uses bundled assets with the WebView origin
+`https://geoguessme.com` and talks to the normal production origin. Native HTTP,
+WebSocket, refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`;
+invite links are derived from `VITE_WEB_ORIGIN`. Both default to
+`https://geoguessme.com` in the Make workflow. Keeping the native WebView and
+API on the same origin avoids a separate CORS and cookie trust boundary. Do not
+weaken cookie flags or use a development server URL in a distributable build.
 
 Android uses native geolocation, share sheets, haptics, status-bar styling, deep
 links, and system-back handling. Camera capture deliberately retains the WebView
@@ -63,7 +63,7 @@ make mobile-build \
 ```
 
 The corresponding backend origin allowlist must include
-`https://app.geoguessme.com`. Cleartext traffic is enabled only for the Android
+`https://dev.geoguessme.com`. Cleartext traffic is enabled only for the Android
 debug build type; release builds prohibit it.
 
 ## Automated journey and diagnostics
