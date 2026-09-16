@@ -17,7 +17,7 @@ import (
 	"geoguessme/internal/storage"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func multipartUploadToGroups(t *testing.T, groupIDs []string, hideLocation bool) *http.Request {
