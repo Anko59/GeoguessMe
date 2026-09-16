@@ -81,6 +81,16 @@ package/permission state, emulator log, and acceleration report where available.
 Credentials generated for the isolated fixture stay under ignored
 `.local/mobile/` paths.
 
+The pull-request workflow selects this journey for Android, backend, frontend,
+shared, deployment, and mobile-tooling changes. The post-merge development
+workflow runs it for every push to `dev`, before publishing development images
+or deploying the hosted development stack. A failed mobile gate blocks that
+publication and retains only the bounded diagnostic directory for seven days.
+This development gate validates the app/runtime integration; it does not create
+or upload a signed Play bundle. The production release workflow must build and
+verify the release-specific signed AAB after the release version and upload-key
+configuration are available, then retain its provenance with the artifact.
+
 Camera switching, held video recording, file-picker import, and advanced lenses
 remain covered by the existing browser tests and shared implementation but are
 not automated in the first native Maestro journey. They need device-matrix
@@ -129,6 +139,106 @@ The resulting signed bundle is
 task fails closed unless all signing values are present; no debug key fallback
 is allowed. The default package is `com.geoguessme.app` and the version comes
 from `.release-version`.
+
+Before a bundle is handed to a distribution workflow, verify it and generate the
+non-secret provenance manifest through the Dockerized Make targets:
+
+```text
+make mobile-verify-release \
+  MOBILE_EXPECTED_UPLOAD_CERT_SHA256=... \
+  MOBILE_REQUIRE_EXPECTED_CERT=true
+make mobile-release-manifest
+```
+
+The verifier reads the packaged manifest with the pinned Bundletool image,
+checks the fixed package name, compares the version name and calculated version
+code with `.release-version`, verifies the JAR signature, and records the AAB
+and upload-certificate SHA-256 values. The manifest additionally binds those
+values to the source commit and Git tree supplied by Make. It contains no
+passwords or private-key material.
+
+The production release workflow now performs this build before image promotion.
+It materializes the keystore only on the ephemeral runner from the
+`MOBILE_UPLOAD_KEYSTORE_BASE64` production secret, passes the two signing
+passwords through `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD`, and
+requires the non-secret `MOBILE_UPLOAD_CERT_SHA256` production variable. It then
+verifies the source SHA/tree, package, version, signing certificate, and AAB
+SHA-256, retains the exact AAB plus manifest as a workflow artifact, and
+attaches both files to the GitHub release. The image-promotion job consumes that
+artifact; it never rebuilds the bundle. No Play edit is created or committed by
+this artifact job.
+
+Configure the production environment once, without committing any signing
+material. The keystore secret is binary data encoded as one base64 line; the two
+passwords remain separate secrets:
+
+```text
+base64 -w0 .local/mobile/upload-keystore.jks | \
+  gh secret set MOBILE_UPLOAD_KEYSTORE_BASE64 --env production
+gh secret set MOBILE_KEYSTORE_PASSWORD --env production
+gh secret set MOBILE_KEY_PASSWORD --env production
+gh variable set MOBILE_UPLOAD_CERT_SHA256 --env production
+```
+
+Run the `gh secret set` commands from a private shell and provide each password
+interactively when prompted. The certificate variable is the SHA-256 fingerprint
+of the Play upload certificate, with or without colons. The separate Play OIDC
+variables documented below are used for API access and are not a replacement for
+the Android upload key. The Play publication job consumes the exact retained
+artifact after the production deployment succeeds.
+
+### Play API release automation
+
+The production release workflow now owns the complete Android distribution
+boundary. It builds and verifies the signed AAB, binds it to the release commit
+and Git tree, retains the AAB and manifest as one artifact, and waits for the
+production deployment to succeed. It then authenticates through GitHub OIDC with
+a short-lived Android Publisher token and performs one Play edit:
+
+1. confirm the app package identity;
+2. create an edit and upload the retained AAB;
+3. update the configured track with the manifest version code and release
+   status;
+4. validate the edit;
+5. commit the edit with changes sent for review; and
+6. read the track back and fail if Play does not report the submitted version
+   and status.
+
+The workflow does not rebuild or select a different bundle after the release
+artifact job. The API client verifies the local AAB SHA-256 against the manifest
+before it creates an edit, and verifies the Play-reported version code before
+changing the track.
+
+Configure these values in the GitHub `production` environment before running a
+production release:
+
+- `MOBILE_UPLOAD_KEYSTORE_BASE64` secret: the base64-encoded upload keystore;
+- `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD` secrets: signing
+  passwords;
+- `MOBILE_UPLOAD_CERT_SHA256` variable: the expected upload certificate
+  fingerprint;
+- `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` variable: the Google WIF provider
+  resource;
+- `PLAY_GCP_SERVICE_ACCOUNT` variable: the Play-authorized service-account
+  email; and
+- `PLAY_RELEASE_TRACK` variable: the target Play track, normally `internal`, a
+  closed-test track, or `production` after the account is eligible.
+
+`PLAY_RELEASE_STATUS` is an optional variable and defaults to `completed`; use
+`inProgress` only when the release process explicitly requires a staged rollout.
+The Google service account must separately have the required app-scoped Play
+permissions. The workflow accepts no JSON key and does not create a credential
+file.
+
+The repository also includes a read-only **Play API access check** workflow. Use
+it to validate OIDC and app identity without creating an edit or changing Play
+state. It is a diagnostic, not an alternative publication path.
+
+If the access preflight, artifact verification, production deployment, or
+post-commit track readback fails, the release stops and retains the failing
+workflow evidence. A successful commit is reported with the package, edit ID,
+track, version, digest, and source provenance; tokens and signing material are
+never printed or stored.
 
 App links recognize `https://geoguessme.com`, `https://www.geoguessme.com`, and
 the `geoguessme:` custom scheme. HTTPS app links become verified only after the

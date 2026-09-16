@@ -12,6 +12,7 @@ fi
 seen=false
 backend=false
 frontend=false
+mobile=false
 full=false
 static_checks=false
 backend_unit=false
@@ -32,12 +33,24 @@ classify() {
             static_checks=true
             backend_unit=true
             backend_integration=true
+            mobile=true
+            ;;
+        frontend/android/* | frontend/mobile-e2e/*)
+            docs_candidate=false
+            static_checks=true
+            mobile=true
             ;;
         frontend/*)
             docs_candidate=false
             static_checks=true
             frontend_unit=true
             browser_e2e=true
+            mobile=true
+            ;;
+        deployment/docker/tools/mobile-tools.Dockerfile | tools/mobile/*)
+            docs_candidate=false
+            static_checks=true
+            mobile=true
             ;;
         docs/openapi*)
             docs_candidate=false
@@ -123,6 +136,7 @@ fi
 if [ "$full" = true ]; then
     backend_integration=true
     browser_e2e=true
+    mobile=true
 fi
 
 # Compatibility outputs consumed by the current workflow. They intentionally
@@ -137,6 +151,7 @@ fi
 
 printf 'backend=%s\n' "$backend"
 printf 'frontend=%s\n' "$frontend"
+printf 'mobile=%s\n' "$mobile"
 printf 'full=%s\n' "$full"
 printf 'docs_only=%s\n' "$docs_only"
 printf 'static_checks=%s\n' "$static_checks"
