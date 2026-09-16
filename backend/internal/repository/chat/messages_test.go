@@ -8,7 +8,7 @@ import (
 
 	"geoguessme/internal/models"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // newMockPool returns an isolated mock pool bound directly to a chat

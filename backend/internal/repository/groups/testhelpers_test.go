@@ -3,7 +3,7 @@ package groups
 import (
 	"testing"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // newMockPool builds a pgxmock pool for repository unit tests.

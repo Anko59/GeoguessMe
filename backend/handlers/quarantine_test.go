@@ -12,7 +12,7 @@ import (
 	"geoguessme/internal/models"
 	"geoguessme/internal/storage"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // TestQuarantineKeysAreUnservable proves the media serving handlers reject any
