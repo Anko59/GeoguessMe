@@ -10,7 +10,7 @@ import (
 	"geoguessme/internal/models"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func TestGroupPhotoAndNotificationPersistence(t *testing.T) {

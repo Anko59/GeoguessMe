@@ -15,7 +15,7 @@ import (
 	"geoguessme/internal/models"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // TestSignupDoesNotRevealVerifiedEmail proves an address already verified by
