@@ -10,7 +10,7 @@ import (
 
 	"geoguessme/internal/models"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 var inviteMetadataColumns = []string{"id", "group_id", "creator_user_id", "created_at", "expires_at", "revoked_at"}
