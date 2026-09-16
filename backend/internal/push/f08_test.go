@@ -13,7 +13,7 @@ import (
 
 	"geoguessme/internal/config"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // newConfiguredService builds a service with an explicit configuration so tests

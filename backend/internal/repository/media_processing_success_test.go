@@ -8,7 +8,7 @@ import (
 
 	"geoguessme/internal/models"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // TestCompleteChallengeProcessing proves the atomic success path: the per-group
