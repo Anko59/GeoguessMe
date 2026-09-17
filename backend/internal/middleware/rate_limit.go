@@ -142,14 +142,25 @@ func extractIdentity(r *http.Request) string {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 	}
 	identity := ""
-	var fields map[string]string
+	var fields map[string]json.RawMessage
 	if json.Unmarshal(body, &fields) == nil {
-		identity = strings.ToLower(strings.TrimSpace(fields["username"]))
+		identity = lowerTrimmedJSONString(fields["username"])
 		if identity == "" {
-			identity = strings.ToLower(strings.TrimSpace(fields["email"]))
+			identity = lowerTrimmedJSONString(fields["email"])
 		}
 	}
 	return identity
+}
+
+// lowerTrimmedJSONString reads one JSON object field as a string. Bodies mix
+// types (the signup payload carries a boolean age flag), so absent or
+// non-string values count as empty instead of failing the whole extraction.
+func lowerTrimmedJSONString(raw json.RawMessage) string {
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 // PolicyOptions configures PolicyMiddleware's request-key extractors.
