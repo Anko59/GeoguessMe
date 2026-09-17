@@ -17,12 +17,23 @@ FROM caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88
 FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS caddy-build
 RUN apk add --no-cache git=2.54.0-r0
 COPY --from=xcaddy /usr/bin/xcaddy /usr/bin/xcaddy
-RUN xcaddy build v2.11.4 \
-    --output /usr/bin/caddy \
-    --replace 'golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0' \
-    --replace 'golang.org/x/crypto@v0.53.0=golang.org/x/crypto@v0.55.0' \
-    --replace 'golang.org/x/crypto@v0.54.0=golang.org/x/crypto@v0.55.0' \
-    --replace 'google.golang.org/grpc@v1.81.0=google.golang.org/grpc@v1.83.2'
+# The dynamic xcaddy build consults sum.golang.org for transitive modules. A
+# short retry absorbs transient checksum-database stream failures without
+# weakening module verification or changing the pinned Caddy version.
+RUN set -eux; \
+    for attempt in 1 2 3; do \
+        echo "Building Caddy (attempt $attempt/3)"; \
+        if xcaddy build v2.11.4 \
+            --output /usr/bin/caddy \
+            --replace 'golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0' \
+            --replace 'golang.org/x/crypto@v0.53.0=golang.org/x/crypto@v0.55.0' \
+            --replace 'golang.org/x/crypto@v0.54.0=golang.org/x/crypto@v0.55.0' \
+            --replace 'google.golang.org/grpc@v1.81.0=google.golang.org/grpc@v1.83.2'; then \
+            exit 0; \
+        fi; \
+        [ "$attempt" -eq 3 ] || sleep 5; \
+    done; \
+    exit 1
 
 # Caddy 2.11.4-alpine (immutable index digest), with the patched binary above.
 # The pinned image currently carries curl/libcurl 8.19.0-r0; refresh both
