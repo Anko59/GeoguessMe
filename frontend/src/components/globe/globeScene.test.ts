@@ -33,6 +33,44 @@ afterEach(() => {
 });
 
 describe('Earth scene', () => {
+    it('keeps touch navigation surface-tracked, pole-safe and pinch-anchored', () => {
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture<HTMLImageElement>());
+        const host = document.createElement('div');
+        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
+        const globe = createGlobeScene(host, vi.fn(), vi.fn());
+        const controls = globe.controls;
+        expect(controls.enablePan).toBe(false);
+        expect(controls.zoomToCursor).toBe(true);
+        expect(controls.touches).toEqual({ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN });
+        expect(controls.minPolarAngle).toBeCloseTo(0.05);
+        expect(controls.maxPolarAngle).toBeCloseTo(Math.PI - 0.05);
+        const surfaceSpeed = (distance: number) =>
+            (Math.tan(THREE.MathUtils.degToRad(21)) * Math.sqrt(distance * distance - 1)) / Math.PI;
+        expect(controls.rotateSpeed).toBeCloseTo(surfaceSpeed(3.5), 3);
+        globe.zoom(0.5);
+        expect(controls.rotateSpeed).toBeCloseTo(surfaceSpeed(1.75), 3);
+        expect(controls.rotateSpeed).toBeLessThan(surfaceSpeed(3.5));
+        globe.dispose();
+    });
+
+    it('damps gesture inertia only while a gesture is in flight', () => {
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture<HTMLImageElement>());
+        const host = document.createElement('div');
+        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
+        document.body.append(host);
+        const globe = createGlobeScene(host, vi.fn(), vi.fn());
+        const canvas = host.querySelector('canvas')!;
+        canvas.setPointerCapture = vi.fn();
+        canvas.releasePointerCapture = vi.fn();
+        canvas.dispatchEvent(
+            new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, pointerType: 'touch' }),
+        );
+        expect(globe.controls.enableDamping).toBe(true);
+        globe.dispose();
+        expect(host.children).toHaveLength(0);
+        host.remove();
+    });
+
     it('releases partially initialized resources if observing the canvas fails', () => {
         const texture = new THREE.Texture<HTMLImageElement>();
         vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(texture);
