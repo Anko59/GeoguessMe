@@ -115,6 +115,11 @@ test.describe('Keyboard navigation', () => {
         await expect(page.locator('#signup-age-attested')).toBeFocused();
 
         await page.keyboard.press('Tab');
+        // The terms link inside the age-gate hint is reachable before the
+        // submit button; opening it must never toggle the checkbox.
+        await expect(page.getByRole('link', { name: /terms of use/i })).toBeFocused();
+
+        await page.keyboard.press('Tab');
         await expect(page.getByRole('button', { name: /sign up/i })).toBeFocused();
 
         await page.keyboard.press('Tab');

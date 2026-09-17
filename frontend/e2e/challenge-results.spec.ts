@@ -48,6 +48,7 @@ async function signupWithToken(context: BrowserContext): Promise<{ page: Page; t
     await page.fill('#signup-username', username);
     await page.fill('#signup-email', email);
     await page.fill('#signup-password', password);
+    await page.check('#signup-age-attested');
     await page.click('button.btn-primary[type="submit"]');
 
     const signupResponse = await signupResponsePromise;

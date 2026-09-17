@@ -145,6 +145,7 @@ export async function signupWithToken(context: BrowserContext): Promise<{ page: 
     await page.fill('#signup-username', uniqueUsername());
     await page.fill('#signup-email', uniqueEmail());
     await page.fill('#signup-password', 'TestPass123');
+    await page.check('#signup-age-attested');
     await page.click('button.btn-primary[type="submit"]');
     const signupResponse = await signupResponsePromise;
     const token = ((await signupResponse.json()) as { access_token: string }).access_token;

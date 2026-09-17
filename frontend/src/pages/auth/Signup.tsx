@@ -116,6 +116,10 @@ export default function Signup() {
                         />
                         <p className="auth-hint">Use at least 8 characters with uppercase, lowercase, and a number.</p>
                         <div className="auth-age-check">
+                            {/* The terms link stays outside the label: a link
+                                inside a label toggles its checkbox when
+                                clicked and inserts a focus stop between the
+                                confirmation and the submit button. */}
                             <input
                                 id="signup-age-attested"
                                 type="checkbox"
@@ -123,10 +127,10 @@ export default function Signup() {
                                 onChange={(event) => setAgeAttested(event.target.checked)}
                                 required
                             />
-                            <label htmlFor="signup-age-attested">
-                                I confirm I am at least 15 years old, as required by the{' '}
-                                <Link to="/terms">Terms of Use</Link>.
-                            </label>
+                            <label htmlFor="signup-age-attested">I confirm I am at least 15 years old.</label>
+                            <p className="auth-hint">
+                                Required by the <Link to="/terms">Terms of Use</Link>.
+                            </p>
                         </div>
                         {error && (
                             <div className="auth-error" role="alert">

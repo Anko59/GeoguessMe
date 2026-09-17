@@ -114,6 +114,7 @@ test.describe('Group operations', () => {
             await invitePage.fill('#signup-username', uniqueUsername());
             await invitePage.fill('#signup-email', uniqueEmail());
             await invitePage.fill('#signup-password', 'TestPass123');
+            await invitePage.check('#signup-age-attested');
             await invitePage.locator('button.btn-primary[type="submit"]').click();
             // The token survives in sessionStorage; the preview resolves and the
             // join button appears before the group page is reached.
