@@ -293,9 +293,9 @@ func TestPhotoGuessListsAndErrors(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	now := time.Now().UTC()
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs("photo-1").WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).AddRow("guess-1", "photo-1", "user-2", "group-1", 1.0, 2.0, 80, 20.0, false, now, "alice", "a.png"))
+	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs("photo-1").WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at"}).AddRow("guess-1", "photo-1", "user-2", "group-1", 1.0, 2.0, 80, 20.0, false, now, "alice", "a.png", now.Add(-72*time.Second)))
 	guesses, err := repo.GuessesForPhoto(context.Background(), "photo-1")
-	if err != nil || len(guesses) != 1 || guesses[0].Username != "alice" {
+	if err != nil || len(guesses) != 1 || guesses[0].Username != "alice" || !guesses[0].ViewExpiresAt.Valid || !guesses[0].ViewExpiresAt.Time.Equal(now.Add(-72*time.Second)) {
 		t.Fatalf("guesses = %+v, %v", guesses, err)
 	}
 }
