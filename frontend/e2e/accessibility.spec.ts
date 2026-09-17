@@ -95,7 +95,9 @@ test.describe('Keyboard navigation', () => {
         await expect(page.getByRole('link', { name: /sign up/i })).toBeFocused();
     });
 
-    test('signup form tab order moves through username, email, password, submit, login link', async ({ page }) => {
+    test('signup form tab order moves through username, email, password, age gate, submit, login link', async ({
+        page,
+    }) => {
         await page.goto('/signup');
         await expect(page.locator('#signup-username')).toBeVisible({ timeout: 10000 });
 
@@ -108,6 +110,9 @@ test.describe('Keyboard navigation', () => {
 
         await page.keyboard.press('Tab');
         await expect(page.locator('#signup-password')).toBeFocused();
+
+        await page.keyboard.press('Tab');
+        await expect(page.locator('#signup-age-attested')).toBeFocused();
 
         await page.keyboard.press('Tab');
         await expect(page.getByRole('button', { name: /sign up/i })).toBeFocused();
