@@ -165,7 +165,7 @@ export default function GroupView() {
                                     aria-label="Open group globe"
                                     title="Group globe"
                                 >
-                                    <Icon name="globe" />
+                                    <img src="/globe_feature_icon.png" alt="" />
                                 </button>
                             )}
                             {group && !groupError && (

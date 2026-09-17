@@ -29,8 +29,8 @@ and submit one server-timed guess.
 - [Photo filters](photo-filters.md) — camera filters, capture behavior, and
   permissions
 - [Rank badges](rank-badges.md) — progression badge artwork and global rank
-- [Custom UI icons](custom-icons.md) — branded icon artwork for camera controls,
-  lens picker, and leaderboard medals
+- [Custom UI icons](custom-icons.md) — branded artwork for camera controls,
+  reactions, feature actions, lens picker, and leaderboard medals
 - [Authentication](authentication.md) — access/refresh tokens, verification,
   account deletion
 - [API reference](api.md) — endpoint conventions, error format, rate limits
