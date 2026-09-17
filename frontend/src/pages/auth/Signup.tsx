@@ -10,6 +10,7 @@ export default function Signup() {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [ageAttested, setAgeAttested] = useState(false);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [oidcConfig, setOIDCConfig] = useState<OIDCConfig | null>(null);
@@ -43,8 +44,16 @@ export default function Signup() {
     const handleSubmit = async (event: React.FormEvent): Promise<void> => {
         event.preventDefault();
         setError('');
+        if (!ageAttested) {
+            setError('Please confirm the minimum age to create an account.');
+            return;
+        }
         setSubmitting(true);
-        const payload: { username: string; password: string; email?: string } = { username, password };
+        const payload: { username: string; password: string; email?: string; age_attested: boolean } = {
+            username,
+            password,
+            age_attested: ageAttested,
+        };
         if (email.trim()) payload.email = email.trim();
         try {
             const response = await api.post<AuthResponse>('/auth/signup', payload);
@@ -106,6 +115,19 @@ export default function Signup() {
                             autoComplete="new-password"
                         />
                         <p className="auth-hint">Use at least 8 characters with uppercase, lowercase, and a number.</p>
+                        <div className="auth-age-check">
+                            <input
+                                id="signup-age-attested"
+                                type="checkbox"
+                                checked={ageAttested}
+                                onChange={(event) => setAgeAttested(event.target.checked)}
+                                required
+                            />
+                            <label htmlFor="signup-age-attested">
+                                I confirm I am at least 15 years old, as required by the{' '}
+                                <Link to="/terms">Terms of Use</Link>.
+                            </label>
+                        </div>
                         {error && (
                             <div className="auth-error" role="alert">
                                 {error}

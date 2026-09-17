@@ -84,6 +84,7 @@ export async function signupViaUI(page: Page, creds?: Partial<Credentials>): Pro
     await page.fill('#signup-username', username);
     await page.fill('#signup-email', email);
     await page.fill('#signup-password', password);
+    await page.check('#signup-age-attested');
     await page.click('button.btn-primary[type="submit"]');
     await page.waitForURL(/\/groups/, { timeout: 15000 });
 

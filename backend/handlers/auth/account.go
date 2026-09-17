@@ -40,6 +40,13 @@ func (a *AuthAPI) Signup(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	req.Email = strings.TrimSpace(req.Email)
+	// The age gate is an eligibility rule, not a field-format rule, so it is
+	// checked before payload validation: an underage account must never be
+	// creatable regardless of the other fields.
+	if !req.AgeAttested {
+		handlers.WriteError(w, http.StatusBadRequest, "age_attestation_required", "You must confirm the minimum age to create an account")
+		return
+	}
 	if err := validation.ValidateUsername(req.Username); err != nil {
 		handlers.WriteError(w, http.StatusBadRequest, "invalid_username", err.Error())
 		return
