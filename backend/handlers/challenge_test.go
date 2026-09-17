@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"geoguessme/internal/chat"
+	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
@@ -296,6 +298,23 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	gameAPI.ConfirmChallengeMediaDelivered(recorder, request)
 	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) || !bytes.Contains(recorder.Body.Bytes(), []byte("guess_expires_at")) {
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	assertScoreGraceSeconds(t, recorder)
+}
+
+// assertScoreGraceSeconds decodes the score_grace_seconds field the guessing
+// window endpoints publish and pins it to the scoring package's policy value
+// so the answering UI can visualize the time decay without guessing it.
+func assertScoreGraceSeconds(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	var payload struct {
+		ScoreGraceSeconds int `json:"score_grace_seconds"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode score_grace_seconds: %v (%s)", err, recorder.Body.String())
+	}
+	if payload.ScoreGraceSeconds != game.ScoreGraceSeconds() {
+		t.Fatalf("score_grace_seconds = %d, want %d", payload.ScoreGraceSeconds, game.ScoreGraceSeconds())
 	}
 }
 

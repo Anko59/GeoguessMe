@@ -1225,6 +1225,8 @@ export interface components {
             guess_expires_at: string;
             /** Format: date-time */
             challenge_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };
@@ -1238,6 +1240,8 @@ export interface components {
              * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
              */
             guess_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };

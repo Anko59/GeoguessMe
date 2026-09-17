@@ -1,0 +1,143 @@
+# Challenge game schemas (challenge windows, guesses, results, party), kept
+# here so schemas.yaml stays under the repository 500-line structure limit.
+# Referenced directly by the API path fragments and resolved as component
+# schemas of docs/openapi.yaml.
+
+ChallengeCreated:
+  type: object
+  required: [id, group_id, expires_at, created_at, server_time]
+  properties:
+    id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    expires_at: { type: string, format: date-time }
+    created_at: { type: string, format: date-time }
+    server_time: { type: string, format: date-time }
+
+ChallengeAccepted:
+  type: object
+  required:
+    [
+      photo_id,
+      media_url,
+      media_type,
+      accepted_at,
+      view_expires_at,
+      guess_after,
+      guess_expires_at,
+      challenge_expires_at,
+      score_grace_seconds,
+      server_time,
+    ]
+  properties:
+    photo_id: { type: string, format: uuid }
+    media_url: { type: string }
+    media_type: { type: string, enum: [image/jpeg, image/png, video/mp4, video/webm] }
+    accepted_at: { type: string, format: date-time }
+    view_expires_at: { type: string, format: date-time }
+    guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
+    challenge_expires_at: { type: string, format: date-time }
+    score_grace_seconds:
+      type: integer
+      description: >-
+        Seconds after the guessing window opens during which the full 5000-point
+        maximum is still achievable; afterwards the achievable score decays
+        linearly down to 20% of the maximum just before guess_expires_at, and a
+        missing guess scores 0 from guess_expires_at onward.
+    server_time: { type: string, format: date-time }
+
+ChallengeMediaDelivered:
+  type: object
+  required: [view_expires_at, guess_after, guess_expires_at, score_grace_seconds, server_time]
+  properties:
+    view_expires_at: { type: string, format: date-time }
+    guess_after: { type: string, format: date-time }
+    guess_expires_at:
+      {
+        type: string,
+        format: date-time,
+        description: Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer,
+      }
+    score_grace_seconds:
+      type: integer
+      description: >-
+        Seconds after the guessing window opens during which the full 5000-point
+        maximum is still achievable; afterwards the achievable score decays
+        linearly down to 20% of the maximum just before guess_expires_at, and a
+        missing guess scores 0 from guess_expires_at onward.
+    server_time: { type: string, format: date-time }
+
+PartyStatus:
+  type: object
+  required: [active, server_time]
+  properties:
+    active: { type: boolean, description: True while a party window covers server_time; dates present when true }
+    started_at: { type: string, format: date-time, description: Present only while a party is active }
+    ends_at: { type: string, format: date-time, description: Present only while a party is active }
+    next_available_at:
+      {
+        type: string,
+        format: date-time,
+        description: Earliest instant the next party may start (previous ends_at plus PARTY_TIME_COOLDOWN); present while recharging or active.,
+      }
+    server_time: { type: string, format: date-time }
+
+GuessResponse:
+  type: object
+  required: [guess_id, photo_id, score, created_at, duplicate, server_time]
+  properties:
+    guess_id: { type: string, format: uuid }
+    photo_id: { type: string, format: uuid }
+    score: { type: integer }
+    distance: { type: number, description: Omitted when timed_out is true }
+    timed_out:
+      { type: boolean, description: True when the player let the guess window expire without guessing (score 0) }
+    party_doubled: { type: boolean, description: True when Party Time doubled this guess; omitted otherwise }
+    created_at: { type: string, format: date-time }
+    duplicate: { type: boolean }
+    server_time: { type: string, format: date-time }
+
+ChallengeResults:
+  type: object
+  required: [photo_id, group_id, guesses, media_available, server_time]
+  properties:
+    photo_id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    actual_lat: { type: number, format: double, description: Omitted while the poster hides the location }
+    actual_long: { type: number, format: double, description: Omitted while the poster hides the location }
+    location_hidden: { type: boolean, description: True when the poster hid the location and it is not yet revealed }
+    location_reveals_at:
+      { type: string, format: date-time, description: When the hidden location becomes visible on the results page }
+    guesses: { type: array, items: { $ref: "#/Guess" } }
+    media_available: { type: boolean }
+    media_url: { type: [string, "null"] }
+    media_type: { type: [string, "null"], enum: [image/jpeg, image/png, video/mp4, video/webm, null] }
+    server_time: { type: string, format: date-time }
+
+Guess:
+  type: object
+  required: [id, photo_id, user_id, group_id, score, created_at, elo_delta]
+  properties:
+    id: { type: string, format: uuid }
+    photo_id: { type: string, format: uuid }
+    user_id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    lat:
+      {
+        type: number,
+        format: double,
+        description: Omitted for other players' guesses while a hidden-location challenge is still hidden; only the viewer's own guessed point is returned.,
+      }
+    long: { type: number, format: double, description: Omitted alongside lat while the location is hidden. }
+    score: { type: integer }
+    elo_delta: { type: integer, description: Weekly Elo change (0 when <2 guesses or before week start). }
+    distance: { type: number, description: Omitted while the location is hidden or when timed_out is true. }
+    timed_out: { type: boolean, description: True when the guess timed out (score 0). }
+    created_at: { type: string, format: date-time }
+    username: { type: string }
+    avatar: { type: string }
