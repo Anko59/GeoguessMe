@@ -39,6 +39,11 @@ async function captureGlobe(page: Page, testInfo: TestInfo, state: string) {
     await testInfo.attach(name, { path, contentType: 'image/png' });
 }
 
+// The journey covers two signups, a camera capture and upload with media
+// processing, and repeated three.js globe interactions. CI renders WebGL in
+// software, where the same interactions that take ~10s locally can exceed the
+// 30s default when a runner is busy, so this journey carries its own budget.
+test.setTimeout(90_000);
 test('explores group challenges on Earth without revealing an unplayed location', async ({
     browser,
     contextOptions,
