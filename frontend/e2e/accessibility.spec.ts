@@ -114,11 +114,14 @@ test.describe('Keyboard navigation', () => {
         await page.keyboard.press('Tab');
         await expect(page.getByRole('button', { name: /sign up/i })).toBeFocused();
 
+        // The consent note beside the form is the first legal layer in the
+        // tab order; the page footer repeats the same destinations, so match
+        // the note links by their exact accessible names.
         await page.keyboard.press('Tab');
-        await expect(page.getByRole('link', { name: /terms of use/i })).toBeFocused();
+        await expect(page.getByRole('link', { name: 'Terms of Use', exact: true })).toBeFocused();
 
         await page.keyboard.press('Tab');
-        await expect(page.getByRole('link', { name: /privacy policy/i })).toBeFocused();
+        await expect(page.getByRole('link', { name: 'Privacy Policy', exact: true })).toBeFocused();
 
         await page.keyboard.press('Tab');
         await expect(page.getByRole('link', { name: /login/i })).toBeFocused();
