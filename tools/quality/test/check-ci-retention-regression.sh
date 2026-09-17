@@ -166,7 +166,7 @@ contains "$RELEASE" 'aab_sha256' \
     "Android release checks the immutable bundle digest"
 contains "$RELEASE" 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' \
     "Android release retains the verified bundle"
-contains "$RELEASE" 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' \
+contains "$RELEASE" 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
     "release promotion consumes the verified bundle"
 contains "$RELEASE" 'android-release/app-release.aab' \
     "GitHub release carries the verified Android bundle"
@@ -175,7 +175,7 @@ absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-accou
 contains "$RELEASE" '^  play-access:' "production release has a Play access preflight"
 contains "$RELEASE" 'needs: \[android, play-access\]' \
     "image promotion waits for Android and Play access"
-contains "$RELEASE" 'google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed' \
+contains "$RELEASE" 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' \
     "production Play jobs pin the Google OIDC action"
 contains "$RELEASE" 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER' \
     "production Play jobs read the WIF provider"
@@ -191,7 +191,7 @@ absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-accou
 
 contains "$PLAY_API" '^  workflow_dispatch:' "Play API access is an explicit manual operation"
 contains "$PLAY_API" 'id-token: write' "Play API access has narrowly scoped OIDC permission"
-contains "$PLAY_API" 'google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed' \
+contains "$PLAY_API" 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' \
     "Play API access pins the Google OIDC action"
 contains "$PLAY_API" 'token_format: access_token' "Play API access requests a short-lived token"
 contains "$PLAY_API" 'https://www.googleapis.com/auth/androidpublisher' \
