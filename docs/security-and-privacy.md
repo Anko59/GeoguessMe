@@ -3,7 +3,10 @@
 This document describes the technical security, privacy, and operational
 controls. The public-facing data and retention policy is maintained in
 [PRIVACY.md](../PRIVACY.md) and published at
-[geoguessme.com/privacy](https://geoguessme.com/privacy).
+[geoguessme.com/privacy](https://geoguessme.com/privacy). The public terms of
+use are published at [geoguessme.com/terms](https://geoguessme.com/terms), and
+the legal notice (operator identity, publication details, and hosting providers)
+at [geoguessme.com/legal](https://geoguessme.com/legal).
 
 ## Authorization model
 
