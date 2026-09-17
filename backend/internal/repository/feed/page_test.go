@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func TestFeedCursorKeepsTimestampTiesAndExcludesLookahead(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 	"geoguessme/handlers"
 	"geoguessme/internal/config"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func publicUpload(t *testing.T, caption, lat string) *http.Request {

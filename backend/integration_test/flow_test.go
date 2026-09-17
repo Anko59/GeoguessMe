@@ -303,6 +303,7 @@ func TestPublicFeedJourney(t *testing.T) {
 	_, err = feedrepo.NewRepository(db).Guess(guessCtx, publicID, other.userID, 0, 0)
 	require.NoError(t, err, "different players must be able to guess while a shared parent lock is held")
 	require.NoError(t, lock.Rollback(t.Context()))
+	resetRateLimiter(t)
 	resp, data = doJSON(t, "POST", path+"/comments", map[string]string{"content": "  Beautiful!  "}, viewer.access, nil)
 	require.Equal(t, 201, resp.StatusCode)
 	var comment models.PublicComment

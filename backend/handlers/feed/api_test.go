@@ -17,7 +17,7 @@ import (
 	feedrepo "geoguessme/internal/repository/feed"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 const testID = "00000000-0000-0000-0000-000000000001"
