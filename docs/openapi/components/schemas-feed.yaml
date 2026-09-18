@@ -108,7 +108,7 @@
       "type": "number"
 "PublicFeedResult":
   "type": "object"
-  "required": ["rank", "user_id", "username", "score", "distance", "elo_delta", "is_viewer"]
+  "required": ["rank", "user_id", "username", "avatar", "score", "distance", "elo_delta", "is_viewer"]
   "properties":
     "rank":
       "type": "integer"
@@ -117,6 +117,8 @@
       "type": "string"
       "format": "uuid"
     "username":
+      "type": "string"
+    "avatar":
       "type": "string"
     "score":
       "type": "integer"

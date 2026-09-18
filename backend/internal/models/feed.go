@@ -50,6 +50,7 @@ type PublicFeedResult struct {
 	Rank     int     `json:"rank"`
 	UserID   string  `json:"user_id"`
 	Username string  `json:"username"`
+	Avatar   string  `json:"avatar"`
 	Score    int     `json:"score"`
 	Distance float64 `json:"distance"`
 	EloDelta int     `json:"elo_delta"`

@@ -64,8 +64,19 @@
 }
 
 .feed-results li span:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     min-width: 0;
     overflow-wrap: anywhere;
+}
+
+.feed-result-avatar {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: none;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 .feed-results em {

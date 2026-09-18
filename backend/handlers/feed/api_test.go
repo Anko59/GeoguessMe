@@ -148,8 +148,8 @@ func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.user_id,u.username,g.score,g.distance").WithArgs("viewer", testID).WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "username", "score", "distance"}).AddRow("viewer", "Explorer", 4500, 120.0),
+	mock.ExpectQuery("SELECT g.user_id,u.username,u.avatar,g.score,g.distance").WithArgs("viewer", testID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance"}).AddRow("viewer", "Explorer", "avatar.png", 4500, 120.0),
 	)
 	mock.ExpectQuery("SELECT challenge_id,created_at,user_id,score FROM").WillReturnRows(
 		pgxmock.NewRows([]string{"challenge_id", "created_at", "user_id", "score"}),

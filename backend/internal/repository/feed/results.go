@@ -19,7 +19,7 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 	if !visible {
 		return nil, ErrNotFound
 	}
-	rows, err := r.pool.Query(ctx, `SELECT g.user_id,u.username,g.score,g.distance
+	rows, err := r.pool.Query(ctx, `SELECT g.user_id,u.username,u.avatar,g.score,g.distance
 		FROM public_guesses g
 		JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
 		JOIN public_challenges p ON p.id=g.challenge_id
@@ -38,7 +38,7 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 	results := make([]models.PublicFeedResult, 0)
 	for rows.Next() {
 		var result models.PublicFeedResult
-		if err := rows.Scan(&result.UserID, &result.Username, &result.Score, &result.Distance); err != nil {
+		if err := rows.Scan(&result.UserID, &result.Username, &result.Avatar, &result.Score, &result.Distance); err != nil {
 			return nil, err
 		}
 		result.Rank = len(results) + 1

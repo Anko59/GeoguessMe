@@ -11,10 +11,10 @@ func TestResultsRanksGuessesAndReturnsSignedAllTimeDeltas(t *testing.T) {
 	r, mock := mockRepository(t)
 	created := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.user_id,u.username,g.score,g.distance").WithArgs("viewer", "post").WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "username", "score", "distance"}).
-			AddRow("winner", "Navigator", 4800, 100.0).
-			AddRow("viewer", "Explorer", 4200, 300.0),
+	mock.ExpectQuery("SELECT g.user_id,u.username,u.avatar,g.score,g.distance").WithArgs("viewer", "post").WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance"}).
+			AddRow("winner", "Navigator", "avatar-a.png", 4800, 100.0).
+			AddRow("viewer", "Explorer", "avatar-b.png", 4200, 300.0),
 	)
 	mock.ExpectQuery("SELECT challenge_id,created_at,user_id,score FROM").WillReturnRows(
 		pgxmock.NewRows([]string{"challenge_id", "created_at", "user_id", "score"}).

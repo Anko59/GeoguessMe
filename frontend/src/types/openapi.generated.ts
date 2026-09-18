@@ -1156,6 +1156,7 @@ export interface components {
             /** Format: uuid */
             user_id: string;
             username: string;
+            avatar: string;
             score: number;
             /** @description Distance in meters. */
             distance: number;

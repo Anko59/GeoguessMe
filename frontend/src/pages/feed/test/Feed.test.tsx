@@ -140,12 +140,22 @@ describe('Public feed', () => {
                 rank: 1,
                 user_id: 'other',
                 username: 'Navigator',
+                avatar: 'avatar-a.png',
                 score: 4800,
                 distance: 100,
                 elo_delta: 4,
                 is_viewer: false,
             },
-            { rank: 2, user_id: 'viewer', username: 'Me', score: 4200, distance: 300, elo_delta: -4, is_viewer: true },
+            {
+                rank: 2,
+                user_id: 'viewer',
+                username: 'Me',
+                avatar: 'avatar-b.png',
+                score: 4200,
+                distance: 300,
+                elo_delta: -4,
+                is_viewer: true,
+            },
         ]);
         renderFeed();
         fireEvent.click(await screen.findByRole('button', { name: 'View challenge results' }));

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { getAPIErrorMessage, publicFeedAPI } from '../../api';
 import type { PublicFeedResult, PublicGuessResult } from '../../types';
+import Avatar from '../../components/common/Avatar';
 import Map from '../../components/map/Map';
 import FeedDialog from './FeedDialog';
 import FeedImage from './FeedImage';
@@ -50,6 +51,12 @@ export function FeedResults({ id }: { id: string }) {
                 {items.map((item) => (
                     <li key={item.user_id} className={item.is_viewer ? 'is-viewer' : undefined}>
                         <span>
+                            <Avatar
+                                userID={item.user_id}
+                                avatar={item.avatar}
+                                username={item.username}
+                                className="feed-result-avatar"
+                            />
                             <strong>
                                 #{item.rank} {item.username}
                             </strong>
