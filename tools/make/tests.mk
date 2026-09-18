@@ -56,6 +56,9 @@ test-mobile-release-contract: ## Verify Android release bundle inspection and pr
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
+test-load-harness-regression: ## Verify the k6 load profile attests age on every signup.
+	bash tools/quality/test/load-harness/check-load-attestation.sh
+
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh && bash tools/quality/test/check-restart-regression.sh --determinism
 

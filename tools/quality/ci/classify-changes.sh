@@ -106,7 +106,7 @@ classify() {
     # selected only when the harness changed. This is additive: the branch
     # above keeps every existing capability untouched.
     case "$path" in
-        Makefile | tools/make/* | tools/quality/* | .github/workflows/* | deployment/compose.tools.yaml | deployment/compose.dev.yaml)
+        Makefile | tools/make/* | tools/quality/* | tools/load/* | .github/workflows/* | deployment/compose.tools.yaml | deployment/compose.dev.yaml)
             harness=true
             ;;
     esac
