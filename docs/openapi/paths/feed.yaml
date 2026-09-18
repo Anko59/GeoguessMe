@@ -31,10 +31,42 @@
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "500":
         "$ref": "../components/responses.yaml#/ErrorResponse"
+"leaderboard":
+  "get":
+    "operationId": "getPublicFeedLeaderboard"
+    "summary": "Rank the community by total public feed score"
+    "description": "Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules."
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters":
+      [
+        { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 256 } },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        },
+      ]
+    "responses":
+      "200":
+        "description": "Stable cursor page ordered by total feed score, username, and user ID."
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicFeedLeaderboardPage"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
 "upload":
   "post":
     "operationId": "createPublicChallenge"
-    "summary": "Publish a photo challenge visible to all signed-in users"
+    "summary": "Publish a photo challenge with an explicit audience"
     "tags": ["Feed"]
     "security": [{ "bearerAuth": [] }]
     "requestBody":
@@ -51,7 +83,19 @@
                 "description": "JPG, PNG or WebP, within configured upload limits."
               "caption":
                 "type": "string"
-                "maxLength": 500
+                "maxLength": 280
+              "audience":
+                "type": "string"
+                "enum": ["public", "friends"]
+                "default": "public"
+                "description": "Friends posts are visible to users sharing a group with the author."
+              "group_id":
+                "type": "array"
+                "maxItems": 20
+                "items":
+                  "type": "string"
+                  "format": "uuid"
+                "description": "Repeated multipart field. Optional selected groups for a friends post; the author must belong to every selected group."
               "lat":
                 "type": "number"
                 "minimum": -90
@@ -248,6 +292,34 @@
           "application/json":
             "schema":
               "$ref": "../components/schemas-feed.yaml#/PublicGuessResult"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "403":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"results":
+  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+  "get":
+    "operationId": "getPublicChallengeResults"
+    "summary": "Read all ranked guesses and the signed all-time Elo delta"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "responses":
+      "200":
+        "description": "All guesses for the visible public challenge, ranked by score."
+        "content":
+          "application/json":
+            "schema":
+              "type": "array"
+              "items":
+                "$ref": "../components/schemas-feed.yaml#/PublicFeedResult"
       "400":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "401":

@@ -103,7 +103,7 @@ func NewApp(
 		Clock:   clock,
 		Metrics: &middleware.Metrics{ExtraMetrics: pushSvc.MetricsText},
 		Auth:    authService,
-		Groups:  handlers.NewGroupAPI(repos),
+		Groups:  handlers.NewGroupAPI(repos, clock),
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
@@ -206,6 +206,8 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/auth/account", protected(a.AuthAPI.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(a.Groups.GetUserGroups))
+	mux.Handle("/api/v1/user/groups/inbox", protected(a.Groups.GetUserGroupsInbox))
+	mux.Handle("/api/v1/user/groups/inbox/read", protected(a.Groups.MarkUserGroupRead))
 	mux.Handle("/api/v1/user/profile/{userID}", protected(a.AuthAPI.GetPublicProfile))
 	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))

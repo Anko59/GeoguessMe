@@ -5,12 +5,13 @@ import type { AuthResponse } from './types';
 
 const { routeRef, apiMocks, mockModule } = vi.hoisted(() => {
     const routeRef = { current: '/' };
-    const apiMocks = { get: vi.fn(), post: vi.fn(), delete: vi.fn() };
+    const apiMocks = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), inbox: vi.fn(), markRead: vi.fn() };
     return {
         routeRef,
         apiMocks,
         mockModule: {
             default: { get: apiMocks.get, post: apiMocks.post, delete: apiMocks.delete },
+            groupsAPI: { inbox: apiMocks.inbox, markRead: apiMocks.markRead },
             getAPIErrorMessage: (error: unknown, fallback: string) =>
                 error instanceof Error ? error.message : fallback,
             getAccessToken: () => null,
@@ -54,10 +55,13 @@ beforeEach(() => {
     apiMocks.get.mockReset();
     apiMocks.post.mockReset();
     apiMocks.delete.mockReset();
+    apiMocks.inbox.mockReset();
+    apiMocks.markRead.mockReset();
     // By default, fail auth refresh so the shell is in an unauthenticated state.
     apiMocks.post.mockRejectedValue(new Error('no session'));
     // Public route tests exercise the intentionally supported OIDC-off mode.
     apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
+    apiMocks.inbox.mockResolvedValue([]);
 });
 
 describe('Home Page', () => {
@@ -70,7 +74,7 @@ describe('Home Page', () => {
         expect(screen.getByRole('heading', { name: /geoguess\.me.*guess the place/i })).toBeInTheDocument();
     });
 
-    it('redirects authenticated visitors to groups', () => {
+    it('redirects authenticated visitors to the feed', () => {
         render(
             <AuthContext.Provider
                 value={{
@@ -88,6 +92,7 @@ describe('Home Page', () => {
             </AuthContext.Provider>,
         );
         expect(screen.queryByRole('heading', { name: /guess the place/i })).not.toBeInTheDocument();
+        expect(window.location.pathname).toBe('/');
     });
 
     it('keeps the landing page visible during logout navigation', () => {

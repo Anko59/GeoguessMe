@@ -19,6 +19,10 @@ import (
 )
 
 func publicUpload(t *testing.T, caption, lat string) *http.Request {
+	return uploadWithAudience(t, caption, lat, "", nil)
+}
+
+func uploadWithAudience(t *testing.T, caption, lat, audience string, groupIDs []string) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
@@ -38,12 +42,44 @@ func publicUpload(t *testing.T, caption, lat string) *http.Request {
 			t.Fatal(err)
 		}
 	}
+	if audience != "" {
+		if err := form.WriteField("audience", audience); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, groupID := range groupIDs {
+		if err := form.WriteField("group_id", groupID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := form.Close(); err != nil {
 		t.Fatal(err)
 	}
 	r := httptest.NewRequest("POST", "/api/v1/feed/challenges", &body)
 	r.Header.Set("Content-Type", form.FormDataContentType())
 	return r.WithContext(handlers.WithUserID(r.Context(), "viewer"))
+}
+
+func TestPublicUploadValidatesAudienceAndSelectedGroups(t *testing.T) {
+	for _, tc := range []struct {
+		name, audience string
+		groups         []string
+	}{
+		{name: "unknown audience", audience: "neighbors"},
+		{name: "public target", audience: "public", groups: []string{"00000000-0000-0000-0000-000000000002"}},
+		{name: "invalid group", audience: "friends", groups: []string{"not-a-uuid"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, _ := mockAPI(t)
+			a.store = &fakeStore{}
+			a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+			w := httptest.NewRecorder()
+			a.Upload(w, uploadWithAudience(t, "A place", "48.8", tc.audience, tc.groups))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
 }
 
 type deletionRecorder struct {
@@ -76,7 +112,7 @@ func TestUploadCreatesOnlyExplicitPublicPhotoAndCompensatesFailures(t *testing.T
 			a.deletions = deletions
 			a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
 			if tc.storageErr == nil {
-				insert := mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), "viewer", "A place", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8, 2.3, pgxmock.AnyArg())
+				insert := mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), "viewer", "A place", "public", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8, 2.3, pgxmock.AnyArg())
 				if tc.databaseErr != nil {
 					insert.WillReturnError(tc.databaseErr)
 				} else {
@@ -102,7 +138,7 @@ func TestUploadCreatesOnlyExplicitPublicPhotoAndCompensatesFailures(t *testing.T
 }
 
 func TestPublicUploadRejectsCaptionAndCoordinatesBeforeStorage(t *testing.T) {
-	for _, tc := range []struct{ caption, lat string }{{strings.Repeat("a", 501), "48.8"}, {"", "NaN"}, {"", "91"}, {"", ""}} {
+	for _, tc := range []struct{ caption, lat string }{{strings.Repeat("a", 281), "48.8"}, {"", "NaN"}, {"", "91"}, {"", ""}} {
 		a, _ := mockAPI(t)
 		store := &fakeStore{}
 		a.store = store

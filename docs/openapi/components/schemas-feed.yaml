@@ -24,7 +24,11 @@
       "type": "string"
     "caption":
       "type": "string"
-      "maxLength": 500
+      "maxLength": 280
+    "audience":
+      "type": "string"
+      "enum": ["public", "friends"]
+      "description": "Public is visible to all signed-in users. Friends is visible to shared-group members, optionally limited to selected groups."
     "created_at":
       "type": "string"
       "format": "date-time"
@@ -49,6 +53,31 @@
       "type": "array"
       "items":
         "$ref": "#/PublicChallenge"
+    "next_cursor":
+      "type": "string"
+"PublicFeedLeaderboardEntry":
+  "type": "object"
+  "required": ["rank", "user_id", "username", "total_score"]
+  "properties":
+    "rank":
+      "type": "integer"
+      "minimum": 1
+    "user_id":
+      "type": "string"
+      "format": "uuid"
+    "username":
+      "type": "string"
+    "total_score":
+      "type": "integer"
+      "minimum": 0
+"PublicFeedLeaderboardPage":
+  "type": "object"
+  "required": ["items", "next_cursor"]
+  "properties":
+    "items":
+      "type": "array"
+      "items":
+        "$ref": "#/PublicFeedLeaderboardEntry"
     "next_cursor":
       "type": "string"
 "PublicComment":
@@ -102,3 +131,30 @@
       "type": "number"
     "actual_long":
       "type": "number"
+"PublicFeedResult":
+  "type": "object"
+  "required": ["rank", "user_id", "username", "avatar", "score", "distance", "elo_delta", "is_viewer"]
+  "properties":
+    "rank":
+      "type": "integer"
+      "minimum": 1
+    "user_id":
+      "type": "string"
+      "format": "uuid"
+    "username":
+      "type": "string"
+    "avatar":
+      "type": "string"
+    "score":
+      "type": "integer"
+      "minimum": 0
+      "maximum": 5000
+    "distance":
+      "type": "number"
+      "minimum": 0
+      "description": "Distance in meters."
+    "elo_delta":
+      "type": "integer"
+      "description": "Signed all-time Elo change caused by this challenge in the global history replay."
+    "is_viewer":
+      "type": "boolean"

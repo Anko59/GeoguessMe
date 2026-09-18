@@ -9,6 +9,7 @@ type PublicChallenge struct {
 	UserID        string    `json:"user_id"`
 	Username      string    `json:"username"`
 	Caption       string    `json:"caption"`
+	Audience      string    `json:"audience"`
 	CreatedAt     time.Time `json:"created_at"`
 	IsOwner       bool      `json:"is_owner"`
 	Resolved      bool      `json:"resolved"`
@@ -20,6 +21,18 @@ type PublicChallenge struct {
 type PublicFeedPage struct {
 	Items      []PublicChallenge `json:"items"`
 	NextCursor string            `json:"next_cursor"`
+}
+
+type PublicFeedLeaderboardEntry struct {
+	Rank       int    `json:"rank"`
+	UserID     string `json:"user_id"`
+	Username   string `json:"username"`
+	TotalScore int    `json:"total_score"`
+}
+
+type PublicFeedLeaderboardPage struct {
+	Items      []PublicFeedLeaderboardEntry `json:"items"`
+	NextCursor string                       `json:"next_cursor"`
 }
 
 type PublicComment struct {
@@ -43,4 +56,15 @@ type PublicGuessResult struct {
 	Long       float64 `json:"long"`
 	ActualLat  float64 `json:"actual_lat"`
 	ActualLong float64 `json:"actual_long"`
+}
+
+type PublicFeedResult struct {
+	Rank     int     `json:"rank"`
+	UserID   string  `json:"user_id"`
+	Username string  `json:"username"`
+	Avatar   string  `json:"avatar"`
+	Score    int     `json:"score"`
+	Distance float64 `json:"distance"`
+	EloDelta int     `json:"elo_delta"`
+	IsViewer bool    `json:"is_viewer"`
 }

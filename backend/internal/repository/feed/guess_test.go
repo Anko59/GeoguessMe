@@ -37,7 +37,7 @@ func TestGuessIsImmutableAndRejectsOwnChallenge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, mock := mockRepository(t)
 			mock.ExpectBegin()
-			mock.ExpectQuery("SELECT user_id,lat,long.*FOR KEY SHARE").WithArgs("post").WillReturnRows(pgxmock.NewRows([]string{"owner", "lat", "long"}).AddRow(tc.owner, 48.0, 2.0))
+			mock.ExpectQuery("SELECT p.user_id,p.lat,p.long.*FOR KEY SHARE").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"owner", "lat", "long"}).AddRow(tc.owner, 48.0, 2.0))
 			if tc.wantErr != nil {
 				mock.ExpectRollback()
 			} else {
@@ -71,7 +71,7 @@ func TestGuessIsImmutableAndRejectsOwnChallenge(t *testing.T) {
 func TestGuessFailureCannotResolveChallenge(t *testing.T) {
 	r, mock := mockRepository(t)
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT user_id,lat,long").WithArgs("post").WillReturnRows(pgxmock.NewRows([]string{"owner", "lat", "long"}).AddRow("author", 0.0, 0.0))
+	mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"owner", "lat", "long"}).AddRow("author", 0.0, 0.0))
 	mock.ExpectExec("INSERT INTO public_guesses").WithArgs("post", "viewer", 0.0, 0.0, 5000, 0.0).WillReturnError(errors.New("insert failure"))
 	mock.ExpectRollback()
 	if _, err := r.Guess(t.Context(), "post", "viewer", 0, 0); err == nil {
@@ -86,7 +86,7 @@ func TestGuessFailureCannotResolveChallenge(t *testing.T) {
 
 func TestResultRequiresViewerGuess(t *testing.T) {
 	r, mock := mockRepository(t)
-	mock.ExpectQuery("SELECT g.score,g.distance,g.lat,g.long,p.lat,p.long").WithArgs("post", "unsolved").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT g.score,g.distance,g.lat,g.long,p.lat,p.long").WithArgs("unsolved", "post").WillReturnError(pgx.ErrNoRows)
 	if _, err := r.Result(t.Context(), "post", "unsolved"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unresolved result: %v", err)
 	}

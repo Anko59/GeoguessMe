@@ -117,6 +117,8 @@ passing that time alone does not grant access to an unplayed active challenge.
 | Method | Path                                                         | Auth   | Description                                                                            |
 | ------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
 | GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                                     |
+| GET    | `/api/v1/user/groups/inbox`                                  | Bearer | Group rail identity, latest-message metadata, and authoritative unread counts          |
+| PUT    | `/api/v1/user/groups/inbox/read?group_id=`                   | Bearer | Mark one group inbox read through the server timestamp                                 |
 | POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
 | POST   | `/api/v1/group/join`                                         | Bearer | Join group `{invite_token}`                                                            |
 | GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |
@@ -169,17 +171,19 @@ rate limit. Posts and comments use a descending `(created_at, id)` cursor;
 `limit` defaults to 20 and accepts 1–50. Read
 [public feed behavior and rollout](public-feed.md) for visibility and retention.
 
-| Method      | Path                                                | Description                                                  |
-| ----------- | --------------------------------------------------- | ------------------------------------------------------------ |
-| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`               |
-| POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,lat,long)`                  |
-| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                              |
-| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer |
-| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt              |
-| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess       |
-| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                            |
-| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                      |
-| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                      |
+| Method      | Path                                                | Description                                                    |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------- |
+| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                 |
+| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames and total score only          |
+| POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,audience,group_id*,lat,long)` |
+| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                |
+| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer   |
+| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt                |
+| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess         |
+| GET         | `/api/v1/feed/challenges/{id}/results`              | Rank every guess and show each signed all-time Elo delta       |
+| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                              |
+| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                        |
+| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                        |
 
 ### WebSocket
 

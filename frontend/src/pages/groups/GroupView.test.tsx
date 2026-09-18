@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
+    groupsAPI: { markRead: vi.fn().mockResolvedValue(undefined) },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 

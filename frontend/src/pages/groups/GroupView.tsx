@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../../api';
+import api, { getAPIErrorMessage, groupsAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { Group, Message } from '../../types';
 import Chat from '../../components/chat/Chat';
@@ -38,6 +38,7 @@ export default function GroupView() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [globeGroupID, setGlobeGroupID] = useState<string | null>(null);
     const [groupPhotoRefreshKey, setGroupPhotoRefreshKey] = useState(0);
+    const [inboxState, setInboxState] = useState({ id: '', error: '' });
     const group = groupState.id === id ? groupState.group : null;
     const groupError = groupState.id === id ? groupState.error : '';
     const groupAccessDenied = groupState.id === id && groupState.accessDenied;
@@ -79,6 +80,13 @@ export default function GroupView() {
 
     useEffect(() => {
         if (!id) return;
+        void groupsAPI.markRead(id).catch((requestError: unknown) => {
+            setInboxState({ id, error: getAPIErrorMessage(requestError, 'Unable to update group inbox.') });
+        });
+    }, [id]);
+
+    useEffect(() => {
+        if (!id) return;
         let active = true;
         void api
             .get<Group>('/group/details', { params: { id } })
@@ -105,7 +113,8 @@ export default function GroupView() {
         prefetchLeaderboard(user.id, id);
     }, [groupError, id, user]);
 
-    const error = groupError || messagesError;
+    const inboxError = inboxState.id === id ? inboxState.error : '';
+    const error = groupError || messagesError || inboxError;
 
     if (!id) return <div>Invalid Group ID</div>;
     if (groupError) {

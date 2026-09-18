@@ -1,10 +1,77 @@
-import { useState, type FormEvent } from 'react';
-import type { PublicGuessResult } from '../../types';
+import { useEffect, useState, type FormEvent } from 'react';
+import { getAPIErrorMessage, publicFeedAPI } from '../../api';
+import type { PublicFeedResult, PublicGuessResult } from '../../types';
+import Avatar from '../../components/common/Avatar';
 import Map from '../../components/map/Map';
 import FeedDialog from './FeedDialog';
 import FeedImage from './FeedImage';
 import LocationPicker from './LocationPicker';
 import { useFeedActions, usePublicResult } from './useFeed';
+
+export function FeedResults({ id }: { id: string }) {
+    const [state, setState] = useState<{ id: string; items: PublicFeedResult[] | null; error: string | null }>({
+        id,
+        items: null,
+        error: null,
+    });
+    useEffect(() => {
+        const controller = new AbortController();
+        void publicFeedAPI
+            .results(id, controller.signal)
+            .then((items) => setState({ id, items, error: null }))
+            .catch((reason: unknown) => {
+                if (!controller.signal.aborted)
+                    setState({
+                        id,
+                        items: null,
+                        error: getAPIErrorMessage(reason, 'Unable to load challenge results'),
+                    });
+            });
+        return () => controller.abort();
+    }, [id]);
+    const items = state.id === id ? state.items : null;
+    const error = state.id === id ? state.error : null;
+    if (error)
+        return (
+            <p className="error-message" role="alert">
+                {error}
+            </p>
+        );
+    if (!items)
+        return (
+            <p className="feed-results-status" role="status">
+                Loading results…
+            </p>
+        );
+    if (items.length === 0) return <p className="feed-results-status">No guesses yet.</p>;
+    return (
+        <section className="feed-results" aria-label="Challenge results">
+            <h3>Challenge results</h3>
+            <ol>
+                {items.map((item) => (
+                    <li key={item.user_id} className={item.is_viewer ? 'is-viewer' : undefined}>
+                        <span>
+                            <Avatar
+                                userID={item.user_id}
+                                avatar={item.avatar}
+                                username={item.username}
+                                className="feed-result-avatar"
+                            />
+                            <strong>
+                                #{item.rank} {item.username}
+                            </strong>
+                            {item.is_viewer && <em> You</em>}
+                        </span>
+                        <span>
+                            {item.score.toLocaleString()} pts · {item.elo_delta >= 0 ? '+' : ''}
+                            {item.elo_delta} Elo
+                        </span>
+                    </li>
+                ))}
+            </ol>
+        </section>
+    );
+}
 
 export default function FeedGame({
     id,

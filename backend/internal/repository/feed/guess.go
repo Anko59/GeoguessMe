@@ -15,7 +15,7 @@ func (r *Repository) Result(ctx context.Context, id, viewer string) (models.Publ
 	var g models.PublicGuessResult
 	err := r.pool.QueryRow(ctx, `SELECT g.score,g.distance,g.lat,g.long,p.lat,p.long
 		FROM public_guesses g JOIN public_challenges p ON p.id=g.challenge_id
-		WHERE g.challenge_id=$1 AND g.user_id=$2`, id, viewer).
+		WHERE g.challenge_id=$2 AND g.user_id=$1 AND `+challengeVisibility, viewer, id).
 		Scan(&g.Score, &g.Distance, &g.Lat, &g.Long, &g.ActualLat, &g.ActualLong)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return g, ErrNotFound
@@ -37,7 +37,7 @@ func (r *Repository) Guess(ctx context.Context, id, viewer string, lat, long flo
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var owner string
-	err = tx.QueryRow(ctx, `SELECT user_id,lat,long FROM public_challenges WHERE id=$1 FOR KEY SHARE`, id).Scan(&owner, &g.ActualLat, &g.ActualLong)
+	err = tx.QueryRow(ctx, `SELECT p.user_id,p.lat,p.long FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility+` FOR KEY SHARE`, viewer, id).Scan(&owner, &g.ActualLat, &g.ActualLong)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return g, ErrNotFound
 	}
