@@ -70,6 +70,19 @@ describe('Signup Page', () => {
         expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
     });
 
+    it('shows the first-layer terms and privacy notice beside the signup form', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        expect(await screen.findByRole('link', { name: 'Terms of Use' })).toHaveAttribute('href', '/terms');
+        expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
+    });
+
     it('submits form with valid data', async () => {
         mockPost.mockResolvedValue({
             data: {

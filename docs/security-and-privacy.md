@@ -3,7 +3,10 @@
 This document describes the technical security, privacy, and operational
 controls. The public-facing data and retention policy is maintained in
 [PRIVACY.md](../PRIVACY.md) and published at
-[geoguessme.com/privacy](https://geoguessme.com/privacy). The operational GDPR
+[geoguessme.com/privacy](https://geoguessme.com/privacy). The public terms of
+use are published at [geoguessme.com/terms](https://geoguessme.com/terms), and
+the legal notice (operator identity, publication details, and hosting providers)
+at [geoguessme.com/legal](https://geoguessme.com/legal). The operational GDPR
 record — processing register, processors and transfer safeguards, data-subject
 requests, and breach response — is owned by
 [data-protection](data-protection.md).
