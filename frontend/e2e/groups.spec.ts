@@ -227,7 +227,14 @@ test.describe('Group empty and error states', () => {
             const page = await context.newPage();
             await signupViaUI(page);
             // Navigate away so a subsequent /groups nav triggers a fresh fetch.
+            // Let the mount session restore settle before leaving: navigating
+            // away while the refresh rotation is still in flight aborts its
+            // response after the server has already revoked the presented
+            // token, stranding the next page with a stale cookie that bounces
+            // it to /login and races the error state this test asserts.
+            const sessionRestored = page.waitForResponse((response) => response.url().endsWith('/api/v1/auth/refresh'));
             await page.goto('/group/join');
+            await sessionRestored;
             // Block the groups endpoint to simulate a server error.
             await page.route('**/api/v1/user/groups**', (route) => route.fulfill({ status: 500, body: '{}' }));
             await page.goto('/groups');
