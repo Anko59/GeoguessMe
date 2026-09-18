@@ -145,6 +145,22 @@ func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 	}
 }
 
+func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
+	a, mock := mockAPI(t)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT g.user_id,u.username,g.score,g.distance").WithArgs("viewer", testID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "score", "distance"}).AddRow("viewer", "Explorer", 4500, 120.0),
+	)
+	mock.ExpectQuery("SELECT challenge_id,created_at,user_id,score FROM").WillReturnRows(
+		pgxmock.NewRows([]string{"challenge_id", "created_at", "user_id", "score"}),
+	)
+	w := httptest.NewRecorder()
+	a.Results(w, request("GET", ""))
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "private, no-store" || !strings.Contains(w.Body.String(), "Explorer") {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", testID).WillReturnError(pgx.ErrNoRows)

@@ -22,6 +22,8 @@ paths:
     $ref: ./openapi/paths/feed.yaml#/play
   /feed/challenges/{id}/guess:
     $ref: ./openapi/paths/feed.yaml#/guess
+  /feed/challenges/{id}/results:
+    $ref: ./openapi/paths/feed.yaml#/results
   /feed/challenges/{id}/reaction:
     $ref: ./openapi/paths/feed.yaml#/reaction
   /feed/challenges/{id}/comments:

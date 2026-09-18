@@ -45,3 +45,13 @@ type PublicGuessResult struct {
 	ActualLat  float64 `json:"actual_lat"`
 	ActualLong float64 `json:"actual_long"`
 }
+
+type PublicFeedResult struct {
+	Rank     int     `json:"rank"`
+	UserID   string  `json:"user_id"`
+	Username string  `json:"username"`
+	Score    int     `json:"score"`
+	Distance float64 `json:"distance"`
+	EloDelta int     `json:"elo_delta"`
+	IsViewer bool    `json:"is_viewer"`
+}

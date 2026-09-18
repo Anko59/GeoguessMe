@@ -140,6 +140,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/feed/challenges/{id}/results': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read all ranked guesses and the signed all-time Elo delta */
+        get: operations['getPublicChallengeResults'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/feed/challenges/{id}/reaction': {
         parameters: {
             query?: never;
@@ -1132,6 +1151,18 @@ export interface components {
             actual_lat: number;
             actual_long: number;
         };
+        PublicFeedResult: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            score: number;
+            /** @description Distance in meters. */
+            distance: number;
+            /** @description Signed all-time Elo change caused by this challenge in the global history replay. */
+            elo_delta: number;
+            is_viewer: boolean;
+        };
         PublicComment: {
             /** Format: uuid */
             id: string;
@@ -1905,6 +1936,34 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallengeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All guesses for the visible public challenge, ranked by score. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedResult'][];
                 };
             };
             400: components['responses']['ErrorResponse'];

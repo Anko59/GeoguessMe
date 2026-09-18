@@ -179,6 +179,7 @@ rate limit. Posts and comments use a descending `(created_at, id)` cursor;
 | GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer   |
 | GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt                |
 | GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess         |
+| GET         | `/api/v1/feed/challenges/{id}/results`              | Rank every guess and show each signed all-time Elo delta       |
 | PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                              |
 | GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                        |
 | DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                        |

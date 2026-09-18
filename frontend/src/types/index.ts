@@ -17,6 +17,7 @@ export type PublicFeedPage = components['schemas']['PublicFeedPage'];
 export type PublicComment = components['schemas']['PublicComment'];
 export type PublicCommentsPage = components['schemas']['PublicCommentsPage'];
 export type PublicGuessResult = components['schemas']['PublicGuessResult'];
+export type PublicFeedResult = components['schemas']['PublicFeedResult'];
 
 // --- Wire types (generated from docs/openapi.yaml) ---
 

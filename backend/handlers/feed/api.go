@@ -37,6 +37,7 @@ func (a *API) Routes(mux *http.ServeMux, protect func(http.HandlerFunc) http.Han
 	mux.Handle("/api/v1/feed/challenges/{id}/media", protect(a.Media))
 	mux.Handle("/api/v1/feed/challenges/{id}/play", protect(a.Play))
 	mux.Handle("/api/v1/feed/challenges/{id}/guess", protect(a.Guess))
+	mux.Handle("/api/v1/feed/challenges/{id}/results", protect(a.Results))
 	mux.Handle("/api/v1/feed/challenges/{id}/reaction", protect(a.Reaction))
 	mux.Handle("/api/v1/feed/challenges/{id}/comments", protect(a.Comments))
 	mux.Handle("/api/v1/feed/challenges/{id}/comments/{commentID}", protect(a.DeleteComment))
@@ -159,6 +160,23 @@ func (a *API) Guess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handlers.WriteJSON(w, 200, result)
+}
+
+func (a *API) Results(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.MethodNotAllowed(w)
+		return
+	}
+	if !validID(w, r) {
+		return
+	}
+	results, err := a.repo.Results(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	handlers.WriteJSON(w, 200, results)
 }
 
 func (a *API) Reaction(w http.ResponseWriter, r *http.Request) {

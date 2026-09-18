@@ -33,10 +33,13 @@ resolution state is independent.
 Each player gets one immutable guess per public post. Repeated submissions
 return the first result, including concurrent submissions. Results show the
 distance, the actual point, and the existing distance-based score from 0
-to 5000. **View your result** reopens the stored result. Public scores are
-separate from private group leaderboards and profile progression. Authors cannot
-guess their own posts. Feed and comment payloads never contain answer
-coordinates.
+to 5000. **View your result** reopens the stored result. Once a challenge has
+multiple guesses, every guess is available in score order with a stable rank and
+a signed all-time Elo delta. The delta is replayed from the same combined
+private/public history as the global ladder; a single guess still has no Elo
+comparison. Public score totals remain separate from private group challenge
+leaderboards and profile progression. Authors cannot guess their own posts. Feed
+and comment payloads never contain answer coordinates.
 
 ## Reactions and comments
 
@@ -73,12 +76,12 @@ cursor requests with indexable seek predicates.
 
 ## Storage, deployment, and rollback
 
-migrations **027_public_feed**, **028_group_inbox_reads**, and
-**029_feed_audiences** add independent public challenge data, durable group
-inbox read boundaries, and audience/selected-group records. Apply migrations
-with the existing deployment migration job before starting the new application
-revision; local operators use `make migrate-up`. No environment variables or
-services are added.
+migrations **027_public_feed**, **028_group_inbox_reads**,
+**029_feed_audiences**, and **030_public_feed_results** add independent public
+challenge data, durable group inbox read boundaries, audience/selected-group
+records, and the ranked results index. Apply migrations with the existing
+deployment migration job before starting the new application revision; local
+operators use `make migrate-up`. No environment variables or services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live
