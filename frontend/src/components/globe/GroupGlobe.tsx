@@ -19,8 +19,14 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
     const selection = useRef<HTMLDivElement>(null);
     const { items, loading, error, refresh } = useGroupChallenges(groupID);
     const [selectedID, setSelectedID] = useState<string | null>(null);
+    const [listOpen, setListOpen] = useState(false);
     const selected = items.find((item) => item.photo_id === selectedID);
     const located = items.filter((item) => item.lat !== undefined && item.long !== undefined).length;
+    const selectFromGlobe = (id: string) => {
+        setSelectedID(id);
+        setListOpen(true);
+    };
+    const toggleList = () => setListOpen((open) => !open);
     useEffect(() => {
         if (selected) {
             selection.current?.focus({ preventScroll: true });
@@ -92,54 +98,71 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
                 </button>
             </header>
             <div className="globe-layout">
-                <Globe items={items} selectedID={selectedID} onSelect={setSelectedID} />
-                <section className="globe-history" aria-label="Group challenges">
+                <Globe items={items} selectedID={selectedID} onSelect={selectFromGlobe} />
+                <section className={`globe-history${listOpen ? ' is-open' : ''}`} aria-label="Group challenges">
                     <div className="globe-history-heading">
                         <h3>Geochallenges</h3>
-                        <button type="button" onClick={refresh} disabled={loading}>
-                            Refresh
-                        </button>
-                    </div>
-                    <p className="globe-summary">
-                        {items.length} {items.length === 1 ? 'challenge' : 'challenges'} · {located} on the globe
-                    </p>
-                    <p className="globe-hint">
-                        Drag to explore, pinch or scroll to zoom. Select a pin or a challenge below.
-                    </p>
-                    {items.length > located && (
-                        <p className="globe-hint">
-                            Hidden locations stay off the globe until you're allowed to see them.
-                        </p>
-                    )}
-                    {loading && <p role="status">Loading group challenges…</p>}
-                    {error && <p role="alert">{error}</p>}
-                    {!loading && !error && items.length === 0 && (
-                        <p>No geochallenges yet. Send your first one from the camera!</p>
-                    )}
-                    {selected && (
-                        <div
-                            ref={selection}
-                            className="globe-selection"
-                            role="region"
-                            aria-label="Selected challenge"
-                            tabIndex={-1}
-                        >
-                            <strong>{selected.username}'s challenge</strong>
-                            <p>
-                                {challengeStatusLabel(selected)} ·{' '}
-                                <time dateTime={selected.created_at}>
-                                    {new Date(selected.created_at).toLocaleDateString()}
-                                </time>
-                            </p>
-                            <p>{locationLabel(selected)}</p>
-                            <button type="button" className="btn btn-primary" onClick={() => openChallenge(selected)}>
-                                {selected.status === 'available' ? 'Play challenge' : 'View results'}
+                        <div className="globe-history-actions">
+                            <button
+                                type="button"
+                                className="globe-sheet-toggle"
+                                aria-expanded={listOpen}
+                                aria-controls="globe-history-body"
+                                onClick={toggleList}
+                            >
+                                {listOpen ? 'Hide list' : 'Show list'}
+                            </button>
+                            <button type="button" onClick={refresh} disabled={loading}>
+                                Refresh
                             </button>
                         </div>
-                    )}
-                    {items.length > 0 && (
-                        <ChallengeHistory items={items} selectedID={selectedID} onSelect={setSelectedID} />
-                    )}
+                    </div>
+                    <div id="globe-history-body" className="globe-history-body">
+                        <p className="globe-summary">
+                            {items.length} {items.length === 1 ? 'challenge' : 'challenges'} · {located} on the globe
+                        </p>
+                        <p className="globe-hint">
+                            Drag to explore, pinch or scroll to zoom. Select a pin or a challenge below.
+                        </p>
+                        {items.length > located && (
+                            <p className="globe-hint">
+                                Hidden locations stay off the globe until you're allowed to see them.
+                            </p>
+                        )}
+                        {loading && <p role="status">Loading group challenges…</p>}
+                        {error && <p role="alert">{error}</p>}
+                        {!loading && !error && items.length === 0 && (
+                            <p>No geochallenges yet. Send your first one from the camera!</p>
+                        )}
+                        {selected && (
+                            <div
+                                ref={selection}
+                                className="globe-selection"
+                                role="region"
+                                aria-label="Selected challenge"
+                                tabIndex={-1}
+                            >
+                                <strong>{selected.username}'s challenge</strong>
+                                <p>
+                                    {challengeStatusLabel(selected)} ·{' '}
+                                    <time dateTime={selected.created_at}>
+                                        {new Date(selected.created_at).toLocaleDateString()}
+                                    </time>
+                                </p>
+                                <p>{locationLabel(selected)}</p>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => openChallenge(selected)}
+                                >
+                                    {selected.status === 'available' ? 'Play challenge' : 'View results'}
+                                </button>
+                            </div>
+                        )}
+                        {items.length > 0 && (
+                            <ChallengeHistory items={items} selectedID={selectedID} onSelect={setSelectedID} />
+                        )}
+                    </div>
                 </section>
             </div>
         </dialog>
