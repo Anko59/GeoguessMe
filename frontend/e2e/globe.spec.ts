@@ -20,12 +20,39 @@ async function openGlobe(page: Page) {
     return globe;
 }
 
+const GLOBE_SCREENSHOT_TIMEOUT_MS = 20_000;
+
 async function captureGlobe(page: Page, testInfo: TestInfo, state: string) {
-    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const name = `globe-${state}`;
     const path = testInfo.outputPath(`${name}.png`);
-    await page.screenshot({ path, animations: 'disabled' });
-    await testInfo.attach(name, { path, contentType: 'image/png' });
+    // Software-rendered WebGL on CI runners can stall Chromium's screenshot
+    // readback on the continuously rendered globe, and an unbounded capture
+    // then consumes the whole journey budget. Bound each attempt, resync to a
+    // freshly rendered frame between attempts, and keep the capture
+    // best-effort: the journey assertions stay strict even when this
+    // diagnostic evidence cannot be produced.
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+            await page.evaluate(() => document.fonts.ready.then(() => undefined));
+            await page.screenshot({ path, animations: 'disabled', timeout: GLOBE_SCREENSHOT_TIMEOUT_MS });
+            await testInfo.attach(name, { path, contentType: 'image/png' });
+            return;
+        } catch (error) {
+            if (attempt === 2) {
+                await testInfo.attach(`${name}-capture-error`, {
+                    body: String(error),
+                    contentType: 'text/plain',
+                });
+                return;
+            }
+            await page.evaluate(
+                () =>
+                    new Promise<void>((resolve) => {
+                        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+                    }),
+            );
+        }
+    }
 }
 
 // The journey covers two signups, a camera capture and upload with media
