@@ -17,6 +17,7 @@ export function createGlobeScene(
     host: HTMLDivElement,
     onSelect: (id: string) => void,
     onError: (message: string) => void,
+    onReady?: () => void,
 ) {
     let disposed = false;
     const cleanup: (() => void)[] = [];
@@ -67,6 +68,10 @@ export function createGlobeScene(
                 earthMaterial.color.set(0xffffff);
                 earthMaterial.needsUpdate = true;
                 render();
+                // The globe is only interactive once the Earth texture has
+                // decoded and rendered; surface that here instead of letting
+                // callers infer it from scene construction.
+                onReady?.();
             },
             undefined,
             () => {
