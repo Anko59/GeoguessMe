@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import './PrivacyPolicy.css';
 import './PrivacyPolicyDetails.css';
 import './PrivacyPolicyResponsive.css';
+import { ChoiceCard, DetailCard, PolicySection, ProviderRow } from './PrivacyPolicyParts';
 
-const updatedDate = '11 September 2026';
+const updatedDate = '17 September 2026';
 
 export default function PrivacyPolicy() {
     return (
@@ -32,9 +32,10 @@ export default function PrivacyPolicy() {
                         <a href="#overview">Overview</a>
                         <a href="#data-we-collect">Data we collect</a>
                         <a href="#how-we-use-data">How we use data</a>
+                        <a href="#legal-bases">Legal bases</a>
                         <a href="#sharing">Sharing and providers</a>
                         <a href="#retention">Retention and deletion</a>
-                        <a href="#your-choices">Your choices</a>
+                        <a href="#your-rights">Your rights and choices</a>
                         <a href="#children">Children’s privacy</a>
                         <a href="#changes">Changes</a>
                         <a href="#contact">Contact</a>
@@ -177,7 +178,49 @@ export default function PrivacyPolicy() {
                         </p>
                     </PolicySection>
 
-                    <PolicySection id="sharing" number="03" title="Sharing and service providers">
+                    <PolicySection id="legal-bases" number="03" title="Legal bases">
+                        <p>
+                            For people in the European Union, each purpose above relies on a specific legal basis under
+                            the GDPR:
+                        </p>
+                        <div className="privacy-retention-table" role="table" aria-label="Legal bases for processing">
+                            <div className="privacy-retention-row privacy-retention-heading" role="row">
+                                <span role="columnheader">Purpose</span>
+                                <span role="columnheader">Legal basis</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Account operation, sessions, email verification, recovery</span>
+                                <span role="cell">Performance of the service (Art. 6(1)(b))</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Gameplay: groups, chat, challenges, scoring, maps</span>
+                                <span role="cell">Performance of the service (Art. 6(1)(b))</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Camera, microphone, and location for a challenge you create</span>
+                                <span role="cell">Performance of the service, kept minimal (Art. 6(1)(b))</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Optional face-tracking lenses, on-device only</span>
+                                <span role="cell">Your consent (Art. 6(1)(a))</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Web Push notifications you enabled</span>
+                                <span role="cell">Your consent (Art. 6(1)(a))</span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Security, rate limiting, abuse prevention</span>
+                                <span role="cell">Legitimate interests (Art. 6(1)(f))</span>
+                            </div>
+                        </div>
+                        <p>
+                            You can withdraw consent at any time — turn notifications off in the app, or deny camera,
+                            microphone, or location permission in your device settings. Withdrawing consent does not
+                            affect processing that already happened.
+                        </p>
+                    </PolicySection>
+
+                    <PolicySection id="sharing" number="04" title="Sharing and service providers">
                         <p>
                             We share information only when it is needed to provide GeoGuessMe, when you direct us to
                             share it through a game, or when disclosure is required to protect people, the service, or
@@ -210,9 +253,18 @@ export default function PrivacyPolicy() {
                             investigate fraud or abuse, or protect the rights and safety of users and the service. We do
                             not sell or rent personal information to data brokers.
                         </p>
+                        <h3>International transfers</h3>
+                        <p>
+                            The application and database servers run in the European Union (Hetzner Cloud). Providers
+                            with global networks, such as Cloudflare for network protection and object storage, may
+                            involve transfers outside the European Economic Area. Where that happens without an adequacy
+                            decision, we rely on the provider's certification under the EU-U.S. Data Privacy Framework
+                            or on European Commission Standard Contractual Clauses. Contact us for details about the
+                            safeguards that apply to your data.
+                        </p>
                     </PolicySection>
 
-                    <PolicySection id="retention" number="04" title="Retention, security, and deletion">
+                    <PolicySection id="retention" number="05" title="Retention, security, and deletion">
                         <h3>How long we keep information</h3>
                         <div className="privacy-retention-table" role="table" aria-label="Data retention summary">
                             <div className="privacy-retention-row privacy-retention-heading" role="row">
@@ -246,6 +298,17 @@ export default function PrivacyPolicy() {
                                     are cleaned up automatically.
                                 </span>
                             </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Encrypted database backups</span>
+                                <span role="cell">
+                                    Restore points kept for 24 hours, 14 days, 8 weeks, and up to 6 months, then deleted
+                                    on the rotation.
+                                </span>
+                            </div>
+                            <div className="privacy-retention-row" role="row">
+                                <span role="cell">Web Push subscriptions</span>
+                                <span role="cell">Until you disable notifications or delete your account.</span>
+                            </div>
                         </div>
                         <h3>How we protect information</h3>
                         <p>
@@ -263,7 +326,17 @@ export default function PrivacyPolicy() {
                         </p>
                     </PolicySection>
 
-                    <PolicySection id="your-choices" number="05" title="Your choices and permissions">
+                    <PolicySection id="your-rights" number="06" title="Your rights and choices">
+                        <p>
+                            If you are in the European Union, you have the right to access your data, rectify it, erase
+                            it, restrict processing, object to processing based on legitimate interests, receive the
+                            data you provided in a machine-readable format (portability), and withdraw consent at any
+                            time. You can also complain to the CNIL (
+                            <a href="https://www.cnil.fr" target="_blank" rel="noreferrer">
+                                cnil.fr
+                            </a>
+                            ) or your local data-protection authority.
+                        </p>
                         <div className="privacy-choice-grid">
                             <ChoiceCard
                                 title="Review or correct"
@@ -282,18 +355,23 @@ export default function PrivacyPolicy() {
                                 detail="Use the in-app deletion flow, or email privacy@geoguessme.com with enough information for us to locate the account safely."
                             />
                         </div>
-                    </PolicySection>
-
-                    <PolicySection id="children" number="06" title="Children’s privacy">
                         <p>
-                            GeoGuessMe is not directed to children under 13, and we do not knowingly collect personal
-                            information from children under 13. If you believe a child has provided personal
-                            information, please contact us so we can investigate and remove it where appropriate. If a
-                            higher minimum age applies where you live, follow that requirement.
+                            Rights requests by email are answered within one month; complex or numerous requests can
+                            extend that by two further months, and we will tell you if so.
                         </p>
                     </PolicySection>
 
-                    <PolicySection id="changes" number="07" title="Changes to this policy">
+                    <PolicySection id="children" number="07" title="Children’s privacy">
+                        <p>
+                            GeoGuessMe is intended for people aged 15 and over, and signup requires confirming the
+                            minimum age. We do not knowingly collect personal information from children under 15. If a
+                            higher minimum age applies where you live, follow that requirement. If you are a parent or
+                            guardian and believe a child under 15 has provided personal information, please contact us
+                            so we can investigate and remove it where appropriate.
+                        </p>
+                    </PolicySection>
+
+                    <PolicySection id="changes" number="08" title="Changes to this policy">
                         <p>
                             We may update this policy when GeoGuessMe changes or when privacy requirements evolve. We
                             will update the date at the top of this page and, when a change is material, provide a
@@ -307,7 +385,7 @@ export default function PrivacyPolicy() {
                         aria-labelledby="contact-title"
                     >
                         <div className="privacy-section-heading">
-                            <span className="privacy-section-number">08</span>
+                            <span className="privacy-section-number">09</span>
                             <div>
                                 <p className="privacy-section-kicker">Questions or requests</p>
                                 <h2 id="contact-title">Let’s keep the map clear.</h2>
@@ -317,6 +395,10 @@ export default function PrivacyPolicy() {
                             For privacy questions, access or correction requests, or account deletion support, email{' '}
                             <a href="mailto:privacy@geoguessme.com">privacy@geoguessme.com</a>. Please do not send
                             passwords, authentication codes, or other sensitive credentials by email.
+                        </p>
+                        <p>
+                            The data controller is the operator of GeoGuessMe; the operator identity, publication
+                            details, and hosting providers are listed on the <Link to="/legal">legal notice</Link>.
                         </p>
                         <div className="privacy-contact-actions">
                             <a className="btn btn-primary" href="mailto:privacy@geoguessme.com">
@@ -333,76 +415,5 @@ export default function PrivacyPolicy() {
                 </article>
             </div>
         </main>
-    );
-}
-
-function PolicySection({
-    children,
-    id,
-    number,
-    title,
-}: {
-    children: ReactNode;
-    id: string;
-    number: string;
-    title: string;
-}) {
-    return (
-        <section id={id} className="privacy-section" aria-labelledby={`${id}-title`}>
-            <div className="privacy-section-heading">
-                <span className="privacy-section-number">{number}</span>
-                <div>
-                    <p className="privacy-section-kicker">GeoGuessMe policy</p>
-                    <h2 id={`${id}-title`}>{title}</h2>
-                </div>
-            </div>
-            <div className="privacy-section-content">{children}</div>
-        </section>
-    );
-}
-
-function DetailCard({
-    accent,
-    children,
-    title,
-}: {
-    accent: 'blue' | 'green' | 'orange' | 'purple';
-    children: ReactNode;
-    title: string;
-}) {
-    return (
-        <div className={`privacy-detail-card privacy-detail-card-${accent}`}>
-            <span className="privacy-detail-marker" aria-hidden="true" />
-            <h3>{title}</h3>
-            {children}
-        </div>
-    );
-}
-
-function ProviderRow({ detail, title }: { detail: string; title: string }) {
-    return (
-        <div className="privacy-provider-row">
-            <span className="privacy-provider-arrow" aria-hidden="true">
-                ↗
-            </span>
-            <div>
-                <h3>{title}</h3>
-                <p>{detail}</p>
-            </div>
-        </div>
-    );
-}
-
-function ChoiceCard({ detail, title }: { detail: string; title: string }) {
-    return (
-        <div className="privacy-choice-card">
-            <span className="privacy-choice-check" aria-hidden="true">
-                ✓
-            </span>
-            <div>
-                <h3>{title}</h3>
-                <p>{detail}</p>
-            </div>
-        </div>
     );
 }
