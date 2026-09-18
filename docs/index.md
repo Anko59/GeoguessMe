@@ -43,6 +43,8 @@ and submit one server-timed guess.
 - [Operations](operations.md) — health, metrics, backups, incident response
 - [Data protection](data-protection.md) — GDPR register, processors and
   transfers, data-subject requests, breach response
+- [Monitoring runbook](runbooks/monitoring.md) — the self-hosted watch stack,
+  capacity gate, setup, alerts, backup, and rollback
 - [Video processing](video-processing.md) — async video pipeline, quarantine,
   transcoding, cleanup
 - [LLM-driven QA agent](qa-agent.md) — source-blind exploratory release

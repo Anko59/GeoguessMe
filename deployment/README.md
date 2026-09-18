@@ -22,14 +22,17 @@ read-only source mounts for checks. Formatter services use the host UID/GID.
 ## Hosted topology
 
 The hosted overlay runs `dev`, `production`, and the shared identity service on
-one Hetzner CX23 as three separate Compose projects. The two game projects each
-have an isolated PostgreSQL volume, environment file, R2 media bucket, loopback
-port, and resource limits. Keycloak owns a third PostgreSQL volume and is
-published only on loopback port 8083. Cloudflare Tunnel is the only ingress
-path: production uses port 8081, dev uses 8082, and `auth.geoguessme.com` uses
-8083; public inbound firewall rules are empty. Dev is protected by Cloudflare
-Access email OTP for the owner; CI has a separate service-token rule used only
-for health checks and deployment SSH.
+one Hetzner CX23 as three separate Compose projects. The independent
+`geoguessme-watch` project adds Beszel, VictoriaLogs, VictoriaMetrics, Vector,
+and a read-only Docker socket proxy only after the documented capacity gate. The
+two game projects each have an isolated PostgreSQL volume, environment file, R2
+media bucket, loopback port, and resource limits. Keycloak owns a third
+PostgreSQL volume and is published only on loopback port 8083. Cloudflare Tunnel
+is the only ingress path: production uses port 8081, dev uses 8082,
+`auth.geoguessme.com` uses 8083, and the Access-protected monitoring gateway
+uses loopback port 8084; public inbound firewall rules are empty. Dev is
+protected by Cloudflare Access email OTP for the owner; CI has a separate
+service-token rule used only for health checks and deployment SSH.
 
 Each game project runs its own OAuth2 Proxy beside the Caddy web gateway. Caddy
 routes `/oauth2/*` and the OIDC session exchange to that proxy; all other API
@@ -178,8 +181,10 @@ container. `geoguessme-health@*.timer` checks application/container health, disk
 pressure, tunnel state, and a maximum backup age of two hours every 15 minutes.
 
 For an outage, inspect `make prod-logs`, `/health/live`, `/health/ready`, and
-`/metrics`. Preserve request IDs and logs, check PostgreSQL and object storage
-health, and do not delete data or rotate secrets before preserving evidence.
+`/metrics`. When the monitoring stack is enabled, inspect
+`watch.geoguessme.com`, its systemd journal, and the VictoriaLogs query UI.
+Preserve request IDs and logs, check PostgreSQL and object storage health, and
+do not delete data or rotate secrets before preserving evidence.
 
 Use `make smoke`, `make backup-rehearsal`, and `make load-test` only against
 disposable local/test or explicitly selected staging environments — never
