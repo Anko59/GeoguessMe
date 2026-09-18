@@ -94,7 +94,12 @@ test.describe('Challenge flow', () => {
             // with the full five minutes left.
             const timer = guesser.getByRole('timer');
             await expect(timer).toBeVisible();
-            await expect(timer).toHaveAttribute('aria-label', /^Time left to guess: [45]:\d{2}$/);
+            // The decay policy publishes the still-achievable score next to
+            // the countdown; a fresh challenge announces full points.
+            await expect(timer).toHaveAttribute(
+                'aria-label',
+                /^Full points available: [\d,]+ points\. Time left to guess: [45]:\d{2}$/,
+            );
 
             await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
             const guessResponsePromise = guesser.waitForResponse(

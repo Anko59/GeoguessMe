@@ -423,4 +423,23 @@ func TestExtractIdentityExported(t *testing.T) {
 
 	req4 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
 	require.Equal(t, "", ExtractIdentity(req4))
+
+	// Non-string sibling fields must not disable identity extraction: the
+	// signup payload carries a boolean age flag next to the username.
+	req5 := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/signup",
+		strings.NewReader(`{"username":"  Carol  ","password":"x","age_attested":true}`),
+	)
+	req5.Header.Set("Content-Type", "application/json")
+	require.Equal(t, "carol", ExtractIdentity(req5))
+
+	// A non-string identity field itself extracts as empty.
+	req6 := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/login",
+		strings.NewReader(`{"username":42,"password":"x"}`),
+	)
+	req6.Header.Set("Content-Type", "application/json")
+	require.Equal(t, "", ExtractIdentity(req6))
 }

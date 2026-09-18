@@ -16,6 +16,8 @@ import AccountSettings from './pages/account/AccountSettings';
 import ProfilePage from './pages/profile/ProfilePage';
 import NotFound from './pages/not-found/NotFound';
 import PrivacyPolicy from './pages/privacy/PrivacyPolicy';
+import LegalNotice from './pages/legal/LegalNotice';
+import TermsOfUse from './pages/legal/TermsOfUse';
 import PwaOnboarding from './components/pwa/PwaOnboarding';
 import LegalFooter from './components/navigation/LegalFooter';
 import { usePushBootstrap } from './push/usePushBootstrap';
@@ -57,6 +59,8 @@ function AppChrome() {
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/auth/oidc/callback" element={<OIDCCallback />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/terms" element={<TermsOfUse />} />
+                <Route path="/legal" element={<LegalNotice />} />
                 <Route
                     path="/groups"
                     element={

@@ -101,7 +101,7 @@ func doJSON(t *testing.T, method, path string, body any, bearer string, cookies 
 func signup(t *testing.T, username, email, password string) tokenPair {
 	t.Helper()
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": username, "email": email, "password": password}, "", nil)
+		map[string]any{"username": username, "email": email, "password": password, "age_attested": true}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "signup status %d: %s", resp.StatusCode, data)
 	var result struct {
 		AccessToken string `json:"access_token"`

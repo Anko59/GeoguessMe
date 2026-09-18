@@ -62,6 +62,7 @@
 }
 .globe-canvas canvas {
     display: block;
+    touch-action: none;
 }
 .globe-controls {
     position: absolute;
@@ -89,6 +90,14 @@
     left: 1rem;
     color: #afc1d2;
     font-size: 0.65rem;
+}
+.globe-history-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.globe-sheet-toggle {
+    display: none;
 }
 .globe-notice {
     position: absolute;
@@ -242,25 +251,76 @@
 
 @media (width <= 650px) {
     .group-globe {
+        display: flex;
+        flex-direction: column;
         width: 100%;
         max-height: 100dvh;
         height: 100dvh;
         margin: 0;
         border: 0;
         border-radius: 0;
+        overflow: hidden;
     }
     .globe-layout {
+        position: relative;
+        flex: 1;
+        min-height: 0;
         grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
     }
     .globe-stage {
-        min-height: 45dvh;
+        min-height: 0;
+        height: 100%;
     }
     .globe-history {
-        max-height: none;
-        overflow-y: visible;
+        position: absolute;
+        inset: auto 0 0 0;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        max-height: min(72dvh, 40rem);
+        overflow: hidden;
         padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
+        background: var(--surface);
+        border-top: 1px solid var(--line);
+        border-radius: 16px 16px 0 0;
+        box-shadow: var(--shadow-lg);
+    }
+    .globe-history:not(.is-open) {
+        max-height: none;
+    }
+    .globe-history-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .globe-history:not(.is-open) .globe-history-body {
+        display: none;
+    }
+    .globe-sheet-toggle {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0.5rem;
+        color: var(--brand-blue-accessible);
+        background: var(--surface-brand);
+        border-radius: var(--radius-sm);
+    }
+    .globe-credit {
+        top: 0.6rem;
+        right: 0.8rem;
+        bottom: auto;
+        left: auto;
     }
     .globe-header {
         padding: max(0.8rem, env(safe-area-inset-top)) 1rem 0.8rem;
+    }
+}
+
+/* Touch-first devices navigate the globe with gestures, so the arrow pad is a
+   mouse affordance: hide it on narrow screens and on any coarse-pointer host. */
+@media (width <= 650px), (hover: none) and (pointer: coarse) {
+    .globe-controls {
+        display: none;
     }
 }

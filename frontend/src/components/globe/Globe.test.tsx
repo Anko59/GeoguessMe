@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Globe from './Globe';
 import type { GroupChallenge } from '../../types';
@@ -14,9 +14,30 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./globeScene', () => ({ createGlobeScene: mocks.create }));
 beforeEach(() => {
     vi.clearAllMocks();
-    mocks.create.mockReturnValue(mocks);
+    mocks.create.mockImplementation(
+        (_host: HTMLDivElement, _onSelect: unknown, _onError: unknown, onReady?: () => void) => {
+            onReady?.();
+            return mocks;
+        },
+    );
 });
 describe('Globe', () => {
+    it('keeps the loading notice until the Earth texture has rendered', async () => {
+        let ready: (() => void) | undefined;
+        mocks.create.mockImplementationOnce(
+            (_host: HTMLDivElement, _onSelect: unknown, _onError: unknown, onReady?: () => void) => {
+                ready = onReady;
+                return mocks;
+            },
+        );
+        render(<Globe items={[]} selectedID={null} onSelect={vi.fn()} />);
+        expect(await screen.findByText('Loading Earth…')).toBeInTheDocument();
+        expect(screen.queryByRole('group', { name: 'Globe controls' })).not.toBeInTheDocument();
+        act(() => ready?.());
+        expect(await screen.findByRole('button', { name: 'Rotate globe left' })).toBeInTheDocument();
+        expect(screen.queryByText('Loading Earth…')).not.toBeInTheDocument();
+    });
+
     it('does not recenter an explored globe when another history page arrives', async () => {
         const item: GroupChallenge = {
             photo_id: 'p',

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"geoguessme/internal/game"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository/groups"
@@ -306,6 +307,7 @@ func (a *GameAPI) AcceptChallenge(w http.ResponseWriter, r *http.Request) {
 		"guess_after":          view.ViewExpiresAt,
 		"guess_expires_at":     view.GuessExpiresAt,
 		"challenge_expires_at": photo.ExpiresAt,
+		"score_grace_seconds":  game.ScoreGraceSeconds(),
 		"server_time":          a.clock(),
 	})
 }
@@ -331,7 +333,7 @@ func (a *GameAPI) ConfirmChallengeMediaDelivered(w http.ResponseWriter, r *http.
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to start the viewing window")
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"view_expires_at": viewExpiresAt, "guess_after": viewExpiresAt, "guess_expires_at": guessExpiresAt, "server_time": a.clock()})
+	WriteJSON(w, http.StatusOK, map[string]any{"view_expires_at": viewExpiresAt, "guess_after": viewExpiresAt, "guess_expires_at": guessExpiresAt, "score_grace_seconds": game.ScoreGraceSeconds(), "server_time": a.clock()})
 }
 
 // mediaURL always returns a same-origin, authenticated API path. Internal S3

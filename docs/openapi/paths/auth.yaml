@@ -11,11 +11,17 @@ signup:
         application/json:
           schema:
             type: object
-            required: [username, password]
+            required: [username, password, age_attested]
             properties:
               username: { type: string, minLength: 3, maxLength: 30, pattern: "^[a-zA-Z0-9_-]+$" }
               email: { type: string, format: email, description: Optional recovery/contact claim. }
               password: { type: string, minLength: 8, maxLength: 128 }
+              age_attested:
+                type: boolean
+                description: >
+                  Must be true. Confirms the user meets the minimum age of 15
+                  published in the terms of use and privacy policy. Signup is
+                  rejected with 400 age_attestation_required otherwise.
     responses:
       "200":
         description: Account created and session issued.

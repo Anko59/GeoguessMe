@@ -233,7 +233,6 @@
     background: var(--surface-soft);
     border: 1px solid var(--line);
     border-radius: 999px;
-    font-size: 1.35rem;
     line-height: 1;
     cursor: pointer;
     transition:
@@ -268,17 +267,20 @@
     border-color: var(--brand-orange);
 }
 
-.party-btn .party-emoji {
+.party-btn .party-mode-icon {
+    width: 1.85rem;
+    height: 1.85rem;
     display: block;
+    object-fit: contain;
 }
 
-/* While a party is live the emoji itself bounces; disabled buttons keep the
+/* While a party is live the icon itself bounces; disabled buttons keep the
    affordance visible without inviting clicks. */
-.party-live .party-btn.party-active .party-emoji {
-    animation: partyEmojiBounce 1s var(--ease-in-out, ease-in-out) infinite;
+.party-live .party-btn.party-active .party-mode-icon {
+    animation: partyIconBounce 1s var(--ease-in-out, ease-in-out) infinite;
 }
 
-@keyframes partyEmojiBounce {
+@keyframes partyIconBounce {
     0%,
     100% {
         transform: translateY(0) rotate(-4deg);
@@ -359,7 +361,7 @@
         mask: none;
     }
 
-    .party-live .party-btn.party-active .party-emoji {
+    .party-live .party-btn.party-active .party-mode-icon {
         animation: none;
     }
 }

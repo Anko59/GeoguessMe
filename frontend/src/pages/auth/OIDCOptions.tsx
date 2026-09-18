@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { backendURL } from '../../platform/endpoints';
 
 type OIDCOptionsProps = {
@@ -63,6 +64,14 @@ function startURL(loginPath: string, parameters: Record<string, string>): string
 
 export default function OIDCOptions({ loginPath, intent, onStart, socialProviders }: OIDCOptionsProps) {
     const signup = intent === 'signup';
+    const [ageAttested, setAgeAttested] = useState(false);
+    const ageGateAllows = (event: { preventDefault: () => void }): boolean => {
+        if (signup && !ageAttested) {
+            event.preventDefault();
+            return false;
+        }
+        return true;
+    };
 
     return (
         <>
@@ -87,7 +96,9 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
                                     <a
                                         className={`btn btn-social btn-social-${provider.alias}`}
                                         href={startURL(loginPath, { kc_idp_hint: provider.alias })}
-                                        onClick={onStart}
+                                        onClick={(event) => {
+                                            if (ageGateAllows(event)) onStart();
+                                        }}
                                         key={provider.alias}
                                     >
                                         {content}
@@ -99,9 +110,30 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
                 </>
             )}
 
-            <form action={loginPath} method="get" className="auth-form auth-oidc-form" onSubmit={onStart}>
+            <form
+                action={loginPath}
+                method="get"
+                className="auth-form auth-oidc-form"
+                onSubmit={(event) => {
+                    if (ageGateAllows(event)) onStart();
+                }}
+            >
                 <input type="hidden" name="rd" value={callbackPath} />
                 {signup && <input type="hidden" name="prompt" value="create" />}
+                {signup && (
+                    <div className="auth-age-check">
+                        <input
+                            id="signup-age-attested"
+                            type="checkbox"
+                            checked={ageAttested}
+                            onChange={(event) => setAgeAttested(event.target.checked)}
+                            required
+                        />
+                        <label htmlFor="signup-age-attested">
+                            I confirm I am at least 15 years old, as required by the Terms of Use.
+                        </label>
+                    </div>
+                )}
                 <label htmlFor={`${intent}-email`}>Email address</label>
                 <input
                     id={`${intent}-email`}

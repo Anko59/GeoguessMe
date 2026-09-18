@@ -14,7 +14,7 @@ signup() {
     local username=$1
     curl --fail --silent --show-error \
         -H 'Content-Type: application/json' \
-        --data "{\"username\":\"$username\",\"email\":\"$username@example.test\",\"password\":\"$password\"}" \
+        --data "{\"username\":\"$username\",\"email\":\"$username@example.test\",\"password\":\"$password\",\"age_attested\":true}" \
         "$base_url/api/v1/auth/signup"
 }
 

@@ -1444,6 +1444,8 @@ export interface components {
             guess_expires_at: string;
             /** Format: date-time */
             challenge_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };
@@ -1457,6 +1459,8 @@ export interface components {
              * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
              */
             guess_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };
@@ -1502,6 +1506,8 @@ export interface components {
             elo_delta: number;
             /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
+            /** @description Elapsed milliseconds from when the guessing window opened to the guesser's submission. Omitted for timed-out guesses or when the reference window is unknown. */
+            time_to_guess_ms?: number;
             /** @description True when the guess timed out (score 0). */
             timed_out?: boolean;
             /** Format: date-time */
@@ -1999,6 +2005,8 @@ export interface operations {
                      */
                     email?: string;
                     password: string;
+                    /** @description Must be true. Confirms the user meets the minimum age of 15 published in the terms of use and privacy policy. Signup is rejected with 400 age_attestation_required otherwise. */
+                    age_attested: boolean;
                 };
             };
         };

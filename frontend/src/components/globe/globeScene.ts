@@ -13,10 +13,15 @@ export function globePosition(lat: number, long: number, radius = 1): THREE.Vect
     );
 }
 
+// Keeps the camera a few degrees away from the degenerate poles, where a
+// horizontal drag would spin the globe in place instead of moving the view.
+const POLE_MARGIN = 0.05;
+
 export function createGlobeScene(
     host: HTMLDivElement,
     onSelect: (id: string) => void,
     onError: (message: string) => void,
+    onReady?: () => void,
 ) {
     let disposed = false;
     const cleanup: (() => void)[] = [];
@@ -43,8 +48,54 @@ export function createGlobeScene(
         controls.enablePan = false;
         controls.minDistance = 1.6;
         controls.maxDistance = 6;
+        controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        controls.zoomToCursor = true;
+        controls.minPolarAngle = POLE_MARGIN;
+        controls.maxPolarAngle = Math.PI - POLE_MARGIN;
         // Render only on interaction: no idle animation or motion preference override.
         controls.enableDamping = false;
+        // OrbitControls' linear pixel mapping is tuned for flat planes: at its
+        // default speed a short finger drag overshoots several time zones. Scale
+        // the rotation speed so dragging moves the surface point under the
+        // finger one to one: rotateSpeed = tan(fov/2)·√(d²−1)/π for radius 1.
+        const syncControls = () => {
+            const distance = camera.position.length();
+            controls.rotateSpeed = Math.min(
+                (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
+                    Math.sqrt(Math.max(distance * distance - 1, 0.0025))) /
+                    Math.PI,
+                1,
+            );
+        };
+        syncControls();
+        // Damping gives touch gestures their glide, but only while a gesture is
+        // in flight: the loop below stops as soon as motion settles, preserving
+        // the interaction-driven rendering contract and reduced-motion choices.
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let frame = 0;
+        const step = () => {
+            frame = 0;
+            if (disposed) return;
+            const before = camera.position.clone();
+            controls.update();
+            syncControls();
+            if (camera.position.distanceToSquared(before) < 1e-8) {
+                controls.enableDamping = false;
+                return;
+            }
+            frame = requestAnimationFrame(step);
+        };
+        const beginInteraction = () => {
+            if (motionQuery.matches) return;
+            controls.enableDamping = true;
+            syncControls();
+            if (!frame) frame = requestAnimationFrame(step);
+        };
+        controls.addEventListener('start', beginInteraction);
+        cleanup.push(() => {
+            controls.removeEventListener('start', beginInteraction);
+            if (frame) cancelAnimationFrame(frame);
+        });
         const render = () => renderer.render(scene, camera);
         controls.addEventListener('change', render);
         cleanup.push(() => controls.removeEventListener('change', render));
@@ -67,6 +118,10 @@ export function createGlobeScene(
                 earthMaterial.color.set(0xffffff);
                 earthMaterial.needsUpdate = true;
                 render();
+                // The globe is only interactive once the Earth texture has
+                // decoded and rendered; surface that here instead of letting
+                // callers infer it from scene construction.
+                onReady?.();
             },
             undefined,
             () => {
@@ -92,6 +147,7 @@ export function createGlobeScene(
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
             renderer.setSize(width, height);
+            syncControls();
             render();
         };
         const observer = new ResizeObserver(resize);
@@ -215,13 +271,15 @@ export function createGlobeScene(
             focus(item: GroupChallenge) {
                 if (item.lat === undefined || item.long === undefined) return;
                 camera.position.copy(globePosition(item.lat, item.long, camera.position.length()));
+                syncControls();
                 controls.update();
             },
             rotate(horizontal: number, vertical: number) {
                 const spherical = new THREE.Spherical().setFromVector3(camera.position);
                 spherical.theta += horizontal;
-                spherical.phi = THREE.MathUtils.clamp(spherical.phi + vertical, 0.05, Math.PI - 0.05);
+                spherical.phi = THREE.MathUtils.clamp(spherical.phi + vertical, POLE_MARGIN, Math.PI - POLE_MARGIN);
                 camera.position.setFromSpherical(spherical);
+                syncControls();
                 controls.update();
             },
             zoom(factor: number) {
@@ -232,8 +290,10 @@ export function createGlobeScene(
                         controls.maxDistance,
                     ),
                 );
+                syncControls();
                 controls.update();
             },
+            controls,
             dispose,
         };
     } catch (error) {
