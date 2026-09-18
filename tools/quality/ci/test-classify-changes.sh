@@ -43,6 +43,8 @@ assert_scope "dev compose change" $'deployment/compose.dev.yaml\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "qa tooling stays non-harness" $'tools/qa/run-local.sh\n' \
     $'backend=false\nfrontend=false\nmobile=false\nfull=false\ndocs_only=false\nstatic_checks=true\nbackend_unit=false\nfrontend_unit=false\nbackend_integration=false\nbrowser_e2e=false\noperational=false\nharness=false'
+assert_scope "load harness stays harness" $'tools/load/k6.js\ntools/load/reconnect-rehearsal/api.go\n' \
+    $'backend=false\nfrontend=false\nmobile=false\nfull=false\ndocs_only=false\nstatic_checks=true\nbackend_unit=false\nfrontend_unit=false\nbackend_integration=false\nbrowser_e2e=false\noperational=false\nharness=true'
 assert_scope "unknown path fails safe" $'unexpected.file\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "empty diff fails safe" "" \

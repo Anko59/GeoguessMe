@@ -29,7 +29,14 @@ export function setup() {
         const username = `load_${suffix}_${i}`;
         const signup = http.post(
             `${__ENV.BASE_URL}/api/v1/auth/signup`,
-            JSON.stringify({ username, email: `${username}@test.geoguessme`, password: 'LoadPass123' }),
+            JSON.stringify({
+                username,
+                email: `${username}@test.geoguessme`,
+                password: 'LoadPass123',
+                // Signup enforces a hard 15+ attestation; the load profile must
+                // satisfy it or every setup identity fails to authenticate.
+                age_attested: true,
+            }),
             { headers: { 'Content-Type': 'application/json' } },
         );
         check(signup, { [`signup vu${i}`]: (v) => v.status === 200 });

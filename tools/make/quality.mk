@@ -96,19 +96,20 @@ archcheck: ## Run the durable architecture rules (mutable globals, SQL in handle
 	$(ARCHCHECK)
 
 # Harness self-tests exercise the quality tooling itself (Makefile fragments,
-# structure-check, debt markers, docs/agent-config, the CI classifier, and the
-# E2E/dev-workflow regressions) rather than the application. `make preflight`
-# runs them only when the harness changed; `make quality` always runs them.
+# structure-check, debt markers, docs/agent-config, the CI classifier, the
+# E2E/dev-workflow regressions, and the load-profile attestation guard) rather
+# than the application. `make preflight` runs them only when the harness
+# changed; `make quality` always runs them.
 #
 # PREFLIGHT_HARNESS selects them inside the preflight gate:
 #   auto  - default: include them only when the harness changed (git diff
 #          between the merge-base of HEAD and origin/dev and HEAD, falling
 #          back to HEAD~1 when origin/dev is unavailable); unknown results
 #          fail safe to "true" (all suites run)
-#   true  - always include all seven
+#   true  - always include all eight
 #   false - never include them (CI passes the classifier output explicitly
 #          because the fast job checks out with depth 1 and cannot diff)
-HARNESS_GATE_TARGETS := test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression
+HARNESS_GATE_TARGETS := test-makefile-fragments-regression test-structure-regression test-debt-markers-regression test-docs-agent-config test-ci-classifier test-e2e-regression test-dev-workflow-regression test-load-harness-regression
 
 PREFLIGHT_HARNESS ?= auto
 ifeq ($(PREFLIGHT_HARNESS),auto)
@@ -130,7 +131,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-play-api test-dev-workflow-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-play-api test-dev-workflow-regression test-load-harness-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 
