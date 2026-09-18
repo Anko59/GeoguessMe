@@ -62,7 +62,7 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if audience == "public" && len(groupIDs) > 0 {
-		handlers.WriteError(w, 400, "invalid_groups", "Select groups only for friends posts")
+		handlers.WriteError(w, 400, "invalid_groups", "Choose groups only for friends posts")
 		return
 	}
 	lat, latErr := strconv.ParseFloat(r.FormValue("lat"), 64)
