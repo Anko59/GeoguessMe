@@ -3,13 +3,14 @@ import { test, expect } from './support/fixtures';
 import { createScenario, closeScenario } from './support/challengeScenario';
 
 async function openGlobe(page: Page) {
-    const texture = page.waitForResponse((response) => new URL(response.url()).pathname === '/globe/earth.jpg');
     await page.getByRole('button', { name: 'Open group globe' }).click();
-    const response = await texture;
-    expect(response.ok()).toBe(true);
-    expect(await response.finished()).toBeNull();
     const globe = page.getByRole('dialog', { name: "Your group's world" });
     await expect(globe).toBeVisible();
+    // Chromium can serve the Earth texture from its in-process memory cache on a
+    // repeat visit, so no response event fires at all. The controls only render
+    // once the texture has decoded and been drawn, which is the readiness signal
+    // the app exposes and a stronger guarantee than observing the network.
+    await expect(globe.getByRole('group', { name: 'Globe controls' })).toBeVisible();
     await expect(globe).toBeInViewport({ ratio: 1 });
     await expect(globe.locator('canvas')).toBeVisible();
     await expect(globe.getByRole('group', { name: 'Globe controls' })).toBeInViewport({ ratio: 1 });

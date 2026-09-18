@@ -61,13 +61,48 @@ describe('Earth scene', () => {
             complete = onLoad;
             return texture;
         });
-        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn());
+        const onReady = vi.fn();
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn(), onReady);
         globe.dispose();
         mocks.render.mockClear();
         complete?.(texture);
         expect(mocks.render).not.toHaveBeenCalled();
+        expect(onReady).not.toHaveBeenCalled();
         globe.dispose();
         expect(mocks.dispose).toHaveBeenCalledOnce();
+    });
+
+    it('announces readiness once the Earth texture has decoded and rendered', () => {
+        const texture = new THREE.Texture<HTMLImageElement>();
+        let complete: ((texture: THREE.Texture<HTMLImageElement>) => void) | undefined;
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            complete = onLoad;
+            return texture;
+        });
+        const onReady = vi.fn();
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn(), onReady);
+        expect(onReady).not.toHaveBeenCalled();
+        mocks.render.mockClear();
+        complete?.(texture);
+        expect(onReady).toHaveBeenCalledOnce();
+        expect(mocks.render).toHaveBeenCalled();
+        globe.dispose();
+    });
+
+    it('does not announce readiness when the Earth texture fails to load', () => {
+        const texture = new THREE.Texture<HTMLImageElement>();
+        let fail: ((error: unknown) => void) | undefined;
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, _onLoad, _onProgress, onError) => {
+            fail = onError;
+            return texture;
+        });
+        const onError = vi.fn();
+        const onReady = vi.fn();
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), onError, onReady);
+        fail?.(new Error('texture failed'));
+        expect(onError).toHaveBeenCalledOnce();
+        expect(onReady).not.toHaveBeenCalled();
+        globe.dispose();
     });
     it('aligns Greenwich, poles and the date line to the Earth texture', () => {
         expect(globePosition(0, 0).x).toBeCloseTo(1);
