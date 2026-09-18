@@ -151,6 +151,7 @@ jobs:
         env:
           PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           PLAY_API_PACKAGE_NAME: com.geoguessme.app
+          PLAY_RELEASE_TRACK: ${{ vars.PLAY_RELEASE_TRACK }}
         run: make play-api-check
 
   promote:

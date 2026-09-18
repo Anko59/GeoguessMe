@@ -178,8 +178,9 @@
     margin-inline: auto;
 }
 
-/* The guessing-phase countdown bar: brand-gradient fill over the window
-   length published by the API, turning danger-colored for the last 15
+/* The guessing-phase countdown bar. When the server publishes the score
+   decay policy, the fill tracks the still-achievable score: full during the
+   grace period, amber while it decays, danger-colored for the last 15
    seconds. The deadline is server-authoritative, so the countdown resumes
    correctly even after the app was closed and reopened. */
 .guess-timer-bar {
@@ -187,7 +188,7 @@
     margin-inline: auto;
     padding: 0.4rem 0.9rem;
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto auto 1fr;
     align-items: center;
     gap: var(--space-3);
     color: var(--brand-navy);
@@ -197,12 +198,30 @@
     box-shadow: var(--shadow-sm);
 }
 
+/* Without a server-published decay policy the bar falls back to the classic
+   two-column time-only layout. */
+.guess-timer-bar--time-only {
+    grid-template-columns: auto 1fr;
+}
+
 .guess-timer-bar__label {
     min-width: 3.5rem;
     font-size: 1.05rem;
     font-weight: 900;
     font-variant-numeric: tabular-nums;
     text-align: center;
+}
+
+.guess-timer-bar__score {
+    min-width: 4.5rem;
+    font-size: 1.05rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.guess-timer-bar--decaying .guess-timer-bar__score {
+    color: var(--brand-orange);
 }
 
 .guess-timer-bar__track {
@@ -226,6 +245,19 @@
 
 .guess-timer-bar--urgent .guess-timer-bar__fill {
     background: linear-gradient(135deg, var(--danger), var(--brand-orange));
+}
+
+.score-notice {
+    width: min(100%, 32rem);
+    margin-inline: auto;
+    padding: 0.45rem 0.9rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--brand-navy);
+    background: var(--surface);
+    border: 1px solid var(--brand-orange);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {

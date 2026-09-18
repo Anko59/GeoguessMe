@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import api, { getAPIErrorMessage } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { ChallengeAcceptance, ChallengeMediaDelivered, ChallengeResults, GuessResult, Message } from '../../types';
-import { gameReducer, initialGameState } from './gameState';
+import { MAX_GUESS_SCORE, gameReducer, initialGameState, scoreMultiplier } from './gameState';
 import GameView from './GameViews';
 import GuessScoreFeedback from './GuessScoreFeedback';
 import './Game.css';
@@ -60,6 +60,68 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         if (!state.guessDeadline || !state.deadline) return 0;
         return Math.max(0, Math.round((state.guessDeadline - state.deadline) / 1000));
     }, [state.deadline, state.guessDeadline]);
+
+    // Seconds since the guessing window opened (the view deadline). With the
+    // server-published grace period this drives the potential-score decay
+    // display on the timer bar.
+    const guessElapsedSeconds = useMemo(
+        () =>
+            state.deadline !== undefined && state.guessDeadline !== undefined
+                ? Math.min(
+                      guessTotalSeconds,
+                      Math.max(0, Math.floor((clock + state.serverOffset - state.deadline) / 1000)),
+                  )
+                : 0,
+        [clock, guessTotalSeconds, state.deadline, state.guessDeadline, state.serverOffset],
+    );
+
+    // The potential score renders only while the guessing phase is live and
+    // the server published the grace policy; Party Time doubling is applied
+    // at guess time and intentionally not reflected in the "up to" display.
+    const potentialScore = useMemo(() => {
+        const answering = state.status === 'guessing' || state.status === 'submitting';
+        if (!answering || state.scoreGraceSeconds === undefined) return undefined;
+        return Math.round(
+            MAX_GUESS_SCORE * scoreMultiplier(guessElapsedSeconds, guessTotalSeconds, state.scoreGraceSeconds),
+        );
+    }, [guessElapsedSeconds, guessTotalSeconds, state.scoreGraceSeconds, state.status]);
+
+    // Grace-end notice: shown exactly once when the full-points period
+    // elapses live during the guessing phase. Challenges reopened after the
+    // grace period already ended start with the marker consumed and stay
+    // quiet instead of announcing a decay the player cannot avoid anymore.
+    const graceNoticeRef = useRef<{ shown: boolean } | null>(null);
+    useEffect(() => {
+        const grace = state.scoreGraceSeconds;
+        if (state.status !== 'guessing' || grace === undefined) {
+            graceNoticeRef.current = null;
+            return;
+        }
+        if (graceNoticeRef.current === null) {
+            graceNoticeRef.current = { shown: guessElapsedSeconds >= grace };
+            if (graceNoticeRef.current.shown) return;
+        }
+        if (!graceNoticeRef.current.shown && guessElapsedSeconds >= grace) {
+            graceNoticeRef.current.shown = true;
+            dispatch({ type: 'show-score-notice', notice: 'grace-ended' });
+        }
+    }, [guessElapsedSeconds, state.scoreGraceSeconds, state.status]);
+
+    useEffect(() => {
+        // The notice dismisses itself shortly after appearing; the timeout
+        // is owned here and cleared on dismissal or unmount.
+        if (state.scoreNotice === undefined) return undefined;
+        const timer = window.setTimeout(() => dispatch({ type: 'clear-score-notice' }), 4000);
+        return () => window.clearTimeout(timer);
+    }, [state.scoreNotice]);
+
+    useEffect(() => {
+        // A phase change (guess submitted, timeout, close) retires the
+        // notice immediately instead of letting it linger.
+        if (state.status !== 'guessing' && state.scoreNotice !== undefined) {
+            dispatch({ type: 'clear-score-notice' });
+        }
+    }, [state.scoreNotice, state.status]);
 
     // Object-URL lifecycle: the committed media URL has a single owner that
     // revokes it exactly once — when it is replaced or dropped by a state
@@ -131,6 +193,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         mediaType: data.media_type,
                         deadline: Date.parse(delivered.data.view_expires_at),
                         guessDeadline: Date.parse(delivered.data.guess_expires_at),
+                        scoreGraceSeconds: delivered.data.score_grace_seconds,
                         serverOffset: Date.parse(delivered.data.server_time) - Date.now(),
                     });
                     onChallengeStatusChange?.(photoId, 'accepted');
@@ -163,6 +226,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
                         photoId,
                         deadline: serverDeadline,
                         guessDeadline: serverGuessDeadline,
+                        scoreGraceSeconds: data.score_grace_seconds,
                         serverOffset,
                     });
                     return;
@@ -325,6 +389,8 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             remaining={remaining}
             guessRemaining={guessRemaining}
             guessTotalSeconds={guessTotalSeconds}
+            potentialScore={potentialScore}
+            scoreNotice={state.scoreNotice}
             serverNowMs={clock + state.serverOffset}
             feedback={feedbackOverlay}
             currentUserId={user?.id}

@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
 import Game from './Game';
 import type { Message, User } from '../../types';
@@ -59,6 +59,27 @@ beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
 });
 
+afterEach(() => vi.useRealTimers());
+
+/** Guessing-phase entry through the media-unavailable path: the accept
+ *  response carries the server windows relative to `elapsedSeconds` after
+ *  the guess window opened, and the media refetch fails. */
+function mockReopenedChallenge(photoId: string, elapsedSeconds: number, totalSeconds: number, graceSeconds = 60) {
+    const now = Date.now();
+    mocks.get.mockRejectedValueOnce(new Error('results not ready')).mockRejectedValueOnce(new Error('media expired'));
+    mocks.post.mockResolvedValueOnce({
+        data: {
+            media_url: `/api/v1/challenges/${photoId}/media`,
+            media_type: 'image/jpeg',
+            accepted_at: new Date(now - (elapsedSeconds + 60) * 1000).toISOString(),
+            server_time: new Date(now).toISOString(),
+            view_expires_at: new Date(now - elapsedSeconds * 1000).toISOString(),
+            guess_expires_at: new Date(now + (totalSeconds - elapsedSeconds) * 1000).toISOString(),
+            score_grace_seconds: graceSeconds,
+        },
+    });
+}
+
 function withGame(photoId: string, onClose = vi.fn()) {
     return render(
         <AuthContext.Provider value={authValue}>
@@ -98,6 +119,93 @@ describe('Game guess timer', () => {
             expect.stringMatching(/width: [\d.]+%/),
         );
         expect(screen.getByRole('dialog', { name: 'Challenge guessing' })).toContainElement(timer);
+    });
+
+    it('shows full points during the published grace period', async () => {
+        // Frozen clock: the displayed elapsed instant is exactly the anchor
+        // the mock publishes, so the potential and countdown are exact.
+        vi.useFakeTimers();
+        mockReopenedChallenge('photo-21', 1, 300);
+        withGame('photo-21');
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        const timer = screen.getByRole('timer');
+        expect(timer.getAttribute('aria-label')).toMatch(
+            /^Full points available: 5,000 points\. Time left to guess: 4:59$/,
+        );
+        expect(timer.querySelector('.guess-timer-bar__score')).toHaveTextContent('5,000');
+        expect(timer).not.toHaveClass('guess-timer-bar--decaying');
+    });
+
+    it('shows the decaying potential score after the grace period', async () => {
+        // Reopening a challenge 150 seconds into a 300-second window: the
+        // potential has decayed to roughly 70% and the bar is labeled
+        // accordingly.
+        vi.useFakeTimers();
+        mockReopenedChallenge('photo-22', 150, 300);
+        withGame('photo-22');
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        const timer = screen.getByRole('timer');
+        expect(timer.getAttribute('aria-label')).toContain('Potential score: 3,494 points');
+        expect(timer.querySelector('.guess-timer-bar__score')).toHaveTextContent('3,494');
+        expect(timer).toHaveClass('guess-timer-bar--decaying');
+        // The grace-end notice is suppressed when the grace period ended
+        // before the challenge was reopened: announcing an unavoidable decay
+        // would only pressure the player.
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('warns about the zero-score cliff in the urgent state', async () => {
+        vi.useFakeTimers();
+        mockReopenedChallenge('photo-23', 286, 300);
+        withGame('photo-23');
+
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const timer = screen.getByRole('timer');
+        expect(timer).toHaveClass('guess-timer-bar--urgent');
+        // 14 seconds before the deadline the potential is just above the
+        // 20% floor: 1 - 0.8 * 226/239 → 1,218 points.
+        expect(timer.querySelector('.guess-timer-bar__score')).toHaveTextContent('1,218');
+        expect(timer.getAttribute('aria-label')).toContain('Guess now or the score drops to 0');
+    });
+
+    it('announces the grace-end transition once while guessing and dismisses it', async () => {
+        vi.useFakeTimers();
+        mockReopenedChallenge('photo-24', 55, 300);
+        withGame('photo-24');
+        // Flush the accept chain; the player is 55 seconds into the window,
+        // still inside the 60-second full-points grace period.
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+        // Crossing the grace boundary live announces the decay exactly once.
+        await act(async () => {
+            vi.advanceTimersByTime(60_000);
+        });
+        expect(screen.getByRole('status')).toHaveTextContent(/Full points have ended/i);
+        await act(async () => {
+            vi.advanceTimersByTime(1_000);
+        });
+        expect(screen.getByRole('status')).toHaveTextContent(/Full points have ended/i);
+
+        // The notice owner auto-dismisses it shortly afterwards.
+        await act(async () => {
+            vi.advanceTimersByTime(4_500);
+        });
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
     it('marks the challenge as missed with 0 points when the guess deadline passes', async () => {

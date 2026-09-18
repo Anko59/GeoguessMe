@@ -163,6 +163,7 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("accept status = %d", recorder.Code)
 	}
+	assertScoreGraceSeconds(t, recorder)
 
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))

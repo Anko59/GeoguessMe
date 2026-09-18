@@ -45,6 +45,14 @@ export interface GameState {
      *  countdown and the timeout transition are derived from it. The timer
      *  therefore keeps running even when the app is closed. */
     guessDeadline?: number;
+    /** Seconds after the guessing window opens with the full 5000-point
+     *  maximum (wire `score_grace_seconds`); when published, the timer bar
+     *  visualizes the score decay after this grace period. Optional so an
+     *  older backend response simply hides the decay display. */
+    scoreGraceSeconds?: number;
+    /** Transient answering-phase notice (for example when the full-points
+     *  grace period ends); auto-cleared by the owner, never persisted. */
+    scoreNotice?: 'grace-ended';
     serverOffset: number;
     results?: ChallengeResults;
     message?: string;
@@ -64,9 +72,17 @@ export type GameAction =
           mediaType?: string;
           deadline: number;
           guessDeadline: number;
+          scoreGraceSeconds: number;
           serverOffset: number;
       }
-    | { type: 'media-unavailable'; photoId: string; deadline: number; guessDeadline: number; serverOffset: number }
+    | {
+          type: 'media-unavailable';
+          photoId: string;
+          deadline: number;
+          guessDeadline: number;
+          scoreGraceSeconds: number;
+          serverOffset: number;
+      }
     | { type: 'accept-failed'; photoId: string; message: string }
     | { type: 'media-failed'; photoId: string; message: string }
     | { type: 'view-expired' }
@@ -86,6 +102,8 @@ export type GameAction =
     | { type: 'results-failed'; photoId: string; message: string }
     | { type: 'show-feedback'; score: number; partyDoubled?: boolean }
     | { type: 'clear-feedback' }
+    | { type: 'show-score-notice'; notice: 'grace-ended' }
+    | { type: 'clear-score-notice' }
     | { type: 'close' }
     | { type: 'reset' };
 
@@ -117,6 +135,9 @@ const withStatus = (state: GameState, status: GameStatus): GameState => ({ ...st
  *
  * `show-feedback` and `clear-feedback` are overlay-only actions: they mutate
  * `feedback` without changing the phase and are legal in every status.
+ * `show-score-notice` is overlay-only and legal only while guessing (the
+ * notice describes the live answering window); `clear-score-notice` is legal
+ * everywhere so the notice owner can dismiss it from any phase.
  *
  * Every other (status, action) pair is an illegal transition and is rejected
  * by returning the current state unchanged; the transition tests pin both the
@@ -137,6 +158,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                       mediaType: action.mediaType,
                       deadline: action.deadline,
                       guessDeadline: action.guessDeadline,
+                      scoreGraceSeconds: action.scoreGraceSeconds,
                       serverOffset: action.serverOffset,
                   }
                 : state;
@@ -147,6 +169,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                       photoId: state.photoId,
                       deadline: action.deadline,
                       guessDeadline: action.guessDeadline,
+                      scoreGraceSeconds: action.scoreGraceSeconds,
                       serverOffset: action.serverOffset,
                   }
                 : state;
@@ -193,6 +216,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             };
         case 'clear-feedback':
             return { ...state, feedback: undefined };
+        case 'show-score-notice':
+            return state.status === 'guessing' ? { ...state, scoreNotice: action.notice } : state;
+        case 'clear-score-notice':
+            return state.scoreNotice === undefined ? state : { ...state, scoreNotice: undefined };
         case 'guess-start':
             return state.status === 'guessing' && state.selectedLocation ? withStatus(state, 'submitting') : state;
         case 'guess-failed':
@@ -209,4 +236,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         case 'reset':
             return freshIdle();
     }
+}
+
+/** Maximum score of a pinpoint guess; mirrors the backend scoring scale and
+ *  is the base for the potential-score decay display. */
+export const MAX_GUESS_SCORE = 5000;
+
+/** Fraction of the maximum score still achievable `elapsedSeconds` after the
+ *  guessing window opened. Mirrors backend/internal/game/score.go
+ *  TimeMultiplier exactly (including the one-second anchor that reaches the
+ *  0.2 floor one second before the deadline) so the answering UI can show the
+ *  decay without re-deriving server policy. */
+export function scoreMultiplier(elapsedSeconds: number, windowSeconds: number, graceSeconds: number): number {
+    if (!(windowSeconds > 0)) return 1;
+    const grace = Math.max(0, graceSeconds);
+    if (elapsedSeconds < grace) return 1;
+    if (elapsedSeconds >= windowSeconds) return 0;
+    const penaltySpan = windowSeconds - grace - 1;
+    if (penaltySpan <= 0) return 1;
+    const offset = elapsedSeconds - grace;
+    if (offset <= 0) return 1;
+    if (offset >= penaltySpan) return 0.2;
+    return 1 - 0.8 * (offset / penaltySpan);
 }

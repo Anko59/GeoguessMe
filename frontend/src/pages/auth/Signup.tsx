@@ -140,6 +140,10 @@ export default function Signup() {
                         <button type="submit" className="btn btn-primary" disabled={submitting}>
                             {submitting ? 'Creating account…' : 'Sign Up'}
                         </button>
+                        <p className="auth-legal-note">
+                            By creating an account you agree to our <Link to="/terms">Terms of Use</Link> and
+                            acknowledge our <Link to="/privacy">Privacy Policy</Link>.
+                        </p>
                     </form>
                 ) : (
                     <p className="auth-provider-note" role="status">

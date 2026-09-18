@@ -153,10 +153,11 @@ Its edit workflow is described in
 
 Run the repository's manual **Play API access check** workflow when diagnosing
 OIDC or Play permissions. It validates the WIF configuration, obtains an Android
-Publisher access token with the narrow API scope, and reads the app identity. A
-successful result must report package `com.geoguessme.app`; a different package
-means the configuration points at the wrong app and must be fixed before a
-release is attempted.
+Publisher access token with the narrow API scope, and reads the configured
+package's configured track through the Android Publisher API. A successful
+result must report package `com.geoguessme.app`; a different package means the
+configuration points at the wrong app and must be fixed before a release is
+attempted.
 
 Production publication is automated by `.github/workflows/release.yml`. After
 the Android release-artifact job verifies the signed AAB and provenance, the
@@ -165,15 +166,21 @@ digests, and then runs the Play publication job. That job uses the retained AAB
 and manifest; it never rebuilds the bundle. The client performs this ordered
 edit transaction:
 
-1. read the app identity and all tracks, rejecting a version code that is not
+1. create an edit and read all tracks through the valid
+   `applications/{packageName}/edits/{editId}/tracks` endpoint, confirming
+   access to the configured package and rejecting a version code that is not
    newer than every version already uploaded for the app;
-2. create an edit and upload the exact AAB whose SHA-256 matches the manifest;
+2. upload the exact AAB whose SHA-256 matches the manifest;
 3. update the configured track with the manifest version code and release
    status;
 4. validate the edit;
 5. commit the edit with changes sent for review; and
 6. read the committed track back and fail if the submitted version and status
    are not present.
+
+If a failure occurs before the commit request, the client deletes the temporary
+edit. It does not delete an edit after a commit attempt whose outcome is
+uncertain.
 
 The workflow uses GitHub OIDC and a short-lived Android Publisher token. It does
 not accept a service-account JSON key, write a credential file, or pause for

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import Signup from './Signup';
@@ -138,6 +138,22 @@ describe('Signup Page', () => {
         expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
+    });
+
+    it('shows the first-layer terms and privacy notice beside the signup form', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        // The consent note sits inside the form; the age-gate hint and the
+        // global footer repeat the same destinations, so scope to the note.
+        const legalNote = await screen.findByText(/By creating an account you agree/i);
+        expect(within(legalNote).getByRole('link', { name: 'Terms of Use' })).toHaveAttribute('href', '/terms');
+        expect(within(legalNote).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
     });
 
     it('submits form with valid data', async () => {

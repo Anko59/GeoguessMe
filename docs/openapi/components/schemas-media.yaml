@@ -15,7 +15,7 @@ MediaProcessingJob:
     result:
       description: Present when the job is ready; the challenge record or the chat message the synchronous upload path would have returned.
       oneOf:
-        - { $ref: "./schemas.yaml#/ChallengeCreated" }
+        - { $ref: "./schemas-game.yaml#/ChallengeCreated" }
         - { $ref: "./schemas.yaml#/Message" }
     error_code:
       type: string

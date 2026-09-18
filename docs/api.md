@@ -154,6 +154,13 @@ starts at that first confirmed full delivery rather than at acceptance, so a
 slow connection gets the full viewing time instead of having the download
 consume it. A re-fetch after the window has closed is always denied, and
 guessing is only allowed once the window has ended — the media stays view-once.
+Both endpoints publish `score_grace_seconds`: the number of seconds after the
+guessing window opens during which the full 5000-point maximum is still
+achievable. Afterwards the achievable score decays linearly down to 20% of the
+maximum just before `guess_expires_at`, and a missing guess scores 0 from
+`guess_expires_at` onward. Clients use the field to visualize the decay while
+the player is choosing a guess instead of revealing the mechanic only on the
+results screen.
 
 ### WebSocket
 

@@ -35,7 +35,7 @@ subscribe:
       content:
         application/json:
           schema:
-            $ref: "../components/schemas.yaml#/PushSubscriptionRequest"
+            $ref: "../components/schemas-push.yaml#/PushSubscriptionRequest"
     responses:
       "201":
         description: Subscription stored (upserted by user + endpoint).

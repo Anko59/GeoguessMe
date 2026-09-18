@@ -84,7 +84,8 @@ mobile-release-manifest: mobile-verify-release ## Create non-secret provenance m
 
 play-api-check: ## Read the Play app identity with a caller-issued OAuth token.
 	@test -n "$${PLAY_ACCESS_TOKEN:-}" || { echo 'PLAY_ACCESS_TOKEN is required and must not be passed on the command line' >&2; exit 2; }
-	$(PLAY_API_RUN) sh -c 'cd /workspace/tools/mobile/play-publisher && go run . inspect-app --package-name "$$PLAY_API_PACKAGE_NAME"'
+	@test -n "$(PLAY_RELEASE_TRACK)" || { echo 'PLAY_RELEASE_TRACK is required' >&2; exit 2; }
+	$(PLAY_API_RUN) sh -c 'cd /workspace/tools/mobile/play-publisher && go run . inspect-app --package-name "$$PLAY_API_PACKAGE_NAME" --track "$$PLAY_RELEASE_TRACK"'
 
 play-api-publish: ## Upload, validate, and commit the verified Android bundle to Play.
 	@test -n "$${PLAY_ACCESS_TOKEN:-}" || { echo 'PLAY_ACCESS_TOKEN is required and must not be passed on the command line' >&2; exit 2; }
