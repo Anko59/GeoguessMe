@@ -7,6 +7,7 @@ import type {
     PublicCommentsPage,
     PublicComment,
     PublicGuessResult,
+    GroupInbox,
 } from './types';
 import { apiBaseURL } from './platform/endpoints';
 
@@ -164,6 +165,13 @@ export const publicFeedAPI = {
     removeComment: async (id: string, commentID: string, signal: AbortSignal) => {
         await api.delete(`${publicPostPath(id)}/comments/${encodeURIComponent(commentID)}`, { signal });
         return true;
+    },
+};
+
+export const groupsAPI = {
+    inbox: async (signal?: AbortSignal) => (await api.get<GroupInbox[]>('/user/groups/inbox', { signal })).data,
+    markRead: async (groupID: string, signal?: AbortSignal) => {
+        await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
     },
 };
 

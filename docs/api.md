@@ -117,6 +117,8 @@ passing that time alone does not grant access to an unplayed active challenge.
 | Method | Path                                                         | Auth   | Description                                                                            |
 | ------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
 | GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                                     |
+| GET    | `/api/v1/user/groups/inbox`                                  | Bearer | Group rail identity, latest-message metadata, and authoritative unread counts          |
+| PUT    | `/api/v1/user/groups/inbox/read?group_id=`                   | Bearer | Mark one group inbox read through the server timestamp                                 |
 | POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
 | POST   | `/api/v1/group/join`                                         | Bearer | Join group `{invite_token}`                                                            |
 | GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |

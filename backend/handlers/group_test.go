@@ -78,6 +78,23 @@ func (s stubGroupReader) UserGroups(ctx context.Context, userID string) ([]model
 	return s.groups, s.err
 }
 
+type stubGroupInboxReader struct {
+	groups []models.GroupInbox
+	err    error
+}
+
+func (s stubGroupInboxReader) UserGroups(context.Context, string) ([]models.Group, error) {
+	return nil, nil
+}
+
+func (s stubGroupInboxReader) UserInbox(context.Context, string) ([]models.GroupInbox, error) {
+	return s.groups, s.err
+}
+
+func (s stubGroupInboxReader) MarkInboxRead(context.Context, string, string, time.Time) error {
+	return s.err
+}
+
 func TestGetUserGroupsReturnsReaderGroups(t *testing.T) {
 	api := NewGroupAPI(stubGroupReader{groups: []models.Group{
 		{ID: "g1", Name: "Paris", Code: "ABC123"},
@@ -136,6 +153,34 @@ func TestGetUserGroupsReaderErrorUsesErrorEnvelope(t *testing.T) {
 	}
 	if envelope.Error.Code != "internal_error" || envelope.Error.Message != "Unable to load groups" {
 		t.Fatalf("error envelope = %+v", envelope)
+	}
+}
+
+func TestGetUserGroupsInboxReturnsAuthoritativeSummaries(t *testing.T) {
+	now := time.Date(2026, 9, 18, 10, 0, 0, 0, time.UTC)
+	api := NewGroupAPI(stubGroupInboxReader{groups: []models.GroupInbox{{
+		ID: "g1", Name: "Paris", UnreadCount: 2,
+		LatestMessage: &models.InboxMessageMeta{ID: "m1", Kind: "text", Username: "Alice", CreatedAt: now},
+	}}})
+	recorder := httptest.NewRecorder()
+	api.GetUserGroupsInbox(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"unread_count":2`) {
+		t.Fatalf("inbox response = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMarkUserGroupReadValidatesMethodAndGroup(t *testing.T) {
+	api := NewGroupAPI(stubGroupInboxReader{})
+	recorder := httptest.NewRecorder()
+	api.MarkUserGroupRead(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("method status = %d", recorder.Code)
+	}
+	recorder = httptest.NewRecorder()
+	request := requestWithUser(http.MethodPut, "/?group_id=invalid", "", "user-1")
+	api.MarkUserGroupRead(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("invalid group status = %d", recorder.Code)
 	}
 }
 

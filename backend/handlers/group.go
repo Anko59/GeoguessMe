@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"geoguessme/internal/auth"
 	"geoguessme/internal/media"
@@ -252,17 +253,29 @@ type GroupReader interface {
 	UserGroups(ctx context.Context, userID string) ([]models.Group, error)
 }
 
+type GroupInboxReader interface {
+	UserInbox(ctx context.Context, userID string) ([]models.GroupInbox, error)
+	MarkInboxRead(ctx context.Context, groupID, userID string, readAt time.Time) error
+}
+
 // GroupAPI serves group read endpoints from injected dependencies. It is the
 // target pattern for removing handler package globals: each migrated endpoint
 // becomes a method here and the application composition root holds a
 // *GroupAPI.
 type GroupAPI struct {
 	groups GroupReader
+	inbox  GroupInboxReader
+	clock  func() time.Time
 }
 
 // NewGroupAPI constructs the migrated group read API with its reader.
-func NewGroupAPI(groups GroupReader) *GroupAPI {
-	return &GroupAPI{groups: groups}
+func NewGroupAPI(groups GroupReader, clocks ...func() time.Time) *GroupAPI {
+	inbox, _ := groups.(GroupInboxReader)
+	clock := time.Now
+	if len(clocks) > 0 && clocks[0] != nil {
+		clock = clocks[0]
+	}
+	return &GroupAPI{groups: groups, inbox: inbox, clock: clock}
 }
 
 // GetUserGroups lists the groups the authenticated user belongs to, newest
@@ -280,6 +293,58 @@ func (a *GroupAPI) GetUserGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, groups)
+}
+
+// GetUserGroupsInbox returns the authenticated user's group rail summaries.
+// Unread counts and latest-message metadata are calculated by the repository;
+// the browser never infers them from a partial chat history.
+func (a *GroupAPI) GetUserGroupsInbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+	if a.inbox == nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load group inbox")
+		return
+	}
+	items, err := a.inbox.UserInbox(r.Context(), GetUserIDFromContext(r))
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load group inbox")
+		return
+	}
+	if items == nil {
+		items = []models.GroupInbox{}
+	}
+	WriteJSON(w, http.StatusOK, items)
+}
+
+// MarkUserGroupRead advances a member's persisted inbox boundary. It is
+// intentionally separate from the chat history endpoint so opening a group is
+// the only UI action that acknowledges its rail indicator.
+func (a *GroupAPI) MarkUserGroupRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		MethodNotAllowed(w)
+		return
+	}
+	if a.inbox == nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to update group inbox")
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id is required")
+		return
+	}
+	err := a.inbox.MarkInboxRead(r.Context(), groupID, GetUserIDFromContext(r), a.clock().UTC())
+	if errors.Is(err, groups.ErrNotMember) {
+		WriteError(w, http.StatusForbidden, "forbidden", "You are not a member of this group")
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to update group inbox")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type groupNotificationRequest struct {

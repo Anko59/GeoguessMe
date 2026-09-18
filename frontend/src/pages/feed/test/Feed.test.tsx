@@ -18,8 +18,13 @@ const mocks = vi.hoisted(() => ({
     comments: vi.fn(),
     comment: vi.fn(),
     removeComment: vi.fn(),
+    inbox: vi.fn(),
 }));
-vi.mock('../../../api', () => ({ publicFeedAPI: mocks, getAPIErrorMessage: (error: Error) => error.message }));
+vi.mock('../../../api', () => ({
+    publicFeedAPI: mocks,
+    groupsAPI: { inbox: mocks.inbox, markRead: vi.fn() },
+    getAPIErrorMessage: (error: Error) => error.message,
+}));
 vi.mock('../../../components/map/Map', () => ({
     default: ({ onLocationSelect }: { onLocationSelect: (lat: number, long: number) => void }) => (
         <button type="button" onClick={() => onLocationSelect(48.8, 2.3)}>
@@ -59,6 +64,7 @@ beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('IntersectionObserver', undefined);
     mocks.list.mockResolvedValue({ items: [post()], next_cursor: '' });
+    mocks.inbox.mockResolvedValue([]);
     mocks.media.mockResolvedValue(new Blob(['image'], { type: 'image/jpeg' }));
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
     mocks.react.mockResolvedValue(true);

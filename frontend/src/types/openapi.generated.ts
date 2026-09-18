@@ -488,6 +488,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/user/groups/inbox': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group rail summaries for the authenticated user.
+         * @description Unread counts are derived from persisted message read markers. Latest message metadata never includes message content or media.
+         */
+        get: operations['listUserGroupInbox'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/user/groups/inbox/read': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a group inbox as read. */
+        put: operations['markUserGroupRead'];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/user/profile/{userID}': {
         parameters: {
             query?: never;
@@ -1180,6 +1217,22 @@ export interface components {
             name: string;
             /** Format: date-time */
             created_at: string;
+        };
+        InboxMessageMeta: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: 'text' | 'challenge' | 'media' | 'system';
+            username: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        GroupInbox: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            unread_count: number;
+            latest_message?: components['schemas']['InboxMessageMeta'] | null;
         };
         /** @description Another player's progression profile. Never contains email or account details; only visible when the player shares a group with the requester. */
         PublicProfile: {
@@ -2438,6 +2491,52 @@ export interface operations {
                 };
             };
             401: components['responses']['ErrorResponse'];
+        };
+    };
+    listUserGroupInbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group inbox summaries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GroupInbox'][];
+                };
+            };
+            401: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    markUserGroupRead: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group messages are read through the server timestamp. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
         };
     };
     getUserProfile: {

@@ -60,6 +60,10 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/deleteAccount
   /user/groups:
     $ref: ./openapi/paths/groups.yaml#/userGroups
+  /user/groups/inbox:
+    $ref: ./openapi/paths/groups.yaml#/userGroupsInbox
+  /user/groups/inbox/read:
+    $ref: ./openapi/paths/groups.yaml#/markUserGroupRead
   /user/profile/{userID}:
     $ref: ./openapi/paths/groups.yaml#/userProfile
   /group/create:
