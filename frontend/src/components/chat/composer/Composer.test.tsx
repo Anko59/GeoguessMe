@@ -33,6 +33,30 @@ beforeEach(() => {
 });
 
 describe('Composer', () => {
+    it('grows for multiline drafts and shrinks when the draft gets shorter', () => {
+        render(
+            <Composer
+                wsRef={openSocket(vi.fn())}
+                groupID="group-1"
+                connectionStatus="connected"
+                replyingTo={null}
+                onCancelReply={vi.fn()}
+            />,
+        );
+        const textarea = screen.getByLabelText('Message') as HTMLTextAreaElement;
+        expect(textarea).toHaveAttribute('rows', '1');
+        Object.defineProperty(textarea, 'scrollHeight', {
+            configurable: true,
+            get: () => (textarea.value.includes('\n') ? 96 : 48),
+        });
+
+        fireEvent.change(textarea, { target: { value: 'first\nsecond' } });
+        expect(textarea.style.height).toBe('96px');
+
+        fireEvent.change(textarea, { target: { value: 'first' } });
+        expect(textarea.style.height).toBe('48px');
+    });
+
     it('sends the trimmed text over the socket', () => {
         const send = vi.fn();
         render(
@@ -48,6 +72,28 @@ describe('Composer', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'hi' }));
         expect(screen.getByLabelText('Message')).toHaveValue('');
+    });
+
+    it('sends with Enter while Shift+Enter remains available for line breaks', () => {
+        const send = vi.fn();
+        render(
+            <Composer
+                wsRef={openSocket(send)}
+                groupID="group-1"
+                connectionStatus="connected"
+                replyingTo={null}
+                onCancelReply={vi.fn()}
+            />,
+        );
+        const textarea = screen.getByLabelText('Message');
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'hello' }));
+
+        fireEvent.change(textarea, { target: { value: 'line one' } });
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
+        expect(send).toHaveBeenCalledOnce();
     });
 
     it('attaches the reply target id when replying to a message', () => {

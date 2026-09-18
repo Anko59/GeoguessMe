@@ -362,15 +362,3 @@ MessagesPage:
         type: [string, "null"],
         description: Opaque cursor strictly after the last message of the page; the reconnect catch-up anchor (empty for an empty page),
       }
-
-PushSubscriptionRequest:
-  type: object
-  required: [endpoint, keys]
-  properties:
-    endpoint: { type: string, format: uri }
-    keys:
-      type: object
-      required: [p256dh, auth]
-      properties:
-        p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
-        auth: { type: string, description: "Base64url 16-byte authentication secret" }

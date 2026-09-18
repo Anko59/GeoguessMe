@@ -14,6 +14,20 @@ function locationRevealClause(revealsAt: string, referenceMs: number): string {
     return `after ${hours} hours`;
 }
 
+// formatGuessDuration renders the server-computed guess duration
+// (time_to_guess_ms, from when the guessing window opened to the submission)
+// as a compact label like "1min 12sec". Zero units are omitted, except that a
+// sub-minute duration shows only seconds (matching the "0.5 km away in 1min
+// 12sec" example).
+function formatGuessDuration(ms: number): string {
+    const totalSeconds = Math.round(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes === 0) return `${seconds}sec`;
+    if (seconds === 0) return `${minutes}min`;
+    return `${minutes}min ${seconds}sec`;
+}
+
 interface GameViewProps {
     state: GameState;
     /** True while a private media blob is being fetched for the viewing window. */
@@ -274,7 +288,11 @@ function GameResultsView({
                                             <span>Timed out — 0 pts</span>
                                         ) : (
                                             guess.distance !== undefined && (
-                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                                <span>
+                                                    {(guess.distance / 1000).toFixed(1)} km away
+                                                    {guess.time_to_guess_ms !== undefined &&
+                                                        ` in ${formatGuessDuration(guess.time_to_guess_ms)}`}
+                                                </span>
                                             )
                                         )}
                                     </div>

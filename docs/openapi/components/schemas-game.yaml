@@ -137,6 +137,11 @@ Guess:
     score: { type: integer }
     elo_delta: { type: integer, description: Weekly Elo change (0 when <2 guesses or before week start). }
     distance: { type: number, description: Omitted while the location is hidden or when timed_out is true. }
+    time_to_guess_ms:
+      {
+        type: integer,
+        description: Elapsed milliseconds from when the guessing window opened to the guesser's submission. Omitted for timed-out guesses or when the reference window is unknown.,
+      }
     timed_out: { type: boolean, description: True when the guess timed out (score 0). }
     created_at: { type: string, format: date-time }
     username: { type: string }
