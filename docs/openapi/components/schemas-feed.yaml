@@ -55,6 +55,31 @@
         "$ref": "#/PublicChallenge"
     "next_cursor":
       "type": "string"
+"PublicFeedLeaderboardEntry":
+  "type": "object"
+  "required": ["rank", "user_id", "username", "total_score"]
+  "properties":
+    "rank":
+      "type": "integer"
+      "minimum": 1
+    "user_id":
+      "type": "string"
+      "format": "uuid"
+    "username":
+      "type": "string"
+    "total_score":
+      "type": "integer"
+      "minimum": 0
+"PublicFeedLeaderboardPage":
+  "type": "object"
+  "required": ["items", "next_cursor"]
+  "properties":
+    "items":
+      "type": "array"
+      "items":
+        "$ref": "#/PublicFeedLeaderboardEntry"
+    "next_cursor":
+      "type": "string"
 "PublicComment":
   "type": "object"
   "required": ["id", "user_id", "username", "content", "created_at", "can_delete"]

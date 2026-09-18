@@ -23,6 +23,18 @@ type PublicFeedPage struct {
 	NextCursor string            `json:"next_cursor"`
 }
 
+type PublicFeedLeaderboardEntry struct {
+	Rank       int    `json:"rank"`
+	UserID     string `json:"user_id"`
+	Username   string `json:"username"`
+	TotalScore int    `json:"total_score"`
+}
+
+type PublicFeedLeaderboardPage struct {
+	Items      []PublicFeedLeaderboardEntry `json:"items"`
+	NextCursor string                       `json:"next_cursor"`
+}
+
 type PublicComment struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`
