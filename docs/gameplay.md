@@ -165,13 +165,17 @@ the same time.
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 `actual_lat`, `actual_long`, all guesses with `username`, `score`, `elo_delta`,
-`distance`, and `media_url` plus `media_type` (with `?result=1`) if the media is
-still available. `elo_delta` is the signed change in the player's weekly Elo
-rating caused by this challenge — the results page shows the weekly change only.
-It is zero when the challenge has fewer than two guesses or was created before
-the current calendar week started (such challenges no longer belong to any
-weekly ladder). Result photos can be opened full screen; videos retain playback
-controls in the result panel.
+`distance`, `time_to_guess_ms`, and `media_url` plus `media_type` (with
+`?result=1`) if the media is still available. `time_to_guess_ms` is how long
+after that player's guessing window opened they submitted, in milliseconds — the
+results page shows it next to the distance (for example "0.5 km away in 1min
+12sec"). It is omitted for timed-out guesses and for legacy guesses without a
+recorded viewing window. `elo_delta` is the signed change in the player's weekly
+Elo rating caused by this challenge — the results page shows the weekly change
+only. It is zero when the challenge has fewer than two guesses or was created
+before the current calendar week started (such challenges no longer belong to
+any weekly ladder). Result photos can be opened full screen; videos retain
+playback controls in the result panel.
 
 When a poster hid the location (`hide_location`), the exact spot stays private
 for the `LOCATION_HIDE_DURATION` (48 hours by default): the response omits

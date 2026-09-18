@@ -1283,6 +1283,8 @@ export interface components {
             elo_delta: number;
             /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
+            /** @description Elapsed milliseconds from when the guessing window opened to the guesser's submission. Omitted for timed-out guesses or when the reference window is unknown. */
+            time_to_guess_ms?: number;
             /** @description True when the guess timed out (score 0). */
             timed_out?: boolean;
             /** Format: date-time */
