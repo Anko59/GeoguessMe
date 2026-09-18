@@ -6,14 +6,19 @@ import GroupGlobe from './GroupGlobe';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../api', () => ({ default: { get }, getAPIErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock('./Globe', () => ({
-    default: ({ items }: { items: GroupChallenge[] }) => (
-        <div data-testid="pins">
-            {items
-                .filter((item) => item.lat !== undefined)
-                .map((item) => item.photo_id)
-                .join(',')}
-        </div>
-    ),
+    default: ({ items, onSelect }: { items: GroupChallenge[]; onSelect: (id: string) => void }) => {
+        const pins = items.filter((item) => item.lat !== undefined);
+        return (
+            <div data-testid="pins">
+                {pins.length > 0 && (
+                    <button type="button" onClick={() => onSelect(pins[0].photo_id)}>
+                        select pin
+                    </button>
+                )}
+                {pins.map((item) => item.photo_id).join(',')}
+            </div>
+        );
+    },
 }));
 const challenge: GroupChallenge = {
     photo_id: 'p1',
@@ -40,6 +45,20 @@ beforeEach(() => {
 });
 
 describe('GroupGlobe', () => {
+    it('raises the challenge sheet when a pin is selected and toggles it closed', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        await screen.findByText('Alice');
+        const toggle = screen.getByRole('button', { name: 'Show list' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(screen.getByRole('button', { name: 'select pin' }));
+        const opened = screen.getByRole('button', { name: 'Hide list' });
+        expect(opened).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('region', { name: 'Selected challenge' })).toHaveFocus();
+        fireEvent.click(opened);
+        expect(screen.getByRole('button', { name: 'Show list' })).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('loads every page independently of chat history and opens selected results', async () => {
         get.mockResolvedValueOnce({ data: { items: [challenge], next_cursor: 'next' } }).mockResolvedValueOnce({
             data: {
