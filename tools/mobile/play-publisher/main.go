@@ -36,6 +36,7 @@ func inspectApp(args []string) error {
 	inspect := flag.NewFlagSet("inspect-app", flag.ContinueOnError)
 	inspect.SetOutput(os.Stderr)
 	packageName := inspect.String("package-name", defaultPackageName, "Android application package name")
+	track := inspect.String("track", envOrDefault("PLAY_RELEASE_TRACK", ""), "Play track to inspect")
 	baseURL := inspect.String("base-url", os.Getenv("PLAY_API_BASE_URL"), "Android Publisher API HTTPS origin")
 	if err := inspect.Parse(args); err != nil {
 		return err
@@ -43,18 +44,22 @@ func inspectApp(args []string) error {
 	if *packageName == "" {
 		return errors.New("--package-name must not be empty")
 	}
+	if *track == "" {
+		return errors.New("--track must not be empty")
+	}
 	client, err := NewClient(*baseURL, os.Getenv("PLAY_ACCESS_TOKEN"), nil)
 	if err != nil {
 		return err
 	}
-	application, err := client.GetApplication(context.Background(), *packageName)
+	releases, err := client.ListTrackReleases(context.Background(), *packageName, *track)
 	if err != nil {
 		return err
 	}
-	if application.PackageName != *packageName {
-		return fmt.Errorf("Play API returned package %q, expected %q", application.PackageName, *packageName)
-	}
-	return json.NewEncoder(os.Stdout).Encode(application)
+	return json.NewEncoder(os.Stdout).Encode(struct {
+		PackageName  string `json:"package_name"`
+		Track        string `json:"track"`
+		ReleaseCount int    `json:"release_count"`
+	}{PackageName: *packageName, Track: *track, ReleaseCount: len(releases)})
 }
 
 func publishBundleCommand(args []string) error {

@@ -375,3 +375,8 @@ volumes intact; registry access failures do not require a storage reset.
 | Abusive user      | Revoke sessions, delete account via `DELETE /auth/account`, preserve request IDs                           |
 | Failed migration  | Restore from backup — migrations are forward-only                                                          |
 | Storage outage    | Backend returns 502/503 on media endpoints; gameplay continues without media                               |
+
+Suspected personal-data breaches follow
+[runbooks/data-breach-response](runbooks/data-breach-response.md), including the
+72-hour CNIL notification duty; the compliance record lives in
+[data-protection](data-protection.md).

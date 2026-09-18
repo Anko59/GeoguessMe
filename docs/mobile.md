@@ -195,8 +195,11 @@ and Git tree, retains the AAB and manifest as one artifact, and waits for the
 production deployment to succeed. It then authenticates through GitHub OIDC with
 a short-lived Android Publisher token and performs one Play edit:
 
-1. confirm the app package identity;
-2. create an edit and upload the retained AAB;
+1. create an edit and read every track through the valid
+   `applications/{packageName}/edits/{editId}/tracks` endpoint, confirming
+   access to the configured package and rejecting a version code that is not
+   newer than every version already uploaded for the app;
+2. upload the retained AAB;
 3. update the configured track with the manifest version code and release
    status;
 4. validate the edit;
@@ -207,7 +210,9 @@ a short-lived Android Publisher token and performs one Play edit:
 The workflow does not rebuild or select a different bundle after the release
 artifact job. The API client verifies the local AAB SHA-256 against the manifest
 before it creates an edit, and verifies the Play-reported version code before
-changing the track.
+changing the track. If an error occurs before commit, it deletes the temporary
+edit; it never deletes an edit after a commit attempt whose outcome is
+uncertain.
 
 Configure these values in the GitHub `production` environment before running a
 production release:
