@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import FeedCard from './FeedCard';
 import FeedComposer from './FeedComposer';
+import GroupRail from './GroupRail';
 import { useFeed } from './useFeed';
 import './FeedForms.css';
 import './Feed.css';
+import './FeedAudience.css';
 
 function FeedPage({ id }: { id?: string }) {
     const feed = useFeed(id);
@@ -28,6 +30,7 @@ function FeedPage({ id }: { id?: string }) {
             </header>
             <main className="feed-layout">
                 <div className="feed-column">
+                    <GroupRail />
                     <section className="feed-heading">
                         <div>
                             <p className="feed-eyebrow">Community challenges</p>

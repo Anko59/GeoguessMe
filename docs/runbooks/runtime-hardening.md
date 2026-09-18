@@ -98,9 +98,11 @@ set—not only the files changed most recently:
 
 - scripts (root:root, mode 0755): `common.sh`, `deploy.sh`, `forced-command.sh`,
   `verify-deployment-hashes.sh`, `backup.sh`, `restore-rehearsal.sh`,
-  `health-check.sh`, and `alert.sh`;
+  `health-check.sh`, `alert.sh`, `watch-health.sh`,
+  `watch-refresh-metrics-token.sh`, and `watch-capacity.sh`;
 - configuration (root:root, mode 0444): `compose.production.yaml` and
-  `compose.hosted.yaml`.
+  `compose.hosted.yaml`, `compose.watch.yaml`, `watch/Caddyfile`,
+  `watch/vector.yaml`, and `watch/victoria-metrics.yaml`.
 
 Stop both `geoguessme-health@*.timer` units for the short copy window and use
 `install --owner=root --group=root --mode=...` for each file. After every file

@@ -62,6 +62,19 @@ protected response.
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://backend:8080/metrics
 ```
 
+## Hosted monitoring
+
+When enabled on the shared hosted VM, the protected monitoring entry point is
+`https://watch.geoguessme.com/`. Beszel is at the root, VictoriaLogs is at
+`/logs/select/vmui/`, and VictoriaMetrics is at `/metrics/vmui/`. Cloudflare
+Access permits only the owner email, and Beszel retains its own administrator
+login. The monitoring stack consumes production logs and metrics without
+exposing the application's bearer token or Docker socket publicly.
+
+The capacity gate, installation, token rotation, alert behavior, backup, and
+rollback procedure are canonical in the
+[monitoring runbook](runbooks/monitoring.md).
+
 ## Logging
 
 The group globe reads `/api/v1/group/challenges` in pages. Read failures emit

@@ -98,7 +98,7 @@ echo "runtime hash check: environment=$environment app_revision=$app_revision ru
 echo "  comparing installed host definitions against $manifest"
 
 # Operator scripts installed by provisioning (cloud-init) into /opt/geoguessme/bin.
-for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
     compare \
         "bin/$script.sh" \
         "$APP_ROOT/bin/$script.sh" \
@@ -114,6 +114,16 @@ compare \
     "config/compose.hosted.yaml" \
     "$CONFIG_ROOT/compose.hosted.yaml" \
     "config/compose.hosted.yaml"
+compare \
+    "config/compose.watch.yaml" \
+    "$CONFIG_ROOT/compose.watch.yaml" \
+    "config/compose.watch.yaml"
+for watch_file in Caddyfile vector.yaml victoria-metrics.yaml; do
+    compare \
+        "config/watch/$watch_file" \
+        "$CONFIG_ROOT/watch/$watch_file" \
+        "config/watch/$watch_file"
+done
 
 if [ "$mismatch" -ne 0 ]; then
     echo "runtime hash check FAILED: installed host definitions differ from runtime revision $runtime_revision" >&2

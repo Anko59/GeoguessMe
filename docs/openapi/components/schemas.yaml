@@ -162,6 +162,27 @@ Group:
     name: { type: string }
     created_at: { type: string, format: date-time }
 
+GroupInbox:
+  type: object
+  required: [id, name, unread_count]
+  properties:
+    id: { type: string, format: uuid }
+    name: { type: string }
+    unread_count: { type: integer, minimum: 0 }
+    latest_message:
+      anyOf:
+        - { $ref: "#/InboxMessageMeta" }
+        - type: "null"
+
+InboxMessageMeta:
+  type: object
+  required: [id, kind, username, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    kind: { type: string, enum: [text, challenge, media, system] }
+    username: { type: string }
+    created_at: { type: string, format: date-time }
+
 InviteToken:
   type: string
   minLength: 43

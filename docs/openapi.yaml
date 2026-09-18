@@ -12,6 +12,8 @@ paths:
     $ref: ./openapi/paths/atlas.yaml#/groupChallenges
   /feed:
     $ref: ./openapi/paths/feed.yaml#/feed
+  /feed/leaderboard:
+    $ref: ./openapi/paths/feed.yaml#/leaderboard
   /feed/challenges:
     $ref: ./openapi/paths/feed.yaml#/upload
   /feed/challenges/{id}:
@@ -22,6 +24,8 @@ paths:
     $ref: ./openapi/paths/feed.yaml#/play
   /feed/challenges/{id}/guess:
     $ref: ./openapi/paths/feed.yaml#/guess
+  /feed/challenges/{id}/results:
+    $ref: ./openapi/paths/feed.yaml#/results
   /feed/challenges/{id}/reaction:
     $ref: ./openapi/paths/feed.yaml#/reaction
   /feed/challenges/{id}/comments:
@@ -60,6 +64,10 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/deleteAccount
   /user/groups:
     $ref: ./openapi/paths/groups.yaml#/userGroups
+  /user/groups/inbox:
+    $ref: ./openapi/paths/groups.yaml#/userGroupsInbox
+  /user/groups/inbox/read:
+    $ref: ./openapi/paths/groups.yaml#/markUserGroupRead
   /user/profile/{userID}:
     $ref: ./openapi/paths/groups.yaml#/userProfile
   /group/create:

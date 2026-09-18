@@ -11,6 +11,10 @@ HEALTH="$ROOT/deployment/scripts/hosted/health-check.sh"
 COMPOSE="$ROOT/deployment/compose.production.yaml"
 HOSTED="$ROOT/deployment/compose.hosted.yaml"
 CADDY="$ROOT/deployment/caddy/Caddyfile"
+WATCH_COMPOSE="$ROOT/deployment/compose.watch.yaml"
+WATCH_CADDY="$ROOT/deployment/watch/Caddyfile"
+WATCH_VECTOR="$ROOT/deployment/watch/vector.yaml"
+WATCH_METRICS="$ROOT/deployment/watch/victoria-metrics.yaml"
 FRONTEND_DOCKERFILE="$ROOT/deployment/docker/frontend.Dockerfile"
 BACKEND_DOCKERFILE="$ROOT/deployment/docker/backend.Dockerfile"
 RESTIC_DOCKERFILE="$ROOT/deployment/docker/restic-tools.Dockerfile"
@@ -47,6 +51,34 @@ assert_contains "$IDENTITY_COMPOSE" 'realm-geoguessme.json:/opt/keycloak/data/im
 assert_contains "$IDENTITY_COMPOSE" 'keycloak-config:'
 assert_contains "$HOSTED" 'database:/var/lib/postgresql/data'
 assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}'
+
+assert_contains "$WATCH_COMPOSE" 'name: geoguessme-watch'
+assert_contains "$WATCH_COMPOSE" 'image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}'
+assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80'
+assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375'
+assert_contains "$WATCH_COMPOSE" '/var/run/docker.sock:/var/run/docker.sock:ro'
+assert_contains "$WATCH_COMPOSE" 'POST: "0"'
+for watch_proxy_setting in 'ALLOW_CHANGES: "0"' 'ALLOW_EXPORT: "0"' 'ALLOW_LOGS: "1"'; do assert_contains "$WATCH_COMPOSE" "$watch_proxy_setting"; done
+for watch_memory_limit in 'memory: 192M' 'memory: 256M'; do assert_contains "$WATCH_COMPOSE" "$watch_memory_limit"; done
+for watch_limit in 'memory: 64M' 'memory: 128M' 'memory: 160M'; do
+    assert_contains "$WATCH_COMPOSE" "$watch_limit"
+done
+assert_contains "$WATCH_COMPOSE" 'GEOGUESSME_WATCH_METRICS_DIR'
+assert_not_contains "$WATCH_COMPOSE" 'production.env'
+assert_contains "$WATCH_COMPOSE" 'edge:'
+assert_contains "$WATCH_COMPOSE" 'networks: [watch, edge]'
+assert_contains "$WATCH_COMPOSE" 'production_frontend:'
+assert_contains "$WATCH_COMPOSE" 'external: true'
+assert_contains "$WATCH_VECTOR" 'com.docker.compose.project=geoguessme-production'
+assert_not_contains "$WATCH_VECTOR" 'geoguessme-dev'
+assert_contains "$WATCH_METRICS" 'bearer_token_file: /run/watch-metrics/production-metrics-token'
+assert_not_contains "$WATCH_METRICS" 'bearer_token:'
+assert_contains "$WATCH_METRICS" 'scrape_interval: 30s'
+assert_contains "$WATCH_CADDY" 'handle /logs/*'
+assert_contains "$WATCH_CADDY" 'handle /metrics/*'
+assert_contains "$WATCH_CADDY" 'victoria-logs:9428'
+assert_contains "$WATCH_CADDY" 'victoria-metrics:8428'
+assert_not_contains "$WATCH_COMPOSE" 'caddy:'
 
 # OIDC start parameters are forwarded only through explicit allowlists, and
 # existing Keycloak realms are reconciled instead of relying on import-once.
@@ -371,11 +403,12 @@ trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
 app_revision=$(printf 'a%.0s' $(seq 1 40))
 runtime_revision=$(printf 'b%.0s' $(seq 1 40))
 mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
-    "$hash_root/app/bin" "$hash_root/app/config" \
+    "$hash_root/app/releases/$runtime_revision/deployment/watch" \
+    "$hash_root/app/bin" "$hash_root/app/config/watch" \
     "$hash_root/state/releases/dev"
 printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
 printf '%s\n' "$runtime_revision" >"$hash_root/app/config/runtime-revision"
-for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
     cp "$ROOT/deployment/scripts/hosted/$script.sh" \
         "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted/$script.sh"
     cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
@@ -386,8 +419,16 @@ cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.pro
 cp "$ROOT/deployment/compose.hosted.yaml" \
     "$hash_root/app/releases/$runtime_revision/deployment/compose.hosted.yaml"
 cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
+cp "$ROOT/deployment/compose.watch.yaml" \
+    "$hash_root/app/releases/$runtime_revision/deployment/compose.watch.yaml"
+cp "$ROOT/deployment/compose.watch.yaml" "$hash_root/app/config/compose.watch.yaml"
+for config in Caddyfile vector.yaml victoria-metrics.yaml; do
+    cp "$ROOT/deployment/watch/$config" \
+        "$hash_root/app/releases/$runtime_revision/deployment/watch/$config"
+    cp "$ROOT/deployment/watch/$config" "$hash_root/app/config/watch/$config"
+done
 {
-    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert; do
+    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
         sha256sum "$hash_root/app/bin/$script.sh" |
             awk -v path="bin/$script.sh" '{print $1 "  " path}'
     done
@@ -395,6 +436,12 @@ cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.
         awk '{print $1 "  config/compose.production.yaml"}'
     sha256sum "$hash_root/app/config/compose.hosted.yaml" |
         awk '{print $1 "  config/compose.hosted.yaml"}'
+    sha256sum "$hash_root/app/config/compose.watch.yaml" |
+        awk '{print $1 "  config/compose.watch.yaml"}'
+    for config in Caddyfile vector.yaml victoria-metrics.yaml; do
+        sha256sum "$hash_root/app/config/watch/$config" |
+            awk -v path="config/watch/$config" '{print $1 "  " path}'
+    done
 } >"$hash_root/app/config/runtime-hashes"
 chmod 0444 "$hash_root/app/config/runtime-hashes"
 run_verify() {

@@ -142,4 +142,4 @@
   owner: security-program
   reachable: "libpcre2-8-0 is an unused base-image package; the hosted deployment invokes only the SOPS age-key CLI and does not execute its regex runtime; no newer SOPS image is published"
   approved: true
-  expires: 2026-10-11
+  expires: 2026-10-18

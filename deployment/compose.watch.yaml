@@ -1,0 +1,243 @@
+# Independent monitoring topology for the shared hosted VM. This project is
+# intentionally separate from the application deployment projects: releasing
+# the game must not recreate or remove monitoring state.
+name: geoguessme-watch
+
+x-defaults: &defaults
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+
+services:
+  gateway:
+    <<: *defaults
+    # WEB_IMAGE is the exact digest of the already patched and scanned
+    # production web artifact. Reusing that Caddy runtime avoids introducing a
+    # second vulnerable gateway image while this remains an independent
+    # Compose project and lifecycle.
+    image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}
+    ports:
+      - "127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80"
+    volumes:
+      - ./watch/Caddyfile:/etc/caddy/Caddyfile:ro
+      - gateway_data:/data
+      - gateway_config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    user: "1000:1000"
+    cap_add: ["NET_BIND_SERVICE"]
+    networks: [watch, edge]
+    depends_on:
+      beszel:
+        condition: service_healthy
+      victoria-logs:
+        condition: service_started
+      victoria-metrics:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: 0.25
+          memory: 64M
+          pids: 128
+
+  beszel:
+    <<: *defaults
+    image: henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c
+    environment:
+      APP_URL: https://watch.geoguessme.com
+      CHECK_UPDATES: "false"
+      CONTAINER_DETAILS: "false"
+      DISABLE_PASSWORD_AUTH: "false"
+    volumes:
+      - beszel_data:/beszel_data
+      - beszel_socket:/beszel_socket
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    networks: [watch]
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 60s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: 0.25
+          memory: 128M
+          pids: 128
+
+  beszel-agent:
+    <<: *defaults
+    image: henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46
+    network_mode: host
+    env_file:
+      - path: ${GEOGUESSME_WATCH_AGENT_ENV:-/etc/geoguessme/watch-agent.env}
+        required: false
+    environment:
+      DOCKER_HOST: tcp://127.0.0.1:2375
+      LISTEN: /beszel_socket/beszel.sock
+    volumes:
+      - beszel_agent_data:/var/lib/beszel-agent
+      - beszel_socket:/beszel_socket
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 60s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: 0.25
+          memory: 128M
+          pids: 128
+
+  socket-proxy:
+    <<: *defaults
+    image: lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd
+    ports:
+      - "127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375"
+    environment:
+      ALLOW_ARCHIVE: "0"
+      ALLOW_CHANGES: "0"
+      ALLOW_EXPORT: "0"
+      # GET /containers/{id}/logs is required by Vector; all mutating API
+      # operations remain disabled below.
+      ALLOW_LOGS: "1"
+      ALLOW_PAUSE: "0"
+      ALLOW_RESTARTS: "0"
+      ALLOW_STOP: "0"
+      ALLOW_START: "0"
+      ALLOW_TOP: "0"
+      ALLOW_UNPAUSE: "0"
+      CONTAINERS: "1"
+      EVENTS: "1"
+      PING: "1"
+      POST: "0"
+      VERSION: "1"
+      AUTH: "0"
+      EXEC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      VOLUMES: "0"
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /tmp:size=8m,noexec,nosuid,nodev
+    networks: [watch, edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:2375/_ping >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: 0.10
+          memory: 64M
+          pids: 64
+
+  victoria-logs:
+    <<: *defaults
+    image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+    command:
+      - -storageDataPath=/victoria-logs-data
+      - -retentionPeriod=7d
+      - -retention.maxDiskSpaceUsageBytes=2GiB
+      - -storage.minFreeDiskSpaceBytes=8GiB
+      - -http.pathPrefix=/logs
+      - -httpListenAddr=:9428
+    volumes:
+      - victoria_logs_data:/victoria-logs-data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    networks: [watch]
+    deploy:
+      resources:
+        limits:
+          cpus: 0.50
+          memory: 256M
+          pids: 128
+
+  victoria-metrics:
+    <<: *defaults
+    image: victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
+    command:
+      - -storageDataPath=/victoria-metrics-data
+      - -retentionPeriod=14d
+      - -storage.minFreeDiskSpaceBytes=8GiB
+      - -memory.allowedBytes=96MiB
+      - -search.maxMemoryPerQuery=32MiB
+      - -http.pathPrefix=/metrics
+      - -httpListenAddr=:8428
+      - -promscrape.config=/etc/victoria-metrics/prometheus.yml
+    volumes:
+      - victoria_metrics_data:/victoria-metrics-data
+      - ./watch/victoria-metrics.yaml:/etc/victoria-metrics/prometheus.yml:ro
+      - ${GEOGUESSME_WATCH_METRICS_DIR:-/etc/geoguessme/watch-metrics}:/run/watch-metrics:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    networks:
+      - watch
+      - production_frontend
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: 0.50
+          memory: 192M
+          pids: 128
+
+  vector:
+    <<: *defaults
+    image: timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01
+    command: ["--config", "/etc/vector/vector.yaml"]
+    volumes:
+      - ./watch/vector.yaml:/etc/vector/vector.yaml:ro
+      - vector_data:/var/lib/vector
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    networks: [watch]
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+      victoria-logs:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: 0.25
+          memory: 160M
+          pids: 128
+
+networks:
+  watch:
+    internal: true
+  edge:
+  production_frontend:
+    external: true
+    name: ${GEOGUESSME_PRODUCTION_FRONTEND_NETWORK:-geoguessme-production_frontend}
+
+volumes:
+  beszel_data:
+  beszel_agent_data:
+  beszel_socket:
+  gateway_data:
+  gateway_config:
+  victoria_logs_data:
+  victoria_metrics_data:
+  vector_data:

@@ -4,9 +4,12 @@ import type {
     AuthResponse,
     PublicChallenge,
     PublicFeedPage,
+    PublicFeedLeaderboardPage,
     PublicCommentsPage,
+    PublicFeedResult,
     PublicComment,
     PublicGuessResult,
+    GroupInbox,
 } from './types';
 import { apiBaseURL } from './platform/endpoints';
 
@@ -137,6 +140,8 @@ const publicPostPath = (id: string) => `/feed/challenges/${encodeURIComponent(id
 export const publicFeedAPI = {
     list: async (cursor: string, signal: AbortSignal) =>
         (await api.get<PublicFeedPage>('/feed', { params: { cursor }, signal })).data,
+    leaderboard: async (cursor: string, signal: AbortSignal) =>
+        (await api.get<PublicFeedLeaderboardPage>('/feed/leaderboard', { params: { cursor }, signal })).data,
     get: async (id: string, signal: AbortSignal) =>
         (await api.get<PublicChallenge>(publicPostPath(id), { signal })).data,
     publish: async (form: FormData, signal: AbortSignal) =>
@@ -152,6 +157,8 @@ export const publicFeedAPI = {
         (await api.post<PublicGuessResult>(`${publicPostPath(id)}/guess`, point, { signal })).data,
     result: async (id: string, signal: AbortSignal) =>
         (await api.get<PublicGuessResult>(`${publicPostPath(id)}/guess`, { signal })).data,
+    results: async (id: string, signal: AbortSignal) =>
+        (await api.get<PublicFeedResult[]>(`${publicPostPath(id)}/results`, { signal })).data,
     react: async (id: string, liked: boolean, signal: AbortSignal) => {
         if (liked) await api.put(`${publicPostPath(id)}/reaction`, undefined, { signal });
         else await api.delete(`${publicPostPath(id)}/reaction`, { signal });
@@ -164,6 +171,13 @@ export const publicFeedAPI = {
     removeComment: async (id: string, commentID: string, signal: AbortSignal) => {
         await api.delete(`${publicPostPath(id)}/comments/${encodeURIComponent(commentID)}`, { signal });
         return true;
+    },
+};
+
+export const groupsAPI = {
+    inbox: async (signal?: AbortSignal) => (await api.get<GroupInbox[]>('/user/groups/inbox', { signal })).data,
+    markRead: async (groupID: string, signal?: AbortSignal) => {
+        await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
     },
 };
 

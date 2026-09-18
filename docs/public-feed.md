@@ -5,14 +5,24 @@ discover photo challenges from the whole community. Posts appear newest first,
 with a stable cursor for loading older posts. Each post has a shareable
 `/feed/{id}` link. Signing in is required to follow that link.
 
+The profile page also shows a bounded community feed leaderboard. It ranks
+players by the sum of their immutable public-feed guess scores and exposes only
+rank, username, and total score. Opening a username still uses the existing
+profile visibility rule: full profile details require a shared group unless the
+viewer is looking at their own profile.
+
 ## Publish and play
 
 Choose **Post a challenge**, upload a JPG, PNG, or WebP photo, add an optional
-caption of up to 500 characters, and select the photo's location on the map or
-enter its coordinates. Publication is explicit: private group challenges never
-appear in the public feed automatically. Public uploads use the configured image
-byte and pixel limits and strip metadata during normalization. Videos continue
-to use the private group challenge flow.
+description of up to 280 characters, choose **Everyone** or **Friends in my
+groups**, and select the photo's location on the map or enter its coordinates.
+Friends posts are visible to users sharing a group with the author. The author
+can optionally narrow a friends post to selected groups; the author must belong
+to every selected group. Public posts remain visible to every signed-in user.
+Publication is explicit: private group challenges never appear in the feed
+automatically. Public uploads use the configured image byte and pixel limits and
+strip metadata during normalization. Videos continue to use the private group
+challenge flow.
 
 The composer accepts only JPG, PNG, and WebP files and renders decoded pixels on
 a bounded canvas, without exposing a URL for the raw upload. Publishing stays
@@ -29,10 +39,13 @@ resolution state is independent.
 Each player gets one immutable guess per public post. Repeated submissions
 return the first result, including concurrent submissions. Results show the
 distance, the actual point, and the existing distance-based score from 0
-to 5000. **View your result** reopens the stored result. Public scores are
-separate from private group leaderboards and profile progression. Authors cannot
-guess their own posts. Feed and comment payloads never contain answer
-coordinates.
+to 5000. **View your result** reopens the stored result. Once a challenge has
+multiple guesses, every guess is available in score order with a stable rank and
+a signed all-time Elo delta. The delta is replayed from the same combined
+private/public history as the global ladder; a single guess still has no Elo
+comparison. Public score totals remain separate from private group challenge
+leaderboards and profile progression. Authors cannot guess their own posts. Feed
+and comment payloads never contain answer coordinates.
 
 ## Reactions and comments
 
@@ -69,10 +82,13 @@ cursor requests with indexable seek predicates.
 
 ## Storage, deployment, and rollback
 
-Migration **027_public_feed** adds independent public challenge, guess,
-reaction, and comment tables. Apply migrations with the existing deployment
-migration job before starting the new application revision; local operators use
-`make migrate-up`. No environment variables or services are added.
+migrations **027_public_feed**, **028_group_inbox_reads**,
+**029_feed_audiences**, **030_public_feed_results**, and
+**031_public_feed_leaderboard** add independent public challenge data, durable
+group inbox read boundaries, audience/selected-group records, the ranked results
+index, and the feed-score aggregation index. Apply migrations with the existing
+deployment migration job before starting the new application revision; local
+operators use `make migrate-up`. No environment variables or services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live

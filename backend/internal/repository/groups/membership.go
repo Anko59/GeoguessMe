@@ -2,6 +2,8 @@ package groups
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
 	"geoguessme/internal/models"
 )
@@ -114,4 +116,75 @@ func (r *Repository) SharesGroup(ctx context.Context, userA, userB string) (bool
 			WHERE a.user_id = $1 AND b.user_id = $2
 		)`, userA, userB).Scan(&shared)
 	return shared, err
+}
+
+// UserInbox returns one authoritative summary per group the viewer belongs to.
+// A member's joined_at is the initial read boundary; subsequent boundaries are
+// persisted by MarkInboxRead. Messages authored by the viewer are not unread.
+func (r *Repository) UserInbox(ctx context.Context, userID string) ([]models.GroupInbox, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT g.id, g.name,
+		       COALESCE((
+		           SELECT COUNT(*)
+		           FROM messages m
+		           LEFT JOIN group_message_reads mr
+		             ON mr.group_id = m.group_id AND mr.user_id = $1
+		           WHERE m.group_id = g.id
+		             AND m.user_id <> $1
+		             AND m.created_at > COALESCE(mr.last_read_at, gm.joined_at)
+		       ), 0),
+		       latest.id, latest.kind, latest.username, latest.created_at
+		FROM groups g
+		JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = $1
+		LEFT JOIN LATERAL (
+		    SELECT m.id, m.kind, u.username, m.created_at
+		    FROM messages m
+		    JOIN users u ON u.id = m.user_id
+		    WHERE m.group_id = g.id
+		    ORDER BY m.created_at DESC, m.id DESC
+		    LIMIT 1
+		) latest ON true
+		ORDER BY COALESCE(latest.created_at, g.created_at) DESC, g.id DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	inbox := make([]models.GroupInbox, 0)
+	for rows.Next() {
+		var item models.GroupInbox
+		var unread int64
+		var messageID, messageKind, messageUsername sql.NullString
+		var messageAt sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Name, &unread, &messageID, &messageKind, &messageUsername, &messageAt); err != nil {
+			return nil, err
+		}
+		item.UnreadCount = int(unread)
+		if messageID.Valid {
+			item.LatestMessage = &models.InboxMessageMeta{
+				ID: messageID.String, Kind: messageKind.String, Username: messageUsername.String, CreatedAt: messageAt.Time,
+			}
+		}
+		inbox = append(inbox, item)
+	}
+	return inbox, rows.Err()
+}
+
+// MarkInboxRead advances the viewer's read boundary only for a group they
+// belong to. The timestamp is supplied by the handler's injected clock so
+// tests and deployments have deterministic state transitions.
+func (r *Repository) MarkInboxRead(ctx context.Context, groupID, userID string, readAt time.Time) error {
+	tag, err := r.pool.Exec(ctx, `
+		INSERT INTO group_message_reads(group_id, user_id, last_read_at)
+		SELECT $1, $2, $3
+		WHERE EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)
+		ON CONFLICT (group_id, user_id) DO UPDATE
+		SET last_read_at = GREATEST(group_message_reads.last_read_at, EXCLUDED.last_read_at)`, groupID, userID, readAt)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotMember
+	}
+	return nil
 }

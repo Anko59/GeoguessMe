@@ -30,6 +30,96 @@
 # is fixed in a newer Go/grpc/x-text release that upstream has not yet rebuilt
 # into any published image (no newer tag exists). Revisit before 2026-10-11.
 
+# --- lscr.io/linuxserver/socket-proxy:latest (digest-pinned upstream image;
+# Alpine 3.24.1 still carries OpenSSL 3.5.7 while the registry image has not
+# yet rebuilt against 3.5.8. The proxy is configured without TLS/QUIC, binds
+# only to loopback, and is not reachable from the public tunnel.) ---
+- id: CVE-2026-14456
+  image: lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd
+  digest: sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd
+  owner: security-program
+  reachable: "OpenSSL QUIC denial of service is not reachable because this proxy has no TLS or QUIC listener and is loopback-bound; upstream has not rebuilt the newest image with OpenSSL 3.5.8"
+  approved: true
+  expires: 2026-10-18
+
+# --- victoriametrics/victoria-logs:latest and victoria-metrics:latest ---
+# The current Victoria releases have moved to clean Debian/Alpine runtime
+# packages, but their Go toolchain/dependency rebuilds lag the fixed versions.
+# The exceptions below are for paths not used by this deployment (TLS, HTTP/2,
+# DNS, XML/template parsing, and recursive certificate parsing); the services
+# are reachable only behind the owner-only Access route and private watch
+# networks. Revisit before 2026-10-18.
+- id: CVE-2026-33818
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs does not expose TLS or HTTP/2 directly; the current upstream release still embeds Go 1.26.5 and no newer fixed image is published"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-39821
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs does not use the affected IDNA path for external name processing; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-46600
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs has no DNS message parsing endpoint; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-56853
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "Caddy proxies HTTP/1.1 to VictoriaLogs and the service has no direct HTTP/2 listener; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-56858
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs serves its bundled UI and log data rather than user-controlled Go html/templates; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-56859
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs has no XML ingestion or XML API; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-56860
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs does not use the affected URL parser for an external redirect or proxy; the current upstream release still embeds Go 1.26.5"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-56862
+  image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  digest: sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
+  owner: security-program
+  reachable: "VictoriaLogs has no TLS listener; the current upstream release still embeds Go 1.26.5 and no newer fixed image is published"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-33818
+  image: victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
+  digest: sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
+  owner: security-program
+  reachable: "VictoriaMetrics does not expose TLS or HTTP/2 directly; its current image has clean OS packages but no newer fixed Go rebuild is published"
+  approved: true
+  expires: 2026-10-18
+- id: CVE-2026-14456
+  image: victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
+  digest: sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
+  owner: security-program
+  reachable: "VictoriaMetrics has no TLS or QUIC listener and is private behind the watch gateway; its current image still carries OpenSSL 3.5.7"
+  approved: true
+  expires: 2026-10-18
+
 # --- geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 (locally
 #     rebuilt 15.19-alpine with CVE-2026-14456 OpenSSL and CVE-2026-53612-family
 #     libuuid fixes layered on top; gosu entrypoint

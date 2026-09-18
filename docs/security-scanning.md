@@ -22,7 +22,9 @@ The target scans the following images (see `AUDIT_IMAGES` in
   time. Until the official image includes the `golang.org/x/net` v0.56.0 fix,
   the Dockerfile rebuilds the released Caddy binary from the pinned official
   builder with that dependency override; the resulting application image is
-  scanned directly.
+  scanned directly. The watch gateway deliberately reuses this exact released
+  web artifact through `WEB_IMAGE`, so it does not introduce a second unpatched
+  Caddy runtime.
 - **Deployment utilities** — the newest published `ghcr.io/getsops/sops` image
   (digest-pinned) and `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7`, a
   locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed

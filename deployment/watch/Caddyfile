@@ -1,0 +1,44 @@
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip zstd
+	request_body {
+		max_size 10MB
+	}
+
+	redir /logs /logs/select/vmui/ 308
+	redir /metrics /metrics/vmui/ 308
+
+	handle /logs/* {
+		reverse_proxy victoria-logs:9428 {
+			transport http {
+				read_timeout 360s
+			}
+		}
+	}
+
+	handle /metrics/* {
+		reverse_proxy victoria-metrics:8428 {
+			transport http {
+				read_timeout 360s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy beszel:8090 {
+			transport http {
+				read_timeout 360s
+			}
+		}
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cache-Control "no-store"
+	}
+}
