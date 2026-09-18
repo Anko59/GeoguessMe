@@ -36,9 +36,11 @@ function renderButton(partyStatus: PartyStatus | null = status()) {
 
 describe('PartyButton', () => {
     it('offers starting when no party is recorded', () => {
-        renderButton(status());
+        const { container } = renderButton(status());
         const button = screen.getByRole('button', { name: 'Start party time' });
         expect(button).toBeEnabled();
+        expect(container.querySelector('img')).toHaveAttribute('src', '/party_mode_icon.png');
+        expect(container.querySelector('img')).toHaveAttribute('alt', '');
     });
 
     it('disables and labels the button while a party is active', () => {

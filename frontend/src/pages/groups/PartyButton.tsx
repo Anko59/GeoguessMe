@@ -71,9 +71,7 @@ export default function PartyButton({ groupId, status, onStarted, onRefresh }: P
                 aria-label={label}
                 title={error || label}
             >
-                <span className="party-emoji" aria-hidden="true">
-                    🎉
-                </span>
+                <img src="/party_mode_icon.png" alt="" className="party-mode-icon" />
             </button>
         </span>
     );

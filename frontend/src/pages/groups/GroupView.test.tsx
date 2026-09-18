@@ -165,7 +165,9 @@ beforeEach(() => {
 describe('GroupView', () => {
     it('opens the current group globe from chat and launches its challenges', async () => {
         renderGroupView('group-1');
-        fireEvent.click(await screen.findByRole('button', { name: 'Open group globe' }));
+        const globeButton = await screen.findByRole('button', { name: 'Open group globe' });
+        expect(globeButton.querySelector('img')).toHaveAttribute('src', '/globe_feature_icon.png');
+        fireEvent.click(globeButton);
         expect(screen.getByTestId('globe')).toHaveTextContent('group-1');
         fireEvent.click(screen.getByRole('button', { name: 'Close globe' }));
         expect(screen.queryByTestId('globe')).toBeNull();
