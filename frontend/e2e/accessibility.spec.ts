@@ -43,6 +43,18 @@ test.describe('Accessibility', () => {
     for (const route of ['/signup', '/forgot-password', '/reset-password', '/verify-email']) {
         test(`${route} has no serious or critical Axe violations`, async ({ page }) => {
             await page.goto(route);
+            // The auth card fades in; a mid-fade snapshot measures
+            // semi-transparent text and reports false color-contrast
+            // violations. Analyze only after the entry animations settle.
+            await page
+                .locator('.auth-card')
+                .evaluate((element) =>
+                    Promise.all(
+                        element
+                            .getAnimations({ subtree: true })
+                            .map((animation) => animation.finished.catch(() => undefined)),
+                    ),
+                );
             await expectAccessible(page);
         });
     }
