@@ -87,6 +87,12 @@ sudo systemctl enable --now geoguessme-watch-refresh-metrics-token.timer
 sudo systemctl enable --now geoguessme-watch-health.timer
 ```
 
+The gateway takes `WEB_IMAGE` from the root-owned production release metadata at
+`/var/lib/geoguessme/releases/production/current.env`. That value is an
+immutable digest for the already patched and scanned production Caddy runtime;
+the watch project mounts its own Caddyfile and does not mount the production
+dotenv. A production release does not recreate the watch project.
+
 Open the loopback gateway through the Access route only after the private checks
 pass. Create the first Beszel administrator through the Hub UI. Keep Beszel
 password authentication enabled; Cloudflare Access is an outer authorization

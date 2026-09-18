@@ -11,7 +11,11 @@ x-defaults: &defaults
 services:
   gateway:
     <<: *defaults
-    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    # WEB_IMAGE is the exact digest of the already patched and scanned
+    # production web artifact. Reusing that Caddy runtime avoids introducing a
+    # second vulnerable gateway image while this remains an independent
+    # Compose project and lifecycle.
+    image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}
     ports:
       - "127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80"
     volumes:
@@ -97,10 +101,22 @@ services:
 
   socket-proxy:
     <<: *defaults
-    image: tecnativa/docker-socket-proxy:0.1.2@sha256:dc8ec925b1360c54e6bf350602d6faac4e33c5d8d809118e4c000c0b14a4529a
+    image: lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd
     ports:
       - "127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375"
     environment:
+      ALLOW_ARCHIVE: "0"
+      ALLOW_CHANGES: "0"
+      ALLOW_EXPORT: "0"
+      # GET /containers/{id}/logs is required by Vector; all mutating API
+      # operations remain disabled below.
+      ALLOW_LOGS: "1"
+      ALLOW_PAUSE: "0"
+      ALLOW_RESTARTS: "0"
+      ALLOW_STOP: "0"
+      ALLOW_START: "0"
+      ALLOW_TOP: "0"
+      ALLOW_UNPAUSE: "0"
       CONTAINERS: "1"
       EVENTS: "1"
       PING: "1"
@@ -132,7 +148,7 @@ services:
 
   victoria-logs:
     <<: *defaults
-    image: victoriametrics/victoria-logs:v1.51.1@sha256:a3ecc79c2a1f3ea3b03ac517dcf45c8f6ecbd65629acfd9140c335e867b13522
+    image: victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9
     command:
       - -storageDataPath=/victoria-logs-data
       - -retentionPeriod=7d
@@ -155,7 +171,7 @@ services:
 
   victoria-metrics:
     <<: *defaults
-    image: victoriametrics/victoria-metrics:v1.152.0@sha256:86ca5fdb6d87d56ba047b044039019ba2bd9042b36e35f6ea34e437b6c825cef
+    image: victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c
     command:
       - -storageDataPath=/victoria-metrics-data
       - -retentionPeriod=14d
@@ -187,7 +203,7 @@ services:
 
   vector:
     <<: *defaults
-    image: timberio/vector:0.50.0-alpine@sha256:93761c26fa3a3793f5f200de0f4cfc6102b5e9803ab33b4830d0873ba8dbdc4f
+    image: timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01
     command: ["--config", "/etc/vector/vector.yaml"]
     volumes:
       - ./watch/vector.yaml:/etc/vector/vector.yaml:ro

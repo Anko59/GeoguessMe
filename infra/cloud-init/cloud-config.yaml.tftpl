@@ -33,7 +33,6 @@ write_files:
   - path: /etc/tmpfiles.d/geoguessme.conf
     permissions: "0644"
     content: |
-      # /run is cleared at boot; deployment and backup locks must survive it.
       d /run/lock/geoguessme 0750 deploy deploy -
   - path: /home/ops/.ssh/authorized_keys
     owner: ops:ops
@@ -214,6 +213,7 @@ write_files:
       Type=oneshot
       User=deploy
       WorkingDirectory=/opt/geoguessme/config
+      EnvironmentFile=-/var/lib/geoguessme/releases/production/current.env
       ExecStart=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml up -d
       ExecStop=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml down
       RemainAfterExit=true

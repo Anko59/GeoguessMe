@@ -43,10 +43,11 @@ for spec in \
         --tmpfs /config:size=16m,noexec,nosuid,nodev \
         --mount "type=bind,src=$TMP/mock.Caddyfile,dst=/etc/caddy/Caddyfile,ro" \
         --mount "type=bind,src=$TMP/metrics,dst=/srv/metrics,ro" \
-        caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d \
+        geoguessme-web:local \
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 done
 
+export WEB_IMAGE=geoguessme-web:local
 export GEOGUESSME_WATCH_METRICS_DIR="$TMP"
 export GEOGUESSME_WATCH_AGENT_ENV="$TMP/agent.env"
 export GEOGUESSME_PRODUCTION_FRONTEND_NETWORK="$NETWORK"
@@ -88,7 +89,9 @@ docker restart "$MOCK_BACKEND" >/dev/null
 metric_ok=0
 metric_denied=0
 log_ok=0
-for _ in $(seq 1 45); do
+# VictoriaMetrics scrapes every 30 seconds; allow one full interval plus
+# startup slack for a busy Docker host before declaring the target absent.
+for _ in $(seq 1 90); do
     metric_response=$(curl --fail --silent --max-time 2 -G \
         --data-urlencode 'query=up{job="geoguessme-production"}' \
         http://127.0.0.1:18084/metrics/api/v1/query 2>/dev/null || true)

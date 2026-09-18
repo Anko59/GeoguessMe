@@ -1,13 +1,17 @@
 #!/bin/sh
 set -eu
 
-APP_ROOT=${GEOGUESSME_APP_ROOT:-/opt/geoguessme}
-CONFIG_ROOT=${GEOGUESSME_CONFIG_ROOT:-$APP_ROOT/config}
+# shellcheck source=deployment/scripts/hosted/common.sh
+. "${GEOGUESSME_APP_ROOT:-/opt/geoguessme}/bin/common.sh"
+
 COMPOSE_PROJECT_NAME=geoguessme-watch
 export COMPOSE_PROJECT_NAME
+WATCH_GATEWAY_IMAGE=$(watch_gateway_image)
+export WATCH_GATEWAY_IMAGE
 
 compose() {
-    GEOGUESSME_WATCH_METRICS_DIR=${GEOGUESSME_WATCH_METRICS_DIR:-/etc/geoguessme/watch-metrics} \
+    WEB_IMAGE="$WATCH_GATEWAY_IMAGE" \
+        GEOGUESSME_WATCH_METRICS_DIR=${GEOGUESSME_WATCH_METRICS_DIR:-/etc/geoguessme/watch-metrics} \
         GEOGUESSME_WATCH_AGENT_ENV=${GEOGUESSME_WATCH_AGENT_ENV:-/etc/geoguessme/watch-agent.env} \
         docker compose --project-directory "$CONFIG_ROOT" \
         -f "$CONFIG_ROOT/compose.watch.yaml" "$@"

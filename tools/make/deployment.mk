@@ -28,13 +28,12 @@ clean-build: ## Build production images from scratch without any layer cache.
 # container.
 AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
-	caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d \
 	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
 	henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46 \
-	tecnativa/docker-socket-proxy:0.1.2@sha256:dc8ec925b1360c54e6bf350602d6faac4e33c5d8d809118e4c000c0b14a4529a \
-	victoriametrics/victoria-logs:v1.51.1@sha256:a3ecc79c2a1f3ea3b03ac517dcf45c8f6ecbd65629acfd9140c335e867b13522 \
-	victoriametrics/victoria-metrics:v1.152.0@sha256:86ca5fdb6d87d56ba047b044039019ba2bd9042b36e35f6ea34e437b6c825cef \
-	timberio/vector:0.50.0-alpine@sha256:93761c26fa3a3793f5f200de0f4cfc6102b5e9803ab33b4830d0873ba8dbdc4f \
+	lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd \
+	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
+	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
+	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
 	quay.io/keycloak/keycloak:26.7.3@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
 	cloudflare/cloudflared:2026.9.1@sha256:d68fa057087c359c79a255570e891215877ce48aa48ba6f28aac90d8077acbc3 \
@@ -107,7 +106,7 @@ compose-validate: ## Validate every Compose file.
 	docker compose --profile social -f deployment/compose.dev.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.test.yaml --project-directory . config --quiet
 	GEOGUESSME_IDENTITY_ENV_FILE=deployment/env/identity.env.example docker compose -f deployment/compose.identity.yaml --project-directory . config --quiet
-	GEOGUESSME_WATCH_AGENT_ENV=deployment/env/watch-agent.env.example GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory . config --quiet
+	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=deployment/env/watch-agent.env.example GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory . config --quiet
 	BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml --project-directory . config --quiet
 	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.tools.yaml --project-directory . config --quiet
@@ -193,9 +192,9 @@ hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollbac
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
 
 watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
-	GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
+	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
 
-watch-rehearsal: watch-config ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
+watch-rehearsal: watch-config build-images ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
 	deployment/scripts/watch/rehearsal.sh
 
 cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.

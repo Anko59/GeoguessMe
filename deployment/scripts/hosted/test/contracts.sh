@@ -52,14 +52,14 @@ assert_contains "$IDENTITY_COMPOSE" 'keycloak-config:'
 assert_contains "$HOSTED" 'database:/var/lib/postgresql/data'
 assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}'
 
-# Monitoring is separate with loopback ingress, private networks, production-only log selection, file-based metrics auth, and pinned images.
 assert_contains "$WATCH_COMPOSE" 'name: geoguessme-watch'
+assert_contains "$WATCH_COMPOSE" 'image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}'
 assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80'
 assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375'
 assert_contains "$WATCH_COMPOSE" '/var/run/docker.sock:/var/run/docker.sock:ro'
 assert_contains "$WATCH_COMPOSE" 'POST: "0"'
-assert_contains "$WATCH_COMPOSE" 'memory: 192M'
-assert_contains "$WATCH_COMPOSE" 'memory: 256M'
+for watch_proxy_setting in 'ALLOW_CHANGES: "0"' 'ALLOW_EXPORT: "0"' 'ALLOW_LOGS: "1"'; do assert_contains "$WATCH_COMPOSE" "$watch_proxy_setting"; done
+for watch_memory_limit in 'memory: 192M' 'memory: 256M'; do assert_contains "$WATCH_COMPOSE" "$watch_memory_limit"; done
 for watch_limit in 'memory: 64M' 'memory: 128M' 'memory: 160M'; do
     assert_contains "$WATCH_COMPOSE" "$watch_limit"
 done
@@ -78,7 +78,7 @@ assert_contains "$WATCH_CADDY" 'handle /logs/*'
 assert_contains "$WATCH_CADDY" 'handle /metrics/*'
 assert_contains "$WATCH_CADDY" 'victoria-logs:9428'
 assert_contains "$WATCH_CADDY" 'victoria-metrics:8428'
-assert_contains "$WATCH_COMPOSE" '@sha256:'
+assert_not_contains "$WATCH_COMPOSE" 'caddy:'
 
 # OIDC start parameters are forwarded only through explicit allowlists, and
 # existing Keycloak realms are reconciled instead of relying on import-once.

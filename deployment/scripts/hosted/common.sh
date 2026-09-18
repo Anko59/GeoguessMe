@@ -73,6 +73,15 @@ release_dir() {
     printf '%s/releases/%s\n' "$APP_ROOT" "$1"
 }
 
+watch_gateway_image() {
+    metadata="$STATE_ROOT/releases/production/current.env"
+    [ -f "$metadata" ] || die "no active production image metadata: $metadata"
+    image=$(sed -n 's/^WEB_IMAGE=//p' "$metadata" | tail -1)
+    [ -n "$image" ] || die "production metadata has no WEB_IMAGE: $metadata"
+    validate_image_reference "$image" 'watch gateway'
+    printf '%s\n' "$image"
+}
+
 compose() {
     environment=$1
     release=$2
