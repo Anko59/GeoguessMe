@@ -12,16 +12,27 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
     const host = useRef<HTMLDivElement>(null);
     const scene = useRef<ReturnType<typeof createGlobeScene> | null>(null);
     const [error, setError] = useState('');
-    const [ready, setReady] = useState(false);
+    // `sceneReady` gates the item/selection updates so they only reach a
+    // constructed scene; `textureReady` marks the Earth texture as decoded and
+    // rendered, which is when the globe is actually usable.
+    const [sceneReady, setSceneReady] = useState(false);
+    const [textureReady, setTextureReady] = useState(false);
     useEffect(() => {
         let active = true;
         void import('./globeScene')
             .then(({ createGlobeScene }) => {
                 if (!active || !host.current) return;
-                scene.current = createGlobeScene(host.current, onSelect, (message) => {
-                    if (active) setError(message);
-                });
-                setReady(true);
+                scene.current = createGlobeScene(
+                    host.current,
+                    onSelect,
+                    (message) => {
+                        if (active) setError(message);
+                    },
+                    () => {
+                        if (active) setTextureReady(true);
+                    },
+                );
+                setSceneReady(true);
             })
             .catch(() => {
                 if (active) setError('3D rendering is unavailable. You can still browse every challenge below.');
@@ -34,15 +45,15 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
     }, [onSelect]);
     useEffect(() => {
         scene.current?.update(items, selectedID);
-    }, [items, selectedID, ready]);
+    }, [items, selectedID, sceneReady]);
     const selected = items.find((item) => item.photo_id === selectedID);
     useEffect(() => {
         if (selected) scene.current?.focus(selected);
-    }, [selected, ready]);
+    }, [selected, sceneReady]);
     return (
         <div className="globe-stage">
             <div ref={host} className="globe-canvas" />
-            {!ready && !error && (
+            {!textureReady && !error && (
                 <p className="globe-notice" role="status">
                     Loading Earth…
                 </p>
@@ -52,7 +63,7 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
                     {error}
                 </p>
             )}
-            {ready && !error && (
+            {textureReady && !error && (
                 <div className="globe-controls" role="group" aria-label="Globe controls">
                     <button
                         type="button"
