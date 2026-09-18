@@ -21,6 +21,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const maxDescriptionRunes = 280
+
 func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		handlers.MethodNotAllowed(w)
@@ -42,8 +44,25 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	caption := strings.TrimSpace(r.FormValue("caption"))
-	if !utf8.ValidString(caption) || utf8.RuneCountInString(caption) > 500 {
-		handlers.WriteError(w, 400, "invalid_caption", "Captions can contain up to 500 characters")
+	if !utf8.ValidString(caption) || utf8.RuneCountInString(caption) > maxDescriptionRunes {
+		handlers.WriteError(w, 400, "invalid_caption", "Descriptions can contain up to 280 characters")
+		return
+	}
+	audience := r.FormValue("audience")
+	if audience == "" {
+		audience = "public"
+	}
+	if audience != "public" && audience != "friends" {
+		handlers.WriteError(w, 400, "invalid_audience", "Audience must be public or friends")
+		return
+	}
+	groupIDs, err := selectedGroupIDs(r)
+	if err != nil {
+		handlers.WriteError(w, 400, "invalid_groups", err.Error())
+		return
+	}
+	if audience == "public" && len(groupIDs) > 0 {
+		handlers.WriteError(w, 400, "invalid_groups", "Choose groups only for friends posts")
 		return
 	}
 	lat, latErr := strconv.ParseFloat(r.FormValue("lat"), 64)
@@ -68,7 +87,7 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	p := feed.NewChallenge{ID: uuid.NewString(), UserID: handlers.GetUserIDFromContext(r), Caption: caption,
+	p := feed.NewChallenge{ID: uuid.NewString(), UserID: handlers.GetUserIDFromContext(r), Caption: caption, Audience: audience, GroupIDs: groupIDs,
 		StorageKey: "public-challenges/" + uuid.NewString(), MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: a.clock()}
 	if err := a.store.Put(r.Context(), p.StorageKey, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), p.MIMEType); err != nil {
 		a.compensate(r.Context(), p.StorageKey)
@@ -81,6 +100,27 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handlers.WriteJSON(w, 201, map[string]string{"id": p.ID})
+}
+
+func selectedGroupIDs(r *http.Request) ([]string, error) {
+	values := r.Form["group_id"]
+	if len(values) > 20 {
+		return nil, errors.New("A post can target at most 20 groups")
+	}
+	ids := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		id := strings.TrimSpace(value)
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, errors.New("Each group ID must be a valid UUID")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func (a *API) compensate(ctx context.Context, key string) {

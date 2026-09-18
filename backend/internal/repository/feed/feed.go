@@ -20,28 +20,76 @@ func NewRepository(pool database.Pool) *Repository { return &Repository{pool: po
 
 type NewChallenge struct {
 	ID, UserID, Caption, StorageKey, MIMEType string
+	Audience                                  string
+	GroupIDs                                  []string
 	Preview                                   []byte
 	Lat, Long                                 float64
 	CreatedAt                                 time.Time
 }
 
 func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO public_challenges
-		(id,user_id,caption,storage_key,mime_type,preview,lat,long,created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, p.ID, p.UserID, p.Caption, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.CreatedAt)
-	return err
+	if p.Audience == "" {
+		p.Audience = "public"
+	}
+	if p.Audience != "public" && p.Audience != "friends" {
+		return ErrForbidden
+	}
+	if p.Audience == "public" && len(p.GroupIDs) > 0 {
+		return ErrForbidden
+	}
+	insert := `INSERT INTO public_challenges
+		(id,user_id,caption,audience,storage_key,mime_type,preview,lat,long,created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+	if len(p.GroupIDs) == 0 {
+		_, err := r.pool.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.CreatedAt)
+		return err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.CreatedAt); err != nil {
+		return err
+	}
+	var memberCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM group_members WHERE user_id=$1 AND group_id=ANY($2::text[])`, p.UserID, p.GroupIDs).Scan(&memberCount); err != nil {
+		return err
+	}
+	if memberCount != len(p.GroupIDs) {
+		return ErrForbidden
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO public_challenge_groups(challenge_id,group_id) SELECT $1, unnest($2::text[])`, p.ID, p.GroupIDs); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 const selectPost = `SELECT p.id, p.user_id, u.username, p.caption, p.created_at,
-	p.user_id = $1, EXISTS (SELECT 1 FROM public_guesses g WHERE g.challenge_id=p.id AND g.user_id=$1),
+	p.audience, p.user_id = $1, EXISTS (SELECT 1 FROM public_guesses g WHERE g.challenge_id=p.id AND g.user_id=$1),
 	(SELECT count(*) FROM public_reactions r WHERE r.challenge_id=p.id),
 	EXISTS (SELECT 1 FROM public_reactions r WHERE r.challenge_id=p.id AND r.user_id=$1),
 	(SELECT count(*) FROM public_comments c WHERE c.challenge_id=p.id)
 	FROM public_challenges p JOIN users u ON u.id=p.user_id `
 
+const challengeVisibility = `(p.user_id=$1 OR p.audience='public' OR
+	(p.audience='friends' AND EXISTS (
+		SELECT 1 FROM group_members author_members
+		JOIN group_members viewer_members ON viewer_members.group_id=author_members.group_id
+		WHERE author_members.user_id=p.user_id AND viewer_members.user_id=$1
+	) AND (
+		NOT EXISTS (SELECT 1 FROM public_challenge_groups selected WHERE selected.challenge_id=p.id)
+		OR EXISTS (
+			SELECT 1 FROM public_challenge_groups selected
+			JOIN group_members selected_members ON selected_members.group_id=selected.group_id
+			WHERE selected.challenge_id=p.id AND selected_members.user_id=$1
+		)
+	)))`
+
 func scanPost(row interface{ Scan(...any) error }) (models.PublicChallenge, error) {
 	var p models.PublicChallenge
-	err := row.Scan(&p.ID, &p.UserID, &p.Username, &p.Caption, &p.CreatedAt, &p.IsOwner, &p.Resolved, &p.ReactionCount, &p.Reacted, &p.CommentCount)
+	err := row.Scan(&p.ID, &p.UserID, &p.Username, &p.Caption, &p.CreatedAt, &p.Audience, &p.IsOwner, &p.Resolved, &p.ReactionCount, &p.Reacted, &p.CommentCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -49,16 +97,16 @@ func scanPost(row interface{ Scan(...any) error }) (models.PublicChallenge, erro
 }
 
 func (r *Repository) Get(ctx context.Context, id, viewer string) (models.PublicChallenge, error) {
-	return scanPost(r.pool.QueryRow(ctx, selectPost+`WHERE p.id=$2`, viewer, id))
+	return scanPost(r.pool.QueryRow(ctx, selectPost+`WHERE p.id=$2 AND `+challengeVisibility, viewer, id))
 }
 
 func (r *Repository) List(ctx context.Context, viewer string, cursor Cursor, limit int) (models.PublicFeedPage, error) {
 	page := models.PublicFeedPage{Items: []models.PublicChallenge{}}
-	query := selectPost
+	query := selectPost + `WHERE ` + challengeVisibility + ` `
 	args := []any{viewer, limit + 1}
 	if cursor.ID != "" {
 		// A direct seek predicate remains indexable with prepared generic plans.
-		query += `WHERE (p.created_at,p.id)<($3,$4) `
+		query += `AND (p.created_at,p.id)<($3,$4) `
 		args = append(args, cursor.CreatedAt, cursor.ID)
 	}
 	rows, err := r.pool.Query(ctx, query+`ORDER BY p.created_at DESC,p.id DESC LIMIT $2`, args...)
@@ -102,9 +150,9 @@ type Media struct {
 
 func (r *Repository) Media(ctx context.Context, id, viewer string) (Media, error) {
 	var media Media
-	err := r.pool.QueryRow(ctx, `SELECT storage_key,mime_type,preview,
-		user_id=$2 OR EXISTS (SELECT 1 FROM public_guesses WHERE challenge_id=$1 AND user_id=$2)
-		FROM public_challenges WHERE id=$1`, id, viewer).Scan(&media.StorageKey, &media.MIMEType, &media.Preview, &media.Revealed)
+	err := r.pool.QueryRow(ctx, `SELECT p.storage_key,p.mime_type,p.preview,
+		p.user_id=$1 OR EXISTS (SELECT 1 FROM public_guesses WHERE challenge_id=$2 AND user_id=$1)
+		FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id).Scan(&media.StorageKey, &media.MIMEType, &media.Preview, &media.Revealed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return media, ErrNotFound
 	}

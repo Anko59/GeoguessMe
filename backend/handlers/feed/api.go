@@ -32,11 +32,13 @@ func NewAPI(repo *feed.Repository, store storage.ObjectStore, deletions handlers
 
 func (a *API) Routes(mux *http.ServeMux, protect func(http.HandlerFunc) http.Handler) {
 	mux.Handle("/api/v1/feed", protect(a.List))
+	mux.Handle("/api/v1/feed/leaderboard", protect(a.Leaderboard))
 	mux.Handle("/api/v1/feed/challenges", protect(a.Upload))
 	mux.Handle("/api/v1/feed/challenges/{id}", protect(a.Post))
 	mux.Handle("/api/v1/feed/challenges/{id}/media", protect(a.Media))
 	mux.Handle("/api/v1/feed/challenges/{id}/play", protect(a.Play))
 	mux.Handle("/api/v1/feed/challenges/{id}/guess", protect(a.Guess))
+	mux.Handle("/api/v1/feed/challenges/{id}/results", protect(a.Results))
 	mux.Handle("/api/v1/feed/challenges/{id}/reaction", protect(a.Reaction))
 	mux.Handle("/api/v1/feed/challenges/{id}/comments", protect(a.Comments))
 	mux.Handle("/api/v1/feed/challenges/{id}/comments/{commentID}", protect(a.DeleteComment))
@@ -47,7 +49,7 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, feed.ErrNotFound):
 		handlers.WriteError(w, 404, "not_found", "Public challenge or comment not found")
 	case errors.Is(err, feed.ErrForbidden):
-		handlers.WriteError(w, 403, "forbidden", "You cannot guess your own challenge")
+		handlers.WriteError(w, 403, "forbidden", "You are not allowed to perform this feed action")
 	default:
 		slog.Error("public feed request failed", "error", err)
 		handlers.WriteError(w, 500, "internal_error", "Unable to complete this feed request")
@@ -89,6 +91,33 @@ func (a *API) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := a.repo.List(r.Context(), handlers.GetUserIDFromContext(r), cursor, limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	handlers.WriteJSON(w, 200, page)
+}
+
+func (a *API) Leaderboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.MethodNotAllowed(w)
+		return
+	}
+	cursor, err := feed.ParseLeaderboardCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		handlers.WriteError(w, 400, "invalid_cursor", "Invalid leaderboard cursor")
+		return
+	}
+	limit := 20
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit < 1 || limit > 50 {
+			handlers.WriteError(w, 400, "invalid_limit", "Limit must be between 1 and 50")
+			return
+		}
+	}
+	page, err := a.repo.Leaderboard(r.Context(), cursor, limit)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -159,6 +188,23 @@ func (a *API) Guess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handlers.WriteJSON(w, 200, result)
+}
+
+func (a *API) Results(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.MethodNotAllowed(w)
+		return
+	}
+	if !validID(w, r) {
+		return
+	}
+	results, err := a.repo.Results(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	handlers.WriteJSON(w, 200, results)
 }
 
 func (a *API) Reaction(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@ import { useCallback, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { PublicChallenge } from '../../types';
 import FeedImage from './FeedImage';
-import FeedGame from './FeedGame';
+import FeedGame, { FeedResults } from './FeedGame';
 import FeedComments from './FeedComments';
 import FeedShare from './FeedShare';
 import { useFeedActions } from './useFeed';
@@ -21,6 +21,7 @@ export default function FeedCard({
     const restorePlayFocus = useCallback(() => playButton.current?.focus(), []);
     const [playing, setPlaying] = useState(false);
     const [commentsOpen, setCommentsOpen] = useState(false);
+    const [resultsOpen, setResultsOpen] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const actions = useFeedActions(post.id);
     const revealed = post.is_owner || post.resolved;
@@ -50,7 +51,7 @@ export default function FeedCard({
                                 day: 'numeric',
                             })}
                         </time>{' '}
-                        · Public challenge
+                        · {post.audience === 'friends' ? 'Friends challenge' : 'Public challenge'}
                     </Link>
                 </div>
                 {post.is_owner && (
@@ -123,6 +124,16 @@ export default function FeedCard({
                         View your result
                     </button>
                 )}
+                {revealed && (
+                    <button
+                        className="feed-text-button"
+                        aria-expanded={resultsOpen}
+                        onClick={() => setResultsOpen((open) => !open)}
+                    >
+                        {resultsOpen ? 'Hide challenge results' : 'View challenge results'}
+                    </button>
+                )}
+                {resultsOpen && <FeedResults id={post.id} />}
                 {!revealed && !commentsOpen && (
                     <p className="feed-spoiler-note">Comments may contain clues or spoilers.</p>
                 )}
