@@ -42,6 +42,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/feed/leaderboard': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank the community by total public feed score
+         * @description Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules.
+         */
+        get: operations['getPublicFeedLeaderboard'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/feed/challenges': {
         parameters: {
             query?: never;
@@ -134,6 +154,25 @@ export interface paths {
          * @description Repeated submissions return the original result. Public scores do not contribute to private group rankings or profile progression.
          */
         post: operations['guessPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/results': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read all ranked guesses and the signed all-time Elo delta */
+        get: operations['getPublicChallengeResults'];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1123,6 +1162,17 @@ export interface components {
             items: components['schemas']['PublicChallenge'][];
             next_cursor: string;
         };
+        PublicFeedLeaderboardEntry: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            total_score: number;
+        };
+        PublicFeedLeaderboardPage: {
+            items: components['schemas']['PublicFeedLeaderboardEntry'][];
+            next_cursor: string;
+        };
         PublicGuessResult: {
             score: number;
             /** @description Distance in meters. */
@@ -1131,6 +1181,19 @@ export interface components {
             long: number;
             actual_lat: number;
             actual_long: number;
+        };
+        PublicFeedResult: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            score: number;
+            /** @description Distance in meters. */
+            distance: number;
+            /** @description Signed all-time Elo change caused by this challenge in the global history replay. */
+            elo_delta: number;
+            is_viewer: boolean;
         };
         PublicComment: {
             /** Format: uuid */
@@ -1690,6 +1753,33 @@ export interface operations {
             500: components['responses']['ErrorResponse'];
         };
     };
+    getPublicFeedLeaderboard: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable cursor page ordered by total feed score, username, and user ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedLeaderboardPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
     createPublicChallenge: {
         parameters: {
             query?: never;
@@ -1905,6 +1995,34 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallengeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All guesses for the visible public challenge, ranked by score. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedResult'][];
                 };
             };
             400: components['responses']['ErrorResponse'];

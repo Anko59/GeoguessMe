@@ -8,6 +8,7 @@ import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import type { Profile, PublicProfile } from '../../types';
+import FeedLeaderboard from './FeedLeaderboard';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
@@ -210,6 +211,7 @@ export default function ProfilePage() {
                     <span>{rank.progress_percent}%</span>
                 </div>
             </section>
+            <FeedLeaderboard />
         </main>
     );
 }

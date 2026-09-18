@@ -6,6 +6,7 @@ import GroupRail from './GroupRail';
 import { useFeed } from './useFeed';
 import './FeedForms.css';
 import './Feed.css';
+import './FeedAudience.css';
 
 function FeedPage({ id }: { id?: string }) {
     const feed = useFeed(id);

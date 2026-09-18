@@ -145,6 +145,51 @@ func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 	}
 }
 
+func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
+	a, mock := mockAPI(t)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT g.user_id,u.username,u.avatar,g.score,g.distance").WithArgs("viewer", testID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance"}).AddRow("viewer", "Explorer", "avatar.png", 4500, 120.0),
+	)
+	mock.ExpectQuery("SELECT challenge_id,created_at,user_id,score FROM").WillReturnRows(
+		pgxmock.NewRows([]string{"challenge_id", "created_at", "user_id", "score"}),
+	)
+	w := httptest.NewRecorder()
+	a.Results(w, request("GET", ""))
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "private, no-store" || !strings.Contains(w.Body.String(), "Explorer") {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFeedLeaderboardReturnsTotalsWithoutCaching(t *testing.T) {
+	a, mock := mockAPI(t)
+	mock.ExpectQuery("WITH totals AS").WithArgs(21).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "total_score", "rank"}).
+			AddRow("user-a", "Alice", 5000, 1).
+			AddRow("user-b", "Bob", 4200, 2).
+			AddRow("user-c", "Carol", 3900, 3),
+	)
+	w := httptest.NewRecorder()
+	a.Leaderboard(w, request("GET", ""))
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"username":"Alice"`) || !strings.Contains(w.Body.String(), `"next_cursor"`) {
+		t.Fatalf("leaderboard response = %s", w.Body.String())
+	}
+}
+
+func TestFeedLeaderboardRejectsInvalidCursorBeforePersistence(t *testing.T) {
+	a, _ := mockAPI(t)
+	r := request("GET", "")
+	r.URL.RawQuery = "cursor=invalid"
+	w := httptest.NewRecorder()
+	a.Leaderboard(w, r)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), `"invalid_cursor"`) {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", testID).WillReturnError(pgx.ErrNoRows)

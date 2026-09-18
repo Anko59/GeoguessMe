@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     media: vi.fn(),
     guess: vi.fn(),
     result: vi.fn(),
+    results: vi.fn(),
     react: vi.fn(),
     comments: vi.fn(),
     comment: vi.fn(),
@@ -67,6 +68,7 @@ beforeEach(() => {
     mocks.inbox.mockResolvedValue([]);
     mocks.media.mockResolvedValue(new Blob(['image'], { type: 'image/jpeg' }));
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
+    mocks.results.mockResolvedValue([]);
     mocks.react.mockResolvedValue(true);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -129,6 +131,39 @@ describe('Public feed', () => {
         await waitFor(() => expect(screen.getAllByAltText('Geo challenge photo')).toHaveLength(2));
         expect(screen.queryByRole('button', { name: 'Play challenge' })).not.toBeInTheDocument();
         expect(screen.getByText('Your challenge')).toBeInTheDocument();
+    });
+
+    it('loads ranked challenge results for a revealed post', async () => {
+        mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
+        mocks.results.mockResolvedValue([
+            {
+                rank: 1,
+                user_id: 'other',
+                username: 'Navigator',
+                avatar: 'avatar-a.png',
+                score: 4800,
+                distance: 100,
+                elo_delta: 4,
+                is_viewer: false,
+            },
+            {
+                rank: 2,
+                user_id: 'viewer',
+                username: 'Me',
+                avatar: 'avatar-b.png',
+                score: 4200,
+                distance: 300,
+                elo_delta: -4,
+                is_viewer: true,
+            },
+        ]);
+        renderFeed();
+        fireEvent.click(await screen.findByRole('button', { name: 'View challenge results' }));
+        expect(await screen.findByText('Challenge results')).toBeInTheDocument();
+        expect(screen.getByText('#1 Navigator')).toBeInTheDocument();
+        expect(screen.getByText('4,800 pts · +4 Elo')).toBeInTheDocument();
+        expect(screen.getByText('4,200 pts · -4 Elo')).toBeInTheDocument();
+        expect(mocks.results).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
     });
 
     it('reopens the saved result without submitting another guess', async () => {
