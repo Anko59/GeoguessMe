@@ -269,6 +269,18 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 			Avatar:    guess.Avatar,
 			EloDelta:  eloDelta,
 		}
+		// The time a guess took is measured from when that player's guessing
+		// window opened (their recorded view end) to their submission, the
+		// same elapsed value the scoring time penalty uses. Timed-out guesses
+		// have no guess time to report, and legacy guesses without a recorded
+		// window omit the field entirely.
+		if !guess.TimedOut && guess.ViewExpiresAt.Valid {
+			elapsed := guess.CreatedAt.Sub(guess.ViewExpiresAt.Time)
+			if elapsed >= 0 {
+				timeToGuessMs := int(elapsed.Milliseconds())
+				item.TimeToGuessMs = &timeToGuessMs
+			}
+		}
 		if !hidden || guess.UserID == viewerID {
 			if !guess.TimedOut {
 				item.Lat = &guess.Lat
@@ -328,17 +340,18 @@ func (a *GameAPI) GetGroupChallenges(w http.ResponseWriter, r *http.Request) {
 // guess window expire (score 0, no location). EloDelta is the signed change
 // in the player's weekly Elo rating caused by this challenge.
 type resultsGuess struct {
-	ID        string    `json:"id"`
-	PhotoID   string    `json:"photo_id"`
-	UserID    string    `json:"user_id"`
-	GroupID   string    `json:"group_id"`
-	Lat       *float64  `json:"lat,omitempty"`
-	Long      *float64  `json:"long,omitempty"`
-	Score     int       `json:"score"`
-	Distance  *float64  `json:"distance,omitempty"`
-	TimedOut  bool      `json:"timed_out"`
-	CreatedAt time.Time `json:"created_at"`
-	Username  string    `json:"username"`
-	Avatar    string    `json:"avatar"`
-	EloDelta  int       `json:"elo_delta"`
+	ID            string    `json:"id"`
+	PhotoID       string    `json:"photo_id"`
+	UserID        string    `json:"user_id"`
+	GroupID       string    `json:"group_id"`
+	Lat           *float64  `json:"lat,omitempty"`
+	Long          *float64  `json:"long,omitempty"`
+	Score         int       `json:"score"`
+	Distance      *float64  `json:"distance,omitempty"`
+	TimeToGuessMs *int      `json:"time_to_guess_ms,omitempty"`
+	TimedOut      bool      `json:"timed_out"`
+	CreatedAt     time.Time `json:"created_at"`
+	Username      string    `json:"username"`
+	Avatar        string    `json:"avatar"`
+	EloDelta      int       `json:"elo_delta"`
 }

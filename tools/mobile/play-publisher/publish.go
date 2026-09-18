@@ -84,22 +84,24 @@ func publishBundle(ctx context.Context, client *Client, options PublishOptions) 
 		return PublishResult{}, fmt.Errorf("rewind Android App Bundle: %w", err)
 	}
 
-	application, err := client.GetApplication(ctx, options.PackageName)
+	edit, err := client.InsertEdit(ctx, options.PackageName)
 	if err != nil {
 		return PublishResult{}, err
 	}
-	if application.PackageName != options.PackageName {
-		return PublishResult{}, fmt.Errorf("Play API returned package %q, expected %q", application.PackageName, options.PackageName)
-	}
-	tracks, err := client.ListTracks(ctx, options.PackageName)
+	commitAttempted := false
+	defer func() {
+		if commitAttempted {
+			return
+		}
+		if cleanupErr := client.DeleteEdit(context.Background(), options.PackageName, edit.ID); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: unable to clean up Play edit %q: %v\n", edit.ID, cleanupErr)
+		}
+	}()
+	tracks, err := client.ListTracks(ctx, options.PackageName, edit.ID)
 	if err != nil {
 		return PublishResult{}, err
 	}
 	if err := ensureVersionIsNew(tracks, manifest.VersionCode); err != nil {
-		return PublishResult{}, err
-	}
-	edit, err := client.InsertEdit(ctx, options.PackageName)
-	if err != nil {
 		return PublishResult{}, err
 	}
 	uploaded, err := client.UploadBundle(ctx, options.PackageName, edit.ID, bundle, info.Size())
@@ -125,6 +127,7 @@ func publishBundle(ctx context.Context, client *Client, options PublishOptions) 
 	if _, err := client.ValidateEdit(ctx, options.PackageName, edit.ID); err != nil {
 		return PublishResult{}, err
 	}
+	commitAttempted = true
 	if _, err := client.CommitEdit(ctx, options.PackageName, edit.ID, false); err != nil {
 		return PublishResult{}, err
 	}

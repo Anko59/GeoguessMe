@@ -158,6 +158,7 @@ describe('Game', () => {
                         long: 2.3,
                         score: 100,
                         distance: 1500,
+                        time_to_guess_ms: 72000,
                         elo_delta: 3,
                         created_at: new Date().toISOString(),
                     },
@@ -188,7 +189,7 @@ describe('Game', () => {
         expect(screen.getByText(/Only your own guess is shown on the map.*after 48 hours/)).toBeInTheDocument();
         // The viewer's own guess keeps its distance; the other player's row
         // shows only the score.
-        expect(screen.getByText('1.5 km away')).toBeInTheDocument();
+        expect(screen.getByText('1.5 km away in 1min 12sec')).toBeInTheDocument();
         expect(screen.queryByText(/km away/)).toBeInTheDocument();
         const bobRow = screen.getByText('bob').closest('.score-card') as HTMLElement;
         expect(bobRow).not.toHaveTextContent(/km away/);

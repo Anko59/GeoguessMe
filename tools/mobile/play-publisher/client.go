@@ -46,13 +46,6 @@ func NewClient(baseURL, accessToken string, httpClient *http.Client) (*Client, e
 	return &Client{baseURL: parsed, accessToken: accessToken, httpClient: httpClient}, nil
 }
 
-type Application struct {
-	PackageName         string `json:"packageName"`
-	Title               string `json:"title"`
-	DefaultLanguageCode string `json:"defaultLanguageCode"`
-	AppType             string `json:"appType"`
-}
-
 type AppEdit struct {
 	ID         string `json:"id"`
 	ExpiryTime string `json:"expiryTime"`
@@ -87,31 +80,38 @@ type TrackList struct {
 	Tracks []Track `json:"tracks"`
 }
 
-// GetApplication performs the read-only identity check used before any edit.
-func (c *Client) GetApplication(ctx context.Context, packageName string) (Application, error) {
-	if err := validatePathPart(packageName, "package name"); err != nil {
-		return Application{}, err
-	}
-	var application Application
-	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName), nil, &application)
-	if err != nil {
-		return Application{}, fmt.Errorf("get application %q: %w", packageName, err)
-	}
-	return application, nil
-}
-
-// ListTracks reads every committed track so publication can reject a bundle
+// ListTracks reads every track in an edit so publication can reject a bundle
 // whose version code was already uploaded anywhere in the app.
-func (c *Client) ListTracks(ctx context.Context, packageName string) ([]Track, error) {
-	if err := validatePathPart(packageName, "package name"); err != nil {
-		return nil, err
+func (c *Client) ListTracks(ctx context.Context, packageName, editID string) ([]Track, error) {
+	for value, name := range map[string]string{packageName: "package name", editID: "edit ID"} {
+		if err := validatePathPart(value, name); err != nil {
+			return nil, err
+		}
 	}
 	var tracks TrackList
-	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "tracks"), nil, &tracks)
+	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "edits", editID, "tracks"), nil, &tracks)
 	if err != nil {
 		return nil, fmt.Errorf("list Play tracks: %w", err)
 	}
 	return tracks.Tracks, nil
+}
+
+// ListTrackReleases performs the read-only app access check used before a
+// release workflow creates an edit.
+func (c *Client) ListTrackReleases(ctx context.Context, packageName, track string) ([]Release, error) {
+	for value, name := range map[string]string{packageName: "package name", track: "track"} {
+		if err := validatePathPart(value, name); err != nil {
+			return nil, err
+		}
+	}
+	var releases struct {
+		Releases []Release `json:"releases"`
+	}
+	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "tracks", track, "releases"), nil, &releases)
+	if err != nil {
+		return nil, fmt.Errorf("list Play track releases %q: %w", track, err)
+	}
+	return releases.Releases, nil
 }
 
 // InsertEdit creates a new Play edit transaction.
@@ -128,6 +128,21 @@ func (c *Client) InsertEdit(ctx context.Context, packageName string) (AppEdit, e
 		return AppEdit{}, errors.New("create Play edit returned no edit ID")
 	}
 	return edit, nil
+}
+
+// DeleteEdit removes an edit that failed before commit. Callers must not use
+// this after a commit attempt because the outcome of a failed commit can be
+// uncertain.
+func (c *Client) DeleteEdit(ctx context.Context, packageName, editID string) error {
+	for value, name := range map[string]string{packageName: "package name", editID: "edit ID"} {
+		if err := validatePathPart(value, name); err != nil {
+			return err
+		}
+	}
+	if err := c.doJSON(ctx, http.MethodDelete, c.resourceURL("v3", "applications", packageName, "edits", editID), nil, nil); err != nil {
+		return fmt.Errorf("delete Play edit: %w", err)
+	}
+	return nil
 }
 
 // UploadBundle uploads one signed Android App Bundle into an existing edit.

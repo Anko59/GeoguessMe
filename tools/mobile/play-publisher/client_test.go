@@ -41,46 +41,74 @@ func TestNewClientRejectsUnsafeConfiguration(t *testing.T) {
 	}
 }
 
-func TestGetApplicationSendsBearerAndUsesExpectedEndpoint(t *testing.T) {
+func TestListTracksSendsBearerAndUsesExpectedEndpoint(t *testing.T) {
 	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %s, want GET", r.Method)
-		}
-		if r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app" {
+		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123/tracks" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
 			t.Errorf("authorization = %q", got)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"packageName":"com.geoguessme.app","title":"GeoGuessMe","defaultLanguageCode":"en-US","appType":"GAME"}`)
+		w.Write([]byte(`{"tracks":[]}`))
 	}))
 	defer server.Close()
 
-	application, err := client.GetApplication(context.Background(), "com.geoguessme.app")
+	tracks, err := client.ListTracks(context.Background(), "com.geoguessme.app", "edit-123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if application.Title != "GeoGuessMe" || application.AppType != "GAME" {
-		t.Fatalf("application = %+v", application)
+	if len(tracks) != 0 {
+		t.Fatalf("tracks = %+v", tracks)
 	}
 }
 
-func TestListTracksUsesApplicationTracksEndpoint(t *testing.T) {
+func TestListTracksDecodesApplicationTracks(t *testing.T) {
 	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks" {
+		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123/tracks" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}
 		w.Write([]byte(`{"tracks":[{"track":"internal","releases":[{"versionCodes":["41"],"status":"completed"}]}]}`))
 	}))
 	defer server.Close()
 
-	tracks, err := client.ListTracks(context.Background(), "com.geoguessme.app")
+	tracks, err := client.ListTracks(context.Background(), "com.geoguessme.app", "edit-123")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(tracks) != 1 || tracks[0].Track != "internal" {
 		t.Fatalf("tracks = %+v", tracks)
+	}
+}
+
+func TestListTrackReleasesUsesReadOnlyApplicationTrackEndpoint(t *testing.T) {
+	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks/alpha/releases" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Write([]byte(`{"releases":[{"versionCodes":["41"],"status":"completed"}]}`))
+	}))
+	defer server.Close()
+
+	releases, err := client.ListTrackReleases(context.Background(), "com.geoguessme.app", "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(releases) != 1 || releases[0].VersionCodes[0] != "41" {
+		t.Fatalf("releases = %+v", releases)
+	}
+}
+
+func TestDeleteEditUsesExpectedEndpoint(t *testing.T) {
+	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	if err := client.DeleteEdit(context.Background(), "com.geoguessme.app", "edit-123"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -198,7 +226,7 @@ func TestAPIErrorDoesNotExposeAuthorizationHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := client.GetApplication(context.Background(), "com.geoguessme.app")
+	_, err := client.ListTrackReleases(context.Background(), "com.geoguessme.app", "alpha")
 	if err == nil || strings.Contains(err.Error(), testToken) {
 		t.Fatalf("err = %v", err)
 	}

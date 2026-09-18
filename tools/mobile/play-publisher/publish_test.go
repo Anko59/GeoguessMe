@@ -60,21 +60,16 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 		requestNumber++
 		switch requestNumber {
 		case 1:
-			if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app" {
-				t.Errorf("application request = %s %s", r.Method, r.URL.Path)
-			}
-			io.WriteString(w, `{"packageName":"com.geoguessme.app"}`)
-		case 2:
-			if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks" {
-				t.Errorf("track list request = %s %s", r.Method, r.URL.Path)
-			}
-			io.WriteString(w, `{"tracks":[]}`)
-		case 3:
 			if r.Method != http.MethodPost || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits" {
 				t.Errorf("insert request = %s %s", r.Method, r.URL.Path)
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)
-		case 4:
+		case 2:
+			if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123/tracks" {
+				t.Errorf("track list request = %s %s", r.Method, r.URL.Path)
+			}
+			io.WriteString(w, `{"tracks":[]}`)
+		case 3:
 			if r.Method != http.MethodPost || r.URL.Path != "/upload/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123/bundles" {
 				t.Errorf("upload request = %s %s", r.Method, r.URL.Path)
 			}
@@ -86,7 +81,7 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 				t.Errorf("uploaded body = %q", body)
 			}
 			io.WriteString(w, `{"versionCode":3006000}`)
-		case 5:
+		case 4:
 			if r.Method != http.MethodPut || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123/tracks/internal" {
 				t.Errorf("track update request = %s %s", r.Method, r.URL.Path)
 			}
@@ -98,17 +93,17 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 				t.Errorf("track update body = %s", body)
 			}
 			io.WriteString(w, `{"track":"internal","releases":[{"versionCodes":["3006000"],"status":"completed"}]}`)
-		case 6:
+		case 5:
 			if r.Method != http.MethodPost || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:validate" {
 				t.Errorf("validate request = %s %s", r.Method, r.URL.Path)
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)
-		case 7:
+		case 6:
 			if r.Method != http.MethodPost || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123:commit" || r.URL.RawQuery != "changesInReviewBehavior=ERROR_IF_IN_REVIEW" {
 				t.Errorf("commit request = %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)
-		case 8:
+		case 7:
 			if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks/internal" {
 				t.Errorf("track readback request = %s %s", r.Method, r.URL.Path)
 			}
@@ -123,8 +118,8 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requestNumber != 8 {
-		t.Fatalf("request count = %d, want 8", requestNumber)
+	if requestNumber != 7 {
+		t.Fatalf("request count = %d, want 7", requestNumber)
 	}
 	if result.EditID != "edit-123" || result.VersionCode != 3006000 || result.Track != "internal" {
 		t.Fatalf("result = %+v", result)
@@ -171,13 +166,16 @@ func TestPublishBundleStopsBeforeTrackUpdateWhenPlayReportsWrongVersion(t *testi
 		requests++
 		switch requests {
 		case 1:
-			io.WriteString(w, `{"packageName":"com.geoguessme.app"}`)
+			io.WriteString(w, `{"id":"edit-123"}`)
 		case 2:
 			io.WriteString(w, `{"tracks":[]}`)
 		case 3:
-			io.WriteString(w, `{"id":"edit-123"}`)
-		case 4:
 			io.WriteString(w, `{"versionCode":99}`)
+		case 4:
+			if r.Method != http.MethodDelete || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123" {
+				t.Errorf("cleanup request = %s %s", r.Method, r.URL.Path)
+			}
+			io.WriteString(w, `{}`)
 		default:
 			t.Errorf("unexpected request %d: %s %s", requests, r.Method, r.URL.Path)
 		}

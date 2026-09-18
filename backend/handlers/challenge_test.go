@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"geoguessme/internal/chat"
+	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
@@ -123,9 +125,9 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	groupID := "00000000-0000-0000-0000-000000000001"
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, LifecycleStatus: "ready", HideLocation: true, CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	guessesRows := func() *pgxmock.Rows {
-		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).
-			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png").
-			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, false, now, "carol", "c.png")
+		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at"}).
+			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", now.Add(-72*time.Second)).
+			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, false, now, "carol", "c.png", now.Add(-45*time.Second))
 	}
 	challengesRows := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
@@ -163,6 +165,9 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	if !strings.Contains(body, `"distance":10`) {
 		t.Fatalf("viewer's own guess distance must be present, got %s", body)
 	}
+	if !strings.Contains(body, `"time_to_guess_ms":72000`) {
+		t.Fatalf("results must include the time to guess for non-timed-out guesses, got %s", body)
+	}
 	if !strings.Contains(body, `"elo_delta":20`) || !strings.Contains(body, `"elo_delta":-20`) {
 		t.Fatalf("results must include computed weekly elo_delta, got %s", body)
 	}
@@ -199,7 +204,9 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png"))
+	// A legacy guess without a recorded viewing window (NULL view_expires_at)
+	// still resolves, and its result omits time_to_guess_ms.
+	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", nil))
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")
@@ -207,6 +214,10 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	gameAPI.GetChallengeResults(recorder, resultsRequest)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("results status = %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "time_to_guess_ms") {
+		t.Fatalf("legacy guess without a viewing window must omit time_to_guess_ms, got %s", body)
 	}
 
 	hub := chat.NewHub(nil, nil)
@@ -296,6 +307,23 @@ func TestConfirmChallengeMediaDeliveredReturnsAuthoritativeDeadline(t *testing.T
 	gameAPI.ConfirmChallengeMediaDelivered(recorder, request)
 	if recorder.Code != http.StatusOK || !bytes.Contains(recorder.Body.Bytes(), []byte("view_expires_at")) || !bytes.Contains(recorder.Body.Bytes(), []byte("guess_expires_at")) {
 		t.Fatalf("delivery confirmation = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	assertScoreGraceSeconds(t, recorder)
+}
+
+// assertScoreGraceSeconds decodes the score_grace_seconds field the guessing
+// window endpoints publish and pins it to the scoring package's policy value
+// so the answering UI can visualize the time decay without guessing it.
+func assertScoreGraceSeconds(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	var payload struct {
+		ScoreGraceSeconds int `json:"score_grace_seconds"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode score_grace_seconds: %v (%s)", err, recorder.Body.String())
+	}
+	if payload.ScoreGraceSeconds != game.ScoreGraceSeconds() {
+		t.Fatalf("score_grace_seconds = %d, want %d", payload.ScoreGraceSeconds, game.ScoreGraceSeconds())
 	}
 }
 
