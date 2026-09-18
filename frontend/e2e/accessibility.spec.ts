@@ -43,6 +43,18 @@ test.describe('Accessibility', () => {
     for (const route of ['/signup', '/forgot-password', '/reset-password', '/verify-email']) {
         test(`${route} has no serious or critical Axe violations`, async ({ page }) => {
             await page.goto(route);
+            // The auth card fades in; a mid-fade snapshot measures
+            // semi-transparent text and reports false color-contrast
+            // violations. Analyze only after the entry animations settle.
+            await page
+                .locator('.auth-card')
+                .evaluate((element) =>
+                    Promise.all(
+                        element
+                            .getAnimations({ subtree: true })
+                            .map((animation) => animation.finished.catch(() => undefined)),
+                    ),
+                );
             await expectAccessible(page);
         });
     }
@@ -95,7 +107,7 @@ test.describe('Keyboard navigation', () => {
         await expect(page.getByRole('link', { name: /sign up/i })).toBeFocused();
     });
 
-    test('signup form tab order moves through username, email, password, submit, legal links, login link', async ({
+    test('signup form tab order moves through username, email, password, age gate, submit, legal links, login link', async ({
         page,
     }) => {
         await page.goto('/signup');
@@ -112,16 +124,27 @@ test.describe('Keyboard navigation', () => {
         await expect(page.locator('#signup-password')).toBeFocused();
 
         await page.keyboard.press('Tab');
+        await expect(page.locator('#signup-age-attested')).toBeFocused();
+
+        // The age-gate hint link follows the checkbox; opening it must never
+        // toggle the checkbox.
+        await page.keyboard.press('Tab');
+        const ageCheck = page.locator('.auth-age-check');
+        await expect(ageCheck.getByRole('link', { name: /terms of use/i })).toBeFocused();
+
+        await page.keyboard.press('Tab');
         await expect(page.getByRole('button', { name: /sign up/i })).toBeFocused();
 
-        // The consent note beside the form is the first legal layer in the
-        // tab order; the page footer repeats the same destinations, so match
-        // the note links by their exact accessible names.
-        await page.keyboard.press('Tab');
-        await expect(page.getByRole('link', { name: 'Terms of Use', exact: true })).toBeFocused();
+        // The page carries three legal layers: the age-gate hint, the consent
+        // note beside the form, and the global footer. Each repeats some
+        // destinations, so scope the selectors to their containers.
+        const legalNote = page.locator('.auth-legal-note');
 
         await page.keyboard.press('Tab');
-        await expect(page.getByRole('link', { name: 'Privacy Policy', exact: true })).toBeFocused();
+        await expect(legalNote.getByRole('link', { name: /terms of use/i })).toBeFocused();
+
+        await page.keyboard.press('Tab');
+        await expect(legalNote.getByRole('link', { name: /privacy policy/i })).toBeFocused();
 
         await page.keyboard.press('Tab');
         await expect(page.getByRole('link', { name: /login/i })).toBeFocused();
