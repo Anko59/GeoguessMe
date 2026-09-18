@@ -3,8 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FeedComposer from '../FeedComposer';
 
-const mocks = vi.hoisted(() => ({ publish: vi.fn() }));
-vi.mock('../../../api', () => ({ publicFeedAPI: mocks, getAPIErrorMessage: (error: Error) => error.message }));
+const mocks = vi.hoisted(() => ({ publish: vi.fn(), inbox: vi.fn() }));
+vi.mock('../../../api', () => ({
+    publicFeedAPI: mocks,
+    groupsAPI: { inbox: mocks.inbox },
+    getAPIErrorMessage: (error: Error) => error.message,
+}));
 vi.mock('../../../components/map/Map', () => ({ default: () => null }));
 
 function bitmap(width = 800, height = 600) {
@@ -34,6 +38,7 @@ function renderComposer() {
 
 beforeEach(() => {
     vi.resetAllMocks();
+    mocks.inbox.mockResolvedValue([]);
     vi.stubGlobal(
         'createImageBitmap',
         vi.fn().mockImplementation(async () => bitmap()),
@@ -110,6 +115,23 @@ describe('Public photo preview', () => {
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(screen.getByLabelText('Caption')).toHaveValue('A mystery');
         expect(screen.getByLabelText('Latitude')).toHaveValue(48.8);
+    });
+
+    it('publishes the selected audience and optional group targets', async () => {
+        mocks.inbox.mockResolvedValue([
+            { id: 'group-1', name: 'Paris explorers', unread_count: 0, latest_message: null },
+        ]);
+        mocks.publish.mockResolvedValue({ id: 'post-1' });
+        const { input, submit } = renderComposer();
+        await userEvent.upload(input, new File(['photo'], 'place.jpg', { type: 'image/jpeg' }));
+        await screen.findByRole('img', { name: 'Photo to publish' });
+        await userEvent.click(screen.getByLabelText('Friends in my groups'));
+        await userEvent.click(await screen.findByLabelText('Paris explorers'));
+        await userEvent.click(submit);
+        await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
+        const form = mocks.publish.mock.calls[0][0] as FormData;
+        expect(form.get('audience')).toBe('friends');
+        expect(form.getAll('group_id')).toEqual(['group-1']);
     });
 
     it.each(['success', 'failure'])(

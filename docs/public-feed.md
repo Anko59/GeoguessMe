@@ -8,11 +8,15 @@ with a stable cursor for loading older posts. Each post has a shareable
 ## Publish and play
 
 Choose **Post a challenge**, upload a JPG, PNG, or WebP photo, add an optional
-caption of up to 500 characters, and select the photo's location on the map or
-enter its coordinates. Publication is explicit: private group challenges never
-appear in the public feed automatically. Public uploads use the configured image
-byte and pixel limits and strip metadata during normalization. Videos continue
-to use the private group challenge flow.
+description of up to 280 characters, choose **Everyone** or **Friends in my
+groups**, and select the photo's location on the map or enter its coordinates.
+Friends posts are visible to users sharing a group with the author. The author
+can optionally narrow a friends post to selected groups; the author must belong
+to every selected group. Public posts remain visible to every signed-in user.
+Publication is explicit: private group challenges never appear in the feed
+automatically. Public uploads use the configured image byte and pixel limits and
+strip metadata during normalization. Videos continue to use the private group
+challenge flow.
 
 The composer accepts only JPG, PNG, and WebP files and renders decoded pixels on
 a bounded canvas, without exposing a URL for the raw upload. Publishing stays
@@ -69,10 +73,12 @@ cursor requests with indexable seek predicates.
 
 ## Storage, deployment, and rollback
 
-Migration **027_public_feed** adds independent public challenge, guess,
-reaction, and comment tables. Apply migrations with the existing deployment
-migration job before starting the new application revision; local operators use
-`make migrate-up`. No environment variables or services are added.
+migrations **027_public_feed**, **028_group_inbox_reads**, and
+**029_feed_audiences** add independent public challenge data, durable group
+inbox read boundaries, and audience/selected-group records. Apply migrations
+with the existing deployment migration job before starting the new application
+revision; local operators use `make migrate-up`. No environment variables or
+services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live

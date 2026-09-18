@@ -34,7 +34,7 @@
 "upload":
   "post":
     "operationId": "createPublicChallenge"
-    "summary": "Publish a photo challenge visible to all signed-in users"
+    "summary": "Publish a photo challenge with an explicit audience"
     "tags": ["Feed"]
     "security": [{ "bearerAuth": [] }]
     "requestBody":
@@ -51,7 +51,19 @@
                 "description": "JPG, PNG or WebP, within configured upload limits."
               "caption":
                 "type": "string"
-                "maxLength": 500
+                "maxLength": 280
+              "audience":
+                "type": "string"
+                "enum": ["public", "friends"]
+                "default": "public"
+                "description": "Friends posts are visible to users sharing a group with the author."
+              "group_id":
+                "type": "array"
+                "maxItems": 20
+                "items":
+                  "type": "string"
+                  "format": "uuid"
+                "description": "Repeated multipart field. Optional selected groups for a friends post; the author must belong to every selected group."
               "lat":
                 "type": "number"
                 "minimum": -90

@@ -24,7 +24,11 @@
       "type": "string"
     "caption":
       "type": "string"
-      "maxLength": 500
+      "maxLength": 280
+    "audience":
+      "type": "string"
+      "enum": ["public", "friends"]
+      "description": "Public is visible to all signed-in users. Friends is visible to shared-group members, optionally limited to selected groups."
     "created_at":
       "type": "string"
       "format": "date-time"

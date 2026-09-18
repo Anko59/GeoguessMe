@@ -86,7 +86,7 @@ func TestFeedMediaOnlyStreamsOriginalForResolvedViewerOrExplicitPlay(t *testing.
 			a, mock := mockAPI(t)
 			store := &fakeStore{}
 			a.store = store
-			mock.ExpectQuery("SELECT storage_key,mime_type,preview").WithArgs(testID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"key", "mime", "preview", "revealed"}).AddRow("secret-key", "image/png", []byte("blurred"), tc.revealed))
+			mock.ExpectQuery("SELECT p.storage_key,p.mime_type,p.preview").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"key", "mime", "preview", "revealed"}).AddRow("secret-key", "image/png", []byte("blurred"), tc.revealed))
 			w := httptest.NewRecorder()
 			a.serveMedia(w, request("GET", ""), tc.playing)
 			if w.Code != 200 || w.Body.String() != tc.want {
@@ -124,8 +124,8 @@ func (s *fakeStore) Health(context.Context) error                { return nil }
 func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 	a, mock := mockAPI(t)
 	now := time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)
-	columns := []string{"id", "user", "username", "caption", "created_at", "owner", "resolved", "likes", "liked", "comments"}
-	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", 21).WillReturnRows(pgxmock.NewRows(columns).AddRow(testID, "author", "Explorer", "Find this place", now, false, false, 3, true, 2))
+	columns := []string{"id", "user", "username", "caption", "created_at", "audience", "owner", "resolved", "likes", "liked", "comments"}
+	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", 21).WillReturnRows(pgxmock.NewRows(columns).AddRow(testID, "author", "Explorer", "Find this place", now, "public", false, false, 3, true, 2))
 	w := httptest.NewRecorder()
 	a.List(w, request("GET", ""))
 	if w.Code != 200 {
@@ -153,7 +153,7 @@ func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	if w.Code != 404 {
 		t.Fatal(w.Code)
 	}
-	mock.ExpectExec("DELETE FROM public_comments c USING public_challenges p").WithArgs(testID, testID, "viewer").WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectExec("DELETE FROM public_comments c USING public_challenges p").WithArgs("viewer", testID, testID).WillReturnResult(pgxmock.NewResult("DELETE", 0))
 	w = httptest.NewRecorder()
 	r := request("DELETE", "")
 	r.SetPathValue("commentID", testID)
@@ -161,7 +161,7 @@ func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	if w.Code != 404 {
 		t.Fatal(w.Code)
 	}
-	mock.ExpectQuery("WITH challenge AS").WithArgs(testID, "viewer").WillReturnError(errors.New("database unavailable"))
+	mock.ExpectQuery("WITH challenge AS").WithArgs("viewer", testID).WillReturnError(errors.New("database unavailable"))
 	w = httptest.NewRecorder()
 	a.Reaction(w, request("PUT", ""))
 	if w.Code != 500 {
@@ -174,7 +174,7 @@ func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 
 func TestCommentCreatedWithTrimmedContent(t *testing.T) {
 	a, mock := mockAPI(t)
-	mock.ExpectQuery("WITH inserted AS").WithArgs(pgxmock.AnyArg(), testID, "viewer", "Great place!").WillReturnRows(pgxmock.NewRows([]string{"at", "name"}).AddRow(time.Now(), "Explorer"))
+	mock.ExpectQuery("WITH inserted AS").WithArgs("viewer", pgxmock.AnyArg(), "Great place!", testID).WillReturnRows(pgxmock.NewRows([]string{"at", "name"}).AddRow(time.Now(), "Explorer"))
 	w := httptest.NewRecorder()
 	a.Comments(w, request("POST", `{"content":"  Great place!  "}`))
 	if w.Code != 201 || !strings.Contains(w.Body.String(), `"content":"Great place!"`) {

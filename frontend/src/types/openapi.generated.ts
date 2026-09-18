@@ -51,7 +51,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish a photo challenge visible to all signed-in users */
+        /** Publish a photo challenge with an explicit audience */
         post: operations['createPublicChallenge'];
         delete?: never;
         options?: never;
@@ -1105,6 +1105,11 @@ export interface components {
             user_id: string;
             username: string;
             caption: string;
+            /**
+             * @description Public is visible to all signed-in users. Friends is visible to shared-group members, optionally limited to selected groups.
+             * @enum {string}
+             */
+            audience?: 'public' | 'friends';
             /** Format: date-time */
             created_at: string;
             is_owner: boolean;
@@ -1701,6 +1706,14 @@ export interface operations {
                      */
                     photo: string;
                     caption?: string;
+                    /**
+                     * @description Friends posts are visible to users sharing a group with the author.
+                     * @default public
+                     * @enum {string}
+                     */
+                    audience?: 'public' | 'friends';
+                    /** @description Repeated multipart field. Optional selected groups for a friends post; the author must belong to every selected group. */
+                    group_id?: string[];
                     lat: number;
                     long: number;
                 };

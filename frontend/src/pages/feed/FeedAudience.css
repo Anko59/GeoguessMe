@@ -1,0 +1,32 @@
+.feed-audience {
+    display: grid;
+    gap: 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    padding: 0.9rem;
+}
+
+.feed-audience legend,
+.feed-group-targets > span {
+    font-weight: 750;
+    font-size: 0.85rem;
+}
+
+.feed-audience label,
+.feed-group-targets label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.feed-audience input {
+    width: auto;
+}
+
+.feed-group-targets {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.65rem 0 0.1rem 1.55rem;
+    border-top: 1px solid var(--line);
+}

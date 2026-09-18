@@ -47,7 +47,7 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, feed.ErrNotFound):
 		handlers.WriteError(w, 404, "not_found", "Public challenge or comment not found")
 	case errors.Is(err, feed.ErrForbidden):
-		handlers.WriteError(w, 403, "forbidden", "You cannot guess your own challenge")
+		handlers.WriteError(w, 403, "forbidden", "You are not allowed to perform this feed action")
 	default:
 		slog.Error("public feed request failed", "error", err)
 		handlers.WriteError(w, 500, "internal_error", "Unable to complete this feed request")

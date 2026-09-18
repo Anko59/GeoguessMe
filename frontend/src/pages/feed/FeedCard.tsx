@@ -50,7 +50,7 @@ export default function FeedCard({
                                 day: 'numeric',
                             })}
                         </time>{' '}
-                        · Public challenge
+                        · {post.audience === 'friends' ? 'Friends challenge' : 'Public challenge'}
                     </Link>
                 </div>
                 {post.is_owner && (

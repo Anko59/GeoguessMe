@@ -9,6 +9,7 @@ type PublicChallenge struct {
 	UserID        string    `json:"user_id"`
 	Username      string    `json:"username"`
 	Caption       string    `json:"caption"`
+	Audience      string    `json:"audience"`
 	CreatedAt     time.Time `json:"created_at"`
 	IsOwner       bool      `json:"is_owner"`
 	Resolved      bool      `json:"resolved"`
