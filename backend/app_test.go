@@ -112,7 +112,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		"hub": appA.Hub == appB.Hub, "logger": appA.Logger == appB.Logger,
 		"metrics": appA.Metrics == appB.Metrics, "groups": appA.Groups == appB.Groups,
 		"chat": appA.Chat == appB.Chat, "auth": appA.Auth == appB.Auth,
-		"authapi": appA.AuthAPI == appB.AuthAPI,
+		"authapi": appA.AuthAPI == appB.AuthAPI, "feed": appA.Feed == appB.Feed,
 	} {
 		if shared {
 			t.Fatalf("composition instances share the %s dependency", name)
@@ -147,10 +147,26 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 	// Each App builds its own complete route table and serves a route without
 	// any package-global wiring.
 	for name, app := range map[string]*App{"A": appA, "B": appB} {
+		routes := app.routes()
 		rec := httptest.NewRecorder()
-		app.routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
 		if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
 			t.Fatalf("instance %s /health/live = %d %q", name, rec.Code, rec.Body.String())
+		}
+		// Every public-feed operation must reject anonymous requests before
+		// touching its repository or storage, including original-photo access.
+		for _, route := range []struct{ method, path string }{
+			{"GET", "/feed"}, {"POST", "/feed/challenges"},
+			{"GET", "/feed/challenges/post"}, {"DELETE", "/feed/challenges/post"},
+			{"GET", "/feed/challenges/post/media"}, {"GET", "/feed/challenges/post/play"},
+			{"GET", "/feed/challenges/post/guess"}, {"POST", "/feed/challenges/post/guess"},
+			{"PUT", "/feed/challenges/post/reaction"}, {"DELETE", "/feed/challenges/post/reaction"},
+			{"GET", "/feed/challenges/post/comments"}, {"POST", "/feed/challenges/post/comments"},
+			{"DELETE", "/feed/challenges/post/comments/comment"},
+		} {
+			rec := httptest.NewRecorder()
+			routes.ServeHTTP(rec, httptest.NewRequest(route.method, "/api/v1"+route.path, nil))
+			require.Equal(t, http.StatusUnauthorized, rec.Code, "%s %s", route.method, route.path)
 		}
 	}
 }

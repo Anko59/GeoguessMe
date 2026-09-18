@@ -1,0 +1,410 @@
+.public-feed {
+    min-height: 100dvh;
+    background: var(--surface-soft);
+    color: var(--ink-strong);
+}
+
+.feed-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1rem max(1rem, calc((100vw - 1120px) / 2));
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+.feed-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink);
+    font-weight: 800;
+    font-size: 1.25rem;
+    text-decoration: none;
+}
+
+.feed-brand img {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+}
+.feed-topbar nav {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+.feed-topbar nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font-weight: 650;
+    padding: 0.5rem 0;
+}
+.feed-topbar nav a[aria-current] {
+    color: var(--brand-blue-accessible);
+    border-bottom: 2px solid currentcolor;
+}
+.feed-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 680px) minmax(240px, 300px);
+    gap: 4rem;
+    max-width: 1120px;
+    margin: auto;
+    padding: 2.5rem 1.5rem 5rem;
+}
+.feed-column {
+    min-width: 0;
+}
+.feed-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0 0 1.75rem;
+}
+.feed-heading > div {
+    flex: 1;
+    min-width: min(100%, 300px);
+}
+.feed-eyebrow {
+    color: var(--brand-blue-accessible);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 800;
+    margin: 0 0 0.8rem;
+}
+.feed-heading h1 {
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    line-height: 1.12;
+    letter-spacing: -0.045em;
+    max-width: 520px;
+    margin: 0 0 0.6rem;
+}
+.feed-heading > div > p:not(.feed-eyebrow) {
+    color: var(--ink-muted);
+    line-height: 1.7;
+    max-width: 460px;
+    margin: 0;
+}
+.feed-section-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.feed-section-label h2 {
+    font-size: 1rem;
+    margin: 0;
+}
+.feed-card {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    overflow: hidden;
+    background: var(--surface);
+    margin-bottom: 1.75rem;
+    box-shadow: var(--shadow-xs);
+}
+.feed-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 1rem 1.25rem;
+}
+.feed-avatar {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--surface-brand);
+    border: 1px solid var(--line);
+    color: var(--brand-blue-accessible);
+    font-weight: 750;
+}
+.feed-author {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.feed-author > a {
+    color: var(--ink-muted);
+    font-size: 0.73rem;
+    text-decoration: none;
+}
+.feed-media {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    background: var(--surface-brand);
+}
+.feed-photo {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.feed-photo-frame {
+    width: 100%;
+    height: 100%;
+}
+.feed-photo-blurred {
+    filter: blur(12px) brightness(0.85);
+    transform: scale(1.08);
+}
+.feed-image-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    min-height: 220px;
+    height: 100%;
+    color: var(--ink-muted);
+}
+.feed-image-state[role='alert'] {
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+}
+.feed-reveal-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    align-items: center;
+    padding: 1.5rem;
+    text-align: center;
+    background: linear-gradient(transparent 15%, rgba(10, 28, 48, 0.78));
+    color: white;
+}
+.feed-reveal-overlay h2 {
+    color: white;
+    font-size: 1.4rem;
+    margin: 1rem 0 0.4rem;
+}
+.feed-reveal-overlay p {
+    margin: 0 0 1.4rem;
+    color: white;
+}
+.feed-revealed-badge {
+    position: absolute;
+    left: 1rem;
+    bottom: 1rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--success);
+    font-size: 0.75rem;
+    font-weight: 700;
+    box-shadow: var(--shadow-xs);
+}
+.feed-card-body {
+    padding: 0.7rem 1.25rem 1rem;
+}
+.feed-social-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+}
+.feed-text-button,
+.feed-reaction {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-muted);
+    padding: 0.65rem 0.15rem;
+    font: inherit;
+    font-size: 0.85rem;
+    min-height: 44px;
+}
+.feed-reaction {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--ink);
+}
+.feed-reaction > span:first-child {
+    font-size: 1.8rem;
+    line-height: 1;
+}
+.feed-reaction.is-liked {
+    color: var(--danger);
+}
+.feed-text-button:hover {
+    color: var(--brand-blue-accessible);
+    text-decoration: underline;
+}
+.feed-text-button:disabled,
+.feed-reaction:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.feed-caption {
+    line-height: 1.65;
+    margin: 0.5rem 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.feed-share {
+    margin-left: auto;
+    font-size: 0.8rem;
+    min-width: 0;
+}
+.feed-share > span,
+.feed-share label {
+    display: block;
+    color: var(--ink-muted);
+}
+.feed-share input {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+    padding: 0.5rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    background: var(--surface);
+}
+.feed-caption strong {
+    margin-right: 0.3rem;
+}
+.feed-spoiler-note,
+.feed-note {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    line-height: 1.6;
+}
+.feed-spoiler-note {
+    margin: 0.7rem 0 0;
+}
+.feed-sidebar {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    padding: 1.75rem;
+    margin-top: 1rem;
+    background: linear-gradient(155deg, var(--surface-warm), var(--surface-brand));
+}
+.feed-sidebar > img {
+    width: 76px;
+    height: 76px;
+    object-fit: contain;
+    margin-bottom: 1.5rem;
+}
+.feed-sidebar h2 {
+    font-size: 1.6rem;
+    letter-spacing: -0.04em;
+}
+.feed-sidebar ol {
+    display: grid;
+    gap: 1.5rem;
+    padding-left: 1.2rem;
+    margin: 1.7rem 0;
+}
+.feed-sidebar li {
+    padding-left: 0.4rem;
+    color: var(--brand-blue-accessible);
+}
+.feed-sidebar strong,
+.feed-sidebar span {
+    display: block;
+}
+.feed-sidebar strong {
+    color: var(--ink);
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+}
+.feed-sidebar span {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--ink-muted);
+}
+.feed-sidebar > a,
+.feed-back-link {
+    color: var(--brand-blue-accessible);
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+.feed-empty {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    border: 1px dashed var(--line-strong);
+    border-radius: 1.25rem;
+    background: var(--surface);
+}
+.feed-empty > img {
+    width: 76px;
+    height: 76px;
+}
+.feed-empty h2 {
+    font-size: 1.35rem;
+}
+.feed-empty p {
+    color: var(--ink-muted);
+    line-height: 1.65;
+    margin-bottom: 1.5rem;
+}
+.feed-load-more {
+    width: 100%;
+}
+
+@media (max-width: 900px) {
+    .feed-layout {
+        grid-template-columns: minmax(0, 680px);
+        justify-content: center;
+        padding-top: 1.5rem;
+    }
+    .feed-sidebar {
+        display: none;
+    }
+}
+
+@media (max-width: 540px) {
+    .feed-topbar {
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        padding: 0.75rem 1rem;
+    }
+    .feed-brand {
+        font-size: 1.1rem;
+    }
+    .feed-topbar nav {
+        gap: 1rem;
+        font-size: 0.8rem;
+    }
+    .feed-layout {
+        padding: 1.5rem 0.75rem 3rem;
+    }
+    .feed-heading {
+        padding: 0 0.5rem 1.5rem;
+    }
+    .feed-card-header,
+    .feed-card-body {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    .feed-reveal-overlay h2 {
+        font-size: 1.2rem;
+    }
+    .feed-reveal-overlay p {
+        font-size: 0.85rem;
+    }
+    .feed-dialog {
+        padding: 1rem;
+    }
+}

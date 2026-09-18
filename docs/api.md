@@ -162,6 +162,25 @@ maximum just before `guess_expires_at`, and a missing guess scores 0 from
 the player is choosing a guess instead of revealing the mechanic only on the
 results screen.
 
+### Public feed
+
+All feed routes require bearer authentication and use the default authenticated
+rate limit. Posts and comments use a descending `(created_at, id)` cursor;
+`limit` defaults to 20 and accepts 1–50. Read
+[public feed behavior and rollout](public-feed.md) for visibility and retention.
+
+| Method      | Path                                                | Description                                                  |
+| ----------- | --------------------------------------------------- | ------------------------------------------------------------ |
+| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`               |
+| POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,lat,long)`                  |
+| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                              |
+| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer |
+| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt              |
+| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess       |
+| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                            |
+| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                      |
+| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                      |
+
 ### WebSocket
 
 | Method | Path                           | Auth   | Description               |

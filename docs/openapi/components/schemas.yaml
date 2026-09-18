@@ -1,3 +1,14 @@
+PublicChallenge:
+  $ref: ./schemas-feed.yaml#/PublicChallenge
+PublicFeedPage:
+  $ref: ./schemas-feed.yaml#/PublicFeedPage
+PublicComment:
+  $ref: ./schemas-feed.yaml#/PublicComment
+PublicCommentsPage:
+  $ref: ./schemas-feed.yaml#/PublicCommentsPage
+PublicGuessResult:
+  $ref: ./schemas-feed.yaml#/PublicGuessResult
+
 APIError:
   type: object
   required: [error]
@@ -277,44 +288,7 @@ Message:
     reaction_update: { $ref: "#/MessageReactionUpdate" }
 
 ReactionKey:
-  type: string
-  enum:
-    [
-      like,
-      love,
-      laugh,
-      wow,
-      sad,
-      spot-on,
-      lost,
-      mind-blown,
-      wrong-way,
-      vacation,
-      dislike,
-      cry,
-      kiss,
-      wink,
-      grin,
-      heart-eyes,
-      sunglasses,
-      angry,
-      confused,
-      sleepy,
-      clap,
-      pray,
-      fire,
-      party,
-      👍,
-      ❤️,
-      😂,
-      😮,
-      😢,
-      🙏,
-    ]
-  description: >
-    Reaction identity. The twenty-four named keys map to custom artwork shown
-    in the UI; the six legacy emoji values are still accepted so existing
-    reactions keep working.
+  $ref: ./schemas-reactions.yaml#/ReactionKey
 
 MessageReaction:
   type: object
