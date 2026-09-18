@@ -254,7 +254,7 @@ groupParty:
     responses:
       "200":
         description: Party state.
-        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+        content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/PartyStatus" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
   post:
@@ -279,7 +279,7 @@ groupParty:
     responses:
       "201":
         description: Party started; the response carries the active window.
-        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+        content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/PartyStatus" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

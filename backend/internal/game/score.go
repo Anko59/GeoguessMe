@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// ScoreGracePeriod is the window after the guessing phase opens during which
+// the full distance-based score is still achievable. It is published to
+// clients as score_grace_seconds so the answering UI can visualize the decay
+// without duplicating the policy constant.
+const ScoreGracePeriod = 60 * time.Second
+
+// ScoreGraceSeconds reports ScoreGracePeriod in whole seconds for wire
+// responses.
+func ScoreGraceSeconds() int {
+	return int(ScoreGracePeriod / time.Second)
+}
+
 // CalculateDistance returns the distance between two coordinates in meters using Haversine formula
 func CalculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	const R = 6371000 // Earth radius in meters
@@ -43,18 +55,18 @@ func TimeMultiplier(elapsed, guessWindow time.Duration) float64 {
 	if guessWindow <= 0 {
 		return 1
 	}
-	if elapsed < 60*time.Second {
+	if elapsed < ScoreGracePeriod {
 		return 1
 	}
 	if elapsed >= guessWindow {
 		return 0
 	}
 	// Linear decay from 1.0 at 60s to 0.2 at (guessWindow - 1s).
-	penaltySpan := guessWindow - 60*time.Second - time.Second
+	penaltySpan := guessWindow - ScoreGracePeriod - time.Second
 	if penaltySpan <= 0 {
 		return 1
 	}
-	elapsedOffset := elapsed - 60*time.Second
+	elapsedOffset := elapsed - ScoreGracePeriod
 	if elapsedOffset >= penaltySpan {
 		return 0.2
 	}

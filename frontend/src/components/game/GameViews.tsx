@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import Map from '../map/Map';
 import Icon from '../ui/Icon';
 import FullScreenImage from '../ui/FullScreenImage';
-import type { GameState, GamePosition } from './gameState';
+import { MAX_GUESS_SCORE, type GameState, type GamePosition } from './gameState';
 
 // locationRevealClause renders the remaining hide duration for a hidden
 // challenge location from the API's location_reveals_at timestamp so the UI
@@ -38,6 +38,11 @@ interface GameViewProps {
     guessRemaining: number;
     /** Full guessing-window length in seconds (view end to guess deadline). */
     guessTotalSeconds: number;
+    /** Points still achievable with a pinpoint guess at this instant
+     *  (undefined when the server did not publish the decay policy). */
+    potentialScore?: number;
+    /** Transient answering-phase notice, owned and auto-cleared by Game. */
+    scoreNotice?: 'grace-ended';
     /** The client clock offset by the server offset (used for reveal clauses). */
     serverNowMs: number;
     /** Optional score-feedback overlay rendered above the active phase. */
@@ -123,15 +128,38 @@ function GameWaitingView({ remaining }: { remaining: number }) {
 // the brand colors. The fill ratio derives from the server-published window
 // length, and the countdown keeps running across app restarts because the
 // deadline itself is server-authoritative.
-function GuessTimerBar({ remaining, total }: { remaining: number; total: number }) {
+//
+// With a server-published decay policy the fill tracks the still-achievable
+// score and the potential points are shown next to the countdown; without one
+// it falls back to the raw remaining-time fraction.
+function GuessTimerBar({ remaining, total, potential }: { remaining: number; total: number; potential?: number }) {
     const label = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
-    const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+    const timeFraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+    // When the server published the decay policy, the fill tracks the score
+    // potential instead of raw time: it stays full during the grace period,
+    // drains with the decay, and stops at the 20% floor instead of
+    // suggesting points below it before the deadline cliff.
+    const fraction =
+        potential !== undefined && total > 0 ? Math.min(1, Math.max(0, potential / MAX_GUESS_SCORE)) : timeFraction;
+    const decaying = potential !== undefined && potential < MAX_GUESS_SCORE;
+    const scoreNumber = potential !== undefined ? potential.toLocaleString('en-US') : undefined;
+    const ariaLabel =
+        scoreNumber === undefined
+            ? `Time left to guess: ${label}`
+            : `${decaying ? `Potential score: ${scoreNumber} points` : `Full points available: ${scoreNumber} points`}. Time left to guess: ${label}${
+                  remaining <= 15 ? '. Guess now or the score drops to 0' : ''
+              }`;
     return (
         <div
-            className={`guess-timer-bar${remaining <= 15 ? ' guess-timer-bar--urgent' : ''}`}
+            className={`guess-timer-bar${scoreNumber === undefined ? ' guess-timer-bar--time-only' : ''}${decaying ? ' guess-timer-bar--decaying' : ''}${remaining <= 15 ? ' guess-timer-bar--urgent' : ''}`}
             role="timer"
-            aria-label={`Time left to guess: ${label}`}
+            aria-label={ariaLabel}
         >
+            {scoreNumber !== undefined && (
+                <span className="guess-timer-bar__score" aria-hidden="true">
+                    {scoreNumber}
+                </span>
+            )}
             <span className="guess-timer-bar__label" aria-hidden="true">
                 {label}
             </span>
@@ -146,12 +174,16 @@ function GameGuessingView({
     state,
     guessRemaining,
     guessTotalSeconds,
+    potentialScore,
+    scoreNotice,
     onSelectLocation,
     onSubmitGuess,
 }: {
     state: GameState;
     guessRemaining: number;
     guessTotalSeconds: number;
+    potentialScore?: number;
+    scoreNotice?: 'grace-ended';
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
 }) {
@@ -163,6 +195,11 @@ function GameGuessingView({
                     <h3>Where was this taken?</h3>
                     <p>Tap the map to place your guess.</p>
                 </div>
+                {scoreNotice === 'grace-ended' && (
+                    <p className="score-notice" role="status">
+                        Full points have ended — the achievable score now decreases.
+                    </p>
+                )}
                 <Map
                     onLocationSelect={(lat, long) => onSelectLocation({ lat, long })}
                     selectedLocation={state.selectedLocation ?? null}
@@ -182,7 +219,7 @@ function GameGuessingView({
                         'Select a location…'
                     )}
                 </button>
-                <GuessTimerBar remaining={guessRemaining} total={guessTotalSeconds} />
+                <GuessTimerBar remaining={guessRemaining} total={guessTotalSeconds} potential={potentialScore} />
             </div>
         </GameOverlay>
     );
@@ -333,6 +370,8 @@ export default function GameView({
     remaining,
     guessRemaining,
     guessTotalSeconds,
+    potentialScore,
+    scoreNotice,
     serverNowMs,
     feedback,
     currentUserId,
@@ -358,6 +397,8 @@ export default function GameView({
                     state={state}
                     guessRemaining={guessRemaining}
                     guessTotalSeconds={guessTotalSeconds}
+                    potentialScore={potentialScore}
+                    scoreNotice={scoreNotice}
                     onSelectLocation={onSelectLocation}
                     onSubmitGuess={onSubmitGuess}
                 />
