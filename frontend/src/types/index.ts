@@ -14,6 +14,8 @@
 import type { components } from './openapi.generated';
 export type PublicChallenge = components['schemas']['PublicChallenge'];
 export type PublicFeedPage = components['schemas']['PublicFeedPage'];
+export type PublicFeedLeaderboardEntry = components['schemas']['PublicFeedLeaderboardEntry'];
+export type PublicFeedLeaderboardPage = components['schemas']['PublicFeedLeaderboardPage'];
 export type PublicComment = components['schemas']['PublicComment'];
 export type PublicCommentsPage = components['schemas']['PublicCommentsPage'];
 export type PublicGuessResult = components['schemas']['PublicGuessResult'];

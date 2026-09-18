@@ -4,6 +4,7 @@ import type {
     AuthResponse,
     PublicChallenge,
     PublicFeedPage,
+    PublicFeedLeaderboardPage,
     PublicCommentsPage,
     PublicFeedResult,
     PublicComment,
@@ -139,6 +140,8 @@ const publicPostPath = (id: string) => `/feed/challenges/${encodeURIComponent(id
 export const publicFeedAPI = {
     list: async (cursor: string, signal: AbortSignal) =>
         (await api.get<PublicFeedPage>('/feed', { params: { cursor }, signal })).data,
+    leaderboard: async (cursor: string, signal: AbortSignal) =>
+        (await api.get<PublicFeedLeaderboardPage>('/feed/leaderboard', { params: { cursor }, signal })).data,
     get: async (id: string, signal: AbortSignal) =>
         (await api.get<PublicChallenge>(publicPostPath(id), { signal })).data,
     publish: async (form: FormData, signal: AbortSignal) =>

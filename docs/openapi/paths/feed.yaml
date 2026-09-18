@@ -31,6 +31,38 @@
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "500":
         "$ref": "../components/responses.yaml#/ErrorResponse"
+"leaderboard":
+  "get":
+    "operationId": "getPublicFeedLeaderboard"
+    "summary": "Rank the community by total public feed score"
+    "description": "Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules."
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters":
+      [
+        { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 256 } },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        },
+      ]
+    "responses":
+      "200":
+        "description": "Stable cursor page ordered by total feed score, username, and user ID."
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicFeedLeaderboardPage"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
 "upload":
   "post":
     "operationId": "createPublicChallenge"

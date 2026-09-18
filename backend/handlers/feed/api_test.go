@@ -161,6 +161,35 @@ func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
 	}
 }
 
+func TestFeedLeaderboardReturnsTotalsWithoutCaching(t *testing.T) {
+	a, mock := mockAPI(t)
+	mock.ExpectQuery("WITH totals AS").WithArgs(21).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "total_score", "rank"}).
+			AddRow("user-a", "Alice", 5000, 1).
+			AddRow("user-b", "Bob", 4200, 2).
+			AddRow("user-c", "Carol", 3900, 3),
+	)
+	w := httptest.NewRecorder()
+	a.Leaderboard(w, request("GET", ""))
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"username":"Alice"`) || !strings.Contains(w.Body.String(), `"next_cursor"`) {
+		t.Fatalf("leaderboard response = %s", w.Body.String())
+	}
+}
+
+func TestFeedLeaderboardRejectsInvalidCursorBeforePersistence(t *testing.T) {
+	a, _ := mockAPI(t)
+	r := request("GET", "")
+	r.URL.RawQuery = "cursor=invalid"
+	w := httptest.NewRecorder()
+	a.Leaderboard(w, r)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), `"invalid_cursor"`) {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", testID).WillReturnError(pgx.ErrNoRows)

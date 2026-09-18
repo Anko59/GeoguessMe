@@ -12,6 +12,8 @@ paths:
     $ref: ./openapi/paths/atlas.yaml#/groupChallenges
   /feed:
     $ref: ./openapi/paths/feed.yaml#/feed
+  /feed/leaderboard:
+    $ref: ./openapi/paths/feed.yaml#/leaderboard
   /feed/challenges:
     $ref: ./openapi/paths/feed.yaml#/upload
   /feed/challenges/{id}:

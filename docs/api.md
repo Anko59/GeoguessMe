@@ -174,6 +174,7 @@ rate limit. Posts and comments use a descending `(created_at, id)` cursor;
 | Method      | Path                                                | Description                                                    |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------- |
 | GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                 |
+| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames and total score only          |
 | POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,audience,group_id*,lat,long)` |
 | GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                |
 | GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer   |

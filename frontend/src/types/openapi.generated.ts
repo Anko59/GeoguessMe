@@ -42,6 +42,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/feed/leaderboard': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank the community by total public feed score
+         * @description Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules.
+         */
+        get: operations['getPublicFeedLeaderboard'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/feed/challenges': {
         parameters: {
             query?: never;
@@ -1142,6 +1162,17 @@ export interface components {
             items: components['schemas']['PublicChallenge'][];
             next_cursor: string;
         };
+        PublicFeedLeaderboardEntry: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            total_score: number;
+        };
+        PublicFeedLeaderboardPage: {
+            items: components['schemas']['PublicFeedLeaderboardEntry'][];
+            next_cursor: string;
+        };
         PublicGuessResult: {
             score: number;
             /** @description Distance in meters. */
@@ -1718,6 +1749,33 @@ export interface operations {
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicFeedLeaderboard: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable cursor page ordered by total feed score, username, and user ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedLeaderboardPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
             429: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
         };

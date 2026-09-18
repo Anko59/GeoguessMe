@@ -5,6 +5,12 @@ discover photo challenges from the whole community. Posts appear newest first,
 with a stable cursor for loading older posts. Each post has a shareable
 `/feed/{id}` link. Signing in is required to follow that link.
 
+The profile page also shows a bounded community feed leaderboard. It ranks
+players by the sum of their immutable public-feed guess scores and exposes only
+rank, username, and total score. Opening a username still uses the existing
+profile visibility rule: full profile details require a shared group unless the
+viewer is looking at their own profile.
+
 ## Publish and play
 
 Choose **Post a challenge**, upload a JPG, PNG, or WebP photo, add an optional
@@ -77,9 +83,10 @@ cursor requests with indexable seek predicates.
 ## Storage, deployment, and rollback
 
 migrations **027_public_feed**, **028_group_inbox_reads**,
-**029_feed_audiences**, and **030_public_feed_results** add independent public
-challenge data, durable group inbox read boundaries, audience/selected-group
-records, and the ranked results index. Apply migrations with the existing
+**029_feed_audiences**, **030_public_feed_results**, and
+**031_public_feed_leaderboard** add independent public challenge data, durable
+group inbox read boundaries, audience/selected-group records, the ranked results
+index, and the feed-score aggregation index. Apply migrations with the existing
 deployment migration job before starting the new application revision; local
 operators use `make migrate-up`. No environment variables or services are added.
 
