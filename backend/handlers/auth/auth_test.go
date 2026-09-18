@@ -104,13 +104,25 @@ func handlerUserRows(user *models.User) *pgxmock.Rows {
 func TestSignup(t *testing.T) {
 	t.Run("Invalid Payload", func(t *testing.T) {
 		api := newAuthAPI(t, newAuthMockPool(t), nil)
-		reqBody := []byte(`{"username": ""}`) // Missing password
+		reqBody := []byte(`{"username": "", "age_attested": true}`) // Missing password
 		req, _ := http.NewRequestWithContext(context.Background(), "POST", "/signup", bytes.NewBuffer(reqBody))
 		rr := httptest.NewRecorder()
 
 		api.Signup(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Requires Age Attestation", func(t *testing.T) {
+		api := newAuthAPI(t, newAuthMockPool(t), nil)
+		reqBody := []byte(`{"username": "alice", "password": "StrongPassword123"}`)
+		req, _ := http.NewRequestWithContext(context.Background(), "POST", "/signup", bytes.NewBuffer(reqBody))
+		rr := httptest.NewRecorder()
+
+		api.Signup(rr, req)
+
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), `"code":"age_attestation_required"`)
 	})
 }
 
@@ -153,7 +165,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123"}`)))
+	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("signup status = %d (%s)", recorder.Code, recorder.Body.String())
 	}

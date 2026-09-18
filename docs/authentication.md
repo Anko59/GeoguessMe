@@ -109,6 +109,11 @@ release is owned by the
 
 ## Verification
 
+- Signup enforces the published minimum age of 15 (see the terms of use and
+  privacy policy): the payload must carry `age_attested: true`, the signup UI
+  requires an explicit confirmation checkbox on both the native and the Keycloak
+  path, and the backend rejects native signup with
+  `400 age_attestation_required` otherwise.
 - Recovery email is optional and never controls account, gameplay, or social
   authorization. Before verification it exists only as `pending_email`; only a
   confirmed claim is promoted to the verified `email` used by recovery.

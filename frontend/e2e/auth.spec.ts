@@ -80,6 +80,9 @@ test.describe('Authentication validation', () => {
         await page.fill('#signup-username', 'ab');
         await page.fill('#signup-email', uniqueEmail());
         await page.fill('#signup-password', 'TestPass123');
+        // Satisfy the native required-checkbox so the request reaches the
+        // server-side username validation under test.
+        await page.check('#signup-age-attested');
         await page.click('button.btn-primary[type="submit"]');
 
         await expect(page.locator('.auth-error')).toBeVisible();
@@ -92,6 +95,7 @@ test.describe('Authentication validation', () => {
         await page.fill('#signup-username', uniqueUsername());
         await page.fill('#signup-email', uniqueEmail());
         await page.fill('#signup-password', 'short');
+        await page.check('#signup-age-attested');
         await page.click('button.btn-primary[type="submit"]');
 
         await expect(page.locator('.auth-error')).toBeVisible();
@@ -104,6 +108,7 @@ test.describe('Authentication validation', () => {
         await page.fill('#signup-username', uniqueUsername());
         await page.fill('#signup-email', uniqueEmail());
         await page.fill('#signup-password', 'nouppercase1');
+        await page.check('#signup-age-attested');
         await page.click('button.btn-primary[type="submit"]');
 
         await expect(page.locator('.auth-error')).toBeVisible();
@@ -162,6 +167,7 @@ test.describe('Duplicate registration', () => {
         await page.fill('#signup-username', creds.username);
         await page.fill('#signup-email', uniqueEmail());
         await page.fill('#signup-password', 'TestPass123');
+        await page.check('#signup-age-attested');
         await page.click('button.btn-primary[type="submit"]');
 
         await expect(page.locator('.auth-error')).toBeVisible();
@@ -189,6 +195,7 @@ test.describe('Duplicate registration', () => {
         await page.fill('#signup-username', uniqueUsername());
         await page.fill('#signup-email', creds.email);
         await page.fill('#signup-password', 'TestPass123');
+        await page.check('#signup-age-attested');
         await page.click('button.btn-primary[type="submit"]');
 
         await expect(page).toHaveURL(/\/groups/);

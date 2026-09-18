@@ -1402,6 +1402,8 @@ export interface operations {
                      */
                     email?: string;
                     password: string;
+                    /** @description Must be true. Confirms the user meets the minimum age of 15 published in the terms of use and privacy policy. Signup is rejected with 400 age_attestation_required otherwise. */
+                    age_attested: boolean;
                 };
             };
         };

@@ -252,7 +252,7 @@ func TestSignupIdentityLimitThreePerHour(t *testing.T) {
 
 	username := unique("rl-signup")
 	email := unique("rl") + "@test.local"
-	body := map[string]string{"username": username, "email": email, "password": "StrongPassword123"}
+	body := map[string]any{"username": username, "email": email, "password": "StrongPassword123", "age_attested": true}
 
 	for range 3 {
 		resp, _ := doJSON(t, http.MethodPost, "/api/v1/auth/signup", body, "", nil)
