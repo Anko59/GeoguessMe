@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
 import { useAvatarUrl } from '../../components/common/avatarCache';
 import RankBadge from '../../components/progression/RankBadge';
+import TopNavigation from '../../components/navigation/TopNavigation';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
@@ -55,6 +56,7 @@ export default function ProfilePage() {
     if (loading) {
         return (
             <main className="profile-page profile-state" aria-busy="true">
+                <TopNavigation showSettings={isSelf} />
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading profile…</span>
@@ -66,6 +68,7 @@ export default function ProfilePage() {
     if (error || !profile) {
         return (
             <main className="profile-page profile-state">
+                <TopNavigation showSettings={isSelf} />
                 <div className="profile-error" role="alert">
                     <strong>We couldn’t load this profile</strong>
                     <span>{error || 'This profile is temporarily unavailable.'}</span>
@@ -82,17 +85,7 @@ export default function ProfilePage() {
 
     return (
         <main className="profile-page">
-            <header className="profile-topbar">
-                <Link to="/groups" className="profile-back-link">
-                    <Icon name="arrow-left" className="profile-back-icon" />
-                    Groups
-                </Link>
-                {isSelf && (
-                    <Link to="/settings" className="profile-settings-link">
-                        Settings
-                    </Link>
-                )}
-            </header>
+            <TopNavigation showSettings={isSelf} />
 
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">

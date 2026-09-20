@@ -3,6 +3,11 @@
     padding-block: clamp(1rem, 4vw, 3rem);
 }
 
+.account-settings-container > .app-topbar {
+    width: min(100%, 70rem);
+    justify-self: center;
+}
+
 .account-settings-card {
     width: min(100%, 46rem);
     padding: clamp(1.25rem, 4vw, 2.5rem);
@@ -239,5 +244,17 @@
     .account-danger .btn,
     .account-footer-actions .logout-btn {
         width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .account-settings-container {
+        align-items: center;
+        flex-direction: column;
+    }
+
+    .account-settings-container > .app-topbar {
+        width: 100%;
+        flex: none;
     }
 }

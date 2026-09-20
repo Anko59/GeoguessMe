@@ -4,49 +4,12 @@
     color: var(--ink-strong);
 }
 
-.feed-topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    padding: 1rem max(1rem, calc((100vw - 1120px) / 2));
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
+.public-feed > .app-topbar {
+    width: min(100%, 70rem);
+    margin-inline: auto;
+    padding-inline: 1.5rem;
 }
 
-.feed-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: var(--ink);
-    font-weight: 800;
-    font-size: 1.25rem;
-    text-decoration: none;
-}
-
-.feed-brand img {
-    width: 38px;
-    height: 38px;
-    object-fit: contain;
-}
-.feed-topbar nav {
-    display: flex;
-    gap: 1.5rem;
-    align-items: center;
-}
-.feed-topbar nav a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    color: var(--ink-muted);
-    text-decoration: none;
-    font-weight: 650;
-    padding: 0.5rem 0;
-}
-.feed-topbar nav a[aria-current] {
-    color: var(--brand-blue-accessible);
-    border-bottom: 2px solid currentcolor;
-}
 .feed-layout {
     display: grid;
     grid-template-columns: minmax(0, 680px) minmax(240px, 300px);
@@ -459,18 +422,10 @@
 }
 
 @media (max-width: 540px) {
-    .feed-topbar {
-        flex-wrap: wrap;
-        gap: 0.6rem;
-        padding: 0.75rem 1rem;
+    .public-feed > .app-topbar {
+        padding-inline: 0.75rem;
     }
-    .feed-brand {
-        font-size: 1.1rem;
-    }
-    .feed-topbar nav {
-        gap: 1rem;
-        font-size: 0.8rem;
-    }
+
     .feed-layout {
         padding: 1.5rem 0.75rem 3rem;
     }
