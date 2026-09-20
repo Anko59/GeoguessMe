@@ -28,6 +28,52 @@
     display: grid;
     gap: 1.2rem;
 }
+.feed-camera-form {
+    min-width: 0;
+}
+.feed-camera-form .camera-container {
+    min-height: 28rem;
+    height: min(62dvh, 38rem);
+    border-radius: 0.85rem;
+}
+.feed-camera-form .camera-video,
+.feed-camera-form .camera-view,
+.feed-camera-form .photo-preview {
+    min-height: 28rem;
+}
+.feed-capture-cta {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin: 2rem 0 0.5rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+.feed-capture-cta > img {
+    width: 2.25rem;
+    height: 2.25rem;
+    object-fit: contain;
+    flex: none;
+}
+.feed-capture-cta > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1;
+}
+.feed-capture-cta strong {
+    font-size: 0.9rem;
+}
+.feed-capture-cta span {
+    color: var(--ink-muted);
+    font-size: 0.75rem;
+}
+.feed-capture-cta .btn {
+    flex: none;
+}
 .feed-form fieldset {
     border: 0;
     padding: 0;
@@ -59,13 +105,6 @@
 .feed-form h3 {
     margin: 0;
     font-size: 1rem;
-}
-.feed-compose-preview {
-    max-height: 240px;
-    width: 100%;
-    object-fit: contain;
-    border-radius: 0.8rem;
-    background: var(--surface-soft);
 }
 .feed-map {
     height: 280px;
@@ -165,4 +204,18 @@
 }
 .feed-delete-confirm .btn {
     margin-right: 0.5rem;
+}
+
+@media (max-width: 540px) {
+    .feed-capture-cta {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .feed-capture-cta > div {
+        flex-basis: calc(100% - 3.2rem);
+    }
+    .feed-capture-cta .btn {
+        width: 100%;
+        margin-left: 3.15rem;
+    }
 }

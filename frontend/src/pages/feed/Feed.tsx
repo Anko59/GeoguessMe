@@ -90,6 +90,16 @@ function FeedPage({ id }: { id?: string }) {
                             Explore more challenges →
                         </Link>
                     )}
+                    <section className="feed-capture-cta" aria-label="Post a challenge">
+                        <img src="/camera_icon.png" alt="" aria-hidden="true" />
+                        <div>
+                            <strong>Have a place to share?</strong>
+                            <span>Take a photo and let your device add the location.</span>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setComposing(true)}>
+                            Open camera
+                        </button>
+                    </section>
                 </div>
                 <aside className="feed-sidebar">
                     <img src="/globe_icon.png" alt="" />

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api';
-import type { Group } from '../../types';
+import type { Group, MediaProcessingJob } from '../../types';
 import type React from 'react';
 import { getAPIErrorMessage } from '../../api';
 import { dataURLToBlob, uploadPhoto } from './cameraUtils';
@@ -13,6 +13,12 @@ import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer
 interface ChallengeUploadDeps {
     groupIDs: string[];
     hideLocation: boolean;
+    /** Optional destination override used by capture surfaces outside groups. */
+    uploadCaptured?: (
+        blob: Blob,
+        filename: string,
+        position: GeolocationPosition,
+    ) => Promise<MediaProcessingJob | null>;
     fileMode: boolean;
     capturedPhoto: string | null;
     textBanner: TextBanner;
@@ -42,6 +48,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
     const {
         groupIDs,
         hideLocation,
+        uploadCaptured,
         fileMode,
         capturedPhoto,
         textBanner,
@@ -105,7 +112,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
         const video = recordedVideo;
         const photo = video ? null : renderFinalPhoto();
         if (!video && !photo) return;
-        if (groupIDs.length === 0) {
+        if (!uploadCaptured && groupIDs.length === 0) {
             setError('Select at least one group to send the challenge to.');
             return;
         }
@@ -115,7 +122,9 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
             const position = await requestLocation();
             if (video) {
                 const extension = video.blob.type === 'video/mp4' ? 'mp4' : 'webm';
-                const job = await uploadPhoto(video.blob, `capture.${extension}`, groupIDs, position, hideLocation);
+                const job = uploadCaptured
+                    ? await uploadCaptured(video.blob, `capture.${extension}`, position)
+                    : await uploadPhoto(video.blob, `capture.${extension}`, groupIDs, position, hideLocation);
                 if (job) {
                     // Asynchronous processing: the polling flow resolves the
                     // upload on ready and reports failures via the camera error.
@@ -123,13 +132,12 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
                     return;
                 }
             } else {
-                await uploadPhoto(
-                    dataURLToBlob(photo as string),
-                    fileMode ? 'upload.jpg' : 'capture.jpg',
-                    groupIDs,
-                    position,
-                    hideLocation,
-                );
+                const blob = dataURLToBlob(photo as string);
+                if (uploadCaptured) {
+                    await uploadCaptured(blob, fileMode ? 'upload.jpg' : 'capture.jpg', position);
+                } else {
+                    await uploadPhoto(blob, fileMode ? 'upload.jpg' : 'capture.jpg', groupIDs, position, hideLocation);
+                }
             }
             destroyEffects();
             stopCamera();
@@ -155,6 +163,7 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
         groupIDs,
         hideLocation,
         onUploadComplete,
+        uploadCaptured,
         recordedVideo,
         renderFinalPhoto,
         requestLocation,
