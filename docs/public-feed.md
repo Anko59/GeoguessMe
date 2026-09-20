@@ -121,8 +121,11 @@ route, validation, visibility, immutable guesses, storage cleanup timeouts,
 errors, and pagination. The integration fixture in
 `backend/integration_test/flow_test.go` exercises real publication, viewer
 isolation, independent concurrent guesses, duplicate attempts, reactions,
-comment authorization, and migration cascade cleanup. The browser journey is in
-`frontend/e2e/feed/public-feed.spec.ts`.
+comment authorization, and migration cascade cleanup. The deterministic browser
+journey is in `frontend/e2e/feed/public-feed.spec.ts`. Run it in both the
+Chromium desktop and Pixel 5 mobile projects; it asserts that no file picker or
+manual coordinate controls are present and that the multipart publication
+carries the deterministic device coordinates.
 
 The Playwright journey captures the empty feed, composer, audience controls,
 authored post, blurred challenge, guess dialog, result, revealed challenge, and
