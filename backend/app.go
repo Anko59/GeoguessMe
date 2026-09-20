@@ -185,24 +185,41 @@ func (a *App) routes() http.Handler {
 		limitedHandler := limit(name)(handler)
 		return limitedHandler.ServeHTTP
 	}
+	// methodLimited keeps normal protected reads and writes on independent
+	// per-user route buckets. The trusted-IP bucket remains shared by both
+	// policies as the aggregate abuse guard.
+	methodLimited := func(readPolicy, writePolicy string, handler http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			policy := readPolicy
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+			default:
+				policy = writePolicy
+			}
+			limit(policy)(handler).ServeHTTP(w, r)
+		}
+	}
 	protected := func(handler http.HandlerFunc) http.Handler {
-		return a.AuthAPI.AuthMiddleware(handler)
+		return a.AuthAPI.AuthMiddleware(methodLimited("default", "write", handler))
+	}
+	protectedWithPolicy := func(policy string, handler http.HandlerFunc) http.Handler {
+		return a.AuthAPI.AuthMiddleware(limited(policy, handler))
 	}
 
 	mux.Handle("/api/v1/auth/signup", limit("signup")(http.HandlerFunc(a.AuthAPI.Signup)))
 	mux.Handle("/api/v1/auth/login", limit("login")(http.HandlerFunc(a.AuthAPI.Login)))
 	mux.Handle("/api/v1/auth/oidc/config", limit("default")(http.HandlerFunc(a.AuthAPI.OIDCConfig)))
 	mux.Handle("/api/v1/auth/oidc/session", limit("login")(http.HandlerFunc(a.AuthAPI.ExchangeOIDCSession)))
-	mux.Handle("/api/v1/auth/oidc/link", protected(limited("default", a.AuthAPI.StartOIDCLink)))
+	mux.Handle("/api/v1/auth/oidc/link", protected(a.AuthAPI.StartOIDCLink))
 	mux.Handle("/api/v1/auth/refresh", limit("default")(http.HandlerFunc(a.AuthAPI.Refresh)))
 	mux.Handle("/api/v1/auth/logout", limit("default")(http.HandlerFunc(a.AuthAPI.Logout)))
-	mux.Handle("/api/v1/auth/verify/request", protected(limited("email", a.AuthAPI.RequestVerification)))
+	mux.Handle("/api/v1/auth/verify/request", protectedWithPolicy("email", a.AuthAPI.RequestVerification))
 	mux.Handle("/api/v1/auth/verify", limit("default")(http.HandlerFunc(a.AuthAPI.VerifyEmail)))
 	mux.Handle("/api/v1/auth/password/forgot", limit("email")(http.HandlerFunc(a.AuthAPI.ForgotPassword)))
 	mux.Handle("/api/v1/auth/password/reset", limit("reset")(http.HandlerFunc(a.AuthAPI.ResetPassword)))
-	mux.Handle("/api/v1/auth/password/change", protected(limited("default", a.AuthAPI.ChangePassword)))
-	mux.Handle("/api/v1/auth/profile", protected(limited("default", a.AuthAPI.UpdateProfile)))
-	mux.Handle("/api/v1/auth/profile/avatar", protected(limited("default", a.AuthAPI.UploadAvatar)))
+	mux.Handle("/api/v1/auth/password/change", protected(a.AuthAPI.ChangePassword))
+	mux.Handle("/api/v1/auth/profile", protected(a.AuthAPI.UpdateProfile))
+	mux.Handle("/api/v1/auth/profile/avatar", protected(a.AuthAPI.UploadAvatar))
 	mux.Handle("/api/v1/auth/account", protected(a.AuthAPI.DeleteAccount))
 
 	mux.Handle("/api/v1/user/groups", protected(a.Groups.GetUserGroups))
@@ -213,7 +230,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
 	mux.Handle("POST /api/v1/group/invites", protected(a.Game.CreateInvite))
 	mux.Handle("GET /api/v1/group/invites", protected(a.Game.ListInvites))
-	mux.Handle("POST /api/v1/group/invites/preview", limit("default")(http.HandlerFunc(a.Game.PreviewInvite)))
+	mux.Handle("POST /api/v1/group/invites/preview", limit("write")(http.HandlerFunc(a.Game.PreviewInvite)))
 	mux.Handle("DELETE /api/v1/group/invites/{inviteID}", protected(a.Game.RevokeInvite))
 	mux.Handle("/api/v1/group/details", protected(a.Game.GetGroupDetails))
 	mux.Handle("/api/v1/group/members", protected(a.Game.GetGroupMembers))
@@ -228,24 +245,13 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(a.Game.UploadPhoto))
-	a.Feed.Routes(mux, func(handler http.HandlerFunc) http.Handler {
-		mutate := limited("default", handler)
-		return protected(func(w http.ResponseWriter, r *http.Request) {
-			// Loading a page and its photos must not spend the allowance for
-			// publishing, guesses, reactions, or comments.
-			if r.Method == http.MethodGet {
-				handler(w, r)
-				return
-			}
-			mutate(w, r)
-		})
-	})
+	a.Feed.Routes(mux, protected)
 	mux.Handle("/api/v1/media-processing/{jobID}", protected(a.Game.GetMediaProcessingJob))
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)
 	pushHTTP := push.NewHTTP(a.Push)
-	mux.Handle("/api/v1/push/subscribe", protected(limited("push", pushHTTP.Subscribe)))
-	mux.Handle("/api/v1/push/unsubscribe", protected(limited("push", pushHTTP.Unsubscribe)))
+	mux.Handle("/api/v1/push/subscribe", protectedWithPolicy("push", pushHTTP.Subscribe))
+	mux.Handle("/api/v1/push/unsubscribe", protectedWithPolicy("push", pushHTTP.Unsubscribe))
 	mux.Handle("/api/v1/push/vapid-public-key", protected(pushHTTP.VapidPublicKey))
 	mux.Handle("/api/v1/challenges/{photoID}/accept", protected(a.Game.AcceptChallenge))
 	mux.Handle("/api/v1/challenges/{photoID}/media-delivered", protected(a.Game.ConfirmChallengeMediaDelivered))

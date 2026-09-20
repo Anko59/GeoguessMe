@@ -49,8 +49,20 @@ func DefaultPolicies() []Policy {
 		{
 			Name: "default", FailClosed: false,
 			Buckets: []BucketSpec{
-				{Type: BucketIdentity, Limit: 10, Window: time.Minute},
-				{Type: BucketTrustedIP, Limit: 60, Window: time.Minute},
+				// Read traffic gets its own route bucket so profile, feed, and
+				// group reads do not contend with each other or with writes.
+				{Type: BucketRoute, Limit: 120, Window: time.Minute},
+				{Type: BucketTrustedIP, Limit: 1200, Window: time.Minute},
+			},
+		},
+		{
+			Name: "write", FailClosed: false,
+			Buckets: []BucketSpec{
+				// Write traffic has a separate route budget. The IP budget
+				// preserves an aggregate abuse control without allowing normal
+				// reads to exhaust it first.
+				{Type: BucketRoute, Limit: 60, Window: time.Minute},
+				{Type: BucketTrustedIP, Limit: 600, Window: time.Minute},
 			},
 		},
 	}

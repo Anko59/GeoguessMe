@@ -54,7 +54,7 @@ func TestBuildRateLimitPolicies(t *testing.T) {
 	for _, p := range fallback {
 		names[p.Name] = true
 	}
-	for _, wanted := range []string{"login", "signup", "email", "reset", "push", "default"} {
+	for _, wanted := range []string{"login", "signup", "email", "reset", "push", "default", "write"} {
 		require.True(t, names[wanted], "fallback must include policy %q", wanted)
 	}
 
@@ -191,6 +191,12 @@ func TestFeedReadsPreserveMutationRateLimit(t *testing.T) {
 	cfg := &config.Config{
 		Environment: config.EnvTest,
 		JWTSecret:   "feed-rate-test-secret-longer-than-32-bytes",
+		RateLimitPolicies: []config.RateLimitPolicy{{
+			Name: "write",
+			Buckets: []config.RateLimitBucket{{
+				Type: "route", Limit: 10, Window: time.Minute,
+			}},
+		}},
 	}
 	pool := newCompositionPool(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

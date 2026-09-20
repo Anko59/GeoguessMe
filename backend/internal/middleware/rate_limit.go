@@ -190,7 +190,17 @@ func PolicyMiddleware(p Policy, opts PolicyOptions) func(http.Handler) http.Hand
 	}
 	ex := keyExtractors{
 		route: func(r *http.Request) string {
-			return r.Method + " " + r.Pattern
+			route := r.Method + " " + r.Pattern
+			// Protected routes are isolated per authenticated actor. The
+			// trusted-IP bucket remains a separate aggregate guard, so one
+			// user's feed reads or writes cannot consume another user's route
+			// budget while a shared network is still bounded overall.
+			if opts.User != nil {
+				if user := strings.TrimSpace(opts.User(r)); user != "" {
+					return "user:" + user + "|" + route
+				}
+			}
+			return "ip:" + clientKey(r, opts.TrustedCIDRs) + "|" + route
 		},
 		trustedIP: func(r *http.Request) string { return clientKey(r, opts.TrustedCIDRs) },
 		identity:  identity,
