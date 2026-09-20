@@ -107,11 +107,6 @@ export default function Composer({ wsRef, groupID, connectionStatus, replyingTo,
                 rows={1}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                }}
                 placeholder="Type a message…"
                 className="message-input"
                 maxLength={1000}
