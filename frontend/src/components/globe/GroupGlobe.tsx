@@ -29,6 +29,7 @@ export default function GroupGlobe({
     const [selectedID, setSelectedID] = useState<string | null>(null);
     const [listOpen, setListOpen] = useState(false);
     const dragStartY = useRef<number | null>(null);
+    const dragPointerID = useRef<number | null>(null);
     const suppressGrabberClick = useRef(false);
     const previousChallengeRevision = useRef(challengeRevision);
     const selected = items.find((item) => item.photo_id === selectedID);
@@ -46,24 +47,53 @@ export default function GroupGlobe({
         // authoritative globe history instead of relying on a stale snapshot.
         refresh();
     }, [challengeRevision, refresh]);
-    const onGrabberPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        dragStartY.current = event.clientY;
-        suppressGrabberClick.current = false;
-        event.currentTarget.setPointerCapture?.(event.pointerId);
+    const isSheetGestureTarget = (target: EventTarget | null) => {
+        if (!(target instanceof Element)) return false;
+        if (target.closest('.globe-history-body, .globe-refresh')) return false;
+        // The non-scrolling sheet chrome is a safe gesture surface. Keep the
+        // scrollable body out of this path so browsing challenges never moves
+        // the sheet instead.
+        return Boolean(target.closest('.globe-history'));
     };
-    const onGrabberPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (dragStartY.current === null) return;
+    const onHistoryPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+        if (!isSheetGestureTarget(event.target)) return;
+        dragStartY.current = event.clientY;
+        dragPointerID.current = event.pointerId;
+        suppressGrabberClick.current = false;
+        try {
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Synthetic pointer events and browsers without pointer capture can
+            // still complete a swipe from the events delivered to the sheet.
+        }
+    };
+    const onHistoryPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragStartY.current === null || dragPointerID.current !== event.pointerId) return;
         if (Math.abs(event.clientY - dragStartY.current) > 12) suppressGrabberClick.current = true;
     };
-    const onGrabberPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (dragStartY.current === null) return;
+    const onHistoryPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragStartY.current === null || dragPointerID.current !== event.pointerId) return;
         const delta = event.clientY - dragStartY.current;
         dragStartY.current = null;
-        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        dragPointerID.current = null;
+        try {
+            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }
+        } catch {
+            // Pointer capture is an enhancement; releasing it is not required
+            // for the sheet state transition.
+        }
         if (Math.abs(delta) > 36) {
             suppressGrabberClick.current = true;
             setListOpen(delta < 0);
         }
+    };
+    const onHistoryPointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragPointerID.current !== event.pointerId) return;
+        dragStartY.current = null;
+        dragPointerID.current = null;
+        suppressGrabberClick.current = false;
     };
     const onGrabberClick = () => {
         if (suppressGrabberClick.current) {
@@ -144,7 +174,15 @@ export default function GroupGlobe({
             </header>
             <div className="globe-layout">
                 <Globe items={items} selectedID={selectedID} onSelect={selectFromGlobe} />
-                <section className={`globe-history${listOpen ? ' is-open' : ''}`} aria-label="Group challenges">
+                <section
+                    className={`globe-history${listOpen ? ' is-open' : ''}`}
+                    aria-label="Group challenges"
+                    aria-describedby="globe-sheet-hint"
+                    onPointerDown={onHistoryPointerDown}
+                    onPointerMove={onHistoryPointerMove}
+                    onPointerUp={onHistoryPointerUp}
+                    onPointerCancel={onHistoryPointerCancel}
+                >
                     <button
                         type="button"
                         className="globe-sheet-grabber"
@@ -152,12 +190,6 @@ export default function GroupGlobe({
                         aria-expanded={listOpen}
                         aria-controls="globe-history-body"
                         onClick={onGrabberClick}
-                        onPointerDown={onGrabberPointerDown}
-                        onPointerMove={onGrabberPointerMove}
-                        onPointerUp={onGrabberPointerUp}
-                        onPointerCancel={() => {
-                            dragStartY.current = null;
-                        }}
                     >
                         <span className="globe-sheet-grabber-line" aria-hidden="true" />
                         <span className="visually-hidden">
@@ -179,6 +211,10 @@ export default function GroupGlobe({
                             </button>
                         </div>
                     </div>
+                    <p id="globe-sheet-hint" className="visually-hidden">
+                        Swipe the handle or heading up and down to {listOpen ? 'collapse' : 'expand'} the challenge
+                        list. Scroll the challenge list itself to browse.
+                    </p>
                     <div id="globe-history-body" className="globe-history-body">
                         <p className="globe-summary">
                             {items.length} {items.length === 1 ? 'challenge' : 'challenges'} · {located} on the globe

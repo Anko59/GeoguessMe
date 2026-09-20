@@ -83,6 +83,42 @@ describe('GroupGlobe', () => {
         );
     });
 
+    it('also accepts header swipes without hijacking challenge-list scrolling', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        await screen.findByText('Alice');
+        const heading = screen.getByRole('heading', { name: 'Geochallenges' });
+        fireEvent.pointerDown(heading, { clientY: 600, pointerId: 3 });
+        fireEvent.pointerMove(heading, { clientY: 540, pointerId: 3 });
+        fireEvent.pointerUp(heading, { clientY: 540, pointerId: 3 });
+        expect(screen.getByRole('button', { name: 'Collapse geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'true',
+        );
+
+        const challengeRow = screen.getByRole('button', { name: /Alice/ });
+        fireEvent.pointerDown(challengeRow, { clientY: 400, pointerId: 4 });
+        fireEvent.pointerMove(challengeRow, { clientY: 470, pointerId: 4 });
+        fireEvent.pointerUp(challengeRow, { clientY: 470, pointerId: 4 });
+        expect(screen.getByRole('button', { name: 'Collapse geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'true',
+        );
+    });
+
+    it('cancels a partial sheet swipe without changing its state', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        const heading = await screen.findByRole('heading', { name: 'Geochallenges' });
+        fireEvent.pointerDown(heading, { clientY: 600, pointerId: 5 });
+        fireEvent.pointerMove(heading, { clientY: 540, pointerId: 5 });
+        fireEvent.pointerCancel(heading, { clientY: 540, pointerId: 5 });
+        expect(screen.getByRole('button', { name: 'Expand geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
+    });
+
     it('loads every page independently of chat history and opens selected results', async () => {
         get.mockResolvedValueOnce({ data: { items: [challenge], next_cursor: 'next' } }).mockResolvedValueOnce({
             data: {
