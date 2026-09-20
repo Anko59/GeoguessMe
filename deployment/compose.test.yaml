@@ -13,7 +13,7 @@ services:
     ports: ["${GEOGUESSME_TEST_DB_PORT:-0}:5432"]
     volumes: ["geoguessme_test_db:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test -d geoguessme_test"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U test -d geoguessme_test"]
       interval: 3s
       timeout: 3s
       retries: 30

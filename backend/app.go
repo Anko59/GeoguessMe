@@ -103,7 +103,7 @@ func NewApp(
 		Clock:   clock,
 		Metrics: &middleware.Metrics{ExtraMetrics: pushSvc.MetricsText},
 		Auth:    authService,
-		Groups:  handlers.NewGroupAPI(repos, clock),
+		Groups:  handlers.NewGroupAPI(repos.Groups, clock),
 		Chat:    handlers.NewChatAPI(repos.Chat, repos.Groups, store, cfg, hub, clock, repos),
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
@@ -228,7 +228,18 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/group/messages/media", protected(a.Chat.UploadChatMedia))
 	mux.Handle("/api/v1/group/messages/media/{mediaID}", protected(a.Chat.ServeChatMedia))
 	mux.Handle("/api/v1/photo/upload", protected(a.Game.UploadPhoto))
-	a.Feed.Routes(mux, func(handler http.HandlerFunc) http.Handler { return protected(limited("default", handler)) })
+	a.Feed.Routes(mux, func(handler http.HandlerFunc) http.Handler {
+		mutate := limited("default", handler)
+		return protected(func(w http.ResponseWriter, r *http.Request) {
+			// Loading a page and its photos must not spend the allowance for
+			// publishing, guesses, reactions, or comments.
+			if r.Method == http.MethodGet {
+				handler(w, r)
+				return
+			}
+			mutate(w, r)
+		})
+	})
 	mux.Handle("/api/v1/media-processing/{jobID}", protected(a.Game.GetMediaProcessingJob))
 	mux.Handle("/api/v1/ws/ticket", protected(a.Chat.CreateWebSocketTicket))
 	mux.HandleFunc("/api/v1/ws", a.Chat.HandleChat)

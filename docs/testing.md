@@ -144,11 +144,17 @@ receive provider credentials. Its browser implementation still runs through the
 pinned Docker tool image.
 
 The CI workflow uses shard-scoped Docker layer caching (bounded by branch and
-lockfile hash), explicit artifact retention of 7 days for failure diagnostics,
-and BuildKit GC limits to prevent unbounded cache growth. The aggregate job
-publishes per-job elapsed times to its Actions summary. No secrets or `.env`
-files are cached or uploaded. The `check-ci-retention-regression` target
-validates these properties deterministically.
+lockfile hash), explicit artifact retention of 7 days for browser reports and
+failure diagnostics, and BuildKit GC limits to prevent unbounded cache growth.
+The aggregate job publishes per-job elapsed times to its Actions summary. No
+secrets or `.env` files are cached or uploaded. The
+`check-ci-retention-regression` target validates these properties
+deterministically.
+
+The disposable database health check probes TCP so the temporary socket-only
+initialization server cannot release migrations early. On E2E startup or browser
+failure, the runner prints bounded stack logs, including migration diagnostics,
+before removing the stack and preserves the original failure status.
 
 ## Cache and artifact bounds
 

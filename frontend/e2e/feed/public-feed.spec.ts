@@ -1,53 +1,101 @@
 import { test, expect } from '../support/fixtures';
-import { newAuthContext, signupViaUI } from '../support/helpers';
+import { newAuthContext, signupViaUI, signupWithToken } from '../support/helpers';
+import {
+    captureAudienceControls,
+    captureFeedState,
+    expectPhotoDecoded,
+    installMapTiles,
+    landscapePhoto,
+} from './visual-support';
 
 test('a public post can be guessed, liked, and commented on by someone outside the author’s groups', async ({
     browser,
     contextOptions,
-}) => {
+}, testInfo) => {
     const ownerContext = await newAuthContext(browser, contextOptions);
     const viewerContext = await newAuthContext(browser, contextOptions);
+    let publishedID: string | undefined;
+    let ownerToken = '';
     try {
-        const owner = await ownerContext.newPage();
+        await Promise.all([installMapTiles(ownerContext), installMapTiles(viewerContext)]);
+        const ownerSignup = await signupWithToken(ownerContext);
+        const owner = ownerSignup.page;
+        ownerToken = ownerSignup.token;
         const viewer = await viewerContext.newPage();
-        await signupViaUI(owner);
         await signupViaUI(viewer);
         await owner.goto('/feed');
+        await expect(owner.getByText('The world is waiting for your first post')).toBeVisible();
+        await captureFeedState(owner, testInfo, '00-empty-feed');
+        const photo = await landscapePhoto(owner);
         await owner.getByRole('button', { name: '+ Post a challenge' }).click();
         const composer = owner.getByRole('dialog', { name: 'Post a geo challenge' });
         await composer.getByLabel('Challenge photo').setInputFiles({
             name: 'place.png',
             mimeType: 'image/png',
-            buffer: Buffer.from(
-                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-                'base64',
-            ),
+            buffer: photo,
         });
         await expect(composer.getByRole('img', { name: 'Photo to publish' })).toBeVisible();
+        await expect(composer.getByRole('radio', { name: 'Everyone on GeoGuessMe' })).toBeChecked();
         await composer.getByLabel('Caption').fill('A place worth discovering');
         await composer.getByLabel('Latitude').fill('48.8');
         await composer.getByLabel('Longitude').fill('2.3');
-        await composer.getByRole('button', { name: 'Publish challenge' }).click();
+        await captureFeedState(owner, testInfo, '01-composer', composer);
+        await captureAudienceControls(owner, testInfo, composer);
+        const [publication] = await Promise.all([
+            owner.waitForResponse(
+                (response) =>
+                    response.url().endsWith('/api/v1/feed/challenges') && response.request().method() === 'POST',
+            ),
+            composer.getByRole('button', { name: 'Publish challenge' }).click(),
+        ]);
+        expect(publication.ok()).toBe(true);
+        publishedID = (await publication.json()).id;
         await expect(owner).toHaveURL(/\/feed\/[a-f0-9-]{36}$/);
         await expect(owner.getByText('Your challenge')).toBeVisible();
+        await expectPhotoDecoded(owner.getByAltText('Geo challenge photo'));
+        await captureFeedState(owner, testInfo, '02-authored-post');
         const postURL = owner.url();
         await viewer.goto(postURL);
-        await expect(viewer.getByAltText('Blurred preview of an unsolved geo challenge')).toBeVisible();
+        const blurred = viewer.getByAltText('Blurred preview of an unsolved geo challenge');
+        await expectPhotoDecoded(blurred);
+        await expect(blurred).toHaveCSS('filter', 'blur(12px) brightness(0.85)');
+        await captureFeedState(viewer, testInfo, '03-blurred-challenge');
         await viewer.getByRole('button', { name: 'Play challenge' }).click();
         const game = viewer.getByRole('dialog', { name: 'Where in the world?' });
-        await expect(game.getByAltText('Geo challenge photo')).toBeVisible();
-        await game.getByLabel('Latitude').fill('48.8');
-        await game.getByLabel('Longitude').fill('2.3');
-        await game.getByRole('button', { name: 'Guess & reveal' }).click();
-        await expect(viewer.getByText('5,000 points')).toBeVisible();
+        await expectPhotoDecoded(game.getByAltText('Geo challenge photo'));
+        await captureFeedState(viewer, testInfo, '04-guess-dialog', game);
+        await game.getByLabel('Latitude').fill('0');
+        await game.getByLabel('Longitude').fill('0');
+        const [guess] = await Promise.all([
+            viewer.waitForResponse(
+                (response) => response.url().endsWith('/guess') && response.request().method() === 'POST',
+            ),
+            game.getByRole('button', { name: 'Guess & reveal' }).click(),
+        ]);
+        expect(guess.ok()).toBe(true);
+        const result = await guess.json();
+        expect(result.score).toBeLessThan(5000);
+        expect(result.distance).toBeGreaterThan(1_000_000);
+        await expect(viewer.getByText(/\d[\d,]* points/)).toBeVisible();
+        await captureFeedState(
+            viewer,
+            testInfo,
+            '05-guess-result',
+            viewer.getByRole('dialog', { name: 'Place revealed' }),
+        );
         await viewer.getByRole('button', { name: 'Back to the feed' }).click();
         await expect(viewer.getByText('✓ Revealed')).toBeVisible();
+        const revealed = viewer.getByAltText('Geo challenge photo');
+        await expectPhotoDecoded(revealed);
+        await expect(revealed).toHaveCSS('filter', 'none');
+        await captureFeedState(viewer, testInfo, '06-revealed-challenge');
         await viewer.getByRole('button', { name: 'Like challenge' }).click();
         await expect(viewer.getByRole('button', { name: 'Unlike challenge' })).toHaveAttribute('aria-pressed', 'true');
         await viewer.getByRole('button', { name: '0 comments' }).click();
         await viewer.getByRole('textbox', { name: 'Add a comment' }).fill('Such a lovely place!');
         await viewer.getByRole('button', { name: 'Post comment' }).click();
         await expect(viewer.getByText('Such a lovely place!')).toBeVisible();
+        await captureFeedState(viewer, testInfo, '07-reaction-and-comments');
         await viewer.reload();
         await expect(viewer.getByText('✓ Revealed')).toBeVisible();
         await expect(viewer.getByRole('button', { name: 'Unlike challenge' })).toBeVisible();
@@ -57,8 +105,18 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await owner.getByRole('button', { name: 'Delete post' }).click();
         await owner.getByRole('button', { name: 'Confirm delete' }).click();
         await expect(owner.getByText('This challenge has been removed')).toBeVisible();
+        publishedID = undefined;
     } finally {
-        await ownerContext.close();
-        await viewerContext.close();
+        try {
+            if (publishedID) {
+                const cleanup = await ownerContext.request.delete(`/api/v1/feed/challenges/${publishedID}`, {
+                    headers: { Authorization: `Bearer ${ownerToken}` },
+                });
+                expect([204, 404]).toContain(cleanup.status());
+            }
+        } finally {
+            await ownerContext.close();
+            await viewerContext.close();
+        }
     }
 });
