@@ -23,7 +23,10 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
             .locator('.globe-stage')
             .evaluate((element) => element.getBoundingClientRect().height / window.innerHeight);
         expect(globeShare).toBeGreaterThan(0.55);
-        await expect(globe.getByRole('button', { name: 'Show list' })).toHaveAttribute('aria-expanded', 'false');
+        await expect(globe.getByRole('button', { name: 'Expand geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
     } else {
         await expect(globe.getByRole('group', { name: 'Globe controls' })).toBeInViewport({ ratio: 1 });
     }
@@ -96,9 +99,24 @@ test('explores group challenges on Earth without revealing an unplayed location'
         const globeButton = uploader.getByRole('button', { name: 'Open group globe' });
         const globe = await openGlobe(uploader, testInfo);
         await expect(globe).toContainText('1 challenge · 1 on the globe');
+        const refresh = globe.getByRole('button', { name: 'Refresh geochallenges' });
+        const refreshed = uploader.waitForResponse(
+            (response) => response.url().includes('/api/v1/group/challenges') && response.request().method() === 'GET',
+        );
+        await refresh.click();
+        expect((await refreshed).status()).toBe(200);
+        await expect(globe).toContainText('1 challenge · 1 on the globe');
         await captureGlobe(uploader, testInfo, 'overview');
-        if (mobile) await globe.getByRole('button', { name: 'Show list' }).tap();
-        else {
+        if (mobile) {
+            const sheet = globe.getByRole('button', { name: 'Expand geochallenge list' });
+            await sheet.dispatchEvent('pointerdown', { clientY: 600, pointerId: 1, pointerType: 'touch' });
+            await sheet.dispatchEvent('pointermove', { clientY: 520, pointerId: 1, pointerType: 'touch' });
+            await sheet.dispatchEvent('pointerup', { clientY: 520, pointerId: 1, pointerType: 'touch' });
+            await expect(globe.getByRole('button', { name: 'Collapse geochallenge list' })).toHaveAttribute(
+                'aria-expanded',
+                'true',
+            );
+        } else {
             await globe.getByRole('button', { name: 'Rotate globe left' }).click();
             await globe.getByRole('button', { name: 'Zoom in' }).click();
         }
@@ -121,7 +139,7 @@ test('explores group challenges on Earth without revealing an unplayed location'
         const privateGlobe = await openGlobe(guesser, testInfo);
         await expect(privateGlobe).toContainText('1 challenge · 0 on the globe');
         await expect(privateGlobe).toContainText('Guess this challenge to reveal its location');
-        if (mobile) await privateGlobe.getByRole('button', { name: 'Show list' }).tap();
+        if (mobile) await privateGlobe.getByRole('button', { name: 'Expand geochallenge list' }).click();
         await privateGlobe.locator('.globe-challenge-list button').click();
         await expect(privateGlobe.getByRole('button', { name: 'Play challenge' })).toBeInViewport({ ratio: 1 });
         await captureGlobe(guesser, testInfo, 'hidden-location');

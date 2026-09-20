@@ -49,14 +49,38 @@ describe('GroupGlobe', () => {
         get.mockResolvedValue({ data: { items: [challenge] } });
         render(<GroupGlobe {...props} />);
         await screen.findByText('Alice');
-        const toggle = screen.getByRole('button', { name: 'Show list' });
+        const toggle = screen.getByRole('button', { name: 'Expand geochallenge list' });
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(screen.getByRole('button', { name: 'select pin' }));
-        const opened = screen.getByRole('button', { name: 'Hide list' });
+        const opened = screen.getByRole('button', { name: 'Collapse geochallenge list' });
         expect(opened).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('region', { name: 'Selected challenge' })).toHaveFocus();
         fireEvent.click(opened);
-        expect(screen.getByRole('button', { name: 'Show list' })).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByRole('button', { name: 'Expand geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
+    });
+
+    it('opens and closes the mobile sheet with vertical swipes', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        const grabber = await screen.findByRole('button', { name: 'Expand geochallenge list' });
+        fireEvent.pointerDown(grabber, { clientY: 600, pointerId: 1 });
+        fireEvent.pointerMove(grabber, { clientY: 540, pointerId: 1 });
+        fireEvent.pointerUp(grabber, { clientY: 540, pointerId: 1 });
+        expect(screen.getByRole('button', { name: 'Collapse geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'true',
+        );
+        const opened = screen.getByRole('button', { name: 'Collapse geochallenge list' });
+        fireEvent.pointerDown(opened, { clientY: 400, pointerId: 2 });
+        fireEvent.pointerMove(opened, { clientY: 470, pointerId: 2 });
+        fireEvent.pointerUp(opened, { clientY: 470, pointerId: 2 });
+        expect(screen.getByRole('button', { name: 'Expand geochallenge list' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
     });
 
     it('loads every page independently of chat history and opens selected results', async () => {
@@ -93,11 +117,23 @@ describe('GroupGlobe', () => {
         expect(screen.getByRole('button', { name: 'Play challenge' })).toBeInTheDocument();
     });
 
+    it('refreshes the authoritative history when a new challenge arrives over chat', async () => {
+        get.mockResolvedValueOnce({ data: { items: [] } }).mockResolvedValueOnce({
+            data: { items: [{ ...challenge, photo_id: 'new-challenge' }] },
+        });
+        const view = render(<GroupGlobe {...props} challengeRevision="message-1" />);
+        await screen.findByText(/No geochallenges yet/);
+        view.rerender(<GroupGlobe {...props} challengeRevision="message-2" />);
+        await screen.findByText('Alice');
+        expect(get).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('1 challenge · 1 on the globe')).toBeInTheDocument();
+    });
+
     it('shows empty and failed states and refreshes after an error', async () => {
         get.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { items: [] } });
         render(<GroupGlobe {...props} />);
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load group challenges');
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh geochallenges' }));
         expect(await screen.findByText(/No geochallenges yet/)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).toBeNull();
     });
@@ -136,7 +172,7 @@ describe('GroupGlobe', () => {
         });
         render(<GroupGlobe {...props} />);
         await screen.findByText('Alice');
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh geochallenges' }));
         expect(screen.queryByText('Alice')).toBeNull();
         await screen.findByRole('alert');
         expect(screen.getByTestId('pins')).toBeEmptyDOMElement();

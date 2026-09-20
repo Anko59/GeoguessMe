@@ -8,6 +8,7 @@ export type IconName =
     | 'globe'
     | 'image'
     | 'logout'
+    | 'refresh'
     | 'send'
     | 'user'
     | 'users';
@@ -63,6 +64,14 @@ const paths: Record<IconName, React.ReactNode> = {
             <path d="M10 17l5-5-5-5" />
             <path d="M15 12H3" />
             <path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
+        </>
+    ),
+    refresh: (
+        <>
+            <path d="M20 11a8 8 0 0 0-14.9-4L3 9" />
+            <path d="M3 4v5h5" />
+            <path d="M4 13a8 8 0 0 0 14.9 4L21 15" />
+            <path d="M21 20v-5h-5" />
         </>
     ),
     send: (

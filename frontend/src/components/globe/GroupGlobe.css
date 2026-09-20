@@ -96,8 +96,36 @@
     align-items: center;
     gap: 0.5rem;
 }
-.globe-sheet-toggle {
+.globe-sheet-grabber {
     display: none;
+}
+.globe-sheet-grabber-line {
+    display: block;
+    width: 2.6rem;
+    height: 0.25rem;
+    margin-inline: auto;
+    background: currentcolor;
+    border-radius: 999px;
+    opacity: 0.55;
+}
+.globe-refresh {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--brand-blue-accessible);
+    background: var(--surface-brand);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+}
+.globe-refresh .ui-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+.globe-refresh:disabled {
+    cursor: wait;
+    opacity: 0.55;
 }
 .globe-notice {
     position: absolute;
@@ -135,7 +163,7 @@
     margin: 0.3rem 0 1rem;
     font-size: 0.85rem;
 }
-.globe-hint {
+.globe-note {
     color: var(--ink-subtle);
     font-size: 0.8rem;
     line-height: 1.6;
@@ -285,6 +313,7 @@
         border-top: 1px solid var(--line);
         border-radius: 16px 16px 0 0;
         box-shadow: var(--shadow-lg);
+        transition: max-height 180ms ease;
     }
     .globe-history:not(.is-open) {
         max-height: none;
@@ -297,14 +326,19 @@
     .globe-history:not(.is-open) .globe-history-body {
         display: none;
     }
-    .globe-sheet-toggle {
-        display: inline-flex;
-        align-items: center;
+    .globe-sheet-grabber {
+        display: block;
+        width: 100%;
         min-height: 44px;
-        padding: 0.5rem;
-        color: var(--brand-blue-accessible);
-        background: var(--surface-brand);
-        border-radius: var(--radius-sm);
+        padding: 0.65rem;
+        color: var(--ink-subtle);
+        background: transparent;
+        border: 0;
+        touch-action: none;
+        cursor: grab;
+    }
+    .globe-sheet-grabber:active {
+        cursor: grabbing;
     }
     .globe-credit {
         top: 0.6rem;
@@ -322,5 +356,11 @@
 @media (width <= 650px), (hover: none) and (pointer: coarse) {
     .globe-controls {
         display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .globe-history {
+        transition: none;
     }
 }
