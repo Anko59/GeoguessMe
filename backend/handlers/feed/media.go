@@ -88,7 +88,7 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := feed.NewChallenge{ID: uuid.NewString(), UserID: handlers.GetUserIDFromContext(r), Caption: caption, Audience: audience, GroupIDs: groupIDs,
-		StorageKey: "public-challenges/" + uuid.NewString(), MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: a.clock()}
+		StorageKey: storage.PublicChallengeKey(uuid.NewString()), MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: a.clock()}
 	if err := a.store.Put(r.Context(), p.StorageKey, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), p.MIMEType); err != nil {
 		a.compensate(r.Context(), p.StorageKey)
 		handlers.WriteError(w, 502, "storage_error", "Unable to store photo")

@@ -14,6 +14,11 @@ import (
 var ErrNotFound = errors.New("public challenge not found")
 var ErrForbidden = errors.New("action not allowed")
 var ErrProfileNotFound = errors.New("feed profile not found")
+var ErrViewNotFinished = errors.New("viewing window is still open")
+var ErrGuessTimeExpired = errors.New("guess window expired")
+var ErrMediaExpired = errors.New("media viewing window expired")
+var ErrOwnChallenge = errors.New("cannot use own challenge")
+var ErrInvalidCoordinate = errors.New("invalid coordinate")
 
 type Repository struct{ pool database.Pool }
 

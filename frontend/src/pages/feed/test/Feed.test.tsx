@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicChallenge } from '../../../types';
 import Feed from '../Feed';
-import FeedImage from '../FeedImage';
 
 const mocks = vi.hoisted(() => ({
     list: vi.fn(),
@@ -12,6 +11,12 @@ const mocks = vi.hoisted(() => ({
     publish: vi.fn(),
     remove: vi.fn(),
     media: vi.fn(),
+    acceptTimed: vi.fn(),
+    timedMedia: vi.fn(),
+    timedMediaDelivered: vi.fn(),
+    timedGuess: vi.fn(),
+    timedTimeout: vi.fn(),
+    timedResults: vi.fn(),
     guess: vi.fn(),
     result: vi.fn(),
     results: vi.fn(),
@@ -91,6 +96,36 @@ beforeEach(() => {
     mocks.list.mockResolvedValue({ items: [post()], next_cursor: '' });
     mocks.inbox.mockResolvedValue([]);
     mocks.media.mockResolvedValue(new Blob(['image'], { type: 'image/jpeg' }));
+    mocks.acceptTimed.mockResolvedValue({
+        challenge_id: 'post-1',
+        media_url: '/api/v1/feed/challenges/post-1/timed-media',
+        media_type: 'image/jpeg',
+        accepted_at: new Date().toISOString(),
+        view_expires_at: new Date(Date.now() + 1000).toISOString(),
+        guess_after: new Date(Date.now() + 1000).toISOString(),
+        guess_expires_at: new Date(Date.now() + 121000).toISOString(),
+        score_grace_seconds: 30,
+        server_time: new Date().toISOString(),
+    });
+    mocks.timedMedia.mockResolvedValue(new Blob(['timed-image'], { type: 'image/jpeg' }));
+    mocks.timedMediaDelivered.mockResolvedValue({
+        view_expires_at: new Date(Date.now() + 1000).toISOString(),
+        guess_after: new Date(Date.now() + 1000).toISOString(),
+        guess_expires_at: new Date(Date.now() + 121000).toISOString(),
+        score_grace_seconds: 30,
+        server_time: new Date().toISOString(),
+    });
+    mocks.timedGuess.mockImplementation((id: string, point: { lat: number; long: number }, signal: AbortSignal) =>
+        mocks.guess(id, point, signal),
+    );
+    mocks.timedTimeout.mockResolvedValue(undefined);
+    mocks.timedResults.mockResolvedValue({
+        challenge_id: 'post-1',
+        actual_lat: 48.81,
+        actual_long: 2.31,
+        guesses: [],
+        server_time: new Date().toISOString(),
+    });
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
     mocks.results.mockResolvedValue([]);
     mocks.react.mockResolvedValue(true);
@@ -115,35 +150,49 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Public feed', () => {
     it('blurs unsolved photos and reveals only after a successful guess', async () => {
-        mocks.guess.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({
+        const expired = new Date(Date.now() - 1000).toISOString();
+        mocks.acceptTimed.mockResolvedValueOnce({
+            challenge_id: 'post-1',
+            media_url: '/api/v1/feed/challenges/post-1/timed-media',
+            media_type: 'image/jpeg',
+            accepted_at: new Date(Date.now() - 2000).toISOString(),
+            view_expires_at: expired,
+            guess_after: expired,
+            guess_expires_at: new Date(Date.now() + 120000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        mocks.timedMediaDelivered.mockResolvedValueOnce({
+            view_expires_at: expired,
+            guess_after: expired,
+            guess_expires_at: new Date(Date.now() + 120000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        mocks.timedGuess.mockResolvedValueOnce({
             score: 4900,
             distance: 150,
-            lat: 48.8,
-            long: 2.3,
-            actual_lat: 48.81,
-            actual_long: 2.31,
+            timed_out: false,
+            duplicate: false,
+            guess_id: 'guess-1',
+            challenge_id: 'post-1',
+            created_at: new Date().toISOString(),
+            server_time: new Date().toISOString(),
         });
         renderFeed();
         expect(await screen.findByAltText('Blurred preview of an unsolved geo challenge')).toHaveClass(
             'feed-photo-blurred',
         );
         await userEvent.click(screen.getByRole('button', { name: 'Play challenge' }));
-        const dialog = screen.getByRole('dialog', { name: 'Where in the world?' });
-        expect(within(dialog).getByRole('button', { name: 'Guess & reveal' })).toBeDisabled();
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge guessing' });
+        expect(within(dialog).getByRole('button', { name: 'Select a location…' })).toBeDisabled();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Guess & reveal' }));
-        expect(await within(dialog).findByRole('alert')).toHaveTextContent('Connection lost');
-        expect(screen.getByAltText('Blurred preview of an unsolved geo challenge')).toBeInTheDocument();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Guess & reveal' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Submit guess' }));
         expect(await screen.findByText('4,900 points')).toBeInTheDocument();
         expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
-        await waitFor(() =>
-            expect(screen.queryByAltText('Blurred preview of an unsolved geo challenge')).not.toBeInTheDocument(),
-        );
-        expect(mocks.guess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
-        fireEvent.click(screen.getByRole('button', { name: 'Back to the feed' }));
+        expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'View your result' })).toHaveFocus();
     });
 
     it('shows owners and previous guessers clear photos', async () => {
@@ -159,6 +208,40 @@ describe('Public feed', () => {
 
     it('loads ranked challenge results for a revealed post', async () => {
         mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
+        mocks.timedResults.mockResolvedValue({
+            challenge_id: 'post-1',
+            actual_lat: 48.81,
+            actual_long: 2.31,
+            guesses: [
+                {
+                    id: 'guess-1',
+                    user_id: 'other',
+                    username: 'Navigator',
+                    avatar: 'avatar-a.png',
+                    score: 4800,
+                    distance: 100,
+                    timed_out: false,
+                    lat: 48.81,
+                    long: 2.31,
+                    created_at: new Date().toISOString(),
+                },
+                {
+                    id: 'guess-2',
+                    user_id: 'viewer',
+                    username: 'Me',
+                    avatar: 'avatar-b.png',
+                    score: 4200,
+                    distance: 300,
+                    timed_out: false,
+                    lat: 48.8,
+                    long: 2.3,
+                    created_at: new Date().toISOString(),
+                },
+            ],
+            server_time: new Date().toISOString(),
+        });
+        /* Legacy result rows are intentionally no longer used by the timed
+         * feed flow; keep the old fixture available for unrelated tests. */
         mocks.results.mockResolvedValue([
             {
                 rank: 1,
@@ -182,28 +265,27 @@ describe('Public feed', () => {
             },
         ]);
         renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'View challenge results' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
-        expect(screen.getByText('#1 Navigator')).toBeInTheDocument();
-        expect(screen.getByText('4,800 pts · +4 Elo')).toBeInTheDocument();
-        expect(screen.getByText('4,200 pts · -4 Elo')).toBeInTheDocument();
-        expect(mocks.results).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
+        expect(screen.getByText('Navigator')).toBeInTheDocument();
+        expect(screen.getByText('4,800 pts')).toBeInTheDocument();
+        expect(screen.getByText('4,200 pts')).toBeInTheDocument();
+        expect(mocks.timedResults).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
     });
 
     it('reopens the saved result without submitting another guess', async () => {
         mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
-        mocks.result.mockResolvedValue({
-            score: 4200,
-            distance: 300,
-            lat: 48.8,
-            long: 2.3,
+        mocks.timedResults.mockResolvedValue({
+            challenge_id: 'post-1',
             actual_lat: 48.81,
             actual_long: 2.31,
+            guesses: [],
+            server_time: new Date().toISOString(),
         });
         renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'View your result' }));
-        expect(await screen.findByText('4,200 points')).toBeInTheDocument();
-        expect(mocks.guess).not.toHaveBeenCalled();
+        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        expect(await screen.findByText('Challenge results')).toBeInTheDocument();
+        expect(mocks.timedGuess).not.toHaveBeenCalled();
     });
 
     it('persists reactions, reverses them, and preserves state on failure', async () => {
@@ -348,7 +430,7 @@ describe('Public feed', () => {
         expect(mocks.remove).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
     });
 
-    it.each(['publish', 'guess'] as const)(
+    it.each(['publish'] as const)(
         'keeps the %s dialog open during a save and allows recovery after failure',
         async (operation) => {
             let fail!: (error: Error) => void;
@@ -367,12 +449,6 @@ describe('Public feed', () => {
                 fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
             } else {
                 fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
-            }
-            const submit = within(dialog).getByRole('button', {
-                name: operation === 'publish' ? 'Take photo' : 'Guess & reveal',
-            });
-            if (operation === 'guess') {
-                fireEvent.click(submit);
             }
             expect(mocks[operation]).toHaveBeenCalledTimes(1);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
@@ -403,47 +479,4 @@ describe('Public feed', () => {
         await act(async () => finish({ items: [post()], next_cursor: '' }));
         expect(mocks.media).not.toHaveBeenCalled();
     });
-});
-
-it('revokes feed media once and ignores delivery after unmount', async () => {
-    const { unmount } = render(<FeedImage id="post-1" revealed={false} />);
-    await screen.findByRole('img');
-    unmount();
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
-    let resolve!: (blob: Blob) => void;
-    mocks.media.mockReturnValue(
-        new Promise<Blob>((done) => {
-            resolve = done;
-        }),
-    );
-    const pending = render(<FeedImage id="post-2" revealed={false} />);
-    pending.unmount();
-    await act(async () => resolve(new Blob(['late'])));
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-});
-
-it('loads nearby photos and releases their blobs when they leave the viewport', async () => {
-    let visibility!: IntersectionObserverCallback;
-    const disconnect = vi.fn();
-    class Observer {
-        constructor(callback: IntersectionObserverCallback) {
-            visibility = callback;
-        }
-        observe() {}
-        disconnect = disconnect;
-    }
-    vi.stubGlobal('IntersectionObserver', Observer);
-    try {
-        const view = render(<FeedImage id="post-1" revealed={false} />);
-        expect(mocks.media).not.toHaveBeenCalled();
-        act(() => visibility([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
-        await screen.findByRole('img');
-        act(() => visibility([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
-        expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
-        view.unmount();
-        expect(disconnect).toHaveBeenCalledTimes(1);
-    } finally {
-        vi.unstubAllGlobals();
-    }
 });

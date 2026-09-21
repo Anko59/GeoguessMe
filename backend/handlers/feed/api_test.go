@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"geoguessme/handlers"
+	"geoguessme/internal/config"
 	"geoguessme/internal/models"
 	feedrepo "geoguessme/internal/repository/feed"
 
@@ -244,6 +245,39 @@ func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "database unavailable") {
 		t.Fatal("database detail exposed")
+	}
+}
+
+func TestTimedFeedHandlersUseOwnerAndCoordinateContracts(t *testing.T) {
+	a, mock := mockAPI(t)
+	a.cfg = &config.Config{ViewWindow: 10 * time.Second, GuessWindow: 2 * time.Minute}
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT p.user_id,p.mime_type").WithArgs("viewer", testID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "mime_type"}).AddRow("viewer", "image/png"),
+	)
+	mock.ExpectRollback()
+	w := httptest.NewRecorder()
+	a.AcceptTimed(w, request(http.MethodPost, ""))
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "cannot guess your own challenge") {
+		t.Fatalf("owner accept response %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	a.TimedGuess(w, request(http.MethodPost, `{"lat":91,"long":0}`))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "invalid_coordinates") {
+		t.Fatalf("invalid timed guess response %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTimedMediaStreamsPublicChallengeCanonicalObject(t *testing.T) {
+	a, mock := mockAPI(t)
+	a.store = &fakeStore{}
+	mock.ExpectQuery("SELECT p.storage_key,p.mime_type,p.preview").WithArgs("viewer", testID, pgxmock.AnyArg()).WillReturnRows(
+		pgxmock.NewRows([]string{"key", "mime", "preview"}).AddRow("public-challenges/feed-original", "image/png", []byte("preview")),
+	)
+	w := httptest.NewRecorder()
+	a.TimedMedia(w, request(http.MethodGet, ""))
+	if w.Code != http.StatusOK || w.Body.String() != "original" {
+		t.Fatalf("timed media response %d %q", w.Code, w.Body.String())
 	}
 }
 

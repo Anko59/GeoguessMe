@@ -344,3 +344,70 @@ func TestPublicFeedJourney(t *testing.T) {
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM media_deletion_jobs WHERE storage_key=$1`, key).Scan(&count))
 	require.Equal(t, 1, count)
 }
+
+// TestPublicTimedFeedJourney pins the additive group-style lifecycle: the
+// media-delivered acknowledgement starts server-owned deadlines, late guesses
+// persist an idempotent timeout, and map coordinates remain protected until a
+// viewer resolves or times out their session.
+func TestPublicTimedFeedJourney(t *testing.T) {
+	owner := signup(t, uniqueU("timed-owner"), uniqueU("timed-owner")+"@example.test", "StrongPassword123")
+	viewer := signup(t, uniqueU("timed-viewer"), uniqueU("timed-viewer")+"@example.test", "StrongPassword123")
+	other := signup(t, uniqueU("timed-other"), uniqueU("timed-other")+"@example.test", "StrongPassword123")
+	publicID := uploadPublicPhoto(t, owner.access)
+	path := "/api/v1/feed/challenges/" + publicID
+
+	resp, _ := doJSON(t, http.MethodPost, path+"/accept", nil, owner.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, data := doJSON(t, http.MethodPost, path+"/accept", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var accepted struct {
+		ViewExpiresAt  time.Time `json:"view_expires_at"`
+		GuessExpiresAt time.Time `json:"guess_expires_at"`
+	}
+	require.NoError(t, json.Unmarshal(data, &accepted))
+	require.False(t, accepted.ViewExpiresAt.IsZero())
+	require.True(t, accepted.GuessExpiresAt.After(accepted.ViewExpiresAt))
+	resp, _ = doJSON(t, http.MethodGet, path+"/timed-media", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp, data = doJSON(t, http.MethodPost, path+"/media-delivered", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var delivered struct {
+		ViewExpiresAt  time.Time `json:"view_expires_at"`
+		GuessExpiresAt time.Time `json:"guess_expires_at"`
+	}
+	require.NoError(t, json.Unmarshal(data, &delivered))
+	require.True(t, delivered.GuessExpiresAt.After(delivered.ViewExpiresAt))
+	resp, _ = doJSON(t, http.MethodPost, path+"/timed-guess", map[string]float64{"lat": 48.8, "long": 2.3}, viewer.access, nil)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	waitUntilViewExpires(t, delivered.ViewExpiresAt)
+	resp, _ = doJSON(t, http.MethodGet, path+"/timed-results", nil, other.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, data = doJSON(t, http.MethodPost, path+"/timed-guess", map[string]float64{"lat": 48.8, "long": 2.3}, viewer.access, nil)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var guess struct {
+		Distance float64 `json:"distance"`
+	}
+	require.NoError(t, json.Unmarshal(data, &guess))
+	require.Zero(t, guess.Distance)
+	resp, data = doJSON(t, http.MethodGet, path+"/timed-results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), `"actual_lat":48.8`)
+	require.Contains(t, string(data), `"lat":48.8`)
+
+	timeoutID := uploadPublicPhoto(t, owner.access)
+	timeoutPath := "/api/v1/feed/challenges/" + timeoutID
+	_, _ = doJSON(t, http.MethodPost, timeoutPath+"/accept", nil, viewer.access, nil)
+	_, _ = doJSON(t, http.MethodGet, timeoutPath+"/timed-media", nil, viewer.access, nil)
+	_, _ = doJSON(t, http.MethodPost, timeoutPath+"/media-delivered", nil, viewer.access, nil)
+	db := testDB(t)
+	_, err := db.Exec(t.Context(), `UPDATE public_challenge_views SET view_expires_at=NOW()-interval '1 second', guess_expires_at=NOW()-interval '1 second' WHERE challenge_id=$1 AND user_id=$2`, timeoutID, viewer.userID)
+	require.NoError(t, err)
+	resp, data = doJSON(t, http.MethodPost, timeoutPath+"/timed-guess", map[string]float64{"lat": 0, "long": 0}, viewer.access, nil)
+	require.Equal(t, http.StatusGone, resp.StatusCode)
+	require.Contains(t, string(data), "guess_time_expired")
+	var timedOut bool
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT timed_out FROM public_guesses WHERE challenge_id=$1 AND user_id=$2`, timeoutID, viewer.userID).Scan(&timedOut))
+	require.True(t, timedOut)
+	resp, _ = doJSON(t, http.MethodPost, timeoutPath+"/timed-timeout", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}

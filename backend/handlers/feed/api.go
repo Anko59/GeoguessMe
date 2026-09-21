@@ -38,6 +38,12 @@ func (a *API) Routes(mux *http.ServeMux, protect func(http.HandlerFunc) http.Han
 	mux.Handle("/api/v1/feed/challenges/{id}", protect(a.Post))
 	mux.Handle("/api/v1/feed/challenges/{id}/media", protect(a.Media))
 	mux.Handle("/api/v1/feed/challenges/{id}/play", protect(a.Play))
+	mux.Handle("/api/v1/feed/challenges/{id}/accept", protect(a.AcceptTimed))
+	mux.Handle("/api/v1/feed/challenges/{id}/timed-media", protect(a.TimedMedia))
+	mux.Handle("/api/v1/feed/challenges/{id}/media-delivered", protect(a.MediaDelivered))
+	mux.Handle("/api/v1/feed/challenges/{id}/timed-guess", protect(a.TimedGuess))
+	mux.Handle("/api/v1/feed/challenges/{id}/timed-timeout", protect(a.TimedTimeout))
+	mux.Handle("/api/v1/feed/challenges/{id}/timed-results", protect(a.TimedResults))
 	mux.Handle("/api/v1/feed/challenges/{id}/guess", protect(a.Guess))
 	mux.Handle("/api/v1/feed/challenges/{id}/results", protect(a.Results))
 	mux.Handle("/api/v1/feed/challenges/{id}/reaction", protect(a.Reaction))
@@ -53,6 +59,16 @@ func writeError(w http.ResponseWriter, err error) {
 		handlers.WriteError(w, 404, "not_found", "Player not found")
 	case errors.Is(err, feed.ErrForbidden):
 		handlers.WriteError(w, 403, "forbidden", "You are not allowed to perform this feed action")
+	case errors.Is(err, feed.ErrOwnChallenge):
+		handlers.WriteError(w, 403, "forbidden", "You cannot guess your own challenge")
+	case errors.Is(err, feed.ErrViewNotFinished):
+		handlers.WriteError(w, 409, "viewing_window_open", "Wait until the viewing window ends before guessing")
+	case errors.Is(err, feed.ErrGuessTimeExpired):
+		handlers.WriteError(w, 410, "guess_time_expired", "You did not guess in time")
+	case errors.Is(err, feed.ErrMediaExpired):
+		handlers.WriteError(w, 403, "media_expired", "The viewing window has expired")
+	case errors.Is(err, feed.ErrInvalidCoordinate):
+		handlers.WriteError(w, 400, "invalid_coordinates", "Choose a valid location")
 	default:
 		slog.Error("public feed request failed", "error", err)
 		handlers.WriteError(w, 500, "internal_error", "Unable to complete this feed request")

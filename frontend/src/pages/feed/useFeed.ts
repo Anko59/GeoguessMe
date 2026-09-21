@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAPIErrorMessage, publicFeedAPI } from '../../api';
-import type { PublicChallenge, PublicComment, PublicGuessResult } from '../../types';
+import type { PublicChallenge, PublicComment } from '../../types';
 
 // Each request owner cancels on unmount and rejects overlapping submissions.
 function useFeedRequest() {
@@ -110,29 +110,8 @@ export function useFeedActions(id: string) {
         publish: (form: FormData) => request.run((signal) => publicFeedAPI.publish(form, signal)),
         remove: () => request.run((signal) => publicFeedAPI.remove(id, signal)),
         react: (liked: boolean) => request.run((signal) => publicFeedAPI.react(id, liked, signal)),
-        guess: (point: { lat: number; long: number }) =>
-            request.run((signal) => publicFeedAPI.guess(id, point, signal)),
         comment: (content: string) => request.run((signal) => publicFeedAPI.comment(id, content, signal)),
         removeComment: (commentID: string) =>
             request.run((signal) => publicFeedAPI.removeComment(id, commentID, signal)),
     };
-}
-
-export function usePublicResult(id: string, enabled: boolean) {
-    const [result, setResult] = useState<PublicGuessResult | null>(null);
-    const { run, ...request } = useFeedRequest();
-    const load = useCallback(async () => {
-        const value = await run((signal) => publicFeedAPI.result(id, signal));
-        if (value) setResult(value);
-    }, [id, run]);
-    useEffect(() => {
-        let active = true;
-        queueMicrotask(() => {
-            if (active && enabled) void load();
-        });
-        return () => {
-            active = false;
-        };
-    }, [enabled, load]);
-    return { ...request, result, load };
 }

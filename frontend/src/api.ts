@@ -9,6 +9,10 @@ import type {
     PublicFeedResult,
     PublicComment,
     PublicGuessResult,
+    PublicChallengeAccepted,
+    PublicChallengeMediaDelivered,
+    PublicTimedGuessResponse,
+    PublicTimedResults,
     GroupInbox,
 } from './types';
 import { apiBaseURL } from './platform/endpoints';
@@ -160,6 +164,19 @@ export const publicFeedAPI = {
     media: async (id: string, playing: boolean, signal: AbortSignal) =>
         (await api.get<Blob>(`${publicPostPath(id)}/${playing ? 'play' : 'media'}`, { responseType: 'blob', signal }))
             .data,
+    acceptTimed: async (id: string, signal: AbortSignal) =>
+        (await api.post<PublicChallengeAccepted>(`${publicPostPath(id)}/accept`, undefined, { signal })).data,
+    timedMedia: async (id: string, signal: AbortSignal) =>
+        (await api.get<Blob>(`${publicPostPath(id)}/timed-media`, { responseType: 'blob', signal })).data,
+    timedMediaDelivered: async (id: string, signal: AbortSignal) =>
+        (await api.post<PublicChallengeMediaDelivered>(`${publicPostPath(id)}/media-delivered`, undefined, { signal }))
+            .data,
+    timedGuess: async (id: string, point: { lat: number; long: number }, signal: AbortSignal) =>
+        (await api.post<PublicTimedGuessResponse>(`${publicPostPath(id)}/timed-guess`, point, { signal })).data,
+    timedTimeout: async (id: string, signal: AbortSignal) =>
+        (await api.post<PublicTimedGuessResponse>(`${publicPostPath(id)}/timed-timeout`, undefined, { signal })).data,
+    timedResults: async (id: string, signal: AbortSignal) =>
+        (await api.get<PublicTimedResults>(`${publicPostPath(id)}/timed-results`, { signal })).data,
     guess: async (id: string, point: { lat: number; long: number }, signal: AbortSignal) =>
         (await api.post<PublicGuessResult>(`${publicPostPath(id)}/guess`, point, { signal })).data,
     result: async (id: string, signal: AbortSignal) =>

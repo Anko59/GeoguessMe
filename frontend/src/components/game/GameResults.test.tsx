@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
@@ -70,6 +70,31 @@ function withGame(element: React.ReactNode) {
 }
 
 describe('Game results', () => {
+    it('gives the timed overlay initial focus and does not dismiss an active game with Escape', async () => {
+        mocks.get.mockRejectedValueOnce(new Error('results not ready'));
+        mocks.post.mockResolvedValueOnce({
+            data: {
+                media_url: 'https://example.test/photo.jpg',
+                server_time: new Date().toISOString(),
+                view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                guess_expires_at: new Date(Date.now() + 122000).toISOString(),
+            },
+        });
+        mocks.post.mockResolvedValueOnce({
+            data: {
+                view_expires_at: new Date(Date.now() + 2000).toISOString(),
+                guess_expires_at: new Date(Date.now() + 122000).toISOString(),
+                server_time: new Date().toISOString(),
+            },
+        });
+        withGame(<Game gameMessage={message({ photo_id: 'focus-1', kind: 'challenge' })} onClose={vi.fn()} />);
+
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge photo' });
+        await waitFor(() => expect(dialog).toHaveFocus());
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+        expect(screen.getByRole('dialog', { name: 'Challenge photo' })).toBeInTheDocument();
+    });
+
     it('shows how long each guess took next to its distance', async () => {
         mocks.get.mockResolvedValueOnce({
             data: {

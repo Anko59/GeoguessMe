@@ -24,6 +24,18 @@ paths:
     $ref: ./openapi/paths/feed.yaml#/media
   /feed/challenges/{id}/play:
     $ref: ./openapi/paths/feed.yaml#/play
+  /feed/challenges/{id}/accept:
+    $ref: ./openapi/paths/feed-timed.yaml#/accept
+  /feed/challenges/{id}/timed-media:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedMedia
+  /feed/challenges/{id}/media-delivered:
+    $ref: ./openapi/paths/feed-timed.yaml#/mediaDelivered
+  /feed/challenges/{id}/timed-guess:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedGuess
+  /feed/challenges/{id}/timed-timeout:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedTimeout
+  /feed/challenges/{id}/timed-results:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedResults
   /feed/challenges/{id}/guess:
     $ref: ./openapi/paths/feed.yaml#/guess
   /feed/challenges/{id}/results:
