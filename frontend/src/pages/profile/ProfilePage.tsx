@@ -216,7 +216,7 @@ export default function ProfilePage() {
                     <span>{rank.progress_percent}%</span>
                 </div>
             </section>
-            <FeedLeaderboard />
+            <FeedLeaderboard profileID={profile.id} profileUsername={profile.username} />
         </AuthenticatedPageShell>
     );
 }

@@ -32,8 +32,13 @@ export default function FeedShare({ id, username }: { id: string; username: stri
     }
     return (
         <div className="feed-share">
-            <button className="feed-text-button" disabled={status === 'pending'} onClick={() => void share()}>
-                Share challenge
+            <button
+                className="feed-icon-button"
+                aria-label="Share challenge"
+                disabled={status === 'pending'}
+                onClick={() => void share()}
+            >
+                <img src="/foward_arrow_icon.png" alt="" aria-hidden="true" className="feed-action-icon" />
             </button>
             {status === 'copied' && <span role="status">Link copied</span>}
             {status === 'manual' && (

@@ -209,6 +209,17 @@ describe('Public feed', () => {
     it('persists reactions, reverses them, and preserves state on failure', async () => {
         mocks.react.mockRejectedValueOnce(new Error('Unable to like')).mockResolvedValue(true);
         renderFeed();
+        const likeButton = await screen.findByRole('button', { name: 'Like challenge' });
+        expect(screen.getByRole('img', { name: 'Explorer' })).toHaveAttribute('src', '/avatars/avatar.png');
+        expect(likeButton.querySelector('img')).toHaveAttribute('src', '/reactions/like.png');
+        expect(screen.getByRole('button', { name: '0 comments' }).querySelector('img')).toHaveAttribute(
+            'src',
+            '/chat_bubbl_icon.png',
+        );
+        expect(screen.getByRole('button', { name: 'Share challenge' }).querySelector('img')).toHaveAttribute(
+            'src',
+            '/foward_arrow_icon.png',
+        );
         fireEvent.click(await screen.findByRole('button', { name: 'Like challenge' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to like');
         expect(screen.getByText('2 likes')).toBeInTheDocument();
@@ -225,6 +236,7 @@ describe('Public feed', () => {
             id: 'comment-1',
             user_id: 'viewer',
             username: 'Me',
+            avatar: 'avatar-viewer.png',
             content: 'Beautiful place!',
             created_at: '2026-09-12T11:00:00Z',
             can_delete: true,
@@ -241,6 +253,7 @@ describe('Public feed', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
         expect(await screen.findByText('Beautiful place!')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Me' })).toHaveAttribute('src', '/avatars/avatar-viewer.png');
         expect(screen.getByRole('button', { name: '1 comment' })).toBeInTheDocument();
         expect(mocks.comment).toHaveBeenCalledWith('post-1', 'Beautiful place!', expect.any(AbortSignal));
         fireEvent.click(screen.getByRole('button', { name: 'Delete comment by Me' }));

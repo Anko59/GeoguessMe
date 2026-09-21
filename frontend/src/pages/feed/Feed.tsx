@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import FeedCard from './FeedCard';
 import FeedComposer from './FeedComposer';
-import GroupRail from './GroupRail';
 import { useFeed } from './useFeed';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import './FeedForms.css';
@@ -17,7 +16,6 @@ function FeedPage({ id }: { id?: string }) {
         <AuthenticatedPageShell className="public-feed">
             <main className="feed-layout">
                 <div className="feed-column">
-                    <GroupRail />
                     <section className="feed-heading">
                         <div>
                             <p className="feed-eyebrow">Community challenges</p>
@@ -77,16 +75,6 @@ function FeedPage({ id }: { id?: string }) {
                             Explore more challenges →
                         </Link>
                     )}
-                    <section className="feed-capture-cta" aria-label="Post a challenge">
-                        <img src="/camera_icon.png" alt="" aria-hidden="true" />
-                        <div>
-                            <strong>Have a place to share?</strong>
-                            <span>Take a photo and let your device add the location.</span>
-                        </div>
-                        <button className="btn btn-primary" onClick={() => setComposing(true)}>
-                            Open camera
-                        </button>
-                    </section>
                 </div>
                 <aside className="feed-sidebar">
                     <img src="/globe_icon.png" alt="" />

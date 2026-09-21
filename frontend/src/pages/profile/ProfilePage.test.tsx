@@ -5,11 +5,11 @@ import { AuthContext } from '../../context/AuthContext';
 import type { User } from '../../types';
 import ProfilePage from './ProfilePage';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), leaderboard: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), profileLeaderboard: vi.fn() }));
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
-    publicFeedAPI: { leaderboard: mocks.leaderboard },
+    publicFeedAPI: { profileLeaderboard: mocks.profileLeaderboard },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -91,9 +91,9 @@ const renderProfile = (initialEntry = '/profile') =>
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
-    mocks.leaderboard.mockReset();
+    mocks.profileLeaderboard.mockReset();
     mocks.get.mockResolvedValue({ data: { items: [], next_cursor: '' } });
-    mocks.leaderboard.mockResolvedValue({ items: [], next_cursor: '' });
+    mocks.profileLeaderboard.mockResolvedValue({ items: [], next_cursor: '' });
 });
 
 describe('ProfilePage', () => {
@@ -173,22 +173,24 @@ describe('ProfilePage', () => {
 
     it('renders the feed leaderboard and loads the next page', async () => {
         mocks.get.mockResolvedValueOnce({ data: profile });
-        mocks.leaderboard
+        mocks.profileLeaderboard
             .mockResolvedValueOnce({
-                items: [{ rank: 1, user_id: 'user-2', username: 'bob', total_score: 5000 }],
+                items: [{ rank: 1, user_id: 'user-2', username: 'bob', avatar: 'avatar-bob.png', total_score: 5000 }],
                 next_cursor: 'next-page',
             })
             .mockResolvedValueOnce({
-                items: [{ rank: 2, user_id: 'user-3', username: 'carol', total_score: 4200 }],
+                items: [
+                    { rank: 2, user_id: 'user-3', username: 'carol', avatar: 'avatar-carol.png', total_score: 4200 },
+                ],
                 next_cursor: '',
             });
         renderProfile();
 
-        expect(await screen.findByRole('heading', { name: 'Feed leaderboard' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Best at guessing alice' })).toBeInTheDocument();
         expect(await screen.findByRole('link', { name: 'bob' })).toHaveAttribute('href', '/profile/user-2');
         fireEvent.click(screen.getByRole('button', { name: 'More players' }));
         expect(await screen.findByText('carol')).toBeInTheDocument();
-        expect(mocks.leaderboard).toHaveBeenLastCalledWith('next-page', expect.any(AbortSignal));
+        expect(mocks.profileLeaderboard).toHaveBeenLastCalledWith('user-1', 'next-page', expect.any(AbortSignal));
     });
 
     it('shows the edit link when viewing yourself through the public route', async () => {

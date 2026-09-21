@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import Avatar from '../../components/common/Avatar';
 import { useFeedActions, usePublicComments } from './useFeed';
 
 export default function FeedComments({ id, onCountChange }: { id: string; onCountChange: (delta: number) => void }) {
@@ -36,6 +37,12 @@ export default function FeedComments({ id, onCountChange }: { id: string; onCoun
             <ul>
                 {comments.items.map((comment) => (
                     <li key={comment.id}>
+                        <Avatar
+                            userID={comment.user_id}
+                            avatar={comment.avatar}
+                            username={comment.username}
+                            className="feed-comment-avatar"
+                        />
                         <div>
                             <strong>{comment.username}</strong>
                             <p>{comment.content}</p>

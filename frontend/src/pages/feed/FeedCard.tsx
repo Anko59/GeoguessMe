@@ -1,6 +1,7 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { PublicChallenge } from '../../types';
+import Avatar from '../../components/common/Avatar';
 import FeedImage from './FeedImage';
 import FeedGame, { FeedResults } from './FeedGame';
 import FeedComments from './FeedComments';
@@ -39,9 +40,7 @@ export default function FeedCard({
     return (
         <article className="feed-card" aria-label={`Geo challenge by ${post.username}`}>
             <header className="feed-card-header">
-                <span className="feed-avatar" aria-hidden="true">
-                    {post.username.slice(0, 1).toUpperCase()}
-                </span>
+                <Avatar userID={post.user_id} avatar={post.avatar} username={post.username} className="feed-avatar" />
                 <div className="feed-author">
                     <strong>{post.username}</strong>
                     <Link to={`/feed/${post.id}`}>
@@ -99,17 +98,19 @@ export default function FeedCard({
                         disabled={actions.pending}
                         onClick={() => void react()}
                     >
-                        <span aria-hidden="true">{post.reacted ? '♥' : '♡'}</span>
+                        <img src="/reactions/like.png" alt="" aria-hidden="true" className="feed-action-icon" />
                         <span>
                             {post.reaction_count} {post.reaction_count === 1 ? 'like' : 'likes'}
                         </span>
                     </button>
                     <button
-                        className="feed-text-button"
+                        className="feed-icon-button"
+                        aria-label={`${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`}
                         aria-expanded={commentsOpen}
                         aria-controls={commentsID}
                         onClick={() => setCommentsOpen((open) => !open)}
                     >
+                        <img src="/chat_bubbl_icon.png" alt="" aria-hidden="true" className="feed-action-icon" />
                         {post.comment_count} {post.comment_count === 1 ? 'comment' : 'comments'}
                     </button>
                     <FeedShare id={post.id} username={post.username} />
