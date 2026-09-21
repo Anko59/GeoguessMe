@@ -2,6 +2,20 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { GroupChallenge } from '../../types';
 
+export const HIGH_RES_EARTH_TEXTURE_URL = '/globe/earth-8192.jpg';
+export const FALLBACK_EARTH_TEXTURE_URL = '/globe/earth.jpg';
+export const HIGH_RES_TEXTURE_SIZE = 8192;
+export const HIGH_RES_MIN_DISTANCE = 1.05;
+export const FALLBACK_MIN_DISTANCE = 1.15;
+
+export function earthTextureURL(maxTextureSize: number): string {
+    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE ? HIGH_RES_EARTH_TEXTURE_URL : FALLBACK_EARTH_TEXTURE_URL;
+}
+
+export function earthMinDistance(maxTextureSize: number): number {
+    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE ? HIGH_RES_MIN_DISTANCE : FALLBACK_MIN_DISTANCE;
+}
+
 // Matches the equirectangular texture's Greenwich meridian and north pole.
 export function globePosition(lat: number, long: number, radius = 1): THREE.Vector3 {
     const latitude = THREE.MathUtils.degToRad(lat);
@@ -46,9 +60,12 @@ export function createGlobeScene(
         const controls = new OrbitControls(camera, renderer.domElement);
         cleanup.push(() => controls.dispose());
         controls.enablePan = false;
+        const maxTextureSize = renderer.capabilities.maxTextureSize;
         // Keep a safe margin around the textured sphere while allowing a
-        // useful close view of a pin on a phone-sized viewport.
-        controls.minDistance = 1.15;
+        // useful close view of a pin on a phone-sized viewport. Devices that
+        // cannot upload the high-resolution asset retain the old limit so the
+        // fallback texture is not magnified beyond its useful detail.
+        controls.minDistance = earthMinDistance(maxTextureSize);
         controls.maxDistance = 6;
         controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
         controls.zoomToCursor = true;
@@ -101,7 +118,7 @@ export function createGlobeScene(
         const render = () => renderer.render(scene, camera);
         controls.addEventListener('change', render);
         cleanup.push(() => controls.removeEventListener('change', render));
-        const earthGeometry = new THREE.SphereGeometry(1, 64, 48);
+        const earthGeometry = new THREE.SphereGeometry(1, 96, 64);
         cleanup.push(() => earthGeometry.dispose());
         const earthMaterial = new THREE.MeshPhongMaterial({ color: 0xb9d9f5, shininess: 8 });
         cleanup.push(() => earthMaterial.dispose());
@@ -112,10 +129,13 @@ export function createGlobeScene(
         light.position.set(-3, 5, 4);
         scene.add(light);
         const texture = new THREE.TextureLoader().load(
-            '/globe/earth.jpg',
+            earthTextureURL(maxTextureSize),
             (loaded) => {
                 if (disposed) return;
                 loaded.colorSpace = THREE.SRGBColorSpace;
+                loaded.minFilter = THREE.LinearMipmapLinearFilter;
+                loaded.magFilter = THREE.LinearFilter;
+                loaded.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 4);
                 earthMaterial.map = loaded;
                 earthMaterial.color.set(0xffffff);
                 earthMaterial.needsUpdate = true;
