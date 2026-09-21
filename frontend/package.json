@@ -51,7 +51,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^16.5.0",
     "happy-dom": "^20.14.5",
-    "jsdom": "^27.0.1",
+    "jsdom": "^30.1.0",
     "knip": "6.36.0",
     "markdownlint-cli": "^0.49.1",
     "openapi-typescript": "7.13.0",
