@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
 import Icon from '../../components/ui/Icon';
+import TopNavigation from '../../components/navigation/TopNavigation';
 import { useGroupPhotoUrl } from './groupPhotoCache';
 import './GroupsList.css';
 
@@ -45,6 +46,7 @@ export default function GroupsList() {
     if (loading) {
         return (
             <div className="groups-list-container">
+                <TopNavigation />
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading your groups…</span>
@@ -56,6 +58,7 @@ export default function GroupsList() {
     if (error)
         return (
             <div className="groups-list-container">
+                <TopNavigation />
                 <div className="groups-state error-message" role="alert">
                     <strong>We couldn’t load your groups</strong>
                     <span>{error}</span>
@@ -75,25 +78,7 @@ export default function GroupsList() {
 
     return (
         <div className="groups-list-container">
-            <header className="groups-topbar">
-                <Link to="/groups" className="groups-brand" aria-label="GeoGuessMe groups">
-                    <img src="/logo.png" alt="" />
-                    <span>GeoGuessMe</span>
-                </Link>
-                <div className="groups-account-links">
-                    <Link to="/feed" className="groups-account-link">
-                        Explore feed
-                    </Link>
-                    <Link to="/profile" className="groups-account-link" aria-label="Profile">
-                        <Icon name="user" className="groups-account-icon" />
-                        <span className="groups-account-label">Profile</span>
-                    </Link>
-                    <Link to="/settings" className="groups-account-link" aria-label="Settings">
-                        <Icon name="gear" className="groups-account-icon" />
-                        <span className="groups-account-label">Settings</span>
-                    </Link>
-                </div>
-            </header>
+            <TopNavigation />
 
             <div className="groups-heading-row">
                 <div className="groups-header">

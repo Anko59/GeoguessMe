@@ -4,6 +4,7 @@ import FeedCard from './FeedCard';
 import FeedComposer from './FeedComposer';
 import GroupRail from './GroupRail';
 import { useFeed } from './useFeed';
+import TopNavigation from '../../components/navigation/TopNavigation';
 import './FeedForms.css';
 import './Feed.css';
 import './FeedAudience.css';
@@ -14,20 +15,7 @@ function FeedPage({ id }: { id?: string }) {
     const [composing, setComposing] = useState(false);
     return (
         <div className="public-feed">
-            <header className="feed-topbar">
-                <Link to="/feed" className="feed-brand">
-                    <img src="/logo.png" alt="" />
-                    <span>GeoGuessMe</span>
-                </Link>
-                <nav aria-label="Main navigation">
-                    <Link to="/feed" aria-current="page">
-                        Explore
-                    </Link>
-                    <Link to="/groups">My groups</Link>
-                    <Link to="/profile">Profile</Link>
-                    <Link to="/settings">Settings</Link>
-                </nav>
-            </header>
+            <TopNavigation />
             <main className="feed-layout">
                 <div className="feed-column">
                     <GroupRail />

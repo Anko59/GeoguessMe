@@ -136,6 +136,10 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Profile service unavailable');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'alice' })).toBeInTheDocument());
+        // The profile mounts FeedLeaderboard after the retry. Wait for that
+        // child request to settle before the test cleanup unmounts the tree;
+        // otherwise a fast response can update state after the test ends.
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledTimes(2);
     });
 
