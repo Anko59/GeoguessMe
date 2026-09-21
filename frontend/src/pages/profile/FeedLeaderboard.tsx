@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAPIErrorMessage, publicFeedAPI } from '../../api';
+import Avatar from '../../components/common/Avatar';
+import { useAuth } from '../../context/AuthContext';
 import type { PublicFeedLeaderboardEntry } from '../../types';
+import '../../components/leaderboard/Leaderboard.css';
 
 type LeaderboardState = {
     items: PublicFeedLeaderboardEntry[];
@@ -12,31 +15,44 @@ type LeaderboardState = {
 
 export default function FeedLeaderboard() {
     const [state, setState] = useState<LeaderboardState>({ items: [], nextCursor: '', error: '', loading: true });
+    const initialLoadController = useRef<AbortController | null>(null);
     const loadMoreController = useRef<AbortController | null>(null);
-    useEffect(() => {
+    const { user } = useAuth();
+    const currentUserId = user?.id;
+
+    const loadInitial = useCallback(async () => {
+        initialLoadController.current?.abort();
         const controller = new AbortController();
-        void publicFeedAPI
-            .leaderboard('', controller.signal)
-            .then((page) => {
-                if (!controller.signal.aborted) {
-                    setState({ items: page.items, nextCursor: page.next_cursor, error: '', loading: false });
-                }
-            })
-            .catch((reason: unknown) => {
-                if (!controller.signal.aborted) {
-                    setState({
-                        items: [],
-                        nextCursor: '',
-                        error: getAPIErrorMessage(reason, 'Unable to load the feed leaderboard.'),
-                        loading: false,
-                    });
-                }
-            });
+        initialLoadController.current = controller;
+        setState((current) => ({ ...current, loading: true, error: '' }));
+        try {
+            const page = await publicFeedAPI.leaderboard('', controller.signal);
+            if (!controller.signal.aborted) {
+                setState({ items: page.items, nextCursor: page.next_cursor, error: '', loading: false });
+            }
+        } catch (reason: unknown) {
+            if (!controller.signal.aborted) {
+                setState({
+                    items: [],
+                    nextCursor: '',
+                    error: getAPIErrorMessage(reason, 'Unable to load the feed leaderboard.'),
+                    loading: false,
+                });
+            }
+        } finally {
+            if (initialLoadController.current === controller) {
+                initialLoadController.current = null;
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadInitial();
         return () => {
-            controller.abort();
+            initialLoadController.current?.abort();
             loadMoreController.current?.abort();
         };
-    }, []);
+    }, [loadInitial]);
 
     async function loadMore() {
         if (!state.nextCursor || state.loading) return;
@@ -67,39 +83,134 @@ export default function FeedLeaderboard() {
         }
     }
 
+    const getRankMedal = (rank: number) => {
+        switch (rank) {
+            case 1:
+                return '/ui/medal-gold.png';
+            case 2:
+                return '/ui/medal-silver.png';
+            case 3:
+                return '/ui/medal-bronze.png';
+            default:
+                return null;
+        }
+    };
+
+    const getRankClass = (rank: number) => {
+        switch (rank) {
+            case 1:
+                return 'gold';
+            case 2:
+                return 'silver';
+            case 3:
+                return 'bronze';
+            default:
+                return '';
+        }
+    };
+
+    const retry = () => {
+        if (state.items.length > 0) {
+            void loadMore();
+        } else {
+            void loadInitial();
+        }
+    };
+    const leaderValue = state.items[0]?.total_score ?? 1;
+
     return (
-        <section className="profile-feed-leaderboard" aria-labelledby="profile-feed-leaderboard-title">
-            <div className="profile-feed-leaderboard-heading">
+        <section className="leaderboard-container" aria-labelledby="profile-feed-leaderboard-title">
+            <div className="leaderboard-header">
+                <img src="/friends_leaderboard_icon.png" alt="" className="leaderboard-icon" />
                 <div>
-                    <p className="profile-eyebrow">Community challenge totals</p>
+                    <p>Community rankings</p>
                     <h2 id="profile-feed-leaderboard-title">Feed leaderboard</h2>
                 </div>
-                <span>Score only</span>
+                <span className="leaderboard-scope">All-time totals</span>
             </div>
             {state.error && (
-                <p className="profile-error" role="alert">
-                    {state.error}
-                </p>
+                <div className="leaderboard-error" role="alert">
+                    <p>{state.error}</p>
+                    <button className="btn btn-secondary" onClick={retry}>
+                        Retry
+                    </button>
+                </div>
             )}
-            {!state.error && state.loading && state.items.length === 0 && <p role="status">Loading feed rankings…</p>}
-            {!state.error && !state.loading && state.items.length === 0 && <p>No feed guesses have been scored yet.</p>}
+            {!state.error && state.loading && state.items.length === 0 && (
+                <div className="loading-state" role="status">
+                    <div className="spinner" />
+                    <p>Loading feed rankings…</p>
+                </div>
+            )}
+            {!state.error && !state.loading && state.items.length === 0 && (
+                <div className="leaderboard-empty-state">
+                    <img src="/cup_icon.png" alt="" className="leaderboard-empty-icon" />
+                    <h2>No scores yet</h2>
+                    <p className="empty-subtitle">Be the first to score a public challenge.</p>
+                </div>
+            )}
             {state.items.length > 0 && (
-                <ol className="profile-feed-leaderboard-list">
-                    {state.items.map((entry) => (
-                        <li key={entry.user_id}>
-                            <span className="profile-feed-rank">#{entry.rank}</span>
-                            <Link className="profile-feed-player" to={`/profile/${entry.user_id}`}>
-                                {entry.username}
-                            </Link>
-                            <strong>{entry.total_score.toLocaleString()}</strong>
-                        </li>
-                    ))}
+                <ol className="leaderboard-list" aria-label="Feed leaderboard rankings">
+                    {state.items.map((entry, index) => {
+                        const rankMedal = getRankMedal(entry.rank);
+                        const rankClass = getRankClass(entry.rank);
+                        const isCurrentUser = entry.user_id === currentUserId;
+
+                        return (
+                            <li
+                                key={entry.user_id}
+                                className={`leaderboard-entry ${rankClass} ${isCurrentUser ? 'current-user' : ''} scale-in`}
+                                style={{ animationDelay: `${index * 0.05}s` }}
+                            >
+                                <div className="entry-rank">
+                                    {rankMedal ? (
+                                        <img src={rankMedal} alt="" className="entry-rank-medal" />
+                                    ) : (
+                                        `#${entry.rank}`
+                                    )}
+                                </div>
+                                <div className="entry-avatar">
+                                    <Link
+                                        to={`/profile/${entry.user_id}`}
+                                        aria-label={`View ${entry.username}'s profile`}
+                                    >
+                                        <Avatar userID={entry.user_id} username={entry.username} />
+                                    </Link>
+                                </div>
+                                <div className="entry-info">
+                                    <div className="entry-username-row">
+                                        <div className="entry-username">
+                                            <Link className="entry-username-link" to={`/profile/${entry.user_id}`}>
+                                                {entry.username}
+                                            </Link>
+                                            {isCurrentUser && <span className="you-badge">You</span>}
+                                        </div>
+                                        <div className="entry-rank-name">Public challenge score</div>
+                                    </div>
+                                    <div className="entry-score-bar" aria-hidden="true">
+                                        <div
+                                            className="score-fill"
+                                            style={{
+                                                width: `${Math.min(100, (entry.total_score / (leaderValue || 1)) * 100)}%`,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="entry-score">
+                                    {entry.total_score.toLocaleString()}
+                                    <span className="score-label">pts</span>
+                                </div>
+                            </li>
+                        );
+                    })}
                 </ol>
             )}
             {state.nextCursor && (
-                <button className="btn btn-secondary" disabled={state.loading} onClick={() => void loadMore()}>
-                    {state.loading ? 'Loading…' : 'More players'}
-                </button>
+                <div className="leaderboard-pagination">
+                    <button className="btn btn-secondary" disabled={state.loading} onClick={() => void loadMore()}>
+                        {state.loading ? 'Loading…' : 'More players'}
+                    </button>
+                </div>
             )}
         </section>
     );
