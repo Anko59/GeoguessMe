@@ -142,6 +142,13 @@ export const publicFeedAPI = {
         (await api.get<PublicFeedPage>('/feed', { params: { cursor }, signal })).data,
     leaderboard: async (cursor: string, signal: AbortSignal) =>
         (await api.get<PublicFeedLeaderboardPage>('/feed/leaderboard', { params: { cursor }, signal })).data,
+    profileLeaderboard: async (profileID: string, cursor: string, signal: AbortSignal) =>
+        (
+            await api.get<PublicFeedLeaderboardPage>(`/feed/leaderboard/${encodeURIComponent(profileID)}`, {
+                params: { cursor },
+                signal,
+            })
+        ).data,
     get: async (id: string, signal: AbortSignal) =>
         (await api.get<PublicChallenge>(publicPostPath(id), { signal })).data,
     publish: async (form: FormData, signal: AbortSignal) =>

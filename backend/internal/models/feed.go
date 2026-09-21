@@ -8,6 +8,7 @@ type PublicChallenge struct {
 	ID            string    `json:"id"`
 	UserID        string    `json:"user_id"`
 	Username      string    `json:"username"`
+	Avatar        string    `json:"avatar"`
 	Caption       string    `json:"caption"`
 	Audience      string    `json:"audience"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -27,6 +28,7 @@ type PublicFeedLeaderboardEntry struct {
 	Rank       int    `json:"rank"`
 	UserID     string `json:"user_id"`
 	Username   string `json:"username"`
+	Avatar     string `json:"avatar"`
 	TotalScore int    `json:"total_score"`
 }
 
@@ -39,6 +41,7 @@ type PublicComment struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`
 	Username  string    `json:"username"`
+	Avatar    string    `json:"avatar"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 	CanDelete bool      `json:"can_delete"`

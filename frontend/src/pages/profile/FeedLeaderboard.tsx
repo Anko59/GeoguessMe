@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAPIErrorMessage, publicFeedAPI } from '../../api';
 import Avatar from '../../components/common/Avatar';
-import { useAuth } from '../../context/AuthContext';
 import type { PublicFeedLeaderboardEntry } from '../../types';
 import '../../components/leaderboard/Leaderboard.css';
 
@@ -13,12 +12,34 @@ type LeaderboardState = {
     loading: boolean;
 };
 
-export default function FeedLeaderboard() {
+function appendUniqueEntries(
+    current: PublicFeedLeaderboardEntry[],
+    additions: PublicFeedLeaderboardEntry[],
+): PublicFeedLeaderboardEntry[] {
+    const seen = new Set(current.map((entry) => entry.user_id));
+    return additions.reduce<PublicFeedLeaderboardEntry[]>(
+        (result, entry) => {
+            if (!seen.has(entry.user_id)) {
+                seen.add(entry.user_id);
+                result.push(entry);
+            }
+            return result;
+        },
+        [...current],
+    );
+}
+
+export default function FeedLeaderboard({
+    profileID,
+    profileUsername,
+}: {
+    profileID: string;
+    profileUsername: string;
+}) {
     const [state, setState] = useState<LeaderboardState>({ items: [], nextCursor: '', error: '', loading: true });
+    const mounted = useRef(false);
     const initialLoadController = useRef<AbortController | null>(null);
     const loadMoreController = useRef<AbortController | null>(null);
-    const { user } = useAuth();
-    const currentUserId = user?.id;
 
     const loadInitial = useCallback(async () => {
         initialLoadController.current?.abort();
@@ -26,12 +47,12 @@ export default function FeedLeaderboard() {
         initialLoadController.current = controller;
         setState((current) => ({ ...current, loading: true, error: '' }));
         try {
-            const page = await publicFeedAPI.leaderboard('', controller.signal);
-            if (!controller.signal.aborted) {
+            const page = await publicFeedAPI.profileLeaderboard(profileID, '', controller.signal);
+            if (mounted.current && !controller.signal.aborted && initialLoadController.current === controller) {
                 setState({ items: page.items, nextCursor: page.next_cursor, error: '', loading: false });
             }
         } catch (reason: unknown) {
-            if (!controller.signal.aborted) {
+            if (mounted.current && !controller.signal.aborted && initialLoadController.current === controller) {
                 setState({
                     items: [],
                     nextCursor: '',
@@ -44,11 +65,13 @@ export default function FeedLeaderboard() {
                 initialLoadController.current = null;
             }
         }
-    }, []);
+    }, [profileID]);
 
     useEffect(() => {
+        mounted.current = true;
         void loadInitial();
         return () => {
+            mounted.current = false;
             initialLoadController.current?.abort();
             loadMoreController.current?.abort();
         };
@@ -61,15 +84,17 @@ export default function FeedLeaderboard() {
         loadMoreController.current = controller;
         setState((current) => ({ ...current, loading: true, error: '' }));
         try {
-            const page = await publicFeedAPI.leaderboard(state.nextCursor, controller.signal);
-            setState((current) => ({
-                items: [...current.items, ...page.items],
-                nextCursor: page.next_cursor,
-                error: '',
-                loading: false,
-            }));
+            const page = await publicFeedAPI.profileLeaderboard(profileID, state.nextCursor, controller.signal);
+            if (mounted.current && !controller.signal.aborted && loadMoreController.current === controller) {
+                setState((current) => ({
+                    items: appendUniqueEntries(current.items, page.items),
+                    nextCursor: page.next_cursor,
+                    error: '',
+                    loading: false,
+                }));
+            }
         } catch (reason: unknown) {
-            if (!controller.signal.aborted) {
+            if (mounted.current && !controller.signal.aborted && loadMoreController.current === controller) {
                 setState((current) => ({
                     ...current,
                     error: getAPIErrorMessage(reason, 'Unable to load more rankings.'),
@@ -123,8 +148,8 @@ export default function FeedLeaderboard() {
             <div className="leaderboard-header">
                 <img src="/friends_leaderboard_icon.png" alt="" className="leaderboard-icon" />
                 <div>
-                    <p>Community rankings</p>
-                    <h2 id="profile-feed-leaderboard-title">Feed leaderboard</h2>
+                    <p>Challenge rankings</p>
+                    <h2 id="profile-feed-leaderboard-title">Best at guessing {profileUsername}</h2>
                 </div>
                 <span className="leaderboard-scope">All-time totals</span>
             </div>
@@ -146,7 +171,9 @@ export default function FeedLeaderboard() {
                 <div className="leaderboard-empty-state">
                     <img src="/cup_icon.png" alt="" className="leaderboard-empty-icon" />
                     <h2>No scores yet</h2>
-                    <p className="empty-subtitle">Be the first to score a public challenge.</p>
+                    <p className="empty-subtitle">
+                        Be the first to score one of {profileUsername}&apos;s visible challenges.
+                    </p>
                 </div>
             )}
             {state.items.length > 0 && (
@@ -154,12 +181,11 @@ export default function FeedLeaderboard() {
                     {state.items.map((entry, index) => {
                         const rankMedal = getRankMedal(entry.rank);
                         const rankClass = getRankClass(entry.rank);
-                        const isCurrentUser = entry.user_id === currentUserId;
 
                         return (
                             <li
                                 key={entry.user_id}
-                                className={`leaderboard-entry ${rankClass} ${isCurrentUser ? 'current-user' : ''} scale-in`}
+                                className={`leaderboard-entry ${rankClass} scale-in`}
                                 style={{ animationDelay: `${index * 0.05}s` }}
                             >
                                 <div className="entry-rank">
@@ -174,7 +200,11 @@ export default function FeedLeaderboard() {
                                         to={`/profile/${entry.user_id}`}
                                         aria-label={`View ${entry.username}'s profile`}
                                     >
-                                        <Avatar userID={entry.user_id} username={entry.username} />
+                                        <Avatar
+                                            userID={entry.user_id}
+                                            avatar={entry.avatar}
+                                            username={entry.username}
+                                        />
                                     </Link>
                                 </div>
                                 <div className="entry-info">
@@ -183,9 +213,8 @@ export default function FeedLeaderboard() {
                                             <Link className="entry-username-link" to={`/profile/${entry.user_id}`}>
                                                 {entry.username}
                                             </Link>
-                                            {isCurrentUser && <span className="you-badge">You</span>}
                                         </div>
-                                        <div className="entry-rank-name">Public challenge score</div>
+                                        <div className="entry-rank-name">Score on visible challenges</div>
                                     </div>
                                     <div className="entry-score-bar" aria-hidden="true">
                                         <div

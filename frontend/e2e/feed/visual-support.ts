@@ -50,7 +50,9 @@ async function expectMapFilled(dialog: Locator): Promise<void> {
 
 export async function captureFeedState(page: Page, testInfo: TestInfo, name: string, dialog?: Locator): Promise<void> {
     if (!dialog) {
-        await expect(page.getByRole('region', { name: 'Group inbox' }).getByText('No groups yet.')).toBeVisible();
+        const feedColumn = page.locator('.feed-column');
+        await expect(feedColumn).toBeVisible();
+        await expect(feedColumn.locator('.feed-card, .feed-empty h2, .feed-empty[role="alert"]').first()).toBeVisible();
     }
     await expect(page.getByRole('alert')).toHaveCount(0);
     await page.evaluate(() => document.fonts.ready);

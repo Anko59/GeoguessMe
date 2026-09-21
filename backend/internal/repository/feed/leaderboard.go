@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"geoguessme/internal/models"
@@ -36,23 +37,50 @@ func encodeLeaderboardCursor(entry models.PublicFeedLeaderboardEntry) string {
 }
 
 func (r *Repository) Leaderboard(ctx context.Context, cursor LeaderboardCursor, limit int) (models.PublicFeedLeaderboardPage, error) {
-	page := models.PublicFeedLeaderboardPage{Items: []models.PublicFeedLeaderboardEntry{}}
-	query := `WITH totals AS (
-		SELECT g.user_id,u.username,SUM(g.score)::bigint AS total_score
+	return r.loadLeaderboard(ctx, cursor, limit, `WITH totals AS (
+		SELECT g.user_id,u.username,u.avatar,SUM(g.score)::bigint AS total_score
 		FROM public_guesses g
 		JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
-		GROUP BY g.user_id,u.username
+		GROUP BY g.user_id,u.username,u.avatar
 	), ranked AS (
-		SELECT user_id,username,total_score,RANK() OVER (ORDER BY total_score DESC) AS rank
+		SELECT user_id,username,avatar,total_score,RANK() OVER (ORDER BY total_score DESC) AS rank
 		FROM totals
 	)
-	SELECT user_id,username,total_score,rank FROM ranked `
-	args := []any{limit + 1}
-	if cursor.UserID != "" {
-		query += `WHERE total_score < $1 OR (total_score=$1 AND (username > $2 OR (username=$2 AND user_id > $3))) `
-		args = []any{cursor.Score, cursor.Username, cursor.UserID, limit + 1}
+	SELECT user_id,username,avatar,total_score,rank FROM ranked `, nil)
+}
+
+// ProfileLeaderboard ranks players by their guesses on a target player's feed
+// challenges. The target's visible posts are filtered with challengeVisibility
+// using the authenticated viewer, and the target itself is excluded even if a
+// legacy row ever exists in public_guesses.
+func (r *Repository) ProfileLeaderboard(ctx context.Context, target, viewer string, cursor LeaderboardCursor, limit int) (models.PublicFeedLeaderboardPage, error) {
+	if err := r.authorizeProfileViewer(ctx, target, viewer); err != nil {
+		return models.PublicFeedLeaderboardPage{Items: []models.PublicFeedLeaderboardEntry{}}, err
 	}
-	query += `ORDER BY total_score DESC,username ASC,user_id ASC LIMIT $` + strconv.Itoa(len(args))
+	return r.loadLeaderboard(ctx, cursor, limit, `WITH totals AS (
+		SELECT g.user_id,u.username,u.avatar,SUM(g.score)::bigint AS total_score
+		FROM public_guesses g
+		JOIN public_challenges p ON p.id=g.challenge_id
+		JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
+		WHERE p.user_id=$2 AND g.user_id<>$2 AND `+challengeVisibility+`
+		GROUP BY g.user_id,u.username,u.avatar
+	), ranked AS (
+		SELECT user_id,username,avatar,total_score,RANK() OVER (ORDER BY total_score DESC) AS rank
+		FROM totals
+	)
+	SELECT user_id,username,avatar,total_score,rank FROM ranked `, []any{viewer, target})
+}
+
+func (r *Repository) loadLeaderboard(ctx context.Context, cursor LeaderboardCursor, limit int, query string, args []any) (models.PublicFeedLeaderboardPage, error) {
+	page := models.PublicFeedLeaderboardPage{Items: []models.PublicFeedLeaderboardEntry{}}
+	if cursor.UserID != "" {
+		first := len(args) + 1
+		query += fmt.Sprintf(`WHERE total_score < $%d OR (total_score=$%d AND (username > $%d OR (username=$%d AND user_id > $%d))) `, first, first, first+1, first+1, first+2)
+		args = append(args, cursor.Score, cursor.Username, cursor.UserID)
+	}
+	limitPosition := len(args) + 1
+	args = append(args, limit+1)
+	query += `ORDER BY total_score DESC,username ASC,user_id ASC LIMIT $` + strconv.Itoa(limitPosition)
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return page, err
@@ -60,7 +88,7 @@ func (r *Repository) Leaderboard(ctx context.Context, cursor LeaderboardCursor, 
 	defer rows.Close()
 	for rows.Next() {
 		var entry models.PublicFeedLeaderboardEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.TotalScore, &entry.Rank); err != nil {
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Avatar, &entry.TotalScore, &entry.Rank); err != nil {
 			return page, err
 		}
 		page.Items = append(page.Items, entry)

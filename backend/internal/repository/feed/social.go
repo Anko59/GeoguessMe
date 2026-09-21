@@ -35,7 +35,7 @@ func (r *Repository) Comments(ctx context.Context, id, viewer string, cursor Cur
 	if !exists {
 		return page, ErrNotFound
 	}
-	query := `SELECT c.id,c.user_id,u.username,c.content,c.created_at,
+	query := `SELECT c.id,c.user_id,u.username,u.avatar,c.content,c.created_at,
 		c.user_id=$1 OR p.user_id=$1 FROM public_comments c
 		JOIN users u ON u.id=c.user_id JOIN public_challenges p ON p.id=c.challenge_id
 		WHERE c.challenge_id=$2 AND ` + challengeVisibility + ` `
@@ -51,7 +51,7 @@ func (r *Repository) Comments(ctx context.Context, id, viewer string, cursor Cur
 	defer rows.Close()
 	for rows.Next() {
 		var c models.PublicComment
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.Content, &c.CreatedAt, &c.CanDelete); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.Avatar, &c.Content, &c.CreatedAt, &c.CanDelete); err != nil {
 			return page, err
 		}
 		page.Items = append(page.Items, c)
@@ -72,8 +72,8 @@ func (r *Repository) Comment(ctx context.Context, id, viewer, content string) (m
 	err := r.pool.QueryRow(ctx, `WITH inserted AS (
 		INSERT INTO public_comments(id,challenge_id,user_id,content)
 		SELECT $2,p.id,$1,$3 FROM public_challenges p WHERE p.id=$4 AND `+challengeVisibility+` RETURNING created_at)
-		SELECT inserted.created_at,u.username FROM inserted JOIN users u ON u.id=$1`, viewer, c.ID, content, id).
-		Scan(&c.CreatedAt, &c.Username)
+		SELECT inserted.created_at,u.username,u.avatar FROM inserted JOIN users u ON u.id=$1`, viewer, c.ID, content, id).
+		Scan(&c.CreatedAt, &c.Username, &c.Avatar)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}

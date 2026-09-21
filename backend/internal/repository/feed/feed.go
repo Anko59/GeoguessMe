@@ -13,6 +13,7 @@ import (
 
 var ErrNotFound = errors.New("public challenge not found")
 var ErrForbidden = errors.New("action not allowed")
+var ErrProfileNotFound = errors.New("feed profile not found")
 
 type Repository struct{ pool database.Pool }
 
@@ -66,7 +67,7 @@ func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 	return tx.Commit(ctx)
 }
 
-const selectPost = `SELECT p.id, p.user_id, u.username, p.caption, p.created_at,
+const selectPost = `SELECT p.id, p.user_id, u.username, u.avatar, p.caption, p.created_at,
 	p.audience, p.user_id = $1, EXISTS (SELECT 1 FROM public_guesses g WHERE g.challenge_id=p.id AND g.user_id=$1),
 	(SELECT count(*) FROM public_reactions r WHERE r.challenge_id=p.id),
 	EXISTS (SELECT 1 FROM public_reactions r WHERE r.challenge_id=p.id AND r.user_id=$1),
@@ -89,11 +90,40 @@ const challengeVisibility = `(p.user_id=$1 OR p.audience='public' OR
 
 func scanPost(row interface{ Scan(...any) error }) (models.PublicChallenge, error) {
 	var p models.PublicChallenge
-	err := row.Scan(&p.ID, &p.UserID, &p.Username, &p.Caption, &p.CreatedAt, &p.Audience, &p.IsOwner, &p.Resolved, &p.ReactionCount, &p.Reacted, &p.CommentCount)
+	err := row.Scan(&p.ID, &p.UserID, &p.Username, &p.Avatar, &p.Caption, &p.CreatedAt, &p.Audience, &p.IsOwner, &p.Resolved, &p.ReactionCount, &p.Reacted, &p.CommentCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
 	return p, err
+}
+
+// authorizeProfileViewer applies the same visibility rule as the existing
+// public profile endpoint before returning aggregate feed performance. A
+// missing target and a target hidden by the existing shared-group rule remain
+// distinguishable so the HTTP layer can preserve the profile API semantics.
+func (r *Repository) authorizeProfileViewer(ctx context.Context, target, viewer string) error {
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id=$1 AND deleted_at IS NULL)`, target).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrProfileNotFound
+	}
+	if target == viewer {
+		return nil
+	}
+	var shared bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM group_members target_members
+		JOIN group_members viewer_members ON viewer_members.group_id=target_members.group_id
+		WHERE target_members.user_id=$1 AND viewer_members.user_id=$2
+	)`, target, viewer).Scan(&shared); err != nil {
+		return err
+	}
+	if !shared {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (r *Repository) Get(ctx context.Context, id, viewer string) (models.PublicChallenge, error) {

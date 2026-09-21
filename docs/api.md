@@ -175,7 +175,8 @@ for visibility and retention.
 | Method      | Path                                                | Description                                                    |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------- |
 | GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                 |
-| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames and total score only          |
+| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames, avatars, and total score     |
+| GET         | `/api/v1/feed/leaderboard/{profileID}`              | Players ranked by guesses on one profile owner's feed posts    |
 | POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,audience,group_id*,lat,long)` |
 | GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                |
 | GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer   |

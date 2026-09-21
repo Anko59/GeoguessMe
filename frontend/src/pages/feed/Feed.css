@@ -155,16 +155,14 @@
     padding: 1rem 1.25rem;
 }
 .feed-avatar {
-    display: grid;
-    place-items: center;
     width: 42px;
     height: 42px;
     flex-shrink: 0;
+    display: block;
     border-radius: 50%;
     background: var(--surface-brand);
     border: 1px solid var(--line);
-    color: var(--brand-blue-accessible);
-    font-weight: 750;
+    object-fit: cover;
 }
 .feed-author {
     display: flex;
@@ -258,7 +256,8 @@
     gap: 0.25rem 1rem;
 }
 .feed-text-button,
-.feed-reaction {
+.feed-reaction,
+.feed-icon-button {
     background: none;
     border: none;
     cursor: pointer;
@@ -268,15 +267,23 @@
     font-size: 0.85rem;
     min-height: 44px;
 }
+.feed-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
 .feed-reaction {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     color: var(--ink);
 }
-.feed-reaction > span:first-child {
-    font-size: 1.8rem;
-    line-height: 1;
+.feed-action-icon {
+    width: 1.45rem;
+    height: 1.45rem;
+    flex: none;
+    display: block;
+    object-fit: contain;
 }
 .feed-reaction.is-liked {
     color: var(--danger);
@@ -286,7 +293,8 @@
     text-decoration: underline;
 }
 .feed-text-button:disabled,
-.feed-reaction:disabled {
+.feed-reaction:disabled,
+.feed-icon-button:disabled {
     opacity: 0.6;
     cursor: wait;
 }
@@ -300,6 +308,9 @@
     margin-left: auto;
     font-size: 0.8rem;
     min-width: 0;
+}
+.feed-share .feed-icon-button {
+    padding-inline: 0.35rem;
 }
 .feed-share > span,
 .feed-share label {
@@ -319,6 +330,16 @@
 }
 .feed-caption strong {
     margin-right: 0.3rem;
+}
+
+.feed-comment-avatar {
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface-brand);
+    border: 1px solid var(--line);
 }
 
 .feed-spoiler-note,

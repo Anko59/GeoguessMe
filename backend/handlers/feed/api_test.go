@@ -124,8 +124,8 @@ func (s *fakeStore) Health(context.Context) error                { return nil }
 func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 	a, mock := mockAPI(t)
 	now := time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)
-	columns := []string{"id", "user", "username", "caption", "created_at", "audience", "owner", "resolved", "likes", "liked", "comments"}
-	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", 21).WillReturnRows(pgxmock.NewRows(columns).AddRow(testID, "author", "Explorer", "Find this place", now, "public", false, false, 3, true, 2))
+	columns := []string{"id", "user", "username", "avatar", "caption", "created_at", "audience", "owner", "resolved", "likes", "liked", "comments"}
+	mock.ExpectQuery("SELECT p.id, p.user_id").WithArgs("viewer", 21).WillReturnRows(pgxmock.NewRows(columns).AddRow(testID, "author", "Explorer", "avatar2.png", "Find this place", now, "public", false, false, 3, true, 2))
 	w := httptest.NewRecorder()
 	a.List(w, request("GET", ""))
 	if w.Code != 200 {
@@ -164,10 +164,10 @@ func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
 func TestFeedLeaderboardReturnsTotalsWithoutCaching(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("WITH totals AS").WithArgs(21).WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "username", "total_score", "rank"}).
-			AddRow("user-a", "Alice", 5000, 1).
-			AddRow("user-b", "Bob", 4200, 2).
-			AddRow("user-c", "Carol", 3900, 3),
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "total_score", "rank"}).
+			AddRow("user-a", "Alice", "avatar.png", 5000, 1).
+			AddRow("user-b", "Bob", "avatar2.png", 4200, 2).
+			AddRow("user-c", "Carol", "avatar3.png", 3900, 3),
 	)
 	w := httptest.NewRecorder()
 	a.Leaderboard(w, request("GET", ""))
@@ -186,6 +186,36 @@ func TestFeedLeaderboardRejectsInvalidCursorBeforePersistence(t *testing.T) {
 	w := httptest.NewRecorder()
 	a.Leaderboard(w, r)
 	if w.Code != 400 || !strings.Contains(w.Body.String(), `"invalid_cursor"`) {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProfileFeedLeaderboardScopesToProfileAndPreservesPrivacy(t *testing.T) {
+	a, mock := mockAPI(t)
+	r := request("GET", "")
+	r.SetPathValue("profileID", testID)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(testID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(testID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("WITH totals AS").WithArgs("viewer", testID, 21).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "total_score", "rank"}).AddRow("guesser", "Navigator", "avatar2.png", 4800, 1),
+	)
+	w := httptest.NewRecorder()
+	a.ProfileLeaderboard(w, r)
+	if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("response %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"avatar":"avatar2.png"`) {
+		t.Fatalf("avatar missing: %s", w.Body.String())
+	}
+}
+
+func TestProfileFeedLeaderboardRejectsInvalidProfileIDBeforePersistence(t *testing.T) {
+	a, _ := mockAPI(t)
+	r := request("GET", "")
+	r.SetPathValue("profileID", "not-a-uuid")
+	w := httptest.NewRecorder()
+	a.ProfileLeaderboard(w, r)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"invalid_id"`) {
 		t.Fatalf("response %d %s", w.Code, w.Body.String())
 	}
 }
@@ -219,7 +249,7 @@ func TestFeedErrorsAndCommentOwnership(t *testing.T) {
 
 func TestCommentCreatedWithTrimmedContent(t *testing.T) {
 	a, mock := mockAPI(t)
-	mock.ExpectQuery("WITH inserted AS").WithArgs("viewer", pgxmock.AnyArg(), "Great place!", testID).WillReturnRows(pgxmock.NewRows([]string{"at", "name"}).AddRow(time.Now(), "Explorer"))
+	mock.ExpectQuery("WITH inserted AS").WithArgs("viewer", pgxmock.AnyArg(), "Great place!", testID).WillReturnRows(pgxmock.NewRows([]string{"at", "name", "avatar"}).AddRow(time.Now(), "Explorer", "avatar.png"))
 	w := httptest.NewRecorder()
 	a.Comments(w, request("POST", `{"content":"  Great place!  "}`))
 	if w.Code != 201 || !strings.Contains(w.Body.String(), `"content":"Great place!"`) {

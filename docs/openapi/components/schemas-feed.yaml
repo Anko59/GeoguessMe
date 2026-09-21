@@ -5,6 +5,7 @@
       "id",
       "user_id",
       "username",
+      "avatar",
       "caption",
       "created_at",
       "is_owner",
@@ -21,6 +22,8 @@
       "type": "string"
       "format": "uuid"
     "username":
+      "type": "string"
+    "avatar":
       "type": "string"
     "caption":
       "type": "string"
@@ -57,7 +60,7 @@
       "type": "string"
 "PublicFeedLeaderboardEntry":
   "type": "object"
-  "required": ["rank", "user_id", "username", "total_score"]
+  "required": ["rank", "user_id", "username", "avatar", "total_score"]
   "properties":
     "rank":
       "type": "integer"
@@ -66,6 +69,8 @@
       "type": "string"
       "format": "uuid"
     "username":
+      "type": "string"
+    "avatar":
       "type": "string"
     "total_score":
       "type": "integer"
@@ -82,7 +87,7 @@
       "type": "string"
 "PublicComment":
   "type": "object"
-  "required": ["id", "user_id", "username", "content", "created_at", "can_delete"]
+  "required": ["id", "user_id", "username", "avatar", "content", "created_at", "can_delete"]
   "properties":
     "id":
       "type": "string"
@@ -91,6 +96,8 @@
       "type": "string"
       "format": "uuid"
     "username":
+      "type": "string"
+    "avatar":
       "type": "string"
     "content":
       "type": "string"
