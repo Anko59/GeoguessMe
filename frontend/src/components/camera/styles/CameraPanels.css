@@ -337,8 +337,19 @@
     font-weight: 700;
 }
 
-.camera-options-feed input {
+.camera-options-feed input[type='radio'] {
+    width: 1.05rem;
+    height: 1.05rem;
+    min-height: 1.05rem;
+    margin: 0;
+    padding: 0;
+    flex: none;
     accent-color: var(--brand-yellow);
+}
+
+.camera-options-feed input[type='radio']:focus-visible {
+    outline: 2px solid var(--brand-yellow);
+    outline-offset: 2px;
 }
 
 .camera-options-caption {
