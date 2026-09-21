@@ -48,13 +48,14 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await captureFeedState(owner, testInfo, '00-empty-feed');
         await owner.getByRole('button', { name: '+ Post a challenge' }).click();
         const composer = owner.getByRole('dialog', { name: 'Post a geo challenge' });
-        await composer.getByLabel('Caption').fill('A place worth discovering');
         await expect(composer.locator('input[type="file"]')).toHaveCount(0);
         await expect(composer.getByLabel('Latitude')).toHaveCount(0);
         await expect(composer.getByRole('button', { name: 'Take photo' })).toBeVisible();
         await composer.getByRole('button', { name: 'Take photo' }).click();
         await expect(composer.locator('.preview-image')).toBeVisible();
-        await expect(composer.getByRole('radio', { name: 'Everyone on GeoGuessMe' })).toBeChecked();
+        await composer.getByRole('button', { name: 'Challenge options' }).click();
+        await composer.getByRole('textbox', { name: 'Caption (optional)' }).fill('A place worth discovering');
+        await expect(composer.getByRole('radio', { name: 'Public feed' })).toBeChecked();
         await captureFeedState(owner, testInfo, '01-composer', composer);
         await captureAudienceControls(owner, testInfo, composer);
         const [publication] = await Promise.all([

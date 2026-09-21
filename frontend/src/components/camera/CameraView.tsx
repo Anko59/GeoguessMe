@@ -5,6 +5,7 @@ import TextBannerEditor, { TextBannerOverlay } from './TextBannerEditor';
 import type { Group } from '../../types';
 import type { LensId } from './lenses/lensCatalog';
 import type { TextBanner } from './textBanner';
+import type { ChallengeAudience } from './useChallengeUpload';
 
 interface CameraViewProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -36,6 +37,9 @@ interface CameraViewProps {
     allowFileFallback: boolean;
     allowVideo: boolean;
     showChallengeOptions: boolean;
+    feedMode: boolean;
+    feedAudience: ChallengeAudience;
+    feedCaption: string;
     captureSummary?: string;
     onStartCamera: () => void;
     onSetFileMode: () => void;
@@ -44,6 +48,8 @@ interface CameraViewProps {
     onToggleOptions: () => void;
     onToggleGroup: (id: string) => void;
     onToggleHideLocation: () => void;
+    onAudienceChange: (audience: ChallengeAudience) => void;
+    onCaptionChange: (caption: string) => void;
     onCloseOptions: () => void;
     onSelectLens: (lens: LensId) => void;
     onBannerChange: (banner: TextBanner) => void;
@@ -86,6 +92,9 @@ export default function CameraView({
     allowFileFallback,
     allowVideo,
     showChallengeOptions,
+    feedMode,
+    feedAudience,
+    feedCaption,
     captureSummary,
     onStartCamera,
     onSetFileMode,
@@ -94,6 +103,8 @@ export default function CameraView({
     onToggleOptions,
     onToggleGroup,
     onToggleHideLocation,
+    onAudienceChange,
+    onCaptionChange,
     onCloseOptions,
     onSelectLens,
     onBannerChange,
@@ -138,6 +149,11 @@ export default function CameraView({
             hideLocation={hideLocation}
             onToggleGroup={onToggleGroup}
             onToggleHideLocation={onToggleHideLocation}
+            feedMode={feedMode}
+            feedAudience={feedAudience}
+            feedCaption={feedCaption}
+            onAudienceChange={onAudienceChange}
+            onCaptionChange={onCaptionChange}
             onClose={onCloseOptions}
         />
     );

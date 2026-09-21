@@ -31,15 +31,69 @@
 .feed-camera-form {
     min-width: 0;
 }
-.feed-camera-form .camera-container {
-    min-height: 28rem;
-    height: min(62dvh, 38rem);
-    border-radius: 0.85rem;
+.feed-dialog.feed-camera-dialog {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+    background: #0b1020;
 }
-.feed-camera-form .camera-video,
-.feed-camera-form .camera-view,
-.feed-camera-form .photo-preview {
-    min-height: 28rem;
+.feed-camera-dialog::backdrop {
+    background: #0b1020;
+}
+.feed-camera-dialog .feed-dialog-header {
+    position: absolute;
+    z-index: 5;
+    inset: 0 0 auto;
+    margin: 0;
+    padding: 0.8rem 1rem;
+    color: white;
+    background: linear-gradient(180deg, rgba(5, 10, 24, 0.8), transparent);
+    pointer-events: none;
+}
+.feed-camera-dialog .feed-dialog-header h2,
+.feed-camera-dialog .feed-dialog-header button {
+    pointer-events: auto;
+}
+.feed-camera-dialog .feed-dialog-header h2 {
+    font-size: 1rem;
+}
+.feed-camera-dialog .feed-dialog-header .feed-text-button {
+    color: white;
+}
+.feed-camera-dialog .feed-camera-form {
+    height: 100dvh;
+}
+.feed-camera-dialog .camera-container {
+    width: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+}
+.feed-camera-dialog .camera-video,
+.feed-camera-dialog .camera-view,
+.feed-camera-dialog .photo-preview {
+    min-height: 100dvh;
+}
+.feed-camera-dialog .feed-camera-note,
+.feed-camera-dialog .feed-camera-error {
+    position: absolute;
+    z-index: 4;
+    left: 1rem;
+    right: 1rem;
+    bottom: 0.8rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.86);
+    text-align: center;
+    pointer-events: none;
+}
+.feed-camera-dialog .feed-camera-error {
+    bottom: 3.4rem;
+    color: #ffd4d4;
 }
 .feed-form fieldset {
     border: 0;

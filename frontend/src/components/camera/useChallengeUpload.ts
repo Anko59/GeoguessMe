@@ -10,14 +10,28 @@ import { drawTextBanner, type TextBanner } from './textBanner';
 import type { FaceFrame } from './lenses/facePose';
 import type { LensRenderer as LensRendererInstance } from './lenses/LensRenderer';
 
+export type ChallengeAudience = 'public' | 'friends';
+
+export interface CaptureUploadOptions {
+    audience: ChallengeAudience;
+    caption: string;
+    groupIDs: string[];
+    hideLocation: boolean;
+    idempotencyKey: string;
+}
+
 interface ChallengeUploadDeps {
     groupIDs: string[];
     hideLocation: boolean;
+    audience: ChallengeAudience;
+    caption: string;
+    idempotencyKey: string;
     /** Optional destination override used by capture surfaces outside groups. */
     uploadCaptured?: (
         blob: Blob,
         filename: string,
         position: GeolocationPosition,
+        options: CaptureUploadOptions,
     ) => Promise<MediaProcessingJob | null>;
     fileMode: boolean;
     capturedPhoto: string | null;
@@ -48,6 +62,9 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
     const {
         groupIDs,
         hideLocation,
+        audience,
+        caption,
+        idempotencyKey,
         uploadCaptured,
         fileMode,
         capturedPhoto,
@@ -123,7 +140,13 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
             if (video) {
                 const extension = video.blob.type === 'video/mp4' ? 'mp4' : 'webm';
                 const job = uploadCaptured
-                    ? await uploadCaptured(video.blob, `capture.${extension}`, position)
+                    ? await uploadCaptured(video.blob, `capture.${extension}`, position, {
+                          audience,
+                          caption,
+                          groupIDs,
+                          hideLocation,
+                          idempotencyKey,
+                      })
                     : await uploadPhoto(video.blob, `capture.${extension}`, groupIDs, position, hideLocation);
                 if (job) {
                     // Asynchronous processing: the polling flow resolves the
@@ -134,7 +157,13 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
             } else {
                 const blob = dataURLToBlob(photo as string);
                 if (uploadCaptured) {
-                    await uploadCaptured(blob, fileMode ? 'upload.jpg' : 'capture.jpg', position);
+                    await uploadCaptured(blob, fileMode ? 'upload.jpg' : 'capture.jpg', position, {
+                        audience,
+                        caption,
+                        groupIDs,
+                        hideLocation,
+                        idempotencyKey,
+                    });
                 } else {
                     await uploadPhoto(blob, fileMode ? 'upload.jpg' : 'capture.jpg', groupIDs, position, hideLocation);
                 }
@@ -159,9 +188,12 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
     }, [
         destroyEffects,
         discardRecording,
+        audience,
+        caption,
         fileMode,
         groupIDs,
         hideLocation,
+        idempotencyKey,
         onUploadComplete,
         uploadCaptured,
         recordedVideo,
@@ -180,28 +212,30 @@ export function useChallengeUpload(deps: ChallengeUploadDeps) {
 
 // Capture-screen options: which groups receive the challenge and whether the
 // exact location stays hidden from guessers.
-export function useChallengeOptions(currentGroupID: string) {
+export function useChallengeOptions(currentGroupID: string, feedMode = false) {
     const [showOptions, setShowOptions] = useState(false);
     const [availableGroups, setAvailableGroups] = useState<Group[]>([]);
-    const [targetGroupIDs, setTargetGroupIDs] = useState<string[]>([currentGroupID]);
+    const [targetGroupIDs, setTargetGroupIDs] = useState<string[]>(currentGroupID ? [currentGroupID] : []);
     const [hideLocation, setHideLocation] = useState(false);
+    const [audience, setAudience] = useState<ChallengeAudience>('public');
+    const [caption, setCaption] = useState('');
     const previousGroupID = useRef(currentGroupID);
 
     useEffect(() => {
         if (previousGroupID.current === currentGroupID) return;
         previousGroupID.current = currentGroupID;
-        setTargetGroupIDs([currentGroupID]);
+        setTargetGroupIDs(currentGroupID ? [currentGroupID] : []);
         setAvailableGroups([]);
         setShowOptions(false);
         setHideLocation(false);
-    }, [currentGroupID]);
+    }, [currentGroupID, feedMode]);
 
     const toggleOptions = useCallback(() => {
         setShowOptions((open) => {
             if (!open) {
                 void api
                     .get<Group[]>('/user/groups')
-                    .then((response) => setAvailableGroups(response.data))
+                    .then((response) => setAvailableGroups(Array.isArray(response.data) ? response.data : []))
                     .catch(() => setAvailableGroups([]));
             }
             return !open;
@@ -225,6 +259,10 @@ export function useChallengeOptions(currentGroupID: string) {
         toggleOptions,
         toggleGroup,
         toggleHideLocation,
+        audience,
+        setAudience,
+        caption,
+        setCaption,
         closeOptions,
     };
 }

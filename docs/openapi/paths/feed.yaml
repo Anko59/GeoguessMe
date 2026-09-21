@@ -16,14 +16,10 @@
           "application/json":
             "schema":
               "$ref": "../components/schemas-feed.yaml#/PublicFeedPage"
-      "400":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "401":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "404":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "429":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "400": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "401": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "429": { "$ref": "../components/responses.yaml#/ErrorResponse" }
       "500":
         "$ref": "../components/responses.yaml#/ErrorResponse"
 "leaderboard":
@@ -93,7 +89,7 @@
 "upload":
   "post":
     "operationId": "createPublicChallenge"
-    "summary": "Publish a photo challenge with an explicit audience"
+    "summary": "Publish a feed challenge and optional group challenges"
     "tags": ["Feed"]
     "security": [{ "bearerAuth": [] }]
     "requestBody":
@@ -122,7 +118,15 @@
                 "items":
                   "type": "string"
                   "format": "uuid"
-                "description": "Repeated multipart field. Optional selected groups for a friends post; the author must belong to every selected group."
+                "description": "Repeated multipart field. Each selected group receives a normal private challenge; the author must belong to every selected group. Friends feed visibility is also limited to these groups when supplied."
+              "hide_location":
+                "type": "boolean"
+                "default": false
+                "description": "Hide the exact location on the selected private group challenges."
+              "idempotency_key":
+                "type": "string"
+                "format": "uuid"
+                "description": "Stable client-generated key reused when retrying the same capture."
               "lat":
                 "type": "number"
                 "minimum": -90
@@ -132,22 +136,25 @@
                 "minimum": -180
                 "maximum": 180
     "responses":
+      "200":
+        "description": "The same capture was already published; the idempotent result is returned."
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/ChallengePublication"
       "201":
         "description": "Success"
         "content":
           "application/json":
             "schema":
-              "type": "object"
-              "required": ["id"]
-              "properties":
-                "id":
-                  "type": "string"
-                  "format": "uuid"
+              "$ref": "../components/schemas-feed.yaml#/ChallengePublication"
       "400":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "401":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "404":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "409":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "429":
         "$ref": "../components/responses.yaml#/ErrorResponse"

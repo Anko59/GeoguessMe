@@ -94,6 +94,23 @@ photos, results, or comments does not consume that write allowance, so browsing
 cannot prevent a subsequent guess or comment. Every read still requires an
 active authenticated account and the applicable media authorization.
 
+Publication fan-out is capped at 20 selected groups. A submission stores one
+feed object and one private object per selected group; the database destination
+rows commit transactionally, while object storage uses compensation because it
+cannot participate in that transaction. Failed cleanup is attempted for up to 10
+seconds per object and then sent to the durable deletion worker. Both
+publication and cleanup serialize on the canonical storage key; the worker
+rechecks live references before deleting, so a retry cannot remove a later
+successful upload that reused a key.
+
+The idempotency reservation also stores the normalized byte size, MIME type,
+SHA-256 digest, location-visibility flag, and a random per-attempt publication
+token. Replaying a key with different immutable metadata returns a conflict.
+Rows created before migration 033 retain safe defaults (location visible, zero
+size, and empty digest/token) and are not silently treated as equivalent to a
+newly uploaded capture; operators should use a fresh idempotency key for those
+legacy rows.
+
 ## Storage, deployment, and rollback
 
 migrations **027_public_feed**, **028_group_inbox_reads**,
@@ -101,10 +118,12 @@ migrations **027_public_feed**, **028_group_inbox_reads**,
 **031_public_feed_leaderboard**, and **032_public_feed_timed_games** add
 independent public challenge data, durable group inbox read boundaries,
 audience/selected-group records, ranked results and feed-score indexes, and a
-separate timed-session/timeout lifecycle for public feed games. Apply migrations
-with the existing deployment migration job before starting the new application
-revision; local operators use `make migrate-up`. No environment variables or
-services are added.
+separate timed-session/timeout lifecycle for public feed games. Migration
+**033_feed_publication_metadata** is applied after the timed-game migration; its
+`IF NOT EXISTS` clauses also allow a clean deployment of this branch when 032 is
+absent. Apply migrations with the existing deployment migration job before
+starting the new application revision; local operators use `make migrate-up`. No
+environment variables or services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live

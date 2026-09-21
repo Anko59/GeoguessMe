@@ -19,18 +19,43 @@ var ErrGuessTimeExpired = errors.New("guess window expired")
 var ErrMediaExpired = errors.New("media viewing window expired")
 var ErrOwnChallenge = errors.New("cannot use own challenge")
 var ErrInvalidCoordinate = errors.New("invalid coordinate")
+var ErrConflict = errors.New("public challenge id already belongs to another user")
 
 type Repository struct{ pool database.Pool }
 
 func NewRepository(pool database.Pool) *Repository { return &Repository{pool: pool} }
 
 type NewChallenge struct {
-	ID, UserID, Caption, StorageKey, MIMEType string
-	Audience                                  string
-	GroupIDs                                  []string
-	Preview                                   []byte
-	Lat, Long                                 float64
-	CreatedAt                                 time.Time
+	ID, UserID, Caption, StorageKey, MIMEType, ContentDigest string
+	Audience                                                 string
+	PublicationToken                                         string
+	GroupIDs                                                 []string
+	Preview                                                  []byte
+	Lat, Long                                                float64
+	ByteSize                                                 int64
+	HideLocation                                             bool
+	CreatedAt                                                time.Time
+}
+
+type PublicationResolution uint8
+
+const (
+	PublicationNotCommitted PublicationResolution = iota
+	PublicationCommitted
+	PublicationAlreadyCommitted
+	PublicationConflict
+)
+
+// PublicationReservation serializes one idempotent feed publication from the
+// reservation check through the object-store fan-out and the database commit.
+// New reservations retain their transaction until Create or Rollback, so a
+// concurrent retry cannot write the same canonical storage keys first.
+type PublicationReservation interface {
+	Existing() bool
+	GroupIDs() []string
+	Create(context.Context, NewChallenge, []*models.Photo) error
+	Resolve(context.Context) (PublicationResolution, error)
+	Rollback(context.Context) error
 }
 
 func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
@@ -40,14 +65,11 @@ func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 	if p.Audience != "public" && p.Audience != "friends" {
 		return ErrForbidden
 	}
-	if p.Audience == "public" && len(p.GroupIDs) > 0 {
-		return ErrForbidden
-	}
 	insert := `INSERT INTO public_challenges
-		(id,user_id,caption,audience,storage_key,mime_type,preview,lat,long,created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+		(id,user_id,caption,audience,storage_key,mime_type,preview,lat,long,hide_location,byte_size,content_digest,publication_token,created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 	if len(p.GroupIDs) == 0 {
-		_, err := r.pool.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.CreatedAt)
+		_, err := r.pool.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.HideLocation, p.ByteSize, p.ContentDigest, p.PublicationToken, p.CreatedAt)
 		return err
 	}
 
@@ -56,7 +78,7 @@ func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.CreatedAt); err != nil {
+	if _, err := tx.Exec(ctx, insert, p.ID, p.UserID, p.Caption, p.Audience, p.StorageKey, p.MIMEType, p.Preview, p.Lat, p.Long, p.HideLocation, p.ByteSize, p.ContentDigest, p.PublicationToken, p.CreatedAt); err != nil {
 		return err
 	}
 	var memberCount int

@@ -18,8 +18,6 @@ const mocks = vi.hoisted(() => ({
     timedTimeout: vi.fn(),
     timedResults: vi.fn(),
     guess: vi.fn(),
-    result: vi.fn(),
-    results: vi.fn(),
     react: vi.fn(),
     comments: vi.fn(),
     comment: vi.fn(),
@@ -49,10 +47,28 @@ vi.mock('../../../components/camera/Camera', () => ({
                         blob: Blob,
                         filename: string,
                         position: GeolocationPosition,
+                        options: {
+                            audience: 'public' | 'friends';
+                            caption: string;
+                            groupIDs: string[];
+                            hideLocation: boolean;
+                            idempotencyKey: string;
+                        },
                     ) => Promise<unknown>
-                )(new Blob(['camera'], { type: 'image/jpeg' }), 'capture.jpg', {
-                    coords: { latitude: 48.8566, longitude: 2.3522 },
-                } as GeolocationPosition)
+                )(
+                    new Blob(['camera'], { type: 'image/jpeg' }),
+                    'capture.jpg',
+                    {
+                        coords: { latitude: 48.8566, longitude: 2.3522 },
+                    } as GeolocationPosition,
+                    {
+                        audience: 'public',
+                        caption: '',
+                        groupIDs: [],
+                        hideLocation: false,
+                        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+                    },
+                )
                     .then(() => (props.onUploadComplete as () => void)())
                     .catch(() => undefined);
             }}
@@ -127,7 +143,6 @@ beforeEach(() => {
         server_time: new Date().toISOString(),
     });
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
-    mocks.results.mockResolvedValue([]);
     mocks.react.mockResolvedValue(true);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -240,30 +255,6 @@ describe('Public feed', () => {
             ],
             server_time: new Date().toISOString(),
         });
-        /* Legacy result rows are intentionally no longer used by the timed
-         * feed flow; keep the old fixture available for unrelated tests. */
-        mocks.results.mockResolvedValue([
-            {
-                rank: 1,
-                user_id: 'other',
-                username: 'Navigator',
-                avatar: 'avatar-a.png',
-                score: 4800,
-                distance: 100,
-                elo_delta: 4,
-                is_viewer: false,
-            },
-            {
-                rank: 2,
-                user_id: 'viewer',
-                username: 'Me',
-                avatar: 'avatar-b.png',
-                score: 4200,
-                distance: 300,
-                elo_delta: -4,
-                is_viewer: true,
-            },
-        ]);
         renderFeed();
         fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
@@ -407,12 +398,12 @@ describe('Public feed', () => {
         await screen.findByText('The world is waiting for your first post');
         fireEvent.click(screen.getByRole('button', { name: '+ Post a challenge' }));
         const dialog = screen.getByRole('dialog');
-        fireEvent.change(within(dialog).getByLabelText('Caption'), { target: { value: 'A new mystery' } });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
         expect(await screen.findByText('Your challenge')).toBeInTheDocument();
         const form = mocks.publish.mock.calls[0][0] as FormData;
         expect(form.get('photo')).toBeInstanceOf(Blob);
-        expect(form.get('caption')).toBe('A new mystery');
+        expect(form.get('caption')).toBe('');
+        expect(form.get('audience')).toBe('public');
         expect(form.get('lat')).toBe('48.8566');
         expect(form.get('long')).toBe('2.3522');
         expect(form.has('group_ids')).toBe(false);
@@ -447,6 +438,16 @@ describe('Public feed', () => {
             const dialog = screen.getByRole('dialog');
             if (operation === 'publish') {
                 fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
+                expect(mocks.publish).toHaveBeenCalledTimes(1);
+                expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
+                fireEvent(dialog, new Event('cancel', { cancelable: true }));
+                expect(dialog).toBeInTheDocument();
+                await act(async () => fail(new Error('Save failed')));
+                expect(await within(dialog).findByRole('alert')).toHaveTextContent('Save failed');
+                expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeEnabled();
+                fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+                expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+                return;
             } else {
                 fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
             }

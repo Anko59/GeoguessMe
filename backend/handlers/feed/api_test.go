@@ -35,7 +35,7 @@ func mockAPI(t *testing.T) (*API, pgxmock.PgxPoolIface) {
 		}
 		mock.Close()
 	})
-	return NewAPI(feedrepo.NewRepository(mock), nil, nil, nil, time.Now), mock
+	return NewAPI(feedrepo.NewRepository(mock), nil, nil, nil, time.Now, nil, nil, nil), mock
 }
 
 func request(method, body string) *http.Request {
@@ -107,16 +107,24 @@ type fakeStore struct {
 	reads     int
 	deleteErr error
 	deleted   []string
+	puts      []string
 	putErr    error
+	onDelete  func()
 }
 
 func (s *fakeStore) Get(context.Context, string) (io.ReadCloser, error) {
 	s.reads++
 	return io.NopCloser(bytes.NewReader([]byte("original"))), nil
 }
-func (s *fakeStore) Put(context.Context, string, io.Reader, int64, string) error { return s.putErr }
+func (s *fakeStore) Put(_ context.Context, key string, _ io.Reader, _ int64, _ string) error {
+	s.puts = append(s.puts, key)
+	return s.putErr
+}
 func (s *fakeStore) Delete(_ context.Context, key string) error {
 	s.deleted = append(s.deleted, key)
+	if s.onDelete != nil {
+		s.onDelete()
+	}
 	return s.deleteErr
 }
 func (s *fakeStore) Stat(context.Context, string) (int64, error) { return 8, nil }

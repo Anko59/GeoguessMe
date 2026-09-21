@@ -95,7 +95,7 @@ export async function captureFeedState(page: Page, testInfo: TestInfo, name: str
 }
 
 export async function captureAudienceControls(page: Page, testInfo: TestInfo, composer: Locator): Promise<void> {
-    const audience = composer.getByRole('group', { name: 'Who can see this challenge?' });
+    const audience = composer.getByRole('group', { name: 'Feed visibility' });
     await audience.scrollIntoViewIfNeeded();
     const radios = audience.getByRole('radio');
     await expect(radios).toHaveCount(2);

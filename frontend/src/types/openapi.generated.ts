@@ -91,7 +91,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish a photo challenge with an explicit audience */
+        /** Publish a feed challenge and optional group challenges */
         post: operations['createPublicChallenge'];
         delete?: never;
         options?: never;
@@ -1303,6 +1303,17 @@ export interface components {
             items: components['schemas']['PublicFeedLeaderboardEntry'][];
             next_cursor: string;
         };
+        GroupChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            group_id: string;
+        };
+        ChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            photos: components['schemas']['GroupChallengePublication'][];
+        };
         PublicChallengeAccepted: {
             /** Format: uuid */
             challenge_id: string;
@@ -2040,29 +2051,46 @@ export interface operations {
                      * @enum {string}
                      */
                     audience?: 'public' | 'friends';
-                    /** @description Repeated multipart field. Optional selected groups for a friends post; the author must belong to every selected group. */
+                    /** @description Repeated multipart field. Each selected group receives a normal private challenge; the author must belong to every selected group. Friends feed visibility is also limited to these groups when supplied. */
                     group_id?: string[];
+                    /**
+                     * @description Hide the exact location on the selected private group challenges.
+                     * @default false
+                     */
+                    hide_location?: boolean;
+                    /**
+                     * Format: uuid
+                     * @description Stable client-generated key reused when retrying the same capture.
+                     */
+                    idempotency_key?: string;
                     lat: number;
                     long: number;
                 };
             };
         };
         responses: {
+            /** @description The same capture was already published; the idempotent result is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChallengePublication'];
+                };
+            };
             /** @description Success */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    'application/json': {
-                        /** Format: uuid */
-                        id: string;
-                    };
+                    'application/json': components['schemas']['ChallengePublication'];
                 };
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
             429: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
             502: components['responses']['ErrorResponse'];

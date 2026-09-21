@@ -19,6 +19,46 @@ func (d *recordingDeleter) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func TestDeleteObjectIfUnreferencedDeletesUnderStorageKeyLock(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	deleted := []string{}
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("public-challenges/post").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("public-challenges/post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectExec("UPDATE media_deletion_jobs SET completed_at").WithArgs("job-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	if err := repo.DeleteObjectIfUnreferenced(context.Background(), "job-1", "public-challenges/post", func(_ context.Context, key string) error {
+		deleted = append(deleted, key)
+		return nil
+	}); err != nil {
+		t.Fatalf("delete unreferenced object: %v", err)
+	}
+	if len(deleted) != 1 || deleted[0] != "public-challenges/post" {
+		t.Fatalf("deleted keys = %v", deleted)
+	}
+}
+
+func TestDeleteObjectIfUnreferencedSkipsReferencedWinner(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	deleted := false
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("public-challenges/post").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("public-challenges/post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec("UPDATE media_deletion_jobs SET completed_at").WithArgs("job-1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+	if err := repo.DeleteObjectIfUnreferenced(context.Background(), "job-1", "public-challenges/post", func(context.Context, string) error {
+		deleted = true
+		return nil
+	}); err != nil {
+		t.Fatalf("skip referenced object: %v", err)
+	}
+	if deleted {
+		t.Fatal("referenced object was deleted")
+	}
+}
+
 func TestDeletionQueueAndCleanupQueries(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
