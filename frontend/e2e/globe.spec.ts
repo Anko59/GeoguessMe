@@ -139,8 +139,18 @@ test('explores group challenges on Earth without revealing an unplayed location'
         const privateGlobe = await openGlobe(guesser, testInfo);
         await expect(privateGlobe).toContainText('1 challenge · 0 on the globe');
         await expect(privateGlobe).toContainText('Guess this challenge to reveal its location');
-        if (mobile) await privateGlobe.getByRole('button', { name: 'Expand geochallenge list' }).click();
-        await privateGlobe.locator('.globe-challenge-list button').click();
+        if (mobile) {
+            const expandList = privateGlobe.getByRole('button', { name: 'Expand geochallenge list' });
+            await expandList.press('Enter');
+            await expect(privateGlobe.getByRole('button', { name: 'Collapse geochallenge list' })).toHaveAttribute(
+                'aria-expanded',
+                'true',
+            );
+        }
+        const privateChallenge = privateGlobe.locator('.globe-challenge-list button');
+        await expect(privateChallenge).toBeVisible({ timeout: 5_000 });
+        await privateChallenge.scrollIntoViewIfNeeded();
+        await privateChallenge.click();
         await expect(privateGlobe.getByRole('button', { name: 'Play challenge' })).toBeInViewport({ ratio: 1 });
         await captureGlobe(guesser, testInfo, 'hidden-location');
         await privateGlobe.getByRole('button', { name: 'Play challenge' }).click();

@@ -215,7 +215,7 @@
         flex-basis: calc(100% - 3.2rem);
     }
     .feed-capture-cta .btn {
-        width: 100%;
+        width: calc(100% - 3.15rem);
         margin-left: 3.15rem;
     }
 }
