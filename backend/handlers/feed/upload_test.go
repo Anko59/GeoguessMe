@@ -213,6 +213,31 @@ func TestUploadAmbiguousCommitReconcilesCanonicalWinnerWithoutCleanupOrDuplicate
 	}
 }
 
+func TestUploadAmbiguousCommitResolutionFailureQueuesEveryAttemptedObject(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &fakeStore{}
+	deletions := &deletionRecorder{}
+	publisher := &fakeChallengePublisher{
+		createErr:  errors.New("commit outcome unknown"),
+		resolveErr: errors.New("database unavailable while reconciling"),
+	}
+	a.store = store
+	a.deletions = deletions
+	a.publisher = publisher
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
+	if w.Code != http.StatusInternalServerError || len(store.deleted) != 0 {
+		t.Fatalf("resolution failure status=%d deleted=%v", w.Code, store.deleted)
+	}
+	if len(deletions.keys) != 2 || deletions.contextErr != nil {
+		t.Fatalf("resolution failure cleanup=%+v", deletions)
+	}
+	if publisher.lastReservation == nil || !publisher.lastReservation.rolledBack {
+		t.Fatal("resolution failure did not release publication reservation")
+	}
+}
+
 func TestUploadAmbiguousCommitOwnedByThisAttemptPublishesOnce(t *testing.T) {
 	a, _ := mockAPI(t)
 	publisher := &fakeChallengePublisher{createErr: errors.New("commit outcome unknown"), resolveStatus: feedrepo.PublicationCommitted}

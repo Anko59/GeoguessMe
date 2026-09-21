@@ -148,9 +148,11 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 			resolution, resolveErr := reservation.Resolve(r.Context())
 			if resolveErr != nil {
 				// The commit outcome is unknown. Do not delete objects that may
-				// belong to a committed row; the durable cleanup worker will
-				// reconcile an orphan once the outcome is known.
+				// belong to a committed row. Queue them instead: the durable
+				// cleanup worker rechecks references under the storage-key lock and
+				// deletes only an orphan if the publication was not committed.
 				slog.Error("resolve public publication commit outcome", "error", resolveErr)
+				a.enqueueDeletionKeys(r.Context(), "publication-reconciliation", keys)
 				_ = reservation.Rollback(r.Context())
 				writeError(w, err)
 				return
@@ -251,6 +253,20 @@ func selectedGroupIDs(r *http.Request) ([]string, error) {
 
 func (a *API) compensate(ctx context.Context, key string) {
 	a.compensateKeys(ctx, []string{key})
+}
+
+func (a *API) enqueueDeletionKeys(ctx context.Context, source string, keys []string) {
+	if len(keys) == 0 || a.deletions == nil {
+		if len(keys) > 0 && a.deletions == nil {
+			slog.Error("durable public upload cleanup unavailable", "source", source, "keys", keys)
+		}
+		return
+	}
+	queued, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := a.deletions.EnqueueMediaDeletion(queued, source, keys); err != nil {
+		slog.Error("enqueue public upload cleanup failed", "source", source, "keys", keys, "error", err)
+	}
 }
 
 func (a *API) compensateKeys(ctx context.Context, keys []string) {
