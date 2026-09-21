@@ -15,6 +15,14 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
     await expect(globe.locator('.globe-controls')).toBeAttached();
     await expect(globe).toBeInViewport({ ratio: 1 });
     await expect(globe.locator('canvas')).toBeVisible();
+    const maxTextureSize = await globe.locator('canvas').evaluate((canvas) => {
+        const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+        return context?.getParameter(context.MAX_TEXTURE_SIZE) ?? 0;
+    });
+    // The renderer must have a usable bounded texture path on every supported
+    // WebGL device; high-limit devices use the sharper asset and smaller ones
+    // stay on the bundled fallback.
+    expect(maxTextureSize).toBeGreaterThanOrEqual(2048);
     if (testInfo.project.name === 'mobile') {
         // Touch devices navigate with gestures: the arrow pad stays hidden and
         // the globe owns most of the screen behind the collapsed list sheet.

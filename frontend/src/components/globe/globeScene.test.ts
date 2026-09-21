@@ -1,14 +1,33 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createGlobeScene, globePosition } from './globeScene';
+import {
+    createGlobeScene,
+    earthMinDistance,
+    earthTextureURL,
+    FALLBACK_EARTH_TEXTURE_URL,
+    FALLBACK_MIN_DISTANCE,
+    globePosition,
+    HIGH_RES_EARTH_TEXTURE_URL,
+    HIGH_RES_MIN_DISTANCE,
+} from './globeScene';
 
-const mocks = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), forceContextLoss: vi.fn(), disconnect: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+    render: vi.fn(),
+    dispose: vi.fn(),
+    forceContextLoss: vi.fn(),
+    disconnect: vi.fn(),
+    maxTextureSize: 8192,
+}));
 vi.mock('three', async (importOriginal) => {
     const actual = await importOriginal<typeof import('three')>();
     return {
         ...actual,
         WebGLRenderer: class {
             domElement = document.createElement('canvas');
+            capabilities = {
+                maxTextureSize: mocks.maxTextureSize,
+                getMaxAnisotropy: () => 8,
+            };
             setPixelRatio() {}
             setSize() {}
             render = mocks.render;
@@ -20,6 +39,7 @@ vi.mock('three', async (importOriginal) => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mocks.maxTextureSize = 8192;
     vi.stubGlobal(
         'ResizeObserver',
         class {
@@ -33,6 +53,45 @@ afterEach(() => {
 });
 
 describe('Earth scene', () => {
+    it('selects the high-resolution asset only when the GPU can upload it', () => {
+        expect(earthTextureURL(8192)).toBe(HIGH_RES_EARTH_TEXTURE_URL);
+        expect(earthTextureURL(16384)).toBe(HIGH_RES_EARTH_TEXTURE_URL);
+        expect(earthTextureURL(4096)).toBe(FALLBACK_EARTH_TEXTURE_URL);
+        expect(earthMinDistance(8192)).toBe(HIGH_RES_MIN_DISTANCE);
+        expect(earthMinDistance(4096)).toBe(FALLBACK_MIN_DISTANCE);
+    });
+
+    it('configures mipmaps and anisotropic filtering for the high-resolution texture', () => {
+        const texture = new THREE.Texture<HTMLImageElement>();
+        let requestedURL = '';
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((url, onLoad) => {
+            requestedURL = String(url);
+            onLoad?.(texture);
+            return texture;
+        });
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn());
+        expect(requestedURL).toBe(HIGH_RES_EARTH_TEXTURE_URL);
+        expect(texture.minFilter).toBe(THREE.LinearMipmapLinearFilter);
+        expect(texture.magFilter).toBe(THREE.LinearFilter);
+        expect(texture.anisotropy).toBe(4);
+        expect(globe.controls.minDistance).toBe(HIGH_RES_MIN_DISTANCE);
+        globe.dispose();
+    });
+
+    it('keeps the bundled texture and conservative zoom on smaller WebGL limits', () => {
+        mocks.maxTextureSize = 4096;
+        const texture = new THREE.Texture<HTMLImageElement>();
+        let requestedURL = '';
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((url) => {
+            requestedURL = String(url);
+            return texture;
+        });
+        const globe = createGlobeScene(document.createElement('div'), vi.fn(), vi.fn());
+        expect(requestedURL).toBe(FALLBACK_EARTH_TEXTURE_URL);
+        expect(globe.controls.minDistance).toBe(FALLBACK_MIN_DISTANCE);
+        globe.dispose();
+    });
+
     it('keeps touch navigation surface-tracked, pole-safe and pinch-anchored', () => {
         vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture<HTMLImageElement>());
         const host = document.createElement('div');
@@ -190,7 +249,7 @@ describe('Earth scene', () => {
         globe.zoom(100);
         expect(camera.position.length()).toBeCloseTo(6);
         globe.zoom(0.001);
-        expect(camera.position.length()).toBeCloseTo(1.15);
+        expect(camera.position.length()).toBeCloseTo(HIGH_RES_MIN_DISTANCE);
         globe.rotate(0.25, 0.25);
         expect(camera.position.z).not.toBeCloseTo(0);
         const renders = mocks.render.mock.calls.length;
