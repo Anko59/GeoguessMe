@@ -1303,6 +1303,17 @@ export interface components {
             items: components['schemas']['PublicFeedLeaderboardEntry'][];
             next_cursor: string;
         };
+        GroupChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            group_id: string;
+        };
+        ChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            photos: components['schemas']['GroupChallengePublication'][];
+        };
         PublicChallengeAccepted: {
             /** Format: uuid */
             challenge_id: string;
@@ -1378,17 +1389,6 @@ export interface components {
             guesses: components['schemas']['PublicTimedResultGuess'][];
             /** Format: date-time */
             server_time: string;
-        };
-        GroupChallengePublication: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            group_id: string;
-        };
-        ChallengePublication: {
-            /** Format: uuid */
-            id: string;
-            photos: components['schemas']['GroupChallengePublication'][];
         };
         PublicGuessResult: {
             score: number;
