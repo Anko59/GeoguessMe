@@ -192,6 +192,19 @@ for visibility and retention.
 | PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                                                                                                       |
 | GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                                                                                                 |
 | DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                                                                                                 |
+Feed publication accepts at most 20 selected groups. One request writes one
+public-feed object plus one private object for each selected group, so object
+storage and cleanup work scale with the fan-out even though the database rows
+commit together. The authenticated mutation rate limit applies to the request;
+the deployment's storage quota and cleanup backlog are the operational limits
+for the resulting objects.
+
+The database transaction is authoritative for publication rows and destination
+membership. Object storage does not provide the same transaction boundary: if a
+later object write or the database commit fails, the API compensates by deleting
+every attempted object. Each deletion attempt has a bounded 10-second timeout;
+failures are enqueued for the durable media-deletion worker, so operators should
+monitor the cleanup backlog and storage-error metrics.
 
 ### WebSocket
 

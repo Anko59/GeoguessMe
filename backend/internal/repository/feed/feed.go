@@ -34,6 +34,17 @@ type NewChallenge struct {
 	CreatedAt                                 time.Time
 }
 
+// PublicationReservation serializes one idempotent feed publication from the
+// reservation check through the object-store fan-out and the database commit.
+// New reservations retain their transaction until Create or Rollback, so a
+// concurrent retry cannot write the same canonical storage keys first.
+type PublicationReservation interface {
+	Existing() bool
+	GroupIDs() []string
+	Create(context.Context, NewChallenge, []*models.Photo) error
+	Rollback(context.Context) error
+}
+
 func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 	if p.Audience == "" {
 		p.Audience = "public"

@@ -94,6 +94,12 @@ photos, results, or comments does not consume that write allowance, so browsing
 cannot prevent a subsequent guess or comment. Every read still requires an
 active authenticated account and the applicable media authorization.
 
+Publication fan-out is capped at 20 selected groups. A submission stores one
+feed object and one private object per selected group; the database destination
+rows commit transactionally, while object storage uses compensation because it
+cannot participate in that transaction. Failed cleanup is attempted for up to 10
+seconds per object and then sent to the durable deletion worker.
+
 ## Storage, deployment, and rollback
 
 migrations **027_public_feed**, **028_group_inbox_reads**,

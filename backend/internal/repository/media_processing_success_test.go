@@ -172,54 +172,88 @@ func testFeedChallenge() (feedrepo.NewChallenge, []*models.Photo) {
 	return challenge, photos
 }
 
-func TestCreateFeedChallengeCommitsFeedAndGroupRowsTogether(t *testing.T) {
+func TestReserveFeedChallengeCommitsFeedAndGroupRowsTogether(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	challenge, photos := testFeedChallenge()
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(true))
 	mock.ExpectExec("INSERT INTO public_challenge_groups").WithArgs(challenge.ID, challenge.GroupIDs).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectExec("INSERT INTO photos").WithArgs(photos[0].ID, photos[0].UserID, photos[0].GroupID, photos[0].URL, photos[0].StorageKey, photos[0].MIMEType, photos[0].ByteSize, photos[0].Lat, photos[0].Long, photos[0].LifecycleStatus, photos[0].HideLocation, photos[0].CreatedAt, photos[0].ExpiresAt, photos[0].RetentionAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 
-	created, err := repo.CreateFeedChallenge(context.Background(), challenge, photos)
-	if err != nil || created {
-		t.Fatalf("created=%v err=%v", created, err)
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || reservation.Existing() {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
+	}
+	if err := reservation.Create(context.Background(), challenge, photos); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestCreateFeedChallengeIsIdempotentForTheSameOwner(t *testing.T) {
+func TestReserveFeedChallengeIsIdempotentForTheSameOwner(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	challenge, photos := testFeedChallenge()
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
-		pgxmock.NewRows([]string{"user_id"}).AddRow(challenge.UserID),
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "caption", "audience", "lat", "long"}).AddRow(challenge.UserID, challenge.Caption, challenge.Audience, challenge.Lat, challenge.Long),
+	)
+	mock.ExpectQuery("SELECT group_id FROM public_challenge_groups").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"group_id"}).AddRow("group-1"),
 	)
 	mock.ExpectCommit()
 
-	retried, err := repo.CreateFeedChallenge(context.Background(), challenge, photos)
-	if err != nil || !retried {
-		t.Fatalf("retried=%v err=%v", retried, err)
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || !reservation.Existing() || len(reservation.GroupIDs()) != 1 {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
 	}
 }
 
-func TestCreateFeedChallengeRollsBackWhenGroupMembershipIsMissing(t *testing.T) {
+func TestReserveFeedChallengeRejectsReplayMetadataMismatch(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	challenge.Caption = "different place"
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "caption", "audience", "lat", "long"}).AddRow("user-1", "A place", "friends", challenge.Lat, challenge.Long),
+	)
+	mock.ExpectQuery("SELECT group_id FROM public_challenge_groups").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"group_id"}).AddRow("group-1"),
+	)
+	mock.ExpectRollback()
+
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if reservation != nil || !errors.Is(err, feedrepo.ErrConflict) {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
+	}
+}
+
+func TestReserveFeedChallengeRollsBackWhenGroupMembershipIsMissing(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	challenge, photos := testFeedChallenge()
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(pgxmock.NewRows([]string{"user_id"}))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(false))
 	mock.ExpectRollback()
 
-	if _, err := repo.CreateFeedChallenge(context.Background(), challenge, photos); !errors.Is(err, feedrepo.ErrForbidden) {
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Create(context.Background(), challenge, photos); !errors.Is(err, feedrepo.ErrForbidden) {
 		t.Fatalf("membership error = %v", err)
+	}
+	if err := reservation.Rollback(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }

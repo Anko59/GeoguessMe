@@ -16,7 +16,7 @@ import (
 	"geoguessme/internal/config"
 	"geoguessme/internal/media"
 	"geoguessme/internal/models"
-	"geoguessme/internal/repository/feed"
+	feedrepo "geoguessme/internal/repository/feed"
 	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
 
@@ -79,17 +79,6 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := handlers.GetUserIDFromContext(r)
-	if a.publisher != nil {
-		existing, err := a.publisher.ExistingFeedChallenge(r.Context(), idempotencyKey, userID)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		if existing {
-			writeChallengeResponse(w, http.StatusOK, idempotencyKey, groupIDs)
-			return
-		}
-	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
 		handlers.WriteError(w, 400, "missing_photo", "Choose a photo to publish")
@@ -107,9 +96,21 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := a.clock()
-	p := feed.NewChallenge{ID: idempotencyKey, UserID: userID, Caption: caption, Audience: audience, GroupIDs: groupIDs,
+	p := feedrepo.NewChallenge{ID: idempotencyKey, UserID: userID, Caption: caption, Audience: audience, GroupIDs: groupIDs,
 		StorageKey: "public-challenges/" + idempotencyKey, MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: now}
 	photos := makeGroupPhotos(idempotencyKey, userID, groupIDs, normalized.MIMEType, int64(len(normalized.Data)), lat, long, hideLocation, now, a.cfg)
+	var reservation feedrepo.PublicationReservation
+	if a.publisher != nil {
+		reservation, err = a.publisher.ReserveFeedChallenge(r.Context(), p, photos)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if reservation.Existing() {
+			writeChallengeResponse(w, http.StatusOK, idempotencyKey, reservation.GroupIDs())
+			return
+		}
+	}
 	keys := make([]string, 0, len(photos)+1)
 	keys = append(keys, p.StorageKey)
 	for _, photo := range photos {
@@ -118,6 +119,11 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 	storedKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if err := a.store.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
+			if reservation != nil {
+				if rollbackErr := reservation.Rollback(r.Context()); rollbackErr != nil {
+					slog.Error("rollback public publication reservation", "error", rollbackErr)
+				}
+			}
 			// A failed Put may have written an object before returning its
 			// error, so include the current key, but never enqueue objects that
 			// were not attempted yet.
@@ -127,33 +133,31 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		storedKeys = append(storedKeys, key)
 	}
-	alreadyExists := false
 	if a.publisher != nil {
-		alreadyExists, err = a.publisher.CreateFeedChallenge(r.Context(), p, photos)
+		err = reservation.Create(r.Context(), p, photos)
 	} else {
 		err = a.repo.Create(r.Context(), p)
 	}
 	if err != nil {
+		if reservation != nil {
+			if rollbackErr := reservation.Rollback(r.Context()); rollbackErr != nil {
+				slog.Error("rollback public publication reservation", "error", rollbackErr)
+			}
+		}
 		a.compensateKeys(r.Context(), keys)
 		writeError(w, err)
 		return
 	}
-	if !alreadyExists {
-		for _, photo := range photos {
-			if a.hub != nil {
-				photoID := photo.ID
-				a.hub.Broadcast(models.Message{ID: uuid.NewString(), GroupID: photo.GroupID, UserID: userID, Kind: "challenge", PhotoID: &photoID, Content: "", CreatedAt: now})
-			}
-			if a.push != nil {
-				a.push.NotifyNewChallenge(r.Context(), photo.GroupID, userID, photo.ID)
-			}
+	for _, photo := range photos {
+		if a.hub != nil {
+			photoID := photo.ID
+			a.hub.Broadcast(models.Message{ID: uuid.NewString(), GroupID: photo.GroupID, UserID: userID, Kind: "challenge", PhotoID: &photoID, Content: "", CreatedAt: now})
+		}
+		if a.push != nil {
+			a.push.NotifyNewChallenge(r.Context(), photo.GroupID, userID, photo.ID)
 		}
 	}
-	status := http.StatusCreated
-	if alreadyExists {
-		status = http.StatusOK
-	}
-	writeChallengeResponse(w, status, p.ID, groupIDs)
+	writeChallengeResponse(w, http.StatusCreated, p.ID, groupIDs)
 }
 
 func makeGroupPhotos(challengeID, userID string, groupIDs []string, mimeType string, byteSize int64, lat, long float64, hideLocation bool, now time.Time, cfg *config.Config) []*models.Photo {

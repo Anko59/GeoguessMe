@@ -24,8 +24,7 @@ import (
 // group challenges. It is kept as an interface so feed transport tests do not
 // need to construct the full application repository.
 type ChallengePublisher interface {
-	ExistingFeedChallenge(context.Context, string, string) (bool, error)
-	CreateFeedChallenge(context.Context, feed.NewChallenge, []*models.Photo) (bool, error)
+	ReserveFeedChallenge(context.Context, feed.NewChallenge, []*models.Photo) (feed.PublicationReservation, error)
 }
 
 type ChallengeBroadcaster interface {

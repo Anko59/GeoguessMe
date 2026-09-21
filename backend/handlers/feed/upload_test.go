@@ -140,23 +140,46 @@ func TestUploadCreatesOnlyExplicitPublicPhotoAndCompensatesFailures(t *testing.T
 }
 
 type fakeChallengePublisher struct {
-	existing    bool
-	existingErr error
-	createErr   error
-	challenge   feedrepo.NewChallenge
-	photos      []*models.Photo
-	createCalls int
+	existing        bool
+	existingErr     error
+	createErr       error
+	challenge       feedrepo.NewChallenge
+	photos          []*models.Photo
+	createCalls     int
+	groupIDs        []string
+	lastReservation *fakePublicationReservation
 }
 
-func (p *fakeChallengePublisher) ExistingFeedChallenge(context.Context, string, string) (bool, error) {
-	return p.existing, p.existingErr
+type fakePublicationReservation struct {
+	publisher  *fakeChallengePublisher
+	existing   bool
+	groupIDs   []string
+	rolledBack bool
 }
 
-func (p *fakeChallengePublisher) CreateFeedChallenge(_ context.Context, challenge feedrepo.NewChallenge, photos []*models.Photo) (bool, error) {
-	p.createCalls++
-	p.challenge = challenge
-	p.photos = photos
-	return false, p.createErr
+func (p *fakeChallengePublisher) ReserveFeedChallenge(_ context.Context, challenge feedrepo.NewChallenge, _ []*models.Photo) (feedrepo.PublicationReservation, error) {
+	if p.existingErr != nil {
+		return nil, p.existingErr
+	}
+	reservation := &fakePublicationReservation{publisher: p, existing: p.existing, groupIDs: append([]string(nil), p.groupIDs...)}
+	p.lastReservation = reservation
+	return reservation, nil
+}
+
+func (r *fakePublicationReservation) Existing() bool { return r.existing }
+
+func (r *fakePublicationReservation) GroupIDs() []string { return append([]string(nil), r.groupIDs...) }
+
+func (r *fakePublicationReservation) Rollback(context.Context) error {
+	r.rolledBack = true
+	return nil
+}
+
+func (r *fakePublicationReservation) Create(_ context.Context, challenge feedrepo.NewChallenge, photos []*models.Photo) error {
+	r.publisher.createCalls++
+	r.publisher.challenge = challenge
+	r.publisher.photos = photos
+	return r.publisher.createErr
 }
 
 func TestUploadPublishesEverySelectedDestinationThroughTheAtomicPublisher(t *testing.T) {
@@ -208,6 +231,23 @@ func TestUploadIdempotencySkipsStorageAndCreationOnRetry(t *testing.T) {
 	}
 }
 
+func TestUploadIdempotencyReturnsCanonicalDestinationsWithoutStorage(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &fakeStore{}
+	publisher := &fakeChallengePublisher{existing: true, groupIDs: []string{"canonical-group"}}
+	a.store = store
+	a.publisher = publisher
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{"00000000-0000-0000-0000-000000000003"}))
+	if w.Code != http.StatusOK || len(store.puts) != 0 || publisher.createCalls != 0 {
+		t.Fatalf("retry status=%d puts=%v creates=%d", w.Code, store.puts, publisher.createCalls)
+	}
+	if !strings.Contains(w.Body.String(), "canonical-group") || strings.Contains(w.Body.String(), "00000000-0000-0000-0000-000000000003") {
+		t.Fatalf("response did not use persisted destinations: %s", w.Body.String())
+	}
+}
+
 type failOnPutStore struct {
 	fakeStore
 	attempt int
@@ -237,6 +277,26 @@ func TestUploadCompensatesAllAttemptedDestinationsAfterPartialStorageFailure(t *
 	}
 	if len(store.deleted) != 2 || len(deletions.keys) != 0 {
 		t.Fatalf("cleanup deleted=%v queued=%v", store.deleted, deletions.keys)
+	}
+}
+
+func TestUploadRollsBackPublicationReservationBeforeCompensation(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &failOnPutStore{failAt: 2}
+	publisher := &fakeChallengePublisher{}
+	a.store = store
+	a.publisher = publisher
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if publisher.lastReservation == nil || !publisher.lastReservation.rolledBack {
+		t.Fatal("storage failure did not roll back the active publication reservation")
+	}
+	if len(store.deleted) != 2 {
+		t.Fatalf("cleanup deleted=%v", store.deleted)
 	}
 }
 

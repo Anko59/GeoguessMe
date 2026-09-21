@@ -183,6 +183,10 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
     };
 
     const retake = () => {
+        // A retake is a new captured challenge. Keep the current key only for
+        // retries of this exact captured send so a later capture cannot replay
+        // the earlier publication.
+        setIdempotencyKey(createIdempotencyKey());
         setCapturedPhoto(null);
         discardRecording();
         destroyEffects();
