@@ -127,5 +127,4 @@ describe('FeedLeaderboard', () => {
 
         expect(error).not.toHaveBeenCalled();
     });
-
 });

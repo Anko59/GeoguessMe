@@ -16,14 +16,10 @@
           "application/json":
             "schema":
               "$ref": "../components/schemas-feed.yaml#/PublicFeedPage"
-      "400":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "401":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "404":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
-      "429":
-        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "400": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "401": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "429": { "$ref": "../components/responses.yaml#/ErrorResponse" }
       "500":
         "$ref": "../components/responses.yaml#/ErrorResponse"
 "leaderboard":

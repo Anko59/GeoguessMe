@@ -18,8 +18,6 @@ const mocks = vi.hoisted(() => ({
     timedTimeout: vi.fn(),
     timedResults: vi.fn(),
     guess: vi.fn(),
-    result: vi.fn(),
-    results: vi.fn(),
     react: vi.fn(),
     comments: vi.fn(),
     comment: vi.fn(),
@@ -145,7 +143,6 @@ beforeEach(() => {
         server_time: new Date().toISOString(),
     });
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
-    mocks.results.mockResolvedValue([]);
     mocks.react.mockResolvedValue(true);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -258,30 +255,6 @@ describe('Public feed', () => {
             ],
             server_time: new Date().toISOString(),
         });
-        /* Legacy result rows are intentionally no longer used by the timed
-         * feed flow; keep the old fixture available for unrelated tests. */
-        mocks.results.mockResolvedValue([
-            {
-                rank: 1,
-                user_id: 'other',
-                username: 'Navigator',
-                avatar: 'avatar-a.png',
-                score: 4800,
-                distance: 100,
-                elo_delta: 4,
-                is_viewer: false,
-            },
-            {
-                rank: 2,
-                user_id: 'viewer',
-                username: 'Me',
-                avatar: 'avatar-b.png',
-                score: 4200,
-                distance: 300,
-                elo_delta: -4,
-                is_viewer: true,
-            },
-        ]);
         renderFeed();
         fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();

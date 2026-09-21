@@ -119,11 +119,11 @@ migrations **027_public_feed**, **028_group_inbox_reads**,
 independent public challenge data, durable group inbox read boundaries,
 audience/selected-group records, ranked results and feed-score indexes, and a
 separate timed-session/timeout lifecycle for public feed games. Migration
-**033_feed_publication_metadata** is applied after the timed-game migration;
-its `IF NOT EXISTS` clauses also allow a clean deployment of this branch when
-032 is absent. Apply migrations with the existing deployment migration job
-before starting the new application revision; local operators use
-`make migrate-up`. No environment variables or services are added.
+**033_feed_publication_metadata** is applied after the timed-game migration; its
+`IF NOT EXISTS` clauses also allow a clean deployment of this branch when 032 is
+absent. Apply migrations with the existing deployment migration job before
+starting the new application revision; local operators use `make migrate-up`. No
+environment variables or services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live

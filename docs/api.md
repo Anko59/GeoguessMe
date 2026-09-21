@@ -172,26 +172,27 @@ Posts and comments use a descending `(created_at, id)` cursor; `limit` defaults
 to 20 and accepts 1–50. Read [public feed behavior and rollout](public-feed.md)
 for visibility and retention.
 
-| Method      | Path                                                | Description                                                                                                                              |
-| ----------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                                                                                           |
-| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames, avatars, and total score                                                                              |
-| GET         | `/api/v1/feed/leaderboard/{profileID}`              | Players ranked by guesses on one profile owner's feed posts                                                                             |
+| Method      | Path                                                | Description                                                                                                                                        |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                                                                                                     |
+| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames, avatars, and total score                                                                                         |
+| GET         | `/api/v1/feed/leaderboard/{profileID}`              | Players ranked by guesses on one profile owner's feed posts                                                                                        |
 | POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,audience,group_id*,hide_location,idempotency_key,lat,long)`; creates selected private group challenges atomically |
-| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                                                                                          |
-| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer                                                                            |
-| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt                                                                                         |
-| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess                                                                                  |
-| GET         | `/api/v1/feed/challenges/{id}/results`              | Rank every guess and show each signed all-time Elo delta                                                                                |
-| POST        | `/api/v1/feed/challenges/{id}/accept`               | Accept timed feed challenge and receive server deadlines                                                                                 |
-| GET         | `/api/v1/feed/challenges/{id}/timed-media`          | Stream original media for the accepted timed session                                                                                   |
-| POST        | `/api/v1/feed/challenges/{id}/media-delivered`      | Acknowledge delivery and start the view window                                                                                          |
-| POST        | `/api/v1/feed/challenges/{id}/timed-guess`          | Submit one deadline-enforced timed `{lat,long}` guess                                                                                   |
-| POST        | `/api/v1/feed/challenges/{id}/timed-timeout`        | Persist an idempotent zero-point timeout                                                                                                |
-| GET         | `/api/v1/feed/challenges/{id}/timed-results`        | Read authorized map-ready timed results                                                                                                 |
-| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                                                                                                       |
-| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                                                                                                 |
-| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                                                                                                 |
+| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                                                                                                    |
+| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer                                                                                       |
+| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt                                                                                                    |
+| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess                                                                                             |
+| GET         | `/api/v1/feed/challenges/{id}/results`              | Rank every guess and show each signed all-time Elo delta                                                                                           |
+| POST        | `/api/v1/feed/challenges/{id}/accept`               | Accept timed feed challenge and receive server deadlines                                                                                           |
+| GET         | `/api/v1/feed/challenges/{id}/timed-media`          | Stream original media for the accepted timed session                                                                                               |
+| POST        | `/api/v1/feed/challenges/{id}/media-delivered`      | Acknowledge delivery and start the view window                                                                                                     |
+| POST        | `/api/v1/feed/challenges/{id}/timed-guess`          | Submit one deadline-enforced timed `{lat,long}` guess                                                                                              |
+| POST        | `/api/v1/feed/challenges/{id}/timed-timeout`        | Persist an idempotent zero-point timeout                                                                                                           |
+| GET         | `/api/v1/feed/challenges/{id}/timed-results`        | Read authorized map-ready timed results                                                                                                            |
+| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                                                                                                                  |
+| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                                                                                                            |
+| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                                                                                                            |
+
 Feed publication accepts at most 20 selected groups. One request writes one
 public-feed object plus one private object for each selected group, so object
 storage and cleanup work scale with the fan-out even though the database rows
