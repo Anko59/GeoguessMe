@@ -8,6 +8,14 @@ PublicCommentsPage:
   $ref: ./schemas-feed.yaml#/PublicCommentsPage
 PublicGuessResult:
   $ref: ./schemas-feed.yaml#/PublicGuessResult
+PublicChallengeAccepted:
+  $ref: ./schemas-feed.yaml#/PublicChallengeAccepted
+PublicChallengeMediaDelivered:
+  $ref: ./schemas-feed.yaml#/PublicChallengeMediaDelivered
+PublicTimedGuessResponse:
+  $ref: ./schemas-feed.yaml#/PublicTimedGuessResponse
+PublicTimedResults:
+  $ref: ./schemas-feed.yaml#/PublicTimedResults
 
 APIError:
   type: object

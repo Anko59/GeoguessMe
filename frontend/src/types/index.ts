@@ -20,6 +20,10 @@ export type PublicComment = components['schemas']['PublicComment'];
 export type PublicCommentsPage = components['schemas']['PublicCommentsPage'];
 export type PublicGuessResult = components['schemas']['PublicGuessResult'];
 export type PublicFeedResult = components['schemas']['PublicFeedResult'];
+export type PublicChallengeAccepted = components['schemas']['PublicChallengeAccepted'];
+export type PublicChallengeMediaDelivered = components['schemas']['PublicChallengeMediaDelivered'];
+export type PublicTimedGuessResponse = components['schemas']['PublicTimedGuessResponse'];
+export type PublicTimedResults = components['schemas']['PublicTimedResults'];
 
 // --- Wire types (generated from docs/openapi.yaml) ---
 

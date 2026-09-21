@@ -34,22 +34,27 @@ manual location controls. Server-side validation and normalization remain
 authoritative.
 
 An unresolved viewer receives a small, reduced-detail preview from the server.
-Removing the visual blur cannot recover the original pixels. Choosing **Play
-challenge** opens the original photo for an untimed attempt; submitting **Guess
-& reveal** with one valid guess reveals the photo in that player's feed
-permanently. The author always sees their own original. Other viewers'
-resolution state is independent.
+Removing the visual blur cannot recover the original pixels. The timed feed
+challenge uses the same server-authoritative lifecycle as a group challenge:
+**Play challenge** accepts a session, streams the original, and confirms
+complete media delivery before the view and guess windows start. Late guesses
+persist a zero-point timeout, and the author is never allowed to guess their own
+post. Legacy untimed `/play` and `/guess` endpoints remain available while
+clients migrate to the timed routes. The author always sees their own original.
+Other viewers' resolution state is independent.
 
 Each player gets one immutable guess per public post. Repeated submissions
-return the first result, including concurrent submissions. Results show the
-distance, the actual point, and the existing distance-based score from 0
-to 5000. **View your result** reopens the stored result. Once a challenge has
-multiple guesses, every guess is available in score order with a stable rank and
-a signed all-time Elo delta. The delta is replayed from the same combined
-private/public history as the global ladder; a single guess still has no Elo
-comparison. Public score totals remain separate from private group challenge
-leaderboards and profile progression. Authors cannot guess their own posts. Feed
-and comment payloads never contain answer coordinates.
+return the first result, including concurrent submissions. Timed results show
+the distance, the actual point, and the time-adjusted score from 0 to 5000 in a
+map-ready response. Exact challenge and guess coordinates are returned only
+after the owner, a resolved viewer, or an expired timed session is authorized to
+see results. Once a challenge has multiple guesses, every guess is available in
+score order with a stable rank and a signed all-time Elo delta. The delta is
+replayed from the same combined private/public history as the global ladder; a
+single guess still has no Elo comparison. Public score totals remain separate
+from private group challenge leaderboards and profile progression. Authors
+cannot guess their own posts. Feed and comment payloads never contain answer
+coordinates.
 
 ## Reactions and comments
 
@@ -93,11 +98,13 @@ active authenticated account and the applicable media authorization.
 
 migrations **027_public_feed**, **028_group_inbox_reads**,
 **029_feed_audiences**, **030_public_feed_results**, and
-**031_public_feed_leaderboard** add independent public challenge data, durable
-group inbox read boundaries, audience/selected-group records, the ranked results
-index, and the feed-score aggregation index. Apply migrations with the existing
-deployment migration job before starting the new application revision; local
-operators use `make migrate-up`. No environment variables or services are added.
+**031_public_feed_leaderboard**, and **032_public_feed_timed_games** add
+independent public challenge data, durable group inbox read boundaries,
+audience/selected-group records, ranked results and feed-score indexes, and a
+separate timed-session/timeout lifecycle for public feed games. Apply migrations
+with the existing deployment migration job before starting the new application
+revision; local operators use `make migrate-up`. No environment variables or
+services are added.
 
 Public posts remain available until the author deletes the post or account; the
 private challenge TTL and retention settings do not apply. Preview bytes live

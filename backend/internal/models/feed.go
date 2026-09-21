@@ -61,6 +61,61 @@ type PublicGuessResult struct {
 	ActualLong float64 `json:"actual_long"`
 }
 
+// PublicChallengeAccepted and PublicChallengeMediaDelivered mirror the
+// group-game timing contract while keeping feed challenges independent from
+// group photos and membership.
+type PublicChallengeAccepted struct {
+	ChallengeID       string    `json:"challenge_id"`
+	MediaURL          string    `json:"media_url"`
+	MediaType         string    `json:"media_type"`
+	AcceptedAt        time.Time `json:"accepted_at"`
+	ViewExpiresAt     time.Time `json:"view_expires_at"`
+	GuessAfter        time.Time `json:"guess_after"`
+	GuessExpiresAt    time.Time `json:"guess_expires_at"`
+	ScoreGraceSeconds int       `json:"score_grace_seconds"`
+	ServerTime        time.Time `json:"server_time"`
+}
+
+type PublicChallengeMediaDelivered struct {
+	ViewExpiresAt     time.Time `json:"view_expires_at"`
+	GuessAfter        time.Time `json:"guess_after"`
+	GuessExpiresAt    time.Time `json:"guess_expires_at"`
+	ScoreGraceSeconds int       `json:"score_grace_seconds"`
+	ServerTime        time.Time `json:"server_time"`
+}
+
+type PublicTimedGuessResponse struct {
+	GuessID     string    `json:"guess_id"`
+	ChallengeID string    `json:"challenge_id"`
+	Score       int       `json:"score"`
+	Distance    *float64  `json:"distance,omitempty"`
+	TimedOut    bool      `json:"timed_out"`
+	CreatedAt   time.Time `json:"created_at"`
+	Duplicate   bool      `json:"duplicate"`
+	ServerTime  time.Time `json:"server_time"`
+}
+
+type PublicTimedResultGuess struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
+	Avatar    string    `json:"avatar"`
+	Lat       *float64  `json:"lat,omitempty"`
+	Long      *float64  `json:"long,omitempty"`
+	Score     int       `json:"score"`
+	Distance  *float64  `json:"distance,omitempty"`
+	TimedOut  bool      `json:"timed_out"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type PublicTimedResults struct {
+	ChallengeID string                   `json:"challenge_id"`
+	ActualLat   float64                  `json:"actual_lat"`
+	ActualLong  float64                  `json:"actual_long"`
+	Guesses     []PublicTimedResultGuess `json:"guesses"`
+	ServerTime  time.Time                `json:"server_time"`
+}
+
 type PublicFeedResult struct {
 	Rank     int     `json:"rank"`
 	UserID   string  `json:"user_id"`

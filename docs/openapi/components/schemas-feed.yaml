@@ -165,3 +165,78 @@
       "description": "Signed all-time Elo change caused by this challenge in the global history replay."
     "is_viewer":
       "type": "boolean"
+
+"PublicChallengeAccepted":
+  "type": "object"
+  "required":
+    [
+      "challenge_id",
+      "media_url",
+      "media_type",
+      "accepted_at",
+      "view_expires_at",
+      "guess_after",
+      "guess_expires_at",
+      "score_grace_seconds",
+      "server_time",
+    ]
+  "properties":
+    "challenge_id": { "type": "string", "format": "uuid" }
+    "media_url": { "type": "string" }
+    "media_type": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] }
+    "accepted_at": { "type": "string", "format": "date-time" }
+    "view_expires_at": { "type": "string", "format": "date-time" }
+    "guess_after": { "type": "string", "format": "date-time" }
+    "guess_expires_at":
+      { "type": "string", "format": "date-time", "description": "Server-authoritative deadline for the timed guess." }
+    "score_grace_seconds": { "type": "integer", "minimum": 0 }
+    "server_time": { "type": "string", "format": "date-time" }
+
+"PublicChallengeMediaDelivered":
+  "type": "object"
+  "required": ["view_expires_at", "guess_after", "guess_expires_at", "score_grace_seconds", "server_time"]
+  "properties":
+    "view_expires_at": { "type": "string", "format": "date-time" }
+    "guess_after": { "type": "string", "format": "date-time" }
+    "guess_expires_at": { "type": "string", "format": "date-time" }
+    "score_grace_seconds": { "type": "integer", "minimum": 0 }
+    "server_time": { "type": "string", "format": "date-time" }
+
+"PublicTimedGuessResponse":
+  "type": "object"
+  "required": ["guess_id", "challenge_id", "score", "timed_out", "created_at", "duplicate", "server_time"]
+  "properties":
+    "guess_id": { "type": "string", "format": "uuid" }
+    "challenge_id": { "type": "string", "format": "uuid" }
+    "score": { "type": "integer", "minimum": 0, "maximum": 5000 }
+    "distance":
+      { "type": "number", "minimum": 0, "description": "Distance in meters; omitted for authoritative timeouts." }
+    "timed_out": { "type": "boolean" }
+    "created_at": { "type": "string", "format": "date-time" }
+    "duplicate": { "type": "boolean" }
+    "server_time": { "type": "string", "format": "date-time" }
+
+"PublicTimedResultGuess":
+  "type": "object"
+  "required": ["id", "user_id", "username", "avatar", "score", "timed_out", "created_at"]
+  "properties":
+    "id": { "type": "string", "format": "uuid" }
+    "user_id": { "type": "string", "format": "uuid" }
+    "username": { "type": "string" }
+    "avatar": { "type": "string" }
+    "lat": { "type": "number", "format": "double" }
+    "long": { "type": "number", "format": "double" }
+    "score": { "type": "integer", "minimum": 0, "maximum": 5000 }
+    "distance": { "type": "number", "minimum": 0, "description": "Distance in meters; omitted for timeouts." }
+    "timed_out": { "type": "boolean" }
+    "created_at": { "type": "string", "format": "date-time" }
+
+"PublicTimedResults":
+  "type": "object"
+  "required": ["challenge_id", "actual_lat", "actual_long", "guesses", "server_time"]
+  "properties":
+    "challenge_id": { "type": "string", "format": "uuid" }
+    "actual_lat": { "type": "number", "format": "double" }
+    "actual_long": { "type": "number", "format": "double" }
+    "guesses": { "type": "array", "items": { "$ref": "#/PublicTimedResultGuess" } }
+    "server_time": { "type": "string", "format": "date-time" }

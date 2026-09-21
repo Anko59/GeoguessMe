@@ -157,6 +157,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    '/feed/challenges/{id}/accept': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a public feed challenge and create a timed session */
+        post: operations['acceptPublicTimedChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-media': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream the original media for an accepted timed feed challenge
+         * @description The client must call media-delivered after the complete response is received; streaming bytes alone does not start the server-owned view window.
+         */
+        get: operations['getPublicTimedChallengeMedia'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/media-delivered': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm complete delivery and start the public timed view window */
+        post: operations['confirmPublicTimedChallengeMediaDelivered'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-guess': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit one server-timed feed challenge guess */
+        post: operations['submitPublicTimedChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-timeout': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist a timed-out public feed guess after the server deadline */
+        post: operations['timeoutPublicTimedChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-results': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read authorized public feed timed challenge map results
+         * @description The answer and guess coordinates are returned only to the owner, a viewer who resolved the challenge, or a viewer whose server-owned timed session has expired.
+         */
+        get: operations['getPublicTimedChallengeResults'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/feed/challenges/{id}/guess': {
         parameters: {
             query?: never;
@@ -1195,6 +1303,82 @@ export interface components {
             items: components['schemas']['PublicFeedLeaderboardEntry'][];
             next_cursor: string;
         };
+        PublicChallengeAccepted: {
+            /** Format: uuid */
+            challenge_id: string;
+            media_url: string;
+            /** @enum {string} */
+            media_type: 'image/jpeg' | 'image/png' | 'image/webp';
+            /** Format: date-time */
+            accepted_at: string;
+            /** Format: date-time */
+            view_expires_at: string;
+            /** Format: date-time */
+            guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for the timed guess.
+             */
+            guess_expires_at: string;
+            score_grace_seconds: number;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicChallengeMediaDelivered: {
+            /** Format: date-time */
+            view_expires_at: string;
+            /** Format: date-time */
+            guess_after: string;
+            /** Format: date-time */
+            guess_expires_at: string;
+            score_grace_seconds: number;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicTimedGuessResponse: {
+            /** Format: uuid */
+            guess_id: string;
+            /** Format: uuid */
+            challenge_id: string;
+            score: number;
+            /** @description Distance in meters; omitted for authoritative timeouts. */
+            distance?: number;
+            timed_out: boolean;
+            /** Format: date-time */
+            created_at: string;
+            duplicate: boolean;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicTimedResultGuess: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            long?: number;
+            score: number;
+            /** @description Distance in meters; omitted for timeouts. */
+            distance?: number;
+            timed_out: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PublicTimedResults: {
+            /** Format: uuid */
+            challenge_id: string;
+            /** Format: double */
+            actual_lat: number;
+            /** Format: double */
+            actual_long: number;
+            guesses: components['schemas']['PublicTimedResultGuess'][];
+            /** Format: date-time */
+            server_time: string;
+        };
         PublicGuessResult: {
             score: number;
             /** @description Distance in meters. */
@@ -1995,6 +2179,186 @@ export interface operations {
             429: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
             503: components['responses']['ErrorResponse'];
+        };
+    };
+    acceptPublicTimedChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-owned viewing and guessing deadlines. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallengeAccepted'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicTimedChallengeMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private original image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                    'image/webp': string;
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    confirmPublicTimedChallengeMediaDelivered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative viewing and guessing deadlines. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallengeMediaDelivered'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+        };
+    };
+    submitPublicTimedChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: double */
+                    lat: number;
+                    /** Format: double */
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing guess returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            /** @description Guess recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+        };
+    };
+    timeoutPublicTimedChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Existing guess or timeout returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            /** @description Timeout recorded with score zero. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicTimedChallengeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Map-ready challenge results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedResults'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
         };
     };
     getPublicGuess: {
