@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"geoguessme/handlers"
 	"geoguessme/internal/config"
+	"geoguessme/internal/models"
 	"geoguessme/internal/repository/feed"
 	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
@@ -18,16 +20,40 @@ import (
 	"github.com/google/uuid"
 )
 
+// ChallengePublisher atomically stores the feed row and selected private
+// group challenges. It is kept as an interface so feed transport tests do not
+// need to construct the full application repository.
+type ChallengePublisher interface {
+	ExistingFeedChallenge(context.Context, string, string) (bool, error)
+	CreateFeedChallenge(context.Context, feed.NewChallenge, []*models.Photo) (bool, error)
+}
+
+type ChallengeBroadcaster interface {
+	Broadcast(models.Message)
+}
+
 type API struct {
 	repo      *feed.Repository
 	store     storage.ObjectStore
 	deletions handlers.DeletionEnqueuer
+	publisher ChallengePublisher
+	push      handlers.PushNotifier
+	hub       ChallengeBroadcaster
 	cfg       *config.Config
 	clock     func() time.Time
 }
 
-func NewAPI(repo *feed.Repository, store storage.ObjectStore, deletions handlers.DeletionEnqueuer, cfg *config.Config, clock func() time.Time) *API {
-	return &API{repo: repo, store: store, deletions: deletions, cfg: cfg, clock: clock}
+func NewAPI(
+	repo *feed.Repository,
+	store storage.ObjectStore,
+	deletions handlers.DeletionEnqueuer,
+	cfg *config.Config,
+	clock func() time.Time,
+	publisher ChallengePublisher,
+	push handlers.PushNotifier,
+	hub ChallengeBroadcaster,
+) *API {
+	return &API{repo: repo, store: store, deletions: deletions, publisher: publisher, push: push, hub: hub, cfg: cfg, clock: clock}
 }
 
 func (a *API) Routes(mux *http.ServeMux, protect func(http.HandlerFunc) http.Handler) {
@@ -69,6 +95,8 @@ func writeError(w http.ResponseWriter, err error) {
 		handlers.WriteError(w, 403, "media_expired", "The viewing window has expired")
 	case errors.Is(err, feed.ErrInvalidCoordinate):
 		handlers.WriteError(w, 400, "invalid_coordinates", "Choose a valid location")
+	case errors.Is(err, feed.ErrConflict):
+		handlers.WriteError(w, 409, "conflict", "This publication key is already in use")
 	default:
 		slog.Error("public feed request failed", "error", err)
 		handlers.WriteError(w, 500, "internal_error", "Unable to complete this feed request")

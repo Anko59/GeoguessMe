@@ -1,4 +1,5 @@
 import { useGroupPhotoUrl } from '../../pages/groups/groupPhotoCache';
+import type { ChallengeAudience } from './useChallengeUpload';
 
 /** Deterministic per-group accent so every row in the options menu gets its
  *  own color even before a group photo is uploaded. */
@@ -83,6 +84,11 @@ export function CameraOptionsMenu({
     hideLocation,
     onToggleGroup,
     onToggleHideLocation,
+    feedMode = false,
+    feedAudience = 'public',
+    feedCaption = '',
+    onAudienceChange,
+    onCaptionChange,
     onClose,
 }: {
     groups: { id: string; name: string }[];
@@ -90,12 +96,17 @@ export function CameraOptionsMenu({
     hideLocation: boolean;
     onToggleGroup: (id: string) => void;
     onToggleHideLocation: () => void;
+    feedMode?: boolean;
+    feedAudience?: ChallengeAudience;
+    feedCaption?: string;
+    onAudienceChange?: (audience: ChallengeAudience) => void;
+    onCaptionChange?: (caption: string) => void;
     onClose: () => void;
 }) {
     return (
         <div className="camera-options-menu" role="dialog" aria-label="Challenge options">
             <div className="camera-options-section">
-                <p className="camera-options-title">Send to</p>
+                <p className="camera-options-title">{feedMode ? 'Send to groups (optional)' : 'Send to'}</p>
                 {groups.length === 0 ? (
                     <p className="camera-options-hint">Loading your groups…</p>
                 ) : (
@@ -111,6 +122,42 @@ export function CameraOptionsMenu({
                     </ul>
                 )}
             </div>
+            {feedMode && onAudienceChange && (
+                <fieldset className="camera-options-feed">
+                    <legend>Feed visibility</legend>
+                    <label>
+                        <input
+                            type="radio"
+                            name="camera-feed-audience"
+                            value="public"
+                            checked={feedAudience === 'public'}
+                            onChange={() => onAudienceChange('public')}
+                        />
+                        Public feed
+                    </label>
+                    <label>
+                        <input
+                            type="radio"
+                            name="camera-feed-audience"
+                            value="friends"
+                            checked={feedAudience === 'friends'}
+                            onChange={() => onAudienceChange('friends')}
+                        />
+                        Friends only
+                    </label>
+                </fieldset>
+            )}
+            {feedMode && onCaptionChange && (
+                <label className="camera-options-caption">
+                    Caption (optional)
+                    <textarea
+                        value={feedCaption}
+                        maxLength={280}
+                        placeholder="Give them a clue. Keep the answer a mystery."
+                        onChange={(event) => onCaptionChange(event.target.value)}
+                    />
+                </label>
+            )}
             <label className="camera-options-hide">
                 <input type="checkbox" checked={hideLocation} onChange={onToggleHideLocation} />
                 <span className="camera-options-hide-icon" aria-hidden="true">

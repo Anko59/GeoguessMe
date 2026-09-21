@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 
 	"geoguessme/handlers"
 	"geoguessme/internal/config"
+	"geoguessme/internal/models"
+	feedrepo "geoguessme/internal/repository/feed"
 
 	"github.com/pashagolub/pgxmock/v5"
 )
@@ -66,7 +69,6 @@ func TestPublicUploadValidatesAudienceAndSelectedGroups(t *testing.T) {
 		groups         []string
 	}{
 		{name: "unknown audience", audience: "neighbors"},
-		{name: "public target", audience: "public", groups: []string{"00000000-0000-0000-0000-000000000002"}},
 		{name: "invalid group", audience: "friends", groups: []string{"not-a-uuid"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,6 +136,107 @@ func TestUploadCreatesOnlyExplicitPublicPhotoAndCompensatesFailures(t *testing.T
 				t.Fatalf("durable deletion: %+v", deletions)
 			}
 		})
+	}
+}
+
+type fakeChallengePublisher struct {
+	existing    bool
+	existingErr error
+	createErr   error
+	challenge   feedrepo.NewChallenge
+	photos      []*models.Photo
+	createCalls int
+}
+
+func (p *fakeChallengePublisher) ExistingFeedChallenge(context.Context, string, string) (bool, error) {
+	return p.existing, p.existingErr
+}
+
+func (p *fakeChallengePublisher) CreateFeedChallenge(_ context.Context, challenge feedrepo.NewChallenge, photos []*models.Photo) (bool, error) {
+	p.createCalls++
+	p.challenge = challenge
+	p.photos = photos
+	return false, p.createErr
+}
+
+func TestUploadPublishesEverySelectedDestinationThroughTheAtomicPublisher(t *testing.T) {
+	for _, tc := range []struct {
+		name, audience string
+		groups         []string
+	}{
+		{name: "public only", audience: "public"},
+		{name: "friends only", audience: "friends"},
+		{name: "public and groups", audience: "public", groups: []string{testID, "00000000-0000-0000-0000-000000000002"}},
+		{name: "friends and groups", audience: "friends", groups: []string{testID, "00000000-0000-0000-0000-000000000002"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, _ := mockAPI(t)
+			store := &fakeStore{}
+			publisher := &fakeChallengePublisher{}
+			a.store = store
+			a.publisher = publisher
+			a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+			w := httptest.NewRecorder()
+			a.Upload(w, uploadWithAudience(t, "A place", "48.8", tc.audience, tc.groups))
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status %d: %s", w.Code, w.Body.String())
+			}
+			if publisher.createCalls != 1 || publisher.challenge.Audience != tc.audience {
+				t.Fatalf("publisher call: %+v", publisher)
+			}
+			if len(publisher.challenge.GroupIDs) != len(tc.groups) || len(publisher.photos) != len(tc.groups) {
+				t.Fatalf("destinations: challenge=%+v photos=%+v", publisher.challenge.GroupIDs, publisher.photos)
+			}
+			if len(store.puts) != len(tc.groups)+1 {
+				t.Fatalf("stored keys: %v", store.puts)
+			}
+		})
+	}
+}
+
+func TestUploadIdempotencySkipsStorageAndCreationOnRetry(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &fakeStore{}
+	publisher := &fakeChallengePublisher{existing: true}
+	a.store = store
+	a.publisher = publisher
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
+	if w.Code != http.StatusOK || len(store.puts) != 0 || publisher.createCalls != 0 {
+		t.Fatalf("retry status=%d puts=%v creates=%d", w.Code, store.puts, publisher.createCalls)
+	}
+}
+
+type failOnPutStore struct {
+	fakeStore
+	attempt int
+	failAt  int
+}
+
+func (s *failOnPutStore) Put(ctx context.Context, key string, reader io.Reader, size int64, mime string) error {
+	s.attempt++
+	if s.attempt == s.failAt {
+		s.puts = append(s.puts, key)
+		return errors.New("store offline")
+	}
+	return s.fakeStore.Put(ctx, key, reader, size, mime)
+}
+
+func TestUploadCompensatesAllAttemptedDestinationsAfterPartialStorageFailure(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &failOnPutStore{failAt: 2}
+	deletions := &deletionRecorder{}
+	a.store = store
+	a.deletions = deletions
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID, "00000000-0000-0000-0000-000000000002"}))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if len(store.deleted) != 2 || len(deletions.keys) != 0 {
+		t.Fatalf("cleanup deleted=%v queued=%v", store.deleted, deletions.keys)
 	}
 }
 

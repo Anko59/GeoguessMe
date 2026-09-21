@@ -19,6 +19,7 @@ var ErrGuessTimeExpired = errors.New("guess window expired")
 var ErrMediaExpired = errors.New("media viewing window expired")
 var ErrOwnChallenge = errors.New("cannot use own challenge")
 var ErrInvalidCoordinate = errors.New("invalid coordinate")
+var ErrConflict = errors.New("public challenge id already belongs to another user")
 
 type Repository struct{ pool database.Pool }
 
@@ -38,9 +39,6 @@ func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 		p.Audience = "public"
 	}
 	if p.Audience != "public" && p.Audience != "friends" {
-		return ErrForbidden
-	}
-	if p.Audience == "public" && len(p.GroupIDs) > 0 {
 		return ErrForbidden
 	}
 	insert := `INSERT INTO public_challenges

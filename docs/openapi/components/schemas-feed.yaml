@@ -48,6 +48,27 @@
     "comment_count":
       "type": "integer"
       "minimum": 0
+"ChallengePublication":
+  "type": "object"
+  "required": ["id", "photos"]
+  "properties":
+    "id":
+      "type": "string"
+      "format": "uuid"
+    "photos":
+      "type": "array"
+      "items":
+        "$ref": "#/GroupChallengePublication"
+"GroupChallengePublication":
+  "type": "object"
+  "required": ["id", "group_id"]
+  "properties":
+    "id":
+      "type": "string"
+      "format": "uuid"
+    "group_id":
+      "type": "string"
+      "format": "uuid"
 "PublicFeedPage":
   "type": "object"
   "required": ["items", "next_cursor"]

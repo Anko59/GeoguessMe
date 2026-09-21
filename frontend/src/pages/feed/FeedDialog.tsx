@@ -5,12 +5,14 @@ export default function FeedDialog({
     onClose,
     busy = false,
     restoreFocus,
+    className,
     children,
 }: {
     title: string;
     onClose: () => void;
     busy?: boolean;
     restoreFocus?: () => void;
+    className?: string;
     children: ReactNode;
 }) {
     const dialog = useRef<HTMLDialogElement>(null);
@@ -27,7 +29,7 @@ export default function FeedDialog({
     return (
         <dialog
             ref={dialog}
-            className="feed-dialog"
+            className={`feed-dialog${className ? ` ${className}` : ''}`}
             aria-label={title}
             aria-busy={busy}
             onCancel={(event) => {

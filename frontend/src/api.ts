@@ -14,6 +14,7 @@ import type {
     PublicTimedGuessResponse,
     PublicTimedResults,
     GroupInbox,
+    ChallengePublication,
 } from './types';
 import { apiBaseURL } from './platform/endpoints';
 
@@ -156,7 +157,7 @@ export const publicFeedAPI = {
     get: async (id: string, signal: AbortSignal) =>
         (await api.get<PublicChallenge>(publicPostPath(id), { signal })).data,
     publish: async (form: FormData, signal: AbortSignal) =>
-        (await api.post<{ id: string }>('/feed/challenges', form, { signal })).data,
+        (await api.post<ChallengePublication>('/feed/challenges', form, { signal })).data,
     remove: async (id: string, signal: AbortSignal) => {
         await api.delete(publicPostPath(id), { signal });
         return true;

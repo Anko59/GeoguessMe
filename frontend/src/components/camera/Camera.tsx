@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isFilterableImageType } from './cameraUtils';
 import { useCameraSession } from './lifecycle/useCameraSession';
 import { useLensEffects } from './lifecycle/useLensEffects';
-import { useChallengeOptions, useChallengeUpload } from './useChallengeUpload';
+import { useChallengeOptions, useChallengeUpload, type CaptureUploadOptions } from './useChallengeUpload';
 import { useMediaProcessingJob, mediaProcessingErrorMessage } from '../../hooks/useMediaProcessingJob';
 import type { MediaProcessingJob } from '../../types';
 import './Camera.css';
@@ -17,6 +17,19 @@ import { captureFeedback } from '../../platform/haptics';
 
 const FLASH_DURATION_MS = 300;
 
+function createIdempotencyKey(): string {
+    const cryptoAPI = globalThis.crypto;
+    if (cryptoAPI?.randomUUID) return cryptoAPI.randomUUID();
+    if (cryptoAPI?.getRandomValues) {
+        const bytes = cryptoAPI.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    throw new Error('Secure random values are required to publish a challenge.');
+}
+
 export interface CameraProps {
     /** Group challenge destination. Omit when using the feed destination. */
     groupID?: string;
@@ -26,6 +39,7 @@ export interface CameraProps {
         blob: Blob,
         filename: string,
         position: GeolocationPosition,
+        options: CaptureUploadOptions,
     ) => Promise<MediaProcessingJob | null>;
     /** Feed capture is camera-only and does not expose group-only controls. */
     variant?: 'group' | 'feed';
@@ -42,6 +56,7 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
     const [flashVisible, setFlashVisible] = useState(false);
     const [processingJobID, setProcessingJobID] = useState<string | null>(null);
     const [textBanner, setTextBanner] = useState<TextBanner>(EMPTY_TEXT_BANNER);
+    const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
     const [showFilters, setShowFilters] = useState(
         () => !window.matchMedia('(pointer: coarse), (max-width: 40rem)').matches,
     );
@@ -53,8 +68,12 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
         toggleOptions,
         toggleGroup,
         toggleHideLocation,
+        audience,
+        setAudience,
+        caption,
+        setCaption,
         closeOptions,
-    } = useChallengeOptions(feedMode ? '' : groupID);
+    } = useChallengeOptions(feedMode ? '' : groupID, feedMode);
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
     const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,9 +271,17 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
     // While recording, tapping the capture button stops the clip instead of taking a photo.
     const captureButtonClick = recording ? stopRecording : captureGesture.onClick;
 
+    const completeUpload = useCallback(() => {
+        setIdempotencyKey(createIdempotencyKey());
+        onUploadComplete();
+    }, [onUploadComplete]);
+
     const { requestLocation, handleUpload } = useChallengeUpload({
         groupIDs: targetGroupIDs,
         hideLocation,
+        audience,
+        caption,
+        idempotencyKey,
         uploadCaptured,
         fileMode,
         capturedPhoto,
@@ -270,7 +297,7 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
         destroyEffects,
         stopCamera,
         discardRecording,
-        onUploadComplete,
+        onUploadComplete: completeUpload,
         setCapturedPhoto,
         setFileMode,
         setError,
@@ -285,8 +312,8 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
     // the async poll) rather than by an effect that sets state synchronously.
     const handleJobReady = useCallback(() => {
         setProcessingJobID(null);
-        onUploadComplete();
-    }, [onUploadComplete, setProcessingJobID]);
+        completeUpload();
+    }, [completeUpload, setProcessingJobID]);
 
     const handleJobFailed = useCallback(
         (job: MediaProcessingJob) => {
@@ -344,8 +371,15 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
                 processingVideo={processingJobID !== null}
                 allowFileFallback={allowFileFallback}
                 allowVideo={allowVideo}
-                showChallengeOptions={!feedMode}
-                captureSummary={feedMode ? 'Device location will be attached automatically' : undefined}
+                showChallengeOptions
+                feedMode={feedMode}
+                feedAudience={audience}
+                feedCaption={caption}
+                captureSummary={
+                    feedMode
+                        ? `${audience === 'public' ? 'Public' : 'Friends'} · ${targetGroupIDs.length} group${targetGroupIDs.length === 1 ? '' : 's'}`
+                        : undefined
+                }
                 onStartCamera={() => void startCamera()}
                 onSetFileMode={() => setFileMode(true)}
                 onSwitchCamera={switchCamera}
@@ -353,6 +387,8 @@ export default function Camera({ groupID = '', onUploadComplete, uploadCaptured,
                 onToggleOptions={toggleOptions}
                 onToggleGroup={toggleGroup}
                 onToggleHideLocation={toggleHideLocation}
+                onAudienceChange={setAudience}
+                onCaptionChange={setCaption}
                 onCloseOptions={closeOptions}
                 onSelectLens={selectLens}
                 onBannerChange={setTextBanner}

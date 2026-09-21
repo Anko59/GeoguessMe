@@ -24,6 +24,7 @@ export type PublicChallengeAccepted = components['schemas']['PublicChallengeAcce
 export type PublicChallengeMediaDelivered = components['schemas']['PublicChallengeMediaDelivered'];
 export type PublicTimedGuessResponse = components['schemas']['PublicTimedGuessResponse'];
 export type PublicTimedResults = components['schemas']['PublicTimedResults'];
+export type ChallengePublication = components['schemas']['ChallengePublication'];
 
 // --- Wire types (generated from docs/openapi.yaml) ---
 

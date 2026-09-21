@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"geoguessme/internal/models"
+	feedrepo "geoguessme/internal/repository/feed"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v5"
 )
 
@@ -152,5 +154,72 @@ func TestCompleteProcessingJobTx(t *testing.T) {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func testFeedChallenge() (feedrepo.NewChallenge, []*models.Photo) {
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	challenge := feedrepo.NewChallenge{
+		ID: "challenge-1", UserID: "user-1", Caption: "A place", Audience: "friends",
+		GroupIDs: []string{"group-1"}, StorageKey: "public-challenges/challenge-1", MIMEType: "image/png",
+		Preview: []byte("preview"), Lat: 48.8, Long: 2.3, CreatedAt: now,
+	}
+	photos := []*models.Photo{{
+		ID: "photo-1", UserID: "user-1", GroupID: "group-1", StorageKey: "photos/photo-1",
+		MIMEType: "image/png", ByteSize: 12, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready",
+		CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour),
+	}}
+	return challenge, photos
+}
+
+func TestCreateFeedChallengeCommitsFeedAndGroupRowsTogether(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO public_challenge_groups").WithArgs(challenge.ID, challenge.GroupIDs).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO photos").WithArgs(photos[0].ID, photos[0].UserID, photos[0].GroupID, photos[0].URL, photos[0].StorageKey, photos[0].MIMEType, photos[0].ByteSize, photos[0].Lat, photos[0].Long, photos[0].LifecycleStatus, photos[0].HideLocation, photos[0].CreatedAt, photos[0].ExpiresAt, photos[0].RetentionAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+
+	created, err := repo.CreateFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || created {
+		t.Fatalf("created=%v err=%v", created, err)
+	}
+}
+
+func TestCreateFeedChallengeIsIdempotentForTheSameOwner(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id"}).AddRow(challenge.UserID),
+	)
+	mock.ExpectCommit()
+
+	retried, err := repo.CreateFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || !retried {
+		t.Fatalf("retried=%v err=%v", retried, err)
+	}
+}
+
+func TestCreateFeedChallengeRollsBackWhenGroupMembershipIsMissing(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.ID).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(pgxmock.NewRows([]string{"user_id"}))
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(false))
+	mock.ExpectRollback()
+
+	if _, err := repo.CreateFeedChallenge(context.Background(), challenge, photos); !errors.Is(err, feedrepo.ErrForbidden) {
+		t.Fatalf("membership error = %v", err)
 	}
 }

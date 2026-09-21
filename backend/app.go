@@ -108,7 +108,7 @@ func NewApp(
 		Game:    handlers.NewGameAPI(repos.Groups, repos.Chat, repos, store, cfg, pushSvc, hub, clock),
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
 		Party:   partyhandlers.NewAPI(repos.Groups, repos.Party, repos.Chat, repos, pushSvc, hub, cfg, clock),
-		Feed:    feedhandlers.NewAPI(feedrepo.NewRepository(db), store, repos, cfg, clock),
+		Feed:    feedhandlers.NewAPI(feedrepo.NewRepository(db), store, repos, cfg, clock, repos, pushSvc, hub),
 	}
 }
 

@@ -13,7 +13,9 @@ import (
 	"unicode/utf8"
 
 	"geoguessme/handlers"
+	"geoguessme/internal/config"
 	"geoguessme/internal/media"
+	"geoguessme/internal/models"
 	"geoguessme/internal/repository/feed"
 	"geoguessme/internal/storage"
 	"geoguessme/internal/validation"
@@ -56,13 +58,18 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, 400, "invalid_audience", "Audience must be public or friends")
 		return
 	}
+	hideLocation := strings.EqualFold(strings.TrimSpace(r.FormValue("hide_location")), "true")
 	groupIDs, err := selectedGroupIDs(r)
 	if err != nil {
 		handlers.WriteError(w, 400, "invalid_groups", err.Error())
 		return
 	}
-	if audience == "public" && len(groupIDs) > 0 {
-		handlers.WriteError(w, 400, "invalid_groups", "Choose groups only for friends posts")
+	idempotencyKey := strings.TrimSpace(r.FormValue("idempotency_key"))
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
+	}
+	if _, err := uuid.Parse(idempotencyKey); err != nil {
+		handlers.WriteError(w, 400, "invalid_idempotency_key", "A valid publication key is required")
 		return
 	}
 	lat, latErr := strconv.ParseFloat(r.FormValue("lat"), 64)
@@ -70,6 +77,18 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 	if latErr != nil || longErr != nil || validation.ValidateCoordinates(lat, long) != nil {
 		handlers.WriteError(w, 400, "invalid_coordinates", "Choose the photo's location")
 		return
+	}
+	userID := handlers.GetUserIDFromContext(r)
+	if a.publisher != nil {
+		existing, err := a.publisher.ExistingFeedChallenge(r.Context(), idempotencyKey, userID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if existing {
+			writeChallengeResponse(w, http.StatusOK, idempotencyKey, groupIDs)
+			return
+		}
 	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
@@ -87,19 +106,88 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	p := feed.NewChallenge{ID: uuid.NewString(), UserID: handlers.GetUserIDFromContext(r), Caption: caption, Audience: audience, GroupIDs: groupIDs,
-		StorageKey: storage.PublicChallengeKey(uuid.NewString()), MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: a.clock()}
-	if err := a.store.Put(r.Context(), p.StorageKey, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), p.MIMEType); err != nil {
-		a.compensate(r.Context(), p.StorageKey)
-		handlers.WriteError(w, 502, "storage_error", "Unable to store photo")
-		return
+	now := a.clock()
+	p := feed.NewChallenge{ID: idempotencyKey, UserID: userID, Caption: caption, Audience: audience, GroupIDs: groupIDs,
+		StorageKey: "public-challenges/" + idempotencyKey, MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: now}
+	photos := makeGroupPhotos(idempotencyKey, userID, groupIDs, normalized.MIMEType, int64(len(normalized.Data)), lat, long, hideLocation, now, a.cfg)
+	keys := make([]string, 0, len(photos)+1)
+	keys = append(keys, p.StorageKey)
+	for _, photo := range photos {
+		keys = append(keys, photo.StorageKey)
 	}
-	if err := a.repo.Create(r.Context(), p); err != nil {
-		a.compensate(r.Context(), p.StorageKey)
+	storedKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if err := a.store.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
+			// A failed Put may have written an object before returning its
+			// error, so include the current key, but never enqueue objects that
+			// were not attempted yet.
+			a.compensateKeys(r.Context(), append(storedKeys, key))
+			handlers.WriteError(w, 502, "storage_error", "Unable to store photo")
+			return
+		}
+		storedKeys = append(storedKeys, key)
+	}
+	alreadyExists := false
+	if a.publisher != nil {
+		alreadyExists, err = a.publisher.CreateFeedChallenge(r.Context(), p, photos)
+	} else {
+		err = a.repo.Create(r.Context(), p)
+	}
+	if err != nil {
+		a.compensateKeys(r.Context(), keys)
 		writeError(w, err)
 		return
 	}
-	handlers.WriteJSON(w, 201, map[string]string{"id": p.ID})
+	if !alreadyExists {
+		for _, photo := range photos {
+			if a.hub != nil {
+				photoID := photo.ID
+				a.hub.Broadcast(models.Message{ID: uuid.NewString(), GroupID: photo.GroupID, UserID: userID, Kind: "challenge", PhotoID: &photoID, Content: "", CreatedAt: now})
+			}
+			if a.push != nil {
+				a.push.NotifyNewChallenge(r.Context(), photo.GroupID, userID, photo.ID)
+			}
+		}
+	}
+	status := http.StatusCreated
+	if alreadyExists {
+		status = http.StatusOK
+	}
+	writeChallengeResponse(w, status, p.ID, groupIDs)
+}
+
+func makeGroupPhotos(challengeID, userID string, groupIDs []string, mimeType string, byteSize int64, lat, long float64, hideLocation bool, now time.Time, cfg *config.Config) []*models.Photo {
+	photos := make([]*models.Photo, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		photoID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(challengeID+"\x00"+groupID)).String()
+		photos = append(photos, &models.Photo{
+			ID:              photoID,
+			UserID:          userID,
+			GroupID:         groupID,
+			StorageKey:      "photos/" + photoID,
+			MIMEType:        mimeType,
+			ByteSize:        byteSize,
+			Lat:             lat,
+			Long:            long,
+			LifecycleStatus: "ready",
+			HideLocation:    hideLocation,
+			CreatedAt:       now,
+			ExpiresAt:       now.Add(cfg.ChallengeTTL),
+			RetentionAt:     now.Add(cfg.PhotoRetention),
+		})
+	}
+	return photos
+}
+
+func writeChallengeResponse(w http.ResponseWriter, status int, challengeID string, groupIDs []string) {
+	photos := make([]map[string]string, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		photos = append(photos, map[string]string{
+			"id":       uuid.NewSHA1(uuid.NameSpaceURL, []byte(challengeID+"\x00"+groupID)).String(),
+			"group_id": groupID,
+		})
+	}
+	handlers.WriteJSON(w, status, map[string]any{"id": challengeID, "photos": photos})
 }
 
 func selectedGroupIDs(r *http.Request) ([]string, error) {
@@ -124,18 +212,29 @@ func selectedGroupIDs(r *http.Request) ([]string, error) {
 }
 
 func (a *API) compensate(ctx context.Context, key string) {
-	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	err := a.store.Delete(cleanup, key)
-	cancel()
-	if err != nil {
+	a.compensateKeys(ctx, []string{key})
+}
+
+func (a *API) compensateKeys(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		err := a.store.Delete(cleanup, key)
+		cancel()
+		if err == nil {
+			continue
+		}
 		slog.Error("public upload compensation failed", "storage_key", key, "error", err)
 		// Storage may have exhausted its deadline. Give the durable fallback
 		// its own budget so an object-store timeout cannot cancel the enqueue.
 		queued, cancelQueue := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancelQueue()
-		if err := a.deletions.EnqueueMediaDeletion(queued, "manual", []string{key}); err != nil {
-			slog.Error("enqueue public upload deletion failed", "storage_key", key, "error", err)
+		if a.deletions == nil {
+			cancelQueue()
+			continue
 		}
+		if enqueueErr := a.deletions.EnqueueMediaDeletion(queued, "manual", []string{key}); enqueueErr != nil {
+			slog.Error("enqueue public upload deletion failed", "storage_key", key, "error", enqueueErr)
+		}
+		cancelQueue()
 	}
 }
 
