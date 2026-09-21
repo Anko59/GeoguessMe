@@ -1,13 +1,6 @@
 .public-feed {
-    min-height: 100dvh;
     background: var(--surface-soft);
     color: var(--ink-strong);
-}
-
-.public-feed > .app-topbar {
-    width: min(100%, 70rem);
-    margin-inline: auto;
-    padding-inline: 1.5rem;
 }
 
 .feed-layout {
@@ -422,10 +415,6 @@
 }
 
 @media (max-width: 540px) {
-    .public-feed > .app-topbar {
-        padding-inline: 0.75rem;
-    }
-
     .feed-layout {
         padding: 1.5rem 0.75rem 3rem;
     }

@@ -1,11 +1,21 @@
 .account-settings-container {
-    align-items: start;
-    padding-block: clamp(1rem, 4vw, 3rem);
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: transparent;
 }
 
-.account-settings-container > .app-topbar {
-    width: min(100%, 70rem);
-    justify-self: center;
+.account-settings-shell {
+    background:
+        linear-gradient(rgba(246, 248, 252, 0.9), rgba(246, 248, 252, 0.94)),
+        url('/app_background.png') center / 640px;
+}
+
+.account-settings-shell .account-settings-container::before {
+    content: none;
 }
 
 .account-settings-card {
@@ -251,10 +261,5 @@
     .account-settings-container {
         align-items: center;
         flex-direction: column;
-    }
-
-    .account-settings-container > .app-topbar {
-        width: 100%;
-        flex: none;
     }
 }

@@ -4,7 +4,7 @@ import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
 import { useAvatarUrl } from '../../components/common/avatarCache';
 import RankBadge from '../../components/progression/RankBadge';
-import TopNavigation from '../../components/navigation/TopNavigation';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
@@ -55,20 +55,29 @@ export default function ProfilePage() {
 
     if (loading) {
         return (
-            <main className="profile-page profile-state" aria-busy="true">
-                <TopNavigation showSettings={isSelf} />
+            <AuthenticatedPageShell
+                className="profile-page-shell"
+                contentClassName="profile-page profile-state"
+                contentAs="main"
+                showSettings={isSelf}
+                ariaBusy
+            >
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading profile…</span>
                 </div>
-            </main>
+            </AuthenticatedPageShell>
         );
     }
 
     if (error || !profile) {
         return (
-            <main className="profile-page profile-state">
-                <TopNavigation showSettings={isSelf} />
+            <AuthenticatedPageShell
+                className="profile-page-shell"
+                contentClassName="profile-page profile-state"
+                contentAs="main"
+                showSettings={isSelf}
+            >
                 <div className="profile-error" role="alert">
                     <strong>We couldn’t load this profile</strong>
                     <span>{error || 'This profile is temporarily unavailable.'}</span>
@@ -76,7 +85,7 @@ export default function ProfilePage() {
                         Retry
                     </button>
                 </div>
-            </main>
+            </AuthenticatedPageShell>
         );
     }
 
@@ -84,9 +93,12 @@ export default function ProfilePage() {
     const remaining = rank.next_points ? rank.points_to_next - rank.points_in_rank : 0;
 
     return (
-        <main className="profile-page">
-            <TopNavigation showSettings={isSelf} />
-
+        <AuthenticatedPageShell
+            className="profile-page-shell"
+            contentClassName="profile-page"
+            contentAs="main"
+            showSettings={isSelf}
+        >
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">
                     <div className="profile-avatar-ring">
@@ -205,6 +217,6 @@ export default function ProfilePage() {
                 </div>
             </section>
             <FeedLeaderboard />
-        </main>
+        </AuthenticatedPageShell>
     );
 }

@@ -88,6 +88,26 @@ test.describe('Viewport preservation', () => {
         }
     });
 
+    test('authenticated page shell keeps top navigation geometry consistent', async ({ authenticatedPage }) => {
+        const geometry: Array<{ left: number; top: number; width: number; height: number }> = [];
+
+        for (const path of ['/feed', '/groups', '/profile', '/settings']) {
+            await authenticatedPage.goto(path);
+            const navigation = authenticatedPage.locator('.authenticated-page-shell > .app-topbar');
+            await expect(navigation).toBeVisible();
+            const box = await navigation.boundingBox();
+            expect(box).not.toBeNull();
+            geometry.push({
+                left: Math.round(box!.left),
+                top: Math.round(box!.top),
+                width: Math.round(box!.width),
+                height: Math.round(box!.height),
+            });
+        }
+
+        expect(geometry).toEqual([geometry[0], geometry[0], geometry[0], geometry[0]]);
+    });
+
     test('mobile project has touch and mobile user-agent', async ({ page }) => {
         test.skip(test.info().project.name !== 'mobile', 'desktop project — skipped');
 

@@ -1,11 +1,13 @@
 .groups-list-container {
     width: min(100%, 70rem);
-    min-height: 100dvh;
     margin-inline: auto;
-    padding: clamp(1rem, 3vw, 2rem);
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
+}
+
+.groups-page-shell {
+    background: var(--surface-soft);
 }
 
 .groups-heading-row {
@@ -229,10 +231,6 @@
 }
 
 @media (max-width: 600px) {
-    .groups-list-container {
-        gap: var(--space-4);
-    }
-
     .groups-heading-row {
         min-height: auto;
         padding: 1.35rem;

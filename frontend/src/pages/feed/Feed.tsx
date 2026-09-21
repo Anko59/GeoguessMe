@@ -4,7 +4,7 @@ import FeedCard from './FeedCard';
 import FeedComposer from './FeedComposer';
 import GroupRail from './GroupRail';
 import { useFeed } from './useFeed';
-import TopNavigation from '../../components/navigation/TopNavigation';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import './FeedForms.css';
 import './Feed.css';
 import './FeedAudience.css';
@@ -14,8 +14,7 @@ function FeedPage({ id }: { id?: string }) {
     const navigate = useNavigate();
     const [composing, setComposing] = useState(false);
     return (
-        <div className="public-feed">
-            <TopNavigation />
+        <AuthenticatedPageShell className="public-feed">
             <main className="feed-layout">
                 <div className="feed-column">
                     <GroupRail />
@@ -119,7 +118,7 @@ function FeedPage({ id }: { id?: string }) {
                     }}
                 />
             )}
-        </div>
+        </AuthenticatedPageShell>
     );
 }
 

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
-import TopNavigation from '../../components/navigation/TopNavigation';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import type { OIDCConfig } from '../../types';
 import { backendURL } from '../../platform/endpoints';
 import './AccountSettings.css';
@@ -177,8 +177,11 @@ export default function AccountSettings() {
     };
 
     return (
-        <main className="auth-container account-settings-container">
-            <TopNavigation />
+        <AuthenticatedPageShell
+            className="account-settings-shell"
+            contentClassName="auth-container account-settings-container"
+            contentAs="main"
+        >
             <section className="auth-card account-settings-card">
                 <div className="account-header">
                     <img src="/logo.png" alt="" />
@@ -410,6 +413,6 @@ export default function AccountSettings() {
                     </Link>
                 </div>
             </section>
-        </main>
+        </AuthenticatedPageShell>
     );
 }
