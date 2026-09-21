@@ -12,10 +12,14 @@ function FeedSocialSummary({
     post,
     onReact,
     onComment,
+    commentsOpen,
+    commentsID,
 }: {
     post: PublicChallenge;
     onReact: () => void;
     onComment?: () => void;
+    commentsOpen?: boolean;
+    commentsID?: string;
 }) {
     const actions = useFeedActions(post.id);
     return (
@@ -27,17 +31,20 @@ function FeedSocialSummary({
                 disabled={actions.pending}
                 onClick={() => void onReact()}
             >
-                <span aria-hidden="true">{post.reacted ? '♥' : '♡'}</span>
+                <img src="/reactions/like.png" alt="" aria-hidden="true" className="feed-action-icon" />
                 <span>
                     {post.reaction_count} {post.reaction_count === 1 ? 'like' : 'likes'}
                 </span>
             </button>
             {onComment ? (
                 <button
-                    className="feed-text-button"
+                    className="feed-icon-button"
                     aria-label={`${post.comment_count} ${post.comment_count === 1 ? 'comment' : 'comments'}`}
+                    aria-expanded={commentsOpen}
+                    aria-controls={commentsID}
                     onClick={onComment}
                 >
+                    <img src="/chat_bubbl_icon.png" alt="" aria-hidden="true" className="feed-action-icon" />
                     {post.comment_count} {post.comment_count === 1 ? 'comment' : 'comments'}
                 </button>
             ) : (
@@ -195,6 +202,8 @@ export default function FeedCard({
                     post={post}
                     onReact={() => void react()}
                     onComment={() => setCommentsOpen((open) => !open)}
+                    commentsOpen={commentsOpen}
+                    commentsID={commentsID}
                 />
                 {post.caption && (
                     <p className="feed-caption">
