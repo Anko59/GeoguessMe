@@ -139,7 +139,7 @@ describe('ProfilePage', () => {
         // The profile mounts FeedLeaderboard after the retry. Wait for that
         // child request to settle before the test cleanup unmounts the tree;
         // otherwise a fast response can update state after the test ends.
-        expect(await screen.findByText('No feed guesses have been scored yet.')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledTimes(2);
     });
 
