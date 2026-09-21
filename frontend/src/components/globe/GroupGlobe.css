@@ -313,7 +313,7 @@
         flex-direction: column;
         max-height: min(72dvh, 40rem);
         overflow: hidden;
-        padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
+        padding: 0 1rem max(1.2rem, env(safe-area-inset-bottom));
         background: var(--surface);
         border-top: 1px solid var(--line);
         border-radius: 16px 16px 0 0;
@@ -335,7 +335,7 @@
         display: block;
         width: 100%;
         min-height: 44px;
-        padding: 0.65rem;
+        padding: 0.35rem;
         color: var(--ink-subtle);
         background: transparent;
         border: 0;

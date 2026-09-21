@@ -23,6 +23,12 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
             .locator('.globe-stage')
             .evaluate((element) => element.getBoundingClientRect().height / window.innerHeight);
         expect(globeShare).toBeGreaterThan(0.55);
+        const collapsedSheetHeight = await globe
+            .locator('.globe-history')
+            .evaluate((element) => element.getBoundingClientRect().height);
+        // The collapsed sheet should expose its handle and title without
+        // taking a large white slice out of the globe viewport.
+        expect(collapsedSheetHeight).toBeLessThan(120);
         await expect(globe.getByRole('button', { name: 'Expand geochallenge list' })).toHaveAttribute(
             'aria-expanded',
             'false',

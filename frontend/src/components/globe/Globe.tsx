@@ -11,20 +11,28 @@ interface GlobeProps {
 export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
     const host = useRef<HTMLDivElement>(null);
     const scene = useRef<ReturnType<typeof createGlobeScene> | null>(null);
+    const latestOnSelect = useRef(onSelect);
+    const latestView = useRef({ items, selectedID });
     const [error, setError] = useState('');
-    // `sceneReady` gates the item/selection updates so they only reach a
-    // constructed scene; `textureReady` marks the Earth texture as decoded and
-    // rendered, which is when the globe is actually usable.
-    const [sceneReady, setSceneReady] = useState(false);
     const [textureReady, setTextureReady] = useState(false);
+
+    useEffect(() => {
+        latestOnSelect.current = onSelect;
+    }, [onSelect]);
+
+    useEffect(() => {
+        latestView.current = { items, selectedID };
+        scene.current?.update(items, selectedID);
+    }, [items, selectedID]);
+
     useEffect(() => {
         let active = true;
         void import('./globeScene')
             .then(({ createGlobeScene }) => {
                 if (!active || !host.current) return;
-                scene.current = createGlobeScene(
+                const nextScene = createGlobeScene(
                     host.current,
-                    onSelect,
+                    (id) => latestOnSelect.current(id),
                     (message) => {
                         if (active) setError(message);
                     },
@@ -32,7 +40,15 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
                         if (active) setTextureReady(true);
                     },
                 );
-                setSceneReady(true);
+                if (!active) {
+                    nextScene.dispose();
+                    return;
+                }
+                scene.current = nextScene;
+                const { items: currentItems, selectedID: currentSelectedID } = latestView.current;
+                nextScene.update(currentItems, currentSelectedID);
+                const selected = currentItems.find((item) => item.photo_id === currentSelectedID);
+                if (selected) nextScene.focus(selected);
             })
             .catch(() => {
                 if (active) setError('3D rendering is unavailable. You can still browse every challenge below.');
@@ -42,14 +58,11 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
             scene.current?.dispose();
             scene.current = null;
         };
-    }, [onSelect]);
-    useEffect(() => {
-        scene.current?.update(items, selectedID);
-    }, [items, selectedID, sceneReady]);
+    }, []);
     const selected = items.find((item) => item.photo_id === selectedID);
     useEffect(() => {
         if (selected) scene.current?.focus(selected);
-    }, [selected, sceneReady]);
+    }, [selected]);
     return (
         <div className="globe-stage">
             <div ref={host} className="globe-canvas" />

@@ -61,6 +61,40 @@ describe('Globe', () => {
         view.rerender(<Globe items={[item]} selectedID="p" onSelect={onSelect} />);
         expect(mocks.focus).toHaveBeenCalledOnce();
     });
+    it('keeps the scene alive and replays new data when the selection callback changes', async () => {
+        const item: GroupChallenge = {
+            photo_id: 'p',
+            group_id: 'g',
+            user_id: 'u',
+            username: 'Alice',
+            created_at: '',
+            expires_at: '',
+            status: 'results',
+            lat: 48,
+            long: 2,
+        };
+        const firstOnSelect = vi.fn();
+        const secondOnSelect = vi.fn();
+        let select: ((id: string) => void) | undefined;
+        mocks.create.mockImplementationOnce(
+            (_host: HTMLDivElement, onSelect: (id: string) => void, _onError: unknown, onReady?: () => void) => {
+                select = onSelect;
+                onReady?.();
+                return mocks;
+            },
+        );
+        const view = render(<Globe items={[]} selectedID={null} onSelect={firstOnSelect} />);
+        await waitFor(() => expect(mocks.update).toHaveBeenCalledWith([], null));
+        mocks.update.mockClear();
+
+        view.rerender(<Globe items={[item]} selectedID="p" onSelect={secondOnSelect} />);
+
+        await waitFor(() => expect(mocks.update).toHaveBeenCalledWith([item], 'p'));
+        expect(mocks.create).toHaveBeenCalledOnce();
+        expect(mocks.focus).toHaveBeenCalledWith(item);
+        select?.('p');
+        expect(secondOnSelect).toHaveBeenCalledWith('p');
+    });
     it('offers keyboard accessible rotation and zoom, then disposes on close', async () => {
         const onSelect = vi.fn();
         const view = render(<Globe items={[]} selectedID={null} onSelect={onSelect} />);
