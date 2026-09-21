@@ -133,7 +133,10 @@ export function createGlobeScene(
         cleanup.push(() => texture.dispose());
         const pinGeometry = new THREE.SphereGeometry(0.018, 10, 8);
         cleanup.push(() => pinGeometry.dispose());
-        const pinMaterial = new THREE.MeshBasicMaterial();
+        // Instanced colors are only consumed by Three.js materials with
+        // vertex colors enabled. Without this flag, the CPU-side colors set
+        // below never reach the shader and selected pins cannot be highlighted.
+        const pinMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
         cleanup.push(() => pinMaterial.dispose());
         let pins = new THREE.InstancedMesh(pinGeometry, pinMaterial, 0);
         cleanup.push(() => pins.dispose());

@@ -178,6 +178,7 @@ describe('Earth scene', () => {
         const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
         const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
         expect(pins.count).toBe(1);
+        expect((pins.material as THREE.MeshBasicMaterial).vertexColors).toBe(true);
         const matrixVersion = pins.instanceMatrix.version;
         globe.update(items, null);
         expect(scene.children).toContain(pins);
