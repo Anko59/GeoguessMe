@@ -41,7 +41,7 @@ func (r *Repository) AcceptTimedChallenge(ctx context.Context, id, viewer string
 		return PublicChallengeView{}, ErrOwnChallenge
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO public_challenge_views(challenge_id,user_id,accepted_at,view_expires_at,guess_expires_at)
-		VALUES ($1,$2,$3,$3+$4 * INTERVAL '1 second',$3+$4 * INTERVAL '1 second'+$5 * INTERVAL '1 second')
+		VALUES ($1,$2,$3::timestamptz,$3::timestamptz+$4::double precision * INTERVAL '1 second',$3::timestamptz+$4::double precision * INTERVAL '1 second'+$5::double precision * INTERVAL '1 second')
 		ON CONFLICT (challenge_id,user_id) DO NOTHING`, id, viewer, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow))
 	if err != nil {
 		return PublicChallengeView{}, err
@@ -73,8 +73,8 @@ func (r *Repository) MarkTimedMediaDelivered(ctx context.Context, id, viewer str
 	var deliveredAt pgtype.Timestamptz
 	err := r.pool.QueryRow(ctx, `UPDATE public_challenge_views v SET
 		media_delivered_at=COALESCE(v.media_delivered_at,$3),
-		view_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3+$4 * INTERVAL '1 second' ELSE v.view_expires_at END,
-		guess_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3+$4 * INTERVAL '1 second'+$5 * INTERVAL '1 second' ELSE v.guess_expires_at END
+		view_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second' ELSE v.view_expires_at END,
+		guess_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second'+$5::double precision * INTERVAL '1 second' ELSE v.guess_expires_at END
 		FROM public_challenges p
 		WHERE v.challenge_id=$1 AND v.user_id=$2 AND p.id=v.challenge_id AND `+challengeVisibility+`
 		RETURNING v.media_delivered_at,v.view_expires_at,v.guess_expires_at`, id, viewer, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow)).Scan(&deliveredAt, &view.ViewExpiresAt, &view.GuessExpiresAt)

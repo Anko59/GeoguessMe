@@ -18,7 +18,7 @@ func TestAcceptTimedChallengeIsIdempotentAndReturnsMediaType(t *testing.T) {
 	mock.ExpectQuery("SELECT p.user_id,p.mime_type").WithArgs("viewer", "post").WillReturnRows(
 		pgxmock.NewRows([]string{"user_id", "mime_type"}).AddRow("author", "image/png"),
 	)
-	mock.ExpectExec("INSERT INTO public_challenge_views").WithArgs("post", "viewer", now, int64(10), int64(120)).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("(?s)INSERT INTO public_challenge_views.*\\$3::timestamptz.*\\$4::double precision.*\\$5::double precision").WithArgs("post", "viewer", now, int64(10), int64(120)).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectQuery("SELECT accepted_at,media_delivered_at,view_expires_at,guess_expires_at").WithArgs("post", "viewer").WillReturnRows(
 		pgxmock.NewRows([]string{"accepted_at", "media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now, nil, viewEnd, guessEnd),
 	)

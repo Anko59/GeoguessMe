@@ -86,17 +86,36 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await expectPhotoDecoded(blurred);
         await expect(blurred).toHaveCSS('filter', 'blur(12px) brightness(0.85)');
         await captureFeedState(viewer, testInfo, '03-blurred-challenge');
+        const accept = viewer.waitForResponse(
+            (response) =>
+                response.url().endsWith('/api/v1/feed/challenges/' + publishedID + '/accept') &&
+                response.request().method() === 'POST',
+        );
+        const timedMedia = viewer.waitForResponse(
+            (response) =>
+                response.url().endsWith('/api/v1/feed/challenges/' + publishedID + '/timed-media') &&
+                response.request().method() === 'GET',
+        );
+        const delivered = viewer.waitForResponse(
+            (response) =>
+                response.url().endsWith('/api/v1/feed/challenges/' + publishedID + '/media-delivered') &&
+                response.request().method() === 'POST',
+        );
         await viewer.getByRole('button', { name: 'Play challenge' }).click();
-        const game = viewer.getByRole('dialog', { name: 'Where in the world?' });
+        expect((await accept).ok()).toBe(true);
+        expect((await timedMedia).ok()).toBe(true);
+        expect((await delivered).ok()).toBe(true);
+        const game = viewer.getByRole('dialog', { name: 'Challenge photo' });
         await expectPhotoDecoded(game.getByAltText('Geo challenge photo'));
         await captureFeedState(viewer, testInfo, '04-guess-dialog', game);
-        await game.getByLabel('Latitude').fill('0');
-        await game.getByLabel('Longitude').fill('0');
+        await expect(viewer.getByRole('dialog', { name: 'Challenge guessing' })).toBeVisible();
+        const guessing = viewer.getByRole('dialog', { name: 'Challenge guessing' });
+        await guessing.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
         const [guess] = await Promise.all([
             viewer.waitForResponse(
-                (response) => response.url().endsWith('/guess') && response.request().method() === 'POST',
+                (response) => response.url().endsWith('/timed-guess') && response.request().method() === 'POST',
             ),
-            game.getByRole('button', { name: 'Guess & reveal' }).click(),
+            guessing.getByRole('button', { name: /Submit guess/ }).click(),
         ]);
         expect(guess.ok()).toBe(true);
         const result = await guess.json();
@@ -107,9 +126,9 @@ test('a public post can be guessed, liked, and commented on by someone outside t
             viewer,
             testInfo,
             '05-guess-result',
-            viewer.getByRole('dialog', { name: 'Place revealed' }),
+            viewer.getByRole('dialog', { name: 'Challenge results' }),
         );
-        await viewer.getByRole('button', { name: 'Back to the feed' }).click();
+        await viewer.getByRole('button', { name: 'Close' }).click();
         await expect(viewer.getByText('✓ Revealed')).toBeVisible();
         const revealed = viewer.getByAltText('Geo challenge photo');
         await expectPhotoDecoded(revealed);

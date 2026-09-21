@@ -3,6 +3,7 @@ import Map from '../map/Map';
 import Icon from '../ui/Icon';
 import FullScreenImage from '../ui/FullScreenImage';
 import { MAX_GUESS_SCORE, type GameState, type GamePosition } from './gameState';
+import '../../styles/game-results.css';
 
 // locationRevealClause renders the remaining hide duration for a hidden
 // challenge location from the API's location_reveals_at timestamp so the UI
@@ -47,6 +48,8 @@ interface GameViewProps {
     serverNowMs: number;
     /** Optional score-feedback overlay rendered above the active phase. */
     feedback: ReactNode | null;
+    /** Optional source-specific social content rendered below the results map. */
+    resultsFooter?: ReactNode;
     currentUserId?: string;
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
@@ -229,11 +232,13 @@ function GameResultsView({
     state,
     currentUserId,
     serverNowMs,
+    resultsFooter,
     onClose,
 }: {
     state: GameState;
     currentUserId?: string;
     serverNowMs: number;
+    resultsFooter?: ReactNode;
     onClose: () => void;
 }) {
     if (!state.results) return null;
@@ -297,7 +302,7 @@ function GameResultsView({
                                         )}
                                     </div>
                                     <div className="score-card__value">
-                                        <b>{guess.score} pts</b>
+                                        <b>{guess.score.toLocaleString('en-US')} pts</b>
                                         {guess.elo_delta !== 0 && (
                                             <span
                                                 className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
@@ -313,28 +318,31 @@ function GameResultsView({
                             ))}
                         </div>
                     </div>
-                    <div className="result-map" aria-label="Challenge map">
-                        {state.results.location_hidden && (
-                            <div className="result-location-hidden" role="note">
-                                <strong>The poster hasn’t revealed this location yet</strong>
-                                <span>
-                                    Only your own guess is shown on the map. The exact spot and everyone else’s guesses
-                                    will appear here {revealClause}.
-                                </span>
-                            </div>
-                        )}
-                        <Map
-                            onLocationSelect={() => undefined}
-                            selectedLocation={null}
-                            actualLocation={
-                                state.results.actual_lat !== undefined &&
-                                state.results.actual_long !== undefined &&
-                                !state.results.location_hidden
-                                    ? { lat: state.results.actual_lat, long: state.results.actual_long }
-                                    : null
-                            }
-                            guesses={state.results.guesses}
-                        />
+                    <div className="result-map-column">
+                        <div className="result-map" aria-label="Challenge map">
+                            {state.results.location_hidden && (
+                                <div className="result-location-hidden" role="note">
+                                    <strong>The poster hasn’t revealed this location yet</strong>
+                                    <span>
+                                        Only your own guess is shown on the map. The exact spot and everyone else’s
+                                        guesses will appear here {revealClause}.
+                                    </span>
+                                </div>
+                            )}
+                            <Map
+                                onLocationSelect={() => undefined}
+                                selectedLocation={null}
+                                actualLocation={
+                                    state.results.actual_lat !== undefined &&
+                                    state.results.actual_long !== undefined &&
+                                    !state.results.location_hidden
+                                        ? { lat: state.results.actual_lat, long: state.results.actual_long }
+                                        : null
+                                }
+                                guesses={state.results.guesses}
+                            />
+                        </div>
+                        {resultsFooter && <div className="result-footer">{resultsFooter}</div>}
                     </div>
                 </div>
                 <button onClick={onClose} className="next-button btn btn-primary">
@@ -374,6 +382,7 @@ export default function GameView({
     scoreNotice,
     serverNowMs,
     feedback,
+    resultsFooter,
     currentUserId,
     onSelectLocation,
     onSubmitGuess,
@@ -413,6 +422,7 @@ export default function GameView({
                     state={state}
                     currentUserId={currentUserId}
                     serverNowMs={serverNowMs}
+                    resultsFooter={resultsFooter}
                     onClose={onClose}
                 />
             );
