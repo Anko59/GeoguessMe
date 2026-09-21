@@ -97,6 +97,7 @@ export function useTimedGame({
     const [loadingMedia, setLoadingMedia] = useState(false);
     const activeIdRef = useRef(challengeId);
     const mountedRef = useRef(true);
+    const operationControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         activeIdRef.current = challengeId;
@@ -104,6 +105,8 @@ export function useTimedGame({
     useEffect(
         () => () => {
             mountedRef.current = false;
+            operationControllerRef.current?.abort();
+            operationControllerRef.current = null;
         },
         [],
     );
@@ -309,10 +312,14 @@ export function useTimedGame({
         if (!state.selectedLocation || !state.photoId) return;
         const id = state.photoId;
         const guess = state.selectedLocation;
+        const controller = operationControllerRef.current;
+        if (!controller || !isCurrent(id, controller.signal)) return;
         dispatch({ type: 'guess-start' });
         try {
-            const response = await adapter.guess(id, guess, new AbortController().signal);
-            const resultsPromise = loadResults(id);
+            const response = await adapter.guess(id, guess, controller.signal);
+            if (!isCurrent(id, controller.signal)) return;
+            const resultsPromise = loadResults(id, true, controller.signal);
+            if (!isCurrent(id, controller.signal)) return;
             if (!response.duplicate && !response.timed_out)
                 dispatch({
                     type: 'show-feedback',
@@ -322,14 +329,16 @@ export function useTimedGame({
             onStatusChange?.(id, 'guessed');
             await resultsPromise;
         } catch (requestError: unknown) {
-            dispatch({
-                type: 'guess-failed',
-                message: getAPIErrorMessage(requestError, 'Your guess could not be submitted.'),
-            });
+            if (isCurrent(id, controller.signal))
+                dispatch({
+                    type: 'guess-failed',
+                    message: getAPIErrorMessage(requestError, 'Your guess could not be submitted.'),
+                });
         }
-    }, [adapter, loadResults, onStatusChange, state]);
+    }, [adapter, isCurrent, loadResults, onStatusChange, state]);
 
     const close = useCallback(() => {
+        operationControllerRef.current?.abort();
         dispatch({ type: 'close' });
         onClose();
     }, [onClose]);
@@ -350,10 +359,12 @@ export function useTimedGame({
     useEffect(() => {
         if (state.status === 'guessing' && state.guessDeadline !== undefined && guessRemaining <= 0) {
             const id = state.photoId;
+            const controller = operationControllerRef.current;
+            if (!id || !controller || !isCurrent(id, controller.signal)) return;
             dispatch({ type: 'guess-timeout' });
-            if (id) void adapter.timeout(id, new AbortController().signal).catch(() => undefined);
+            void adapter.timeout(id, controller.signal).catch(() => undefined);
         }
-    }, [adapter, guessRemaining, state.guessDeadline, state.photoId, state.status]);
+    }, [adapter, guessRemaining, isCurrent, state.guessDeadline, state.photoId, state.status]);
 
     useEffect(() => {
         if (!challengeId || (requiresCurrentUser && !currentUserId)) {
@@ -361,6 +372,8 @@ export function useTimedGame({
             return;
         }
         const controller = new AbortController();
+        operationControllerRef.current?.abort();
+        operationControllerRef.current = controller;
         if (openResultsDirectly || isOwner) {
             void loadResults(challengeId, true, controller.signal);
         } else if (checkResultsBeforeAccept) {
@@ -374,7 +387,10 @@ export function useTimedGame({
                 await acceptChallenge(challengeId, controller.signal);
             })();
         }
-        return () => controller.abort();
+        return () => {
+            controller.abort();
+            if (operationControllerRef.current === controller) operationControllerRef.current = null;
+        };
     }, [
         acceptChallenge,
         challengeId,

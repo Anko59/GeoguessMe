@@ -15,7 +15,7 @@ export const feedTimedGameAdapter: TimedGameAdapter = {
             // Results remain useful when an old feed media object has been
             // removed; the shared results view already handles no media.
         }
-        return { results: normalizeResults(id, results), media };
+        return { results: normalizeResults(id, results, media !== undefined), media };
     },
 
     async accept(id, signal) {
@@ -54,7 +54,7 @@ export const feedTimedGameAdapter: TimedGameAdapter = {
     },
 };
 
-function normalizeResults(id: string, data: PublicTimedResults): ChallengeResults {
+function normalizeResults(id: string, data: PublicTimedResults, mediaAvailable: boolean): ChallengeResults {
     return {
         photo_id: id,
         group_id: 'feed',
@@ -74,7 +74,7 @@ function normalizeResults(id: string, data: PublicTimedResults): ChallengeResult
             elo_delta: 0,
             created_at: guess.created_at,
         })),
-        media_available: true,
+        media_available: mediaAvailable,
         media_url: null,
         media_type: 'image/jpeg',
         server_time: data.server_time,

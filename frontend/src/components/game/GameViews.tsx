@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import Map from '../map/Map';
 import Icon from '../ui/Icon';
 import FullScreenImage from '../ui/FullScreenImage';
@@ -57,8 +57,51 @@ interface GameViewProps {
 }
 
 function GameOverlay({ children, label }: { children: ReactNode; label: string }) {
+    const dialogRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        dialogRef.current?.focus();
+    }, []);
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Escape') {
+            // Active timed games are intentionally not dismissible: closing
+            // here would leave the server-side viewing/guess window running.
+            event.preventDefault();
+            return;
+        }
+        if (event.key !== 'Tab' || !dialogRef.current) return;
+        const focusable = Array.from(
+            dialogRef.current.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+        );
+        if (focusable.length === 0) {
+            event.preventDefault();
+            dialogRef.current.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
     return (
-        <div className="game-overlay" role="dialog" aria-modal="true" aria-label={label}>
+        <div
+            ref={dialogRef}
+            className="game-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label={label}
+            tabIndex={-1}
+            onKeyDown={handleKeyDown}
+        >
             {children}
         </div>
     );

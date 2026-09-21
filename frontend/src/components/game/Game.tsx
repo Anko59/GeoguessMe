@@ -17,7 +17,7 @@ interface GameProps {
 export default function Game({ gameMessage, onChallengeStatusChange, onClose }: GameProps) {
     const { user } = useAuth();
     const timedGame = useTimedGame({
-        challengeId: gameMessage?.photo_id,
+        challengeId: gameMessage?.photo_id ?? undefined,
         currentUserId: user?.id,
         isOwner: gameMessage?.user_id === user?.id,
         adapter: groupTimedGameAdapter(),

@@ -53,6 +53,7 @@ describe('feed timed-game adapter', () => {
 
         expect(loaded.results.photo_id).toBe('feed-1');
         expect(loaded.results.actual_lat).toBe(48.8);
+        expect(loaded.results.media_available).toBe(true);
         expect(loaded.results.guesses[0]).toMatchObject({
             user_id: 'user-1',
             username: 'Alice',
@@ -114,6 +115,7 @@ describe('feed timed-game adapter', () => {
         const loaded = await feedTimedGameAdapter.loadResults('feed-2', signal);
 
         expect(loaded.results.actual_lat).toBe(1);
+        expect(loaded.results.media_available).toBe(false);
         expect(loaded.media).toBeUndefined();
     });
 });

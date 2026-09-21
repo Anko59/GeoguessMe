@@ -450,12 +450,6 @@ describe('Public feed', () => {
             } else {
                 fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
             }
-            const submit = within(dialog).getByRole('button', {
-                name: operation === 'publish' ? 'Take photo' : 'Guess & reveal',
-            });
-            if (operation === 'guess') {
-                fireEvent.click(submit);
-            }
             expect(mocks[operation]).toHaveBeenCalledTimes(1);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
             fireEvent(dialog, new Event('cancel', { cancelable: true }));
