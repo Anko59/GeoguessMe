@@ -321,9 +321,14 @@ func TestDefaultPoliciesMatchMandatedLimits(t *testing.T) {
 	require.False(t, push.FailClosed)
 
 	def := policies["default"]
-	require.Equal(t, 10, bucketLimit(def, BucketIdentity))
-	require.Equal(t, 60, bucketLimit(def, BucketTrustedIP))
+	require.Equal(t, 120, bucketLimit(def, BucketRoute))
+	require.Equal(t, 1200, bucketLimit(def, BucketTrustedIP))
 	require.False(t, def.FailClosed)
+
+	write := policies["write"]
+	require.Equal(t, 60, bucketLimit(write, BucketRoute))
+	require.Equal(t, 600, bucketLimit(write, BucketTrustedIP))
+	require.False(t, write.FailClosed)
 }
 
 func TestPolicyMiddlewareBodyIdentityAndUserBuckets(t *testing.T) {
@@ -405,6 +410,31 @@ func TestPolicyMiddlewareRouteBucketUsesMatchedPattern(t *testing.T) {
 	require.Equal(t, http.StatusOK, do("/one"))
 	require.Equal(t, http.StatusTooManyRequests, do("/one"))
 	require.Equal(t, http.StatusOK, do("/two"), "distinct route patterns need independent buckets")
+}
+
+func TestPolicyMiddlewareRouteBucketIsolatedByAuthenticatedUser(t *testing.T) {
+	ResetRateLimiter()
+	defer ResetRateLimiter()
+
+	p := Policy{Name: "user-routes", Buckets: []BucketSpec{{Type: BucketRoute, Limit: 1, Window: time.Minute}}}
+	handler := PolicyMiddleware(p, PolicyOptions{
+		User: func(r *http.Request) string { return r.Header.Get("X-Test-User") },
+	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	do := func(user string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/feed", nil)
+		req.RemoteAddr = "192.0.2.10:1234"
+		req.Header.Set("X-Test-User", user)
+		req.Pattern = "GET /api/v1/feed"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	require.Equal(t, http.StatusOK, do("user-a"))
+	require.Equal(t, http.StatusTooManyRequests, do("user-a"), "one user's route quota must still apply")
+	require.Equal(t, http.StatusOK, do("user-b"), "one user's traffic must not starve another user's route quota")
 }
 
 func TestExtractIdentityExported(t *testing.T) {

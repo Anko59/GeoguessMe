@@ -187,6 +187,33 @@ func TestRateLimitReturnsContentTypeJSON(t *testing.T) {
 	require.Contains(t, ct, "application/json", "429 response must have JSON Content-Type, got %q", ct)
 }
 
+// TestProtectedReadAndUnrelatedWriteDoNotStarveComment pins the actor- and
+// route-aware protected policies. Profile reads and reactions for one user
+// must not consume the comment route's write quota, while the trusted-IP
+// bucket continues to provide aggregate abuse protection.
+func TestProtectedReadAndUnrelatedWriteDoNotStarveComment(t *testing.T) {
+	resetRateLimiter(t)
+	t.Cleanup(func() { resetRateLimiter(t) })
+
+	owner := signup(t, uniqueU("rl-feed-owner"), uniqueU("rl-feed-owner")+"@example.test", "StrongPassword123")
+	publicID := uploadPublicPhoto(t, owner.access)
+	path := "/api/v1/feed/challenges/" + publicID
+
+	// This exceeds the old shared identity budget (10/min), but stays well
+	// below the read route budget. A comment must remain available afterward.
+	for i := range 20 {
+		resp, _ := doJSON(t, http.MethodGet, "/api/v1/auth/profile", nil, owner.access, nil)
+		require.Equalf(t, http.StatusOK, resp.StatusCode, "profile read %d must not be rate-limited", i+1)
+	}
+	for i := range 20 {
+		resp, _ := doJSON(t, http.MethodPut, path+"/reaction", nil, owner.access, nil)
+		require.Equalf(t, http.StatusNoContent, resp.StatusCode, "reaction write %d must not be rate-limited", i+1)
+	}
+
+	resp, data := doJSON(t, http.MethodPost, path+"/comments", map[string]string{"content": "Still available"}, owner.access, nil)
+	require.Equalf(t, http.StatusCreated, resp.StatusCode, "comment must retain its route quota: %s", data)
+}
+
 // TestLoginGlobalCapHoldsUnderConcurrency proves the login global bucket
 // (300/min, the mandated limit configured in the test stack) is exact under a
 // concurrent burst: 400 distinct identities produce exactly 300 admitted and
