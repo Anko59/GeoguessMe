@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import type { GroupChallenge, GroupChallengesPage } from '../../types';
 
@@ -49,10 +49,11 @@ export function useGroupChallenges(groupID: string) {
         return () => controller.abort();
     }, [groupID, revision]);
     const current = state.groupID === groupID && state.revision === revision;
+    const refresh = useCallback(() => setRevision((value) => value + 1), []);
     return {
         items: current ? state.items : [],
         loading: !current || state.loading,
         error: current ? state.error : '',
-        refresh: () => setRevision((value) => value + 1),
+        refresh,
     };
 }

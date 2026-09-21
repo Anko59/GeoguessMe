@@ -46,7 +46,9 @@ export function createGlobeScene(
         const controls = new OrbitControls(camera, renderer.domElement);
         cleanup.push(() => controls.dispose());
         controls.enablePan = false;
-        controls.minDistance = 1.6;
+        // Keep a safe margin around the textured sphere while allowing a
+        // useful close view of a pin on a phone-sized viewport.
+        controls.minDistance = 1.15;
         controls.maxDistance = 6;
         controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
         controls.zoomToCursor = true;

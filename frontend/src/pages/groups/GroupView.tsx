@@ -115,6 +115,7 @@ export default function GroupView() {
 
     const inboxError = inboxState.id === id ? inboxState.error : '';
     const error = groupError || messagesError || inboxError;
+    const challengeRevision = [...messages].reverse().find((message) => message.kind === 'challenge')?.id ?? '';
 
     if (!id) return <div>Invalid Group ID</div>;
     if (groupError) {
@@ -240,6 +241,7 @@ export default function GroupView() {
                     key={id}
                     groupID={id}
                     groupName={group.name}
+                    challengeRevision={challengeRevision}
                     onClose={() => setGlobeGroupID(null)}
                     onChallenge={(message) => {
                         setGlobeGroupID(null);

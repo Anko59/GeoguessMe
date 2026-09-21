@@ -190,7 +190,7 @@ describe('Earth scene', () => {
         globe.zoom(100);
         expect(camera.position.length()).toBeCloseTo(6);
         globe.zoom(0.001);
-        expect(camera.position.length()).toBeCloseTo(1.6);
+        expect(camera.position.length()).toBeCloseTo(1.15);
         globe.rotate(0.25, 0.25);
         expect(camera.position.z).not.toBeCloseTo(0);
         const renders = mocks.render.mock.calls.length;

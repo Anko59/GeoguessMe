@@ -31,11 +31,14 @@ ready → accepted → viewing window → guessable → expired → removed
 ## Group globe
 
 The globe icon in the group chat header opens a 3D Earth for that group. Drag to
-rotate, pinch or scroll to zoom, or use the labelled rotation and zoom buttons.
-Select a pin or a challenge in the list to play it or view its results. The list
-includes the group's full challenge history, even after media removal; it loads
-independently of the currently visible chat messages. Reopen the globe or select
-**Refresh** to fetch new challenges and newly revealed locations.
+rotate and use the labelled rotation and zoom buttons (or the familiar touch
+gestures) to explore. On phones, swipe the bottom sheet up or down to browse
+challenges; its grabber also provides a keyboard-accessible toggle. Select a pin
+or a challenge in the list to play it or view its results. The list includes the
+group's full challenge history, even after media removal; it loads independently
+of the currently visible chat messages and refreshes when a new challenge
+arrives. Use the icon-only **Refresh geochallenges** control to fetch newly
+revealed locations on demand.
 
 Search the full history by player, or filter the list to challenges ready to
 play or locations already revealed. The list shows 50 challenges per page to

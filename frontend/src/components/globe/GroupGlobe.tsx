@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { GroupChallenge, Message } from '../../types';
 import Icon from '../ui/Icon';
 import Globe from './Globe';
@@ -10,16 +10,28 @@ import './GroupGlobe.css';
 interface GroupGlobeProps {
     groupID: string;
     groupName: string;
+    /** Changes when a realtime challenge is published for this group. */
+    challengeRevision?: string;
     onClose: () => void;
     onChallenge: (message: Message) => void;
 }
 
-export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }: GroupGlobeProps) {
+export default function GroupGlobe({
+    groupID,
+    groupName,
+    challengeRevision = '',
+    onClose,
+    onChallenge,
+}: GroupGlobeProps) {
     const dialog = useRef<HTMLDialogElement>(null);
     const selection = useRef<HTMLDivElement>(null);
     const { items, loading, error, refresh } = useGroupChallenges(groupID);
     const [selectedID, setSelectedID] = useState<string | null>(null);
     const [listOpen, setListOpen] = useState(false);
+    const dragStartY = useRef<number | null>(null);
+    const dragPointerID = useRef<number | null>(null);
+    const suppressGrabberClick = useRef(false);
+    const previousChallengeRevision = useRef(challengeRevision);
     const selected = items.find((item) => item.photo_id === selectedID);
     const located = items.filter((item) => item.lat !== undefined && item.long !== undefined).length;
     const selectFromGlobe = (id: string) => {
@@ -27,6 +39,69 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
         setListOpen(true);
     };
     const toggleList = () => setListOpen((open) => !open);
+    useEffect(() => {
+        if (previousChallengeRevision.current === challengeRevision) return;
+        previousChallengeRevision.current = challengeRevision;
+        // A challenge can be published by another member while this dialog is
+        // open. The chat socket is the invalidation signal; fetch the
+        // authoritative globe history instead of relying on a stale snapshot.
+        refresh();
+    }, [challengeRevision, refresh]);
+    const isSheetGestureTarget = (target: EventTarget | null) => {
+        if (!(target instanceof Element)) return false;
+        if (target.closest('.globe-history-body, .globe-refresh')) return false;
+        // The non-scrolling sheet chrome is a safe gesture surface. Keep the
+        // scrollable body out of this path so browsing challenges never moves
+        // the sheet instead.
+        return Boolean(target.closest('.globe-history'));
+    };
+    const onHistoryPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+        if (!isSheetGestureTarget(event.target)) return;
+        dragStartY.current = event.clientY;
+        dragPointerID.current = event.pointerId;
+        suppressGrabberClick.current = false;
+        try {
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Synthetic pointer events and browsers without pointer capture can
+            // still complete a swipe from the events delivered to the sheet.
+        }
+    };
+    const onHistoryPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragStartY.current === null || dragPointerID.current !== event.pointerId) return;
+        if (Math.abs(event.clientY - dragStartY.current) > 12) suppressGrabberClick.current = true;
+    };
+    const onHistoryPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragStartY.current === null || dragPointerID.current !== event.pointerId) return;
+        const delta = event.clientY - dragStartY.current;
+        dragStartY.current = null;
+        dragPointerID.current = null;
+        try {
+            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }
+        } catch {
+            // Pointer capture is an enhancement; releasing it is not required
+            // for the sheet state transition.
+        }
+        if (Math.abs(delta) > 36) {
+            suppressGrabberClick.current = true;
+            setListOpen(delta < 0);
+        }
+    };
+    const onHistoryPointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
+        if (dragPointerID.current !== event.pointerId) return;
+        dragStartY.current = null;
+        dragPointerID.current = null;
+        suppressGrabberClick.current = false;
+    };
+    const onGrabberClick = () => {
+        if (suppressGrabberClick.current) {
+            suppressGrabberClick.current = false;
+            return;
+        }
+        toggleList();
+    };
     useEffect(() => {
         if (selected) {
             selection.current?.focus({ preventScroll: true });
@@ -99,33 +174,53 @@ export default function GroupGlobe({ groupID, groupName, onClose, onChallenge }:
             </header>
             <div className="globe-layout">
                 <Globe items={items} selectedID={selectedID} onSelect={selectFromGlobe} />
-                <section className={`globe-history${listOpen ? ' is-open' : ''}`} aria-label="Group challenges">
+                <section
+                    className={`globe-history${listOpen ? ' is-open' : ''}`}
+                    aria-label="Group challenges"
+                    aria-describedby="globe-sheet-hint"
+                    onPointerDown={onHistoryPointerDown}
+                    onPointerMove={onHistoryPointerMove}
+                    onPointerUp={onHistoryPointerUp}
+                    onPointerCancel={onHistoryPointerCancel}
+                >
+                    <button
+                        type="button"
+                        className="globe-sheet-grabber"
+                        aria-label={listOpen ? 'Collapse geochallenge list' : 'Expand geochallenge list'}
+                        aria-expanded={listOpen}
+                        aria-controls="globe-history-body"
+                        onClick={onGrabberClick}
+                    >
+                        <span className="globe-sheet-grabber-line" aria-hidden="true" />
+                        <span className="visually-hidden">
+                            {listOpen ? 'Swipe down to collapse' : 'Swipe up to expand'}
+                        </span>
+                    </button>
                     <div className="globe-history-heading">
                         <h3>Geochallenges</h3>
                         <div className="globe-history-actions">
                             <button
                                 type="button"
-                                className="globe-sheet-toggle"
-                                aria-expanded={listOpen}
-                                aria-controls="globe-history-body"
-                                onClick={toggleList}
+                                className="globe-refresh"
+                                aria-label="Refresh geochallenges"
+                                title="Refresh geochallenges"
+                                onClick={refresh}
+                                disabled={loading}
                             >
-                                {listOpen ? 'Hide list' : 'Show list'}
-                            </button>
-                            <button type="button" onClick={refresh} disabled={loading}>
-                                Refresh
+                                <Icon name="refresh" />
                             </button>
                         </div>
                     </div>
+                    <p id="globe-sheet-hint" className="visually-hidden">
+                        Swipe the handle or heading up and down to {listOpen ? 'collapse' : 'expand'} the challenge
+                        list. Scroll the challenge list itself to browse.
+                    </p>
                     <div id="globe-history-body" className="globe-history-body">
                         <p className="globe-summary">
                             {items.length} {items.length === 1 ? 'challenge' : 'challenges'} · {located} on the globe
                         </p>
-                        <p className="globe-hint">
-                            Drag to explore, pinch or scroll to zoom. Select a pin or a challenge below.
-                        </p>
                         {items.length > located && (
-                            <p className="globe-hint">
+                            <p className="globe-note">
                                 Hidden locations stay off the globe until you're allowed to see them.
                             </p>
                         )}
