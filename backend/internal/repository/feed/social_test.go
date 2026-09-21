@@ -35,10 +35,10 @@ func TestCommentsPagePreservesTiesAndModeratorPermissions(t *testing.T) {
 	now := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
 	first := "00000000-0000-0000-0000-000000000003"
 	second := "00000000-0000-0000-0000-000000000002"
-	columns := []string{"id", "user", "name", "content", "at", "can_delete"}
+	columns := []string{"id", "user", "name", "avatar", "content", "at", "can_delete"}
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT c.id,c.user_id").WithArgs("viewer", "post", 2).
-		WillReturnRows(pgxmock.NewRows(columns).AddRow(first, "author", "Explorer", "One", now, true).AddRow(second, "author", "Explorer", "Two", now, false))
+		WillReturnRows(pgxmock.NewRows(columns).AddRow(first, "author", "Explorer", "avatar.png", "One", now, true).AddRow(second, "author", "Explorer", "avatar.png", "Two", now, false))
 	page, err := r.Comments(t.Context(), "post", "viewer", Cursor{}, 1)
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != first || !page.Items[0].CanDelete {
 		t.Fatalf("first page: %+v, %v", page, err)
@@ -49,7 +49,7 @@ func TestCommentsPagePreservesTiesAndModeratorPermissions(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT c.id,c.user_id.*AND .*ORDER BY").WithArgs("viewer", "post", 2, now, first).
-		WillReturnRows(pgxmock.NewRows(columns).AddRow(second, "author", "Explorer", "Two", now, false))
+		WillReturnRows(pgxmock.NewRows(columns).AddRow(second, "author", "Explorer", "avatar.png", "Two", now, false))
 	page, err = r.Comments(t.Context(), "post", "viewer", cursor, 1)
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != second || page.Items[0].CanDelete || page.NextCursor != "" {
 		t.Fatalf("last page: %+v, %v", page, err)

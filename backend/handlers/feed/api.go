@@ -33,6 +33,7 @@ func NewAPI(repo *feed.Repository, store storage.ObjectStore, deletions handlers
 func (a *API) Routes(mux *http.ServeMux, protect func(http.HandlerFunc) http.Handler) {
 	mux.Handle("/api/v1/feed", protect(a.List))
 	mux.Handle("/api/v1/feed/leaderboard", protect(a.Leaderboard))
+	mux.Handle("/api/v1/feed/leaderboard/{profileID}", protect(a.ProfileLeaderboard))
 	mux.Handle("/api/v1/feed/challenges", protect(a.Upload))
 	mux.Handle("/api/v1/feed/challenges/{id}", protect(a.Post))
 	mux.Handle("/api/v1/feed/challenges/{id}/media", protect(a.Media))
@@ -48,12 +49,31 @@ func writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, feed.ErrNotFound):
 		handlers.WriteError(w, 404, "not_found", "Public challenge or comment not found")
+	case errors.Is(err, feed.ErrProfileNotFound):
+		handlers.WriteError(w, 404, "not_found", "Player not found")
 	case errors.Is(err, feed.ErrForbidden):
 		handlers.WriteError(w, 403, "forbidden", "You are not allowed to perform this feed action")
 	default:
 		slog.Error("public feed request failed", "error", err)
 		handlers.WriteError(w, 500, "internal_error", "Unable to complete this feed request")
 	}
+}
+
+func leaderboardPagination(w http.ResponseWriter, r *http.Request) (feed.LeaderboardCursor, int, bool) {
+	cursor, err := feed.ParseLeaderboardCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		handlers.WriteError(w, 400, "invalid_cursor", "Invalid leaderboard cursor")
+		return cursor, 0, false
+	}
+	limit := 20
+	if value := r.URL.Query().Get("limit"); value != "" {
+		limit, err = strconv.Atoi(value)
+		if err != nil || limit < 1 || limit > 50 {
+			handlers.WriteError(w, 400, "invalid_limit", "Limit must be between 1 and 50")
+			return cursor, 0, false
+		}
+	}
+	return cursor, limit, true
 }
 
 func validID(w http.ResponseWriter, r *http.Request) bool {
@@ -104,20 +124,38 @@ func (a *API) Leaderboard(w http.ResponseWriter, r *http.Request) {
 		handlers.MethodNotAllowed(w)
 		return
 	}
-	cursor, err := feed.ParseLeaderboardCursor(r.URL.Query().Get("cursor"))
-	if err != nil {
-		handlers.WriteError(w, 400, "invalid_cursor", "Invalid leaderboard cursor")
+	cursor, limit, ok := leaderboardPagination(w, r)
+	if !ok {
 		return
 	}
-	limit := 20
-	if value := r.URL.Query().Get("limit"); value != "" {
-		limit, err = strconv.Atoi(value)
-		if err != nil || limit < 1 || limit > 50 {
-			handlers.WriteError(w, 400, "invalid_limit", "Limit must be between 1 and 50")
-			return
-		}
-	}
 	page, err := a.repo.Leaderboard(r.Context(), cursor, limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	handlers.WriteJSON(w, 200, page)
+}
+
+// ProfileLeaderboard returns the players who best guessed the requested
+// profile owner's visible feed challenges. It keeps profile visibility aligned
+// with GET /user/profile/{userID} while leaving the legacy global leaderboard
+// available for compatibility.
+func (a *API) ProfileLeaderboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.MethodNotAllowed(w)
+		return
+	}
+	profileID := strings.TrimSpace(r.PathValue("profileID"))
+	if _, err := uuid.Parse(profileID); err != nil {
+		handlers.WriteError(w, 400, "invalid_id", "A valid profile ID is required")
+		return
+	}
+	cursor, limit, ok := leaderboardPagination(w, r)
+	if !ok {
+		return
+	}
+	page, err := a.repo.ProfileLeaderboard(r.Context(), profileID, handlers.GetUserIDFromContext(r), cursor, limit)
 	if err != nil {
 		writeError(w, err)
 		return

@@ -5,11 +5,13 @@ discover photo challenges from the whole community. Posts appear newest first,
 with a stable cursor for loading older posts. Each post has a shareable
 `/feed/{id}` link. Signing in is required to follow that link.
 
-The profile page also shows a bounded community feed leaderboard. It ranks
-players by the sum of their immutable public-feed guess scores and exposes only
-rank, username, and total score. Opening a username still uses the existing
-profile visibility rule: full profile details require a shared group unless the
-viewer is looking at their own profile.
+The profile page also shows a bounded feed leaderboard for the profile owner. It
+ranks other players by the sum of their immutable guesses on that owner's public
+and viewer-visible friends challenges, never including the owner, and includes
+the same avatar marker used by other player lists. The legacy community
+leaderboard remains available for compatibility. Opening a username still uses
+the existing profile visibility rule: full profile details require a shared
+group unless the viewer is looking at their own profile.
 
 ## Publish and play
 

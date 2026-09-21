@@ -14,6 +14,8 @@ paths:
     $ref: ./openapi/paths/feed.yaml#/feed
   /feed/leaderboard:
     $ref: ./openapi/paths/feed.yaml#/leaderboard
+  /feed/leaderboard/{profileID}:
+    $ref: ./openapi/paths/feed.yaml#/profileLeaderboard
   /feed/challenges:
     $ref: ./openapi/paths/feed.yaml#/upload
   /feed/challenges/{id}:

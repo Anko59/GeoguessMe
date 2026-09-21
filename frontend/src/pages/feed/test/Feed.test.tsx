@@ -62,6 +62,7 @@ function post(overrides: Partial<PublicChallenge> = {}): PublicChallenge {
         id: 'post-1',
         user_id: 'author',
         username: 'Explorer',
+        avatar: 'avatar.png',
         caption: 'A little corner of the world',
         created_at: '2026-09-12T10:00:00Z',
         is_owner: false,

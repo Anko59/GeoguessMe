@@ -51,9 +51,29 @@ export interface paths {
         };
         /**
          * Rank the community by total public feed score
-         * @description Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules.
+         * @description Returns player usernames, avatar markers, and total feed score. Profile details remain protected by the existing shared-group visibility rules.
          */
         get: operations['getPublicFeedLeaderboard'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/leaderboard/{profileID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank players who guessed a profile owner's feed challenges
+         * @description Ranks players by their total score on the requested profile owner's public and viewer-visible friends feed challenges. The profile owner is never included. The requested profile follows the existing shared-group profile visibility rule.
+         */
+        get: operations['getProfileFeedLeaderboard'];
         put?: never;
         post?: never;
         delete?: never;
@@ -1143,6 +1163,7 @@ export interface components {
             /** Format: uuid */
             user_id: string;
             username: string;
+            avatar: string;
             caption: string;
             /**
              * @description Public is visible to all signed-in users. Friends is visible to shared-group members, optionally limited to selected groups.
@@ -1167,6 +1188,7 @@ export interface components {
             /** Format: uuid */
             user_id: string;
             username: string;
+            avatar: string;
             total_score: number;
         };
         PublicFeedLeaderboardPage: {
@@ -1201,6 +1223,7 @@ export interface components {
             /** Format: uuid */
             user_id: string;
             username: string;
+            avatar: string;
             content: string;
             /** Format: date-time */
             created_at: string;
@@ -1776,6 +1799,37 @@ export interface operations {
             };
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getProfileFeedLeaderboard: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                profileID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable cursor page ordered by total score, username, and user ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedLeaderboardPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
             429: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
         };

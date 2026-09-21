@@ -6,13 +6,8 @@
     "security": [{ "bearerAuth": [] }]
     "parameters":
       [
-        { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 256 } },
-        {
-          "name": "limit",
-          "in": "query",
-          "required": false,
-          "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
-        },
+        { "name": "cursor", "in": "query", "schema": { "type": "string", "maxLength": 256 } },
+        { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
       ]
     "responses":
       "200":
@@ -35,7 +30,7 @@
   "get":
     "operationId": "getPublicFeedLeaderboard"
     "summary": "Rank the community by total public feed score"
-    "description": "Returns usernames and total feed score only. Profile details remain protected by the existing shared-group visibility rules."
+    "description": "Returns player usernames, avatar markers, and total feed score. Profile details remain protected by the existing shared-group visibility rules."
     "tags": ["Feed"]
     "security": [{ "bearerAuth": [] }]
     "parameters":
@@ -58,6 +53,38 @@
       "400":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "429":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "500":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+"profileLeaderboard":
+  "get":
+    "operationId": "getProfileFeedLeaderboard"
+    "summary": "Rank players who guessed a profile owner's feed challenges"
+    "description": "Ranks players by their total score on the requested profile owner's public and viewer-visible friends feed challenges. The profile owner is never included. The requested profile follows the existing shared-group profile visibility rule."
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters":
+      [
+        { "name": "profileID", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+        { "name": "cursor", "in": "query", "schema": { "type": "string", "maxLength": 256 } },
+        { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
+      ]
+    "responses":
+      "200":
+        "description": "Stable cursor page ordered by total score, username, and user ID."
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "../components/schemas-feed.yaml#/PublicFeedLeaderboardPage"
+      "400":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "401":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "403":
+        "$ref": "../components/responses.yaml#/ErrorResponse"
+      "404":
         "$ref": "../components/responses.yaml#/ErrorResponse"
       "429":
         "$ref": "../components/responses.yaml#/ErrorResponse"
