@@ -33,6 +33,10 @@ interface CameraViewProps {
     uploading: boolean;
     /** True while an uploaded video is being processed asynchronously. */
     processingVideo: boolean;
+    allowFileFallback: boolean;
+    allowVideo: boolean;
+    showChallengeOptions: boolean;
+    captureSummary?: string;
     onStartCamera: () => void;
     onSetFileMode: () => void;
     onSwitchCamera: () => void;
@@ -79,6 +83,10 @@ export default function CameraView({
     textBanner,
     uploading,
     processingVideo,
+    allowFileFallback,
+    allowVideo,
+    showChallengeOptions,
+    captureSummary,
     onStartCamera,
     onSetFileMode,
     onSwitchCamera,
@@ -109,7 +117,7 @@ export default function CameraView({
         />
     );
     const textEditor = <TextBannerEditor banner={textBanner} onChange={onBannerChange} />;
-    const optionsButton = (
+    const optionsButton = showChallengeOptions ? (
         <button
             type="button"
             className={`options-toggle-btn${showOptions ? ' active' : ''}`}
@@ -122,7 +130,7 @@ export default function CameraView({
                 <img src="/ui/options-gear.png" alt="" className="options-toggle-icon" />
             </span>
         </button>
-    );
+    ) : null;
     const optionsMenu = (
         <CameraOptionsMenu
             groups={optionsGroups}
@@ -149,7 +157,7 @@ export default function CameraView({
                 error={error}
                 hasPhoto={Boolean(capturedPhoto || capturedVideo)}
                 onRetry={onStartCamera}
-                onUseFile={onSetFileMode}
+                onUseFile={allowFileFallback ? onSetFileMode : undefined}
             />
             {!capturedPhoto && !capturedVideo ? (
                 <div className="camera-view">
@@ -178,7 +186,9 @@ export default function CameraView({
                                 onPointerUp={onCaptureButtonPointerUp}
                                 onPointerCancel={onCaptureButtonPointerCancel}
                                 aria-label="Take photo"
-                                title={recording ? 'Recording video' : 'Hold to record video'}
+                                title={
+                                    recording ? 'Recording video' : allowVideo ? 'Hold to record video' : 'Take photo'
+                                }
                             >
                                 <div className="capture-inner"></div>
                             </button>
@@ -190,7 +200,7 @@ export default function CameraView({
                             <p>Loading camera...</p>
                         </div>
                     )}
-                    {fileMode && (
+                    {allowFileFallback && fileMode && (
                         <div className="camera-file-fallback">
                             <label className="btn btn-outline file-fallback-label" htmlFor="camera-file-input">
                                 Choose photo from device
@@ -230,8 +240,12 @@ export default function CameraView({
                             {optionsButton}
                         </div>
                         <span className="camera-options-summary">
-                            {selectedGroupIDs.length} group{selectedGroupIDs.length === 1 ? '' : 's'}
-                            {hideLocation ? ' · location hidden' : ''}
+                            {captureSummary ?? (
+                                <>
+                                    {selectedGroupIDs.length} group{selectedGroupIDs.length === 1 ? '' : 's'}
+                                    {hideLocation ? ' · location hidden' : ''}
+                                </>
+                            )}
                         </span>
                         {capturedPhoto && fileMode && filterPicker}
                         {showOptions && <div className="camera-options-popover">{optionsMenu}</div>}

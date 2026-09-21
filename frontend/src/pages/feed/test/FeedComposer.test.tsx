@@ -1,198 +1,109 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FeedComposer from '../FeedComposer';
 
-const mocks = vi.hoisted(() => ({ publish: vi.fn(), inbox: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+    publish: vi.fn(),
+    inbox: vi.fn(),
+    cameraProps: null as Record<string, unknown> | null,
+}));
 vi.mock('../../../api', () => ({
-    publicFeedAPI: mocks,
+    publicFeedAPI: { publish: mocks.publish },
     groupsAPI: { inbox: mocks.inbox },
     getAPIErrorMessage: (error: Error) => error.message,
 }));
-vi.mock('../../../components/map/Map', () => ({ default: () => null }));
-
-function bitmap(width = 800, height = 600) {
-    return { width, height, close: vi.fn() } as unknown as ImageBitmap;
-}
-
-function deferredBitmap() {
-    let resolve!: (value: ImageBitmap) => void;
-    let reject!: (reason: Error) => void;
-    const promise = new Promise<ImageBitmap>((done, fail) => {
-        resolve = done;
-        reject = fail;
-    });
-    return { promise, resolve, reject };
-}
-
-function renderComposer() {
-    const view = render(<FeedComposer onClose={vi.fn()} onPublished={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText('Latitude'), { target: { value: '48.8' } });
-    fireEvent.change(screen.getByLabelText('Longitude'), { target: { value: '2.3' } });
-    return {
-        ...view,
-        input: screen.getByLabelText('Challenge photo'),
-        submit: screen.getByRole('button', { name: 'Publish challenge' }),
-    };
-}
+vi.mock('../../../components/camera/Camera', () => ({
+    default: (props: Record<string, unknown>) => {
+        mocks.cameraProps = props;
+        return (
+            <button
+                type="button"
+                aria-label="Take photo"
+                onClick={() => {
+                    void (
+                        props.uploadCaptured as (
+                            blob: Blob,
+                            filename: string,
+                            position: GeolocationPosition,
+                        ) => Promise<unknown>
+                    )(new Blob(['camera'], { type: 'image/jpeg' }), 'capture.jpg', {
+                        coords: { latitude: 48.8566, longitude: 2.3522 },
+                    } as GeolocationPosition).then(() => (props.onUploadComplete as () => void)());
+                }}
+            >
+                Take photo
+            </button>
+        );
+    },
+}));
 
 beforeEach(() => {
     vi.resetAllMocks();
+    mocks.cameraProps = null;
     mocks.inbox.mockResolvedValue([]);
-    vi.stubGlobal(
-        'createImageBitmap',
-        vi.fn().mockImplementation(async () => bitmap()),
-    );
-    vi.spyOn(URL, 'createObjectURL');
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-        drawImage: vi.fn(),
-    } as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) {
-        this.open = true;
-    });
-    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
-        this.open = false;
-    });
 });
 
-afterEach(() => vi.unstubAllGlobals());
+function renderComposer() {
+    const onPublished = vi.fn();
+    const view = render(<FeedComposer onClose={vi.fn()} onPublished={onPublished} />);
+    return { ...view, onPublished };
+}
 
-describe('Public photo preview', () => {
-    it.each(['image/jpeg', 'image/png', 'image/webp'])(
-        'renders %s as bounded pixels without exposing a raw file URL',
-        async (type) => {
-            const image = bitmap();
-            vi.mocked(createImageBitmap).mockResolvedValue(image);
-            const { input, submit, container } = renderComposer();
-            const file = new File(['photo'], '<img src=x onerror=alert(1)>.jpg', { type });
-            await userEvent.upload(input, file);
-            const preview = await screen.findByRole('img', { name: 'Photo to publish' });
-            expect(preview.tagName).toBe('CANVAS');
-            expect(preview).toHaveAttribute('width', '320');
-            expect(preview).toHaveAttribute('height', '240');
-            expect(preview).not.toHaveAttribute('src');
-            expect(container.querySelector('img, object, iframe, embed')).toBeNull();
-            expect(createImageBitmap).toHaveBeenCalledWith(file);
-            expect(image.close).toHaveBeenCalledTimes(1);
-            expect(URL.createObjectURL).not.toHaveBeenCalled();
-            expect(submit).toBeEnabled();
-        },
-    );
-
-    it.each(['text/html', 'image/svg+xml', 'application/octet-stream', ''])(
-        'rejects unsupported content type %j even when the picker filter is bypassed',
-        async (type) => {
-            const { input, submit } = renderComposer();
-            const file = new File(['<svg onload="alert(1)"></svg>'], 'place.jpg', { type });
-            await userEvent.setup({ applyAccept: false }).upload(input, file);
-            expect(await screen.findByRole('alert')).toHaveTextContent('Choose a valid JPG, PNG, or WebP photo.');
-            expect(input).toHaveAttribute('aria-invalid', 'true');
-            expect(input).toHaveAccessibleDescription('Choose a valid JPG, PNG, or WebP photo.');
-            expect(submit).toBeDisabled();
-            expect(screen.queryByRole('img')).not.toBeInTheDocument();
-            expect(createImageBitmap).not.toHaveBeenCalled();
-            expect(URL.createObjectURL).not.toHaveBeenCalled();
-        },
-    );
-
-    it('blocks publishing during decoding and after invalid bytes, then recovers without losing input', async () => {
-        const decode = deferredBitmap();
-        vi.mocked(createImageBitmap).mockReturnValueOnce(decode.promise);
-        const { input, submit } = renderComposer();
-        fireEvent.change(screen.getByLabelText('Caption'), { target: { value: 'A mystery' } });
-        await userEvent.upload(input, new File(['<script>alert(1)</script>'], 'place.jpg', { type: 'image/jpeg' }));
-        expect(screen.getByRole('status')).toHaveTextContent('Preparing photo');
-        expect(submit).toBeDisabled();
-        fireEvent.submit(submit.closest('form')!);
-        expect(mocks.publish).not.toHaveBeenCalled();
-        await act(async () => decode.reject(new Error('Invalid image')));
-        expect(await screen.findByRole('alert')).toBeInTheDocument();
-        fireEvent.submit(submit.closest('form')!);
-        expect(mocks.publish).not.toHaveBeenCalled();
-        await userEvent.upload(input, new File(['photo'], 'valid.png', { type: 'image/png' }));
-        await screen.findByRole('img', { name: 'Photo to publish' });
-        expect(submit).toBeEnabled();
-        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        expect(screen.getByLabelText('Caption')).toHaveValue('A mystery');
-        expect(screen.getByLabelText('Latitude')).toHaveValue(48.8);
+describe('Public feed camera composer', () => {
+    it('uses the camera workflow and never exposes file, map, or coordinate inputs', async () => {
+        renderComposer();
+        await screen.findByRole('button', { name: 'Take photo' });
+        expect(screen.queryByLabelText('Challenge photo')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Latitude')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Longitude')).not.toBeInTheDocument();
+        expect(screen.queryByText(/enter a location manually/i)).not.toBeInTheDocument();
+        expect(mocks.cameraProps).toMatchObject({ variant: 'feed' });
     });
 
-    it('publishes the selected audience and optional group targets', async () => {
+    it('publishes caption, audience, groups, and the camera device location', async () => {
         mocks.inbox.mockResolvedValue([
             { id: 'group-1', name: 'Paris explorers', unread_count: 0, latest_message: null },
         ]);
         mocks.publish.mockResolvedValue({ id: 'post-1' });
-        const { input, submit } = renderComposer();
-        await userEvent.upload(input, new File(['photo'], 'place.jpg', { type: 'image/jpeg' }));
-        await screen.findByRole('img', { name: 'Photo to publish' });
+        const { onPublished } = renderComposer();
+        await userEvent.type(screen.getByLabelText('Caption'), 'A mystery from today');
         await userEvent.click(screen.getByLabelText('Friends in my groups'));
         await userEvent.click(await screen.findByLabelText('Paris explorers'));
-        await userEvent.click(submit);
+        await userEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+
         await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
         const form = mocks.publish.mock.calls[0][0] as FormData;
+        expect(form.get('caption')).toBe('A mystery from today');
         expect(form.get('audience')).toBe('friends');
         expect(form.getAll('group_id')).toEqual(['group-1']);
+        expect(form.get('lat')).toBe('48.8566');
+        expect(form.get('long')).toBe('2.3522');
+        expect(form.get('photo')).toBeInstanceOf(Blob);
+        expect(onPublished).toHaveBeenCalledWith('post-1');
     });
 
-    it.each(['success', 'failure'])(
-        'ignores a stale decoder %s after replacing the selected photo',
-        async (outcome) => {
-            const decode = deferredBitmap();
-            vi.mocked(createImageBitmap).mockReturnValueOnce(decode.promise);
-            const { input, submit } = renderComposer();
-            await userEvent.upload(input, new File(['first'], 'first.jpg', { type: 'image/jpeg' }));
-            await userEvent.upload(input, new File(['second'], 'second.jpg', { type: 'image/jpeg' }));
-            const preview = await screen.findByRole('img', { name: 'Photo to publish' });
-            const image = bitmap(100, 100);
-            await act(async () => {
-                if (outcome === 'success') decode.resolve(image);
-                else decode.reject(new Error('Stale failure'));
-            });
-            expect(preview).toHaveAttribute('width', '320');
-            expect(submit).toBeEnabled();
-            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-            if (outcome === 'success') expect(image.close).toHaveBeenCalledTimes(1);
-        },
-    );
+    it('clears selected groups when switching back to public audience', async () => {
+        mocks.inbox.mockResolvedValue([
+            { id: 'group-1', name: 'Paris explorers', unread_count: 0, latest_message: null },
+        ]);
+        mocks.publish.mockResolvedValue({ id: 'post-1' });
+        renderComposer();
+        await userEvent.click(screen.getByLabelText('Friends in my groups'));
+        await userEvent.click(await screen.findByLabelText('Paris explorers'));
+        await userEvent.click(screen.getByLabelText('Everyone on GeoGuessMe'));
+        await userEvent.click(screen.getByRole('button', { name: 'Take photo' }));
 
-    it('hides the previous preview while decoding a replacement and after clearing the selection', async () => {
-        const { input, submit } = renderComposer();
-        await userEvent.upload(input, new File(['first'], 'first.jpg', { type: 'image/jpeg' }));
-        await screen.findByRole('img', { name: 'Photo to publish' });
-        const decode = deferredBitmap();
-        vi.mocked(createImageBitmap).mockReturnValueOnce(decode.promise);
-        await userEvent.upload(input, new File(['second'], 'second.jpg', { type: 'image/jpeg' }));
-        expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(submit).toBeDisabled();
-        fireEvent.change(input, { target: { files: [] } });
-        const image = bitmap();
-        await act(async () => decode.resolve(image));
-        expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(screen.queryByRole('status')).not.toBeInTheDocument();
-        expect(submit).toBeDisabled();
-        expect(image.close).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.publish).toHaveBeenCalledTimes(1));
+        const form = mocks.publish.mock.calls[0][0] as FormData;
+        expect(form.get('audience')).toBe('public');
+        expect(form.getAll('group_id')).toEqual([]);
     });
 
-    it('closes a bitmap delivered after unmount without drawing it', async () => {
-        const decode = deferredBitmap();
-        vi.mocked(createImageBitmap).mockReturnValueOnce(decode.promise);
-        const { input, unmount } = renderComposer();
-        await userEvent.upload(input, new File(['photo'], 'place.jpg', { type: 'image/jpeg' }));
-        unmount();
-        const image = bitmap();
-        await act(async () => decode.resolve(image));
-        expect(image.close).toHaveBeenCalledTimes(1);
-        expect(HTMLCanvasElement.prototype.getContext).not.toHaveBeenCalled();
-    });
-
-    it('releases the bitmap when canvas rendering is unavailable', async () => {
-        const image = bitmap();
-        vi.mocked(createImageBitmap).mockResolvedValue(image);
-        vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
-        const { input, submit } = renderComposer();
-        await userEvent.upload(input, new File(['photo'], 'place.jpg', { type: 'image/jpeg' }));
-        await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-        expect(image.close).toHaveBeenCalledTimes(1);
-        expect(submit).toBeDisabled();
+    it('reports group loading failures instead of silently dropping the audience control dependency', async () => {
+        mocks.inbox.mockRejectedValue(new Error('Groups are temporarily unavailable'));
+        renderComposer();
+        await userEvent.click(screen.getByLabelText('Friends in my groups'));
+        expect(await screen.findByText('Groups are temporarily unavailable')).toBeInTheDocument();
     });
 });

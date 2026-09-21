@@ -67,7 +67,7 @@ function FeedPage({ id }: { id?: string }) {
                             <h2>
                                 {id ? 'This challenge has been removed' : 'The world is waiting for your first post'}
                             </h2>
-                            <p>Share a photo, pin its location, and let the community find it.</p>
+                            <p>Take a photo now and let your device add the location.</p>
                             <button className="btn btn-secondary" onClick={() => setComposing(true)}>
                                 Post a geo challenge
                             </button>
@@ -90,6 +90,16 @@ function FeedPage({ id }: { id?: string }) {
                             Explore more challenges →
                         </Link>
                     )}
+                    <section className="feed-capture-cta" aria-label="Post a challenge">
+                        <img src="/camera_icon.png" alt="" aria-hidden="true" />
+                        <div>
+                            <strong>Have a place to share?</strong>
+                            <span>Take a photo and let your device add the location.</span>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setComposing(true)}>
+                            Open camera
+                        </button>
+                    </section>
                 </div>
                 <aside className="feed-sidebar">
                     <img src="/globe_icon.png" alt="" />
@@ -101,7 +111,7 @@ function FeedPage({ id }: { id?: string }) {
                             <span>Every blurred photo is a place to discover.</span>
                         </li>
                         <li>
-                            <strong>Put a pin in it</strong>
+                            <strong>Guess the place</strong>
                             <span>Open the photo and make one guess. Any guess reveals it.</span>
                         </li>
                         <li>

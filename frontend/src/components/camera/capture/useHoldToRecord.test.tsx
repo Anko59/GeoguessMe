@@ -2,8 +2,18 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useHoldToRecord } from './useHoldToRecord';
 
-function Shutter({ onHold, onStop, onTap }: { onHold: () => Promise<void>; onStop: () => void; onTap: () => void }) {
-    const gesture = useHoldToRecord({ onHold: () => onHold(), onStop, onTap });
+function Shutter({
+    onHold,
+    onStop,
+    onTap,
+    enableHold,
+}: {
+    onHold: () => Promise<void>;
+    onStop: () => void;
+    onTap: () => void;
+    enableHold?: boolean;
+}) {
+    const gesture = useHoldToRecord({ onHold: () => onHold(), onStop, onTap, enableHold });
     return (
         <button
             onClick={gesture.onClick}
@@ -51,5 +61,23 @@ describe('useHoldToRecord', () => {
         expect(onHold).toHaveBeenCalledOnce();
         expect(onStop).toHaveBeenCalledOnce();
         expect(onTap).not.toHaveBeenCalled();
+    });
+
+    it('keeps a camera-only shutter as a photo tap when video is disabled', async () => {
+        vi.useFakeTimers();
+        const onHold = vi.fn(async () => undefined);
+        const onStop = vi.fn();
+        const onTap = vi.fn();
+        render(<Shutter onHold={onHold} onStop={onStop} onTap={onTap} enableHold={false} />);
+
+        const shutter = screen.getByRole('button', { name: 'Shutter' });
+        fireEvent.pointerDown(shutter);
+        await act(async () => vi.advanceTimersByTime(500));
+        fireEvent.pointerUp(shutter);
+        fireEvent.click(shutter);
+
+        expect(onHold).not.toHaveBeenCalled();
+        expect(onStop).not.toHaveBeenCalled();
+        expect(onTap).toHaveBeenCalledOnce();
     });
 });

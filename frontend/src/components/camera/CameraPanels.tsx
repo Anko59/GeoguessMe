@@ -139,7 +139,7 @@ export function CameraErrorPanel({
     error: string;
     hasPhoto: boolean;
     onRetry: () => void;
-    onUseFile: () => void;
+    onUseFile?: () => void;
 }) {
     if (!error) return null;
     return (
@@ -150,9 +150,11 @@ export function CameraErrorPanel({
                     <button className="btn btn-primary" onClick={onRetry}>
                         Try Again
                     </button>
-                    <button className="btn btn-outline file-fallback-btn" onClick={onUseFile}>
-                        Upload from device
-                    </button>
+                    {onUseFile && (
+                        <button className="btn btn-outline file-fallback-btn" onClick={onUseFile}>
+                            Upload from device
+                        </button>
+                    )}
                 </>
             )}
         </div>

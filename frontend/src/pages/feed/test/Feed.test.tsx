@@ -33,6 +33,29 @@ vi.mock('../../../components/map/Map', () => ({
         </button>
     ),
 }));
+vi.mock('../../../components/camera/Camera', () => ({
+    default: (props: Record<string, unknown>) => (
+        <button
+            type="button"
+            aria-label="Take photo"
+            onClick={() => {
+                void (
+                    props.uploadCaptured as (
+                        blob: Blob,
+                        filename: string,
+                        position: GeolocationPosition,
+                    ) => Promise<unknown>
+                )(new Blob(['camera'], { type: 'image/jpeg' }), 'capture.jpg', {
+                    coords: { latitude: 48.8566, longitude: 2.3522 },
+                } as GeolocationPosition)
+                    .then(() => (props.onUploadComplete as () => void)())
+                    .catch(() => undefined);
+            }}
+        >
+            Take photo
+        </button>
+    ),
+}));
 
 function post(overrides: Partial<PublicChallenge> = {}): PublicChallenge {
     return {
@@ -280,7 +303,7 @@ describe('Public feed', () => {
         expect(mocks.list).toHaveBeenLastCalledWith('next', expect.any(AbortSignal));
     });
 
-    it('publishes a photo and explicit location without any group destination', async () => {
+    it('publishes a camera photo with the device location without any group destination', async () => {
         mocks.list.mockResolvedValue({ items: [], next_cursor: '' });
         mocks.publish.mockResolvedValue({ id: 'created' });
         mocks.get.mockResolvedValue(post({ id: 'created', is_owner: true }));
@@ -288,22 +311,14 @@ describe('Public feed', () => {
         await screen.findByText('The world is waiting for your first post');
         fireEvent.click(screen.getByRole('button', { name: '+ Post a challenge' }));
         const dialog = screen.getByRole('dialog');
-        const file = new File(['photo'], 'place.jpg', { type: 'image/jpeg' });
-        await userEvent.upload(within(dialog).getByLabelText('Challenge photo'), file);
         fireEvent.change(within(dialog).getByLabelText('Caption'), { target: { value: 'A new mystery' } });
-        fireEvent.change(within(dialog).getByLabelText('Latitude'), { target: { value: '48.8' } });
-        expect(within(dialog).getByRole('button', { name: 'Publish challenge' })).toBeDisabled();
-        fireEvent.change(within(dialog).getByLabelText('Longitude'), { target: { value: '2.3' } });
-        expect(within(dialog).getByRole('button', { name: 'Publish challenge' })).toBeEnabled();
-        fireEvent.change(within(dialog).getByLabelText('Longitude'), { target: { value: '181' } });
-        expect(within(dialog).getByRole('button', { name: 'Publish challenge' })).toBeDisabled();
-        fireEvent.change(within(dialog).getByLabelText('Longitude'), { target: { value: '2.3' } });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Publish challenge' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
         expect(await screen.findByText('Your challenge')).toBeInTheDocument();
         const form = mocks.publish.mock.calls[0][0] as FormData;
-        expect(form.get('photo')).toBe(file);
+        expect(form.get('photo')).toBeInstanceOf(Blob);
         expect(form.get('caption')).toBe('A new mystery');
-        expect(form.get('lat')).toBe('48.8');
+        expect(form.get('lat')).toBe('48.8566');
+        expect(form.get('long')).toBe('2.3522');
         expect(form.has('group_ids')).toBe(false);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
@@ -335,24 +350,24 @@ describe('Public feed', () => {
             );
             const dialog = screen.getByRole('dialog');
             if (operation === 'publish') {
-                await userEvent.upload(
-                    within(dialog).getByLabelText('Challenge photo'),
-                    new File(['photo'], 'place.jpg', { type: 'image/jpeg' }),
-                );
+                fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
+            } else {
+                fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
             }
-            fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
             const submit = within(dialog).getByRole('button', {
-                name: operation === 'publish' ? 'Publish challenge' : 'Guess & reveal',
+                name: operation === 'publish' ? 'Take photo' : 'Guess & reveal',
             });
-            fireEvent.click(submit);
-            fireEvent.click(submit);
+            if (operation === 'guess') {
+                fireEvent.click(submit);
+            }
             expect(mocks[operation]).toHaveBeenCalledTimes(1);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
             fireEvent(dialog, new Event('cancel', { cancelable: true }));
             expect(dialog).toBeInTheDocument();
             await act(async () => fail(new Error('Save failed')));
             expect(await within(dialog).findByRole('alert')).toHaveTextContent('Save failed');
-            expect(within(dialog).getByLabelText('Latitude')).toHaveValue(48.8);
+            if (operation === 'publish') expect(within(dialog).queryByLabelText('Latitude')).not.toBeInTheDocument();
+            else expect(within(dialog).getByLabelText('Latitude')).toHaveValue(48.8);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeEnabled();
             fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

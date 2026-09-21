@@ -17,7 +17,24 @@ import { captureFeedback } from '../../platform/haptics';
 
 const FLASH_DURATION_MS = 300;
 
-export default function Camera({ groupID, onUploadComplete }: { groupID: string; onUploadComplete: () => void }) {
+export interface CameraProps {
+    /** Group challenge destination. Omit when using the feed destination. */
+    groupID?: string;
+    onUploadComplete: () => void;
+    /** Override the group upload with a destination such as the public feed. */
+    uploadCaptured?: (
+        blob: Blob,
+        filename: string,
+        position: GeolocationPosition,
+    ) => Promise<MediaProcessingJob | null>;
+    /** Feed capture is camera-only and does not expose group-only controls. */
+    variant?: 'group' | 'feed';
+}
+
+export default function Camera({ groupID = '', onUploadComplete, uploadCaptured, variant = 'group' }: CameraProps) {
+    const feedMode = variant === 'feed';
+    const allowFileFallback = !feedMode;
+    const allowVideo = !feedMode;
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
@@ -37,7 +54,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
         toggleGroup,
         toggleHideLocation,
         closeOptions,
-    } = useChallengeOptions(groupID);
+    } = useChallengeOptions(feedMode ? '' : groupID);
     const captureCanvasRef = useRef<HTMLCanvasElement>(null);
     const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +108,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
             [initializeVideoEffects, selectedFilterRef],
         ),
         setError,
+        allowFileFallback,
     });
     const { videoRef, streamRef, cameraReady, startCamera, stopCamera, facingMode, hasMultipleCameras, switchCamera } =
         session;
@@ -226,9 +244,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     };
 
     const captureGesture = useHoldToRecord({
-        onHold: startHeldVideo,
+        onHold: allowVideo ? startHeldVideo : async () => undefined,
         onStop: stopRecording,
         onTap: capturePhoto,
+        enableHold: allowVideo,
     });
     // While recording, tapping the capture button stops the clip instead of taking a photo.
     const captureButtonClick = recording ? stopRecording : captureGesture.onClick;
@@ -236,6 +255,7 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
     const { requestLocation, handleUpload } = useChallengeUpload({
         groupIDs: targetGroupIDs,
         hideLocation,
+        uploadCaptured,
         fileMode,
         capturedPhoto,
         textBanner,
@@ -322,6 +342,10 @@ export default function Camera({ groupID, onUploadComplete }: { groupID: string;
                 textBanner={textBanner}
                 uploading={uploading}
                 processingVideo={processingJobID !== null}
+                allowFileFallback={allowFileFallback}
+                allowVideo={allowVideo}
+                showChallengeOptions={!feedMode}
+                captureSummary={feedMode ? 'Device location will be attached automatically' : undefined}
                 onStartCamera={() => void startCamera()}
                 onSetFileMode={() => setFileMode(true)}
                 onSwitchCamera={switchCamera}

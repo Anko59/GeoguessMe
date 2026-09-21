@@ -13,21 +13,23 @@ viewer is looking at their own profile.
 
 ## Publish and play
 
-Choose **Post a challenge**, upload a JPG, PNG, or WebP photo, add an optional
-description of up to 280 characters, choose **Everyone** or **Friends in my
-groups**, and select the photo's location on the map or enter its coordinates.
-Friends posts are visible to users sharing a group with the author. The author
-can optionally narrow a friends post to selected groups; the author must belong
-to every selected group. Public posts remain visible to every signed-in user.
-Publication is explicit: private group challenges never appear in the feed
-automatically. Public uploads use the configured image byte and pixel limits and
-strip metadata during normalization. Videos continue to use the private group
-challenge flow.
+Choose **Post a challenge**, take a photo with the camera, add an optional
+description of up to 280 characters, and choose **Everyone** or **Friends in my
+groups**. The browser attaches the device's current location when the photo is
+sent. Feed capture does not accept an old photo, a manually pinned map point, or
+hand-entered coordinates. Friends posts are visible to users sharing a group
+with the author. The author can optionally narrow a friends post to selected
+groups; the author must belong to every selected group. Public posts remain
+visible to every signed-in user. Publication is explicit: private group
+challenges never appear in the feed automatically. Public uploads use the
+configured image byte and pixel limits and strip metadata during normalization.
+Videos continue to use the private group challenge flow.
 
-The composer accepts only JPG, PNG, and WebP files and renders decoded pixels on
-a bounded canvas, without exposing a URL for the raw upload. Publishing stays
-disabled until the preview succeeds; unsupported or unreadable files show an
-accessible error. Server-side validation and normalization remain authoritative.
+The feed camera reuses the private group capture workflow for its live preview,
+shutter, processing, and resource cleanup. Camera and location permission errors
+remain recoverable, while the feed composer intentionally has no file picker or
+manual location controls. Server-side validation and normalization remain
+authoritative.
 
 An unresolved viewer receives a small, reduced-detail preview from the server.
 Removing the visual blur cannot recover the original pixels. Choosing **Play
@@ -67,18 +69,18 @@ group members; public posting does not widen those profile permissions.
 
 ## Interaction and accessibility
 
-The feed uses the app's existing colors, buttons, artwork, and map. A compact
-header brings the first photo into view sooner, and **Play public challenges**
-gives new players a route from an empty group list. **Play challenge** opens the
-photo; **Guess & reveal** commits the one attempt. The score and distance lead
-back to the same post for reactions and conversation.
+The feed uses the app's existing colors, buttons, artwork, and camera. A compact
+header brings the first photo into view sooner, and the camera action at the
+bottom of the feed keeps posting discoverable on mobile. **Play public
+challenges** gives new players a route from an empty group list. **Play
+challenge** opens the photo; **Guess & reveal** commits the one attempt. The
+score and distance lead back to the same post for reactions and conversation.
 
 Dialogs retain keyboard focus and restore it on close. Publication and guesses
 keep their dialog open during saving to prevent an accidental dismissal from
-hiding the outcome. Failed saves preserve entered data. Both location pickers
-have labeled coordinate fields for keyboard use. Photos load near the viewport
-and release their blob URLs on departure; feed and comment pages use bounded
-cursor requests with indexable seek predicates.
+hiding the outcome. Failed saves preserve entered data. Photos load near the
+viewport and release their blob URLs on departure; feed and comment pages use
+bounded cursor requests with indexable seek predicates.
 
 Feed mutations use the existing authenticated rate limit. Reading the feed,
 photos, results, or comments does not consume that write allowance, so browsing
@@ -119,8 +121,11 @@ route, validation, visibility, immutable guesses, storage cleanup timeouts,
 errors, and pagination. The integration fixture in
 `backend/integration_test/flow_test.go` exercises real publication, viewer
 isolation, independent concurrent guesses, duplicate attempts, reactions,
-comment authorization, and migration cascade cleanup. The browser journey is in
-`frontend/e2e/feed/public-feed.spec.ts`.
+comment authorization, and migration cascade cleanup. The deterministic browser
+journey is in `frontend/e2e/feed/public-feed.spec.ts`. Run it in both the
+Chromium desktop and Pixel 5 mobile projects; it asserts that no file picker or
+manual coordinate controls are present and that the multipart publication
+carries the deterministic device coordinates.
 
 The Playwright journey captures the empty feed, composer, audience controls,
 authored post, blurred challenge, guess dialog, result, revealed challenge, and

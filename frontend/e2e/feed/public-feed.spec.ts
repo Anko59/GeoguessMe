@@ -1,23 +1,43 @@
 import { test, expect } from '../support/fixtures';
-import { newAuthContext, signupViaUI, signupWithToken } from '../support/helpers';
 import {
-    captureAudienceControls,
-    captureFeedState,
-    expectPhotoDecoded,
-    installMapTiles,
-    landscapePhoto,
-} from './visual-support';
+    installDeterministicCamera,
+    installDeterministicGeolocation,
+    newAuthContext,
+    signupViaUI,
+    signupWithToken,
+} from '../support/helpers';
+import { cameraOptions } from '../support/challengeScenario';
+import { captureAudienceControls, captureFeedState, expectPhotoDecoded, installMapTiles } from './visual-support';
 
 test('a public post can be guessed, liked, and commented on by someone outside the author’s groups', async ({
     browser,
     contextOptions,
 }, testInfo) => {
-    const ownerContext = await newAuthContext(browser, contextOptions);
+    const ownerContext = await newAuthContext(browser, cameraOptions(contextOptions));
     const viewerContext = await newAuthContext(browser, contextOptions);
     let publishedID: string | undefined;
     let ownerToken = '';
     try {
-        await Promise.all([installMapTiles(ownerContext), installMapTiles(viewerContext)]);
+        await Promise.all([
+            installMapTiles(ownerContext),
+            installMapTiles(viewerContext),
+            installDeterministicCamera(ownerContext),
+            installDeterministicGeolocation(ownerContext),
+        ]);
+        await ownerContext.addInitScript(() => {
+            const append = FormData.prototype.append;
+            FormData.prototype.append = function (name, value, filename) {
+                if (name === 'lat' || name === 'long') {
+                    const windowWithCapture = window as Window & {
+                        __feedLocationFields?: Record<string, string>;
+                    };
+                    windowWithCapture.__feedLocationFields ??= {};
+                    windowWithCapture.__feedLocationFields[name] = String(value);
+                }
+                if (filename === undefined) return append.call(this, name, value);
+                return append.call(this, name, value, filename);
+            };
+        });
         const ownerSignup = await signupWithToken(ownerContext);
         const owner = ownerSignup.page;
         ownerToken = ownerSignup.token;
@@ -26,19 +46,15 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await owner.goto('/feed');
         await expect(owner.getByText('The world is waiting for your first post')).toBeVisible();
         await captureFeedState(owner, testInfo, '00-empty-feed');
-        const photo = await landscapePhoto(owner);
         await owner.getByRole('button', { name: '+ Post a challenge' }).click();
         const composer = owner.getByRole('dialog', { name: 'Post a geo challenge' });
-        await composer.getByLabel('Challenge photo').setInputFiles({
-            name: 'place.png',
-            mimeType: 'image/png',
-            buffer: photo,
-        });
-        await expect(composer.getByRole('img', { name: 'Photo to publish' })).toBeVisible();
-        await expect(composer.getByRole('radio', { name: 'Everyone on GeoGuessMe' })).toBeChecked();
         await composer.getByLabel('Caption').fill('A place worth discovering');
-        await composer.getByLabel('Latitude').fill('48.8');
-        await composer.getByLabel('Longitude').fill('2.3');
+        await expect(composer.locator('input[type="file"]')).toHaveCount(0);
+        await expect(composer.getByLabel('Latitude')).toHaveCount(0);
+        await expect(composer.getByRole('button', { name: 'Take photo' })).toBeVisible();
+        await composer.getByRole('button', { name: 'Take photo' }).click();
+        await expect(composer.locator('.preview-image')).toBeVisible();
+        await expect(composer.getByRole('radio', { name: 'Everyone on GeoGuessMe' })).toBeChecked();
         await captureFeedState(owner, testInfo, '01-composer', composer);
         await captureAudienceControls(owner, testInfo, composer);
         const [publication] = await Promise.all([
@@ -46,10 +62,20 @@ test('a public post can be guessed, liked, and commented on by someone outside t
                 (response) =>
                     response.url().endsWith('/api/v1/feed/challenges') && response.request().method() === 'POST',
             ),
-            composer.getByRole('button', { name: 'Publish challenge' }).click(),
+            composer.getByRole('button', { name: 'Send' }).click(),
         ]);
         expect(publication.ok()).toBe(true);
         publishedID = (await publication.json()).id;
+        await expect
+            .poll(() =>
+                owner.evaluate(() => {
+                    const windowWithCapture = window as Window & {
+                        __feedLocationFields?: Record<string, string>;
+                    };
+                    return windowWithCapture.__feedLocationFields ?? {};
+                }),
+            )
+            .toEqual({ lat: '48.8566', long: '2.3522' });
         await expect(owner).toHaveURL(/\/feed\/[a-f0-9-]{36}$/);
         await expect(owner.getByText('Your challenge')).toBeVisible();
         await expectPhotoDecoded(owner.getByAltText('Geo challenge photo'));
