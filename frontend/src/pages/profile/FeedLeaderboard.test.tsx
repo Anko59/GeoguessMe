@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FeedLeaderboard from './FeedLeaderboard';
 
 const mocks = vi.hoisted(() => ({ profileLeaderboard: vi.fn() }));
@@ -17,9 +17,21 @@ const renderLeaderboard = () =>
         </MemoryRouter>,
     );
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((nextResolve) => {
+        resolve = nextResolve;
+    });
+    return { promise, resolve };
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.profileLeaderboard.mockReset();
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
 });
 
 describe('FeedLeaderboard', () => {
@@ -74,5 +86,45 @@ describe('FeedLeaderboard', () => {
         await waitFor(() => expect(screen.getByText('No scores yet')).toBeInTheDocument());
         expect(mocks.profileLeaderboard).toHaveBeenCalledTimes(2);
         expect(mocks.profileLeaderboard).toHaveBeenLastCalledWith('profile-1', '', expect.any(AbortSignal));
+    });
+
+    it('ignores an initial response that resolves after unmount', async () => {
+        const request = deferred<{ items: []; next_cursor: string }>();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mocks.profileLeaderboard.mockReturnValueOnce(request.promise);
+
+        const view = renderLeaderboard();
+        const signal = mocks.profileLeaderboard.mock.calls[0][2] as AbortSignal;
+        view.unmount();
+        expect(signal.aborted).toBe(true);
+
+        await act(async () => {
+            request.resolve({ items: [], next_cursor: '' });
+        });
+
+        expect(error).not.toHaveBeenCalled();
+    });
+
+    it('ignores a load-more response that resolves after unmount', async () => {
+        const request = deferred<{ items: []; next_cursor: string }>();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mocks.profileLeaderboard
+            .mockResolvedValueOnce({
+                items: [{ rank: 1, user_id: 'user-1', username: 'alice', avatar: 'avatar.png', total_score: 5000 }],
+                next_cursor: 'next-page',
+            })
+            .mockReturnValueOnce(request.promise);
+
+        const view = renderLeaderboard();
+        fireEvent.click(await screen.findByRole('button', { name: 'More players' }));
+        const signal = mocks.profileLeaderboard.mock.calls[1][2] as AbortSignal;
+        view.unmount();
+        expect(signal.aborted).toBe(true);
+
+        await act(async () => {
+            request.resolve({ items: [], next_cursor: '' });
+        });
+
+        expect(error).not.toHaveBeenCalled();
     });
 });

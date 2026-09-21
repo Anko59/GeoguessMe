@@ -37,6 +37,7 @@ export default function FeedLeaderboard({
     profileUsername: string;
 }) {
     const [state, setState] = useState<LeaderboardState>({ items: [], nextCursor: '', error: '', loading: true });
+    const mounted = useRef(false);
     const initialLoadController = useRef<AbortController | null>(null);
     const loadMoreController = useRef<AbortController | null>(null);
 
@@ -47,11 +48,11 @@ export default function FeedLeaderboard({
         setState((current) => ({ ...current, loading: true, error: '' }));
         try {
             const page = await publicFeedAPI.profileLeaderboard(profileID, '', controller.signal);
-            if (!controller.signal.aborted) {
+            if (mounted.current && !controller.signal.aborted && initialLoadController.current === controller) {
                 setState({ items: page.items, nextCursor: page.next_cursor, error: '', loading: false });
             }
         } catch (reason: unknown) {
-            if (!controller.signal.aborted) {
+            if (mounted.current && !controller.signal.aborted && initialLoadController.current === controller) {
                 setState({
                     items: [],
                     nextCursor: '',
@@ -67,8 +68,10 @@ export default function FeedLeaderboard({
     }, [profileID]);
 
     useEffect(() => {
+        mounted.current = true;
         void loadInitial();
         return () => {
+            mounted.current = false;
             initialLoadController.current?.abort();
             loadMoreController.current?.abort();
         };
@@ -82,14 +85,16 @@ export default function FeedLeaderboard({
         setState((current) => ({ ...current, loading: true, error: '' }));
         try {
             const page = await publicFeedAPI.profileLeaderboard(profileID, state.nextCursor, controller.signal);
-            setState((current) => ({
-                items: appendUniqueEntries(current.items, page.items),
-                nextCursor: page.next_cursor,
-                error: '',
-                loading: false,
-            }));
+            if (mounted.current && !controller.signal.aborted && loadMoreController.current === controller) {
+                setState((current) => ({
+                    items: appendUniqueEntries(current.items, page.items),
+                    nextCursor: page.next_cursor,
+                    error: '',
+                    loading: false,
+                }));
+            }
         } catch (reason: unknown) {
-            if (!controller.signal.aborted) {
+            if (mounted.current && !controller.signal.aborted && loadMoreController.current === controller) {
                 setState((current) => ({
                     ...current,
                     error: getAPIErrorMessage(reason, 'Unable to load more rankings.'),
