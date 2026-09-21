@@ -18,58 +18,6 @@ export async function installMapTiles(context: BrowserContext): Promise<void> {
     );
 }
 
-// Generate a detailed, reproducible scene rather than a single-color pixel.
-// This exercises image sizing and makes the before/after blur visible without
-// depending on a remote photo service or committing generated test media.
-export async function landscapePhoto(page: Page): Promise<Buffer> {
-    const data = await page.evaluate(() => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 800;
-        canvas.height = 600;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Canvas unavailable for test photo');
-        const sky = context.createLinearGradient(0, 0, 0, 600);
-        sky.addColorStop(0, '#87c8e4');
-        sky.addColorStop(1, '#edf4ed');
-        context.fillStyle = sky;
-        context.fillRect(0, 0, 800, 600);
-        context.fillStyle = '#fff4c5';
-        context.beginPath();
-        context.arc(650, 110, 50, 0, Math.PI * 2);
-        context.fill();
-        context.fillStyle = '#416a63';
-        context.beginPath();
-        context.moveTo(0, 360);
-        context.lineTo(160, 160);
-        context.lineTo(340, 330);
-        context.lineTo(520, 190);
-        context.lineTo(800, 350);
-        context.lineTo(800, 600);
-        context.lineTo(0, 600);
-        context.fill();
-        context.fillStyle = '#387e9b';
-        context.fillRect(0, 440, 800, 160);
-        for (let house = 0; house < 5; house += 1) {
-            const x = 80 + house * 135;
-            context.fillStyle = house % 2 ? '#edc797' : '#e9e3d7';
-            context.fillRect(x, 315, 90, 140);
-            context.fillStyle = '#a45846';
-            context.beginPath();
-            context.moveTo(x - 10, 315);
-            context.lineTo(x + 45, 265);
-            context.lineTo(x + 100, 315);
-            context.fill();
-            context.fillStyle = '#284b5b';
-            for (let row = 0; row < 2; row += 1) {
-                context.fillRect(x + 15, 340 + row * 45, 20, 25);
-                context.fillRect(x + 55, 340 + row * 45, 20, 25);
-            }
-        }
-        return canvas.toDataURL('image/png').split(',')[1];
-    });
-    return Buffer.from(data, 'base64');
-}
-
 export async function expectPhotoDecoded(photo: Locator): Promise<void> {
     await expect(photo).toBeVisible();
     await expect

@@ -7,12 +7,7 @@ import {
     signupWithToken,
 } from '../support/helpers';
 import { cameraOptions } from '../support/challengeScenario';
-import {
-    captureAudienceControls,
-    captureFeedState,
-    expectPhotoDecoded,
-    installMapTiles,
-} from './visual-support';
+import { captureAudienceControls, captureFeedState, expectPhotoDecoded, installMapTiles } from './visual-support';
 
 test('a public post can be guessed, liked, and commented on by someone outside the author’s groups', async ({
     browser,
