@@ -109,6 +109,7 @@ type fakeStore struct {
 	deleted   []string
 	puts      []string
 	putErr    error
+	onDelete  func()
 }
 
 func (s *fakeStore) Get(context.Context, string) (io.ReadCloser, error) {
@@ -121,6 +122,9 @@ func (s *fakeStore) Put(_ context.Context, key string, _ io.Reader, _ int64, _ s
 }
 func (s *fakeStore) Delete(_ context.Context, key string) error {
 	s.deleted = append(s.deleted, key)
+	if s.onDelete != nil {
+		s.onDelete()
+	}
 	return s.deleteErr
 }
 func (s *fakeStore) Stat(context.Context, string) (int64, error) { return 8, nil }

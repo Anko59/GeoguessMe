@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,6 +85,41 @@ func (r *Repository) ClaimDeletionJobs(ctx context.Context, limit int, backoff t
 func (r *Repository) CompleteDeletionJob(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = $1`, id)
 	return err
+}
+
+// DeleteObjectIfUnreferenced serializes durable object cleanup with publishers
+// that use the same storage-key advisory lock. The object-store call is made
+// while the transaction lock is held; this is intentional because a failed
+// delete rolls the job update back and a successful delete cannot race a
+// publication that is about to commit a reference to the same key.
+func (r *Repository) DeleteObjectIfUnreferenced(ctx context.Context, id, storageKey string, deleteObject func(context.Context, string) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, storageKey); err != nil {
+		return err
+	}
+	var referenced bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM public_challenges WHERE storage_key=$1
+		UNION ALL SELECT 1 FROM photos WHERE storage_key=$1 AND lifecycle_status <> 'removed'
+		UNION ALL SELECT 1 FROM group_photos WHERE storage_key=$1
+		UNION ALL SELECT 1 FROM chat_media WHERE storage_key=$1
+		UNION ALL SELECT 1 FROM media_processing_jobs WHERE (quarantine_key=$1 OR canonical_key=$1) AND status IN ('queued','processing')
+	)`, storageKey).Scan(&referenced); err != nil {
+		return err
+	}
+	if !referenced {
+		if err := deleteObject(ctx, storageKey); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE media_deletion_jobs SET completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("complete deletion job: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 // FailDeletionJob records the last error of a deletion job for observability.

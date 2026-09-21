@@ -235,7 +235,7 @@ export function useChallengeOptions(currentGroupID: string, feedMode = false) {
             if (!open) {
                 void api
                     .get<Group[]>('/user/groups')
-                    .then((response) => setAvailableGroups(response.data))
+                    .then((response) => setAvailableGroups(Array.isArray(response.data) ? response.data : []))
                     .catch(() => setAvailableGroups([]));
             }
             return !open;

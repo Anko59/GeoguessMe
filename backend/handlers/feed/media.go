@@ -3,6 +3,8 @@ package feed
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -96,8 +98,11 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := a.clock()
+	digest := sha256.Sum256(normalized.Data)
 	p := feedrepo.NewChallenge{ID: idempotencyKey, UserID: userID, Caption: caption, Audience: audience, GroupIDs: groupIDs,
-		StorageKey: "public-challenges/" + idempotencyKey, MIMEType: normalized.MIMEType, Preview: preview, Lat: lat, Long: long, CreatedAt: now}
+		StorageKey: "public-challenges/" + idempotencyKey, MIMEType: normalized.MIMEType, ContentDigest: hex.EncodeToString(digest[:]),
+		PublicationToken: uuid.NewString(), ByteSize: int64(len(normalized.Data)), HideLocation: hideLocation,
+		Preview: preview, Lat: lat, Long: long, CreatedAt: now}
 	photos := makeGroupPhotos(idempotencyKey, userID, groupIDs, normalized.MIMEType, int64(len(normalized.Data)), lat, long, hideLocation, now, a.cfg)
 	var reservation feedrepo.PublicationReservation
 	if a.publisher != nil {
@@ -119,15 +124,15 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 	storedKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if err := a.store.Put(r.Context(), key, bytes.NewReader(normalized.Data), int64(len(normalized.Data)), normalized.MIMEType); err != nil {
+			// A failed Put may have written an object before returning its
+			// error, so include the current key, but never enqueue objects that
+			// were not attempted yet.
+			a.compensateKeys(r.Context(), append(storedKeys, key))
 			if reservation != nil {
 				if rollbackErr := reservation.Rollback(r.Context()); rollbackErr != nil {
 					slog.Error("rollback public publication reservation", "error", rollbackErr)
 				}
 			}
-			// A failed Put may have written an object before returning its
-			// error, so include the current key, but never enqueue objects that
-			// were not attempted yet.
-			a.compensateKeys(r.Context(), append(storedKeys, key))
 			handlers.WriteError(w, 502, "storage_error", "Unable to store photo")
 			return
 		}
@@ -140,24 +145,53 @@ func (a *API) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if reservation != nil {
-			if rollbackErr := reservation.Rollback(r.Context()); rollbackErr != nil {
-				slog.Error("rollback public publication reservation", "error", rollbackErr)
+			resolution, resolveErr := reservation.Resolve(r.Context())
+			if resolveErr != nil {
+				// The commit outcome is unknown. Do not delete objects that may
+				// belong to a committed row; the durable cleanup worker will
+				// reconcile an orphan once the outcome is known.
+				slog.Error("resolve public publication commit outcome", "error", resolveErr)
+				_ = reservation.Rollback(r.Context())
+				writeError(w, err)
+				return
 			}
+			switch resolution {
+			case feedrepo.PublicationCommitted:
+				broadcastPublication(r.Context(), a, p, photos, now)
+				writeChallengeResponse(w, http.StatusCreated, p.ID, groupIDs)
+				return
+			case feedrepo.PublicationAlreadyCommitted:
+				writeChallengeResponse(w, http.StatusOK, p.ID, reservation.GroupIDs())
+				return
+			case feedrepo.PublicationConflict:
+				writeError(w, feedrepo.ErrConflict)
+				return
+			case feedrepo.PublicationNotCommitted:
+				a.compensateKeys(r.Context(), keys)
+				if rollbackErr := reservation.Rollback(r.Context()); rollbackErr != nil {
+					slog.Error("rollback public publication reservation", "error", rollbackErr)
+				}
+			}
+		} else {
+			a.compensateKeys(r.Context(), keys)
 		}
-		a.compensateKeys(r.Context(), keys)
 		writeError(w, err)
 		return
 	}
+	broadcastPublication(r.Context(), a, p, photos, now)
+	writeChallengeResponse(w, http.StatusCreated, p.ID, groupIDs)
+}
+
+func broadcastPublication(ctx context.Context, a *API, challenge feedrepo.NewChallenge, photos []*models.Photo, now time.Time) {
 	for _, photo := range photos {
 		if a.hub != nil {
 			photoID := photo.ID
-			a.hub.Broadcast(models.Message{ID: uuid.NewString(), GroupID: photo.GroupID, UserID: userID, Kind: "challenge", PhotoID: &photoID, Content: "", CreatedAt: now})
+			a.hub.Broadcast(models.Message{ID: uuid.NewString(), GroupID: photo.GroupID, UserID: challenge.UserID, Kind: "challenge", PhotoID: &photoID, Content: "", CreatedAt: now})
 		}
 		if a.push != nil {
-			a.push.NotifyNewChallenge(r.Context(), photo.GroupID, userID, photo.ID)
+			a.push.NotifyNewChallenge(ctx, photo.GroupID, challenge.UserID, photo.ID)
 		}
 	}
-	writeChallengeResponse(w, http.StatusCreated, p.ID, groupIDs)
 }
 
 func makeGroupPhotos(challengeID, userID string, groupIDs []string, mimeType string, byteSize int64, lat, long float64, hideLocation bool, now time.Time, cfg *config.Config) []*models.Photo {

@@ -13,7 +13,7 @@ func TestCreateFriendsPostValidatesAndStoresSelectedGroupsAtomically(t *testing.
 	created := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	groupIDs := []string{"00000000-0000-0000-0000-000000000002"}
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO public_challenges").WithArgs("post", "author", "A place", "friends", "key", "image/png", []byte("preview"), 48.8, 2.3, created).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs("post", "author", "A place", "friends", "key", "image/png", []byte("preview"), 48.8, 2.3, false, int64(0), "", "", created).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM group_members").WithArgs("author", groupIDs).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
 	mock.ExpectExec("INSERT INTO public_challenge_groups").WithArgs("post", groupIDs).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
@@ -26,7 +26,7 @@ func TestCreateFriendsPostRejectsUnownedSelectedGroup(t *testing.T) {
 	r, mock := mockRepository(t)
 	groupIDs := []string{"00000000-0000-0000-0000-000000000002"}
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM group_members").WithArgs("author", groupIDs).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectRollback()
 	if err := r.Create(t.Context(), NewChallenge{ID: "post", UserID: "author", Audience: "friends", GroupIDs: groupIDs}); err == nil || !errors.Is(err, ErrForbidden) {

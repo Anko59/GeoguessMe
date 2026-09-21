@@ -114,7 +114,7 @@ func TestUploadCreatesOnlyExplicitPublicPhotoAndCompensatesFailures(t *testing.T
 			a.deletions = deletions
 			a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
 			if tc.storageErr == nil {
-				insert := mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), "viewer", "A place", "public", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8, 2.3, pgxmock.AnyArg())
+				insert := mock.ExpectExec("INSERT INTO public_challenges").WithArgs(pgxmock.AnyArg(), "viewer", "A place", "public", pgxmock.AnyArg(), "image/png", pgxmock.AnyArg(), 48.8, 2.3, false, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg())
 				if tc.databaseErr != nil {
 					insert.WillReturnError(tc.databaseErr)
 				} else {
@@ -143,6 +143,8 @@ type fakeChallengePublisher struct {
 	existing        bool
 	existingErr     error
 	createErr       error
+	resolveStatus   feedrepo.PublicationResolution
+	resolveErr      error
 	challenge       feedrepo.NewChallenge
 	photos          []*models.Photo
 	createCalls     int
@@ -151,10 +153,11 @@ type fakeChallengePublisher struct {
 }
 
 type fakePublicationReservation struct {
-	publisher  *fakeChallengePublisher
-	existing   bool
-	groupIDs   []string
-	rolledBack bool
+	publisher    *fakeChallengePublisher
+	existing     bool
+	groupIDs     []string
+	rolledBack   bool
+	resolveCalls int
 }
 
 func (p *fakeChallengePublisher) ReserveFeedChallenge(_ context.Context, challenge feedrepo.NewChallenge, _ []*models.Photo) (feedrepo.PublicationReservation, error) {
@@ -170,6 +173,11 @@ func (r *fakePublicationReservation) Existing() bool { return r.existing }
 
 func (r *fakePublicationReservation) GroupIDs() []string { return append([]string(nil), r.groupIDs...) }
 
+func (r *fakePublicationReservation) Resolve(context.Context) (feedrepo.PublicationResolution, error) {
+	r.resolveCalls++
+	return r.publisher.resolveStatus, r.publisher.resolveErr
+}
+
 func (r *fakePublicationReservation) Rollback(context.Context) error {
 	r.rolledBack = true
 	return nil
@@ -180,6 +188,44 @@ func (r *fakePublicationReservation) Create(_ context.Context, challenge feedrep
 	r.publisher.challenge = challenge
 	r.publisher.photos = photos
 	return r.publisher.createErr
+}
+
+type recordingBroadcaster struct{ count int }
+
+func (b *recordingBroadcaster) Broadcast(models.Message) { b.count++ }
+
+func TestUploadAmbiguousCommitReconcilesCanonicalWinnerWithoutCleanupOrDuplicateNotification(t *testing.T) {
+	a, _ := mockAPI(t)
+	store := &fakeStore{}
+	publisher := &fakeChallengePublisher{createErr: errors.New("commit outcome unknown"), resolveStatus: feedrepo.PublicationAlreadyCommitted}
+	hub := &recordingBroadcaster{}
+	a.store = store
+	a.publisher = publisher
+	a.hub = hub
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
+	if w.Code != http.StatusOK || len(store.deleted) != 0 || hub.count != 0 {
+		t.Fatalf("canonical winner status=%d deleted=%v broadcasts=%d", w.Code, store.deleted, hub.count)
+	}
+	if publisher.lastReservation == nil || publisher.lastReservation.resolveCalls != 1 {
+		t.Fatalf("resolve calls = %+v", publisher.lastReservation)
+	}
+}
+
+func TestUploadAmbiguousCommitOwnedByThisAttemptPublishesOnce(t *testing.T) {
+	a, _ := mockAPI(t)
+	publisher := &fakeChallengePublisher{createErr: errors.New("commit outcome unknown"), resolveStatus: feedrepo.PublicationCommitted}
+	hub := &recordingBroadcaster{}
+	a.store = &fakeStore{}
+	a.publisher = publisher
+	a.hub = hub
+	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	w := httptest.NewRecorder()
+	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
+	if w.Code != http.StatusCreated || hub.count != 1 {
+		t.Fatalf("owned commit status=%d broadcasts=%d", w.Code, hub.count)
+	}
 }
 
 func TestUploadPublishesEverySelectedDestinationThroughTheAtomicPublisher(t *testing.T) {
@@ -280,13 +326,18 @@ func TestUploadCompensatesAllAttemptedDestinationsAfterPartialStorageFailure(t *
 	}
 }
 
-func TestUploadRollsBackPublicationReservationBeforeCompensation(t *testing.T) {
+func TestUploadCompensatesBeforeReleasingPublicationReservation(t *testing.T) {
 	a, _ := mockAPI(t)
 	store := &failOnPutStore{failAt: 2}
 	publisher := &fakeChallengePublisher{}
 	a.store = store
 	a.publisher = publisher
 	a.cfg = &config.Config{UploadMaxBytes: 1024 * 1024, UploadMaxPixels: 1000}
+	store.onDelete = func() {
+		if publisher.lastReservation != nil && publisher.lastReservation.rolledBack {
+			t.Fatal("publication reservation released before storage compensation")
+		}
+	}
 	w := httptest.NewRecorder()
 	a.Upload(w, uploadWithAudience(t, "A place", "48.8", "public", []string{testID}))
 	if w.Code != http.StatusBadGateway {

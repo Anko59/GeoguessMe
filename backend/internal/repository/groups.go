@@ -12,6 +12,7 @@ import (
 	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/repository/party"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -66,25 +67,47 @@ func (r *Repository) ReserveFeedChallenge(ctx context.Context, challenge feedrep
 	if challenge.Audience == "" {
 		challenge.Audience = "public"
 	}
+	if challenge.PublicationToken == "" {
+		challenge.PublicationToken = uuid.NewString()
+	}
+	challenge.GroupIDs = sortedGroupIDs(challenge.GroupIDs)
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	reservationState := &feedPublicationReservation{tx: tx, groups: r.Groups}
+	lockKeys := []string{challenge.StorageKey}
+	for _, photo := range photos {
+		lockKeys = append(lockKeys, photo.StorageKey)
+	}
+	lockKeys = sortedGroupIDs(lockKeys)
+	reservationState := &feedPublicationReservation{
+		tx:        tx,
+		pool:      r.pool,
+		groups:    r.Groups,
+		challenge: challenge,
+		lockKeys:  lockKeys,
+	}
 	defer func() {
 		if err != nil {
 			_ = reservationState.Rollback(ctx)
 		}
 	}()
-	// Serialize retries for the same client key before checking/inserting the
-	// row and before either request writes canonical storage keys.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, challenge.ID); err != nil {
-		return nil, err
+	// Serialize retries for every canonical storage key before checking/inserting
+	// the row and before either request writes the object-store fan-out. The
+	// cleanup worker takes these same locks before deleting a queued object.
+	for _, lockKey := range lockKeys {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey); err != nil {
+			return nil, err
+		}
 	}
 
-	var owner, caption, audience string
+	var owner, caption, audience, mimeType, contentDigest, publicationToken string
 	var lat, long float64
-	err = tx.QueryRow(ctx, `SELECT user_id,caption,audience,lat,long FROM public_challenges WHERE id = $1 FOR KEY SHARE`, challenge.ID).Scan(&owner, &caption, &audience, &lat, &long)
+	var byteSize int64
+	var hideLocation bool
+	err = tx.QueryRow(ctx, `SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges WHERE id = $1 FOR KEY SHARE`, challenge.ID).Scan(
+		&owner, &caption, &audience, &lat, &long, &hideLocation, &mimeType, &byteSize, &contentDigest, &publicationToken,
+	)
 	if err == nil {
 		if owner != challenge.UserID {
 			return nil, feedrepo.ErrConflict
@@ -94,7 +117,16 @@ func (r *Repository) ReserveFeedChallenge(ctx context.Context, challenge feedrep
 			return nil, queryErr
 		}
 		requestedGroups := sortedGroupIDs(challenge.GroupIDs)
-		if caption != challenge.Caption || audience != challenge.Audience || lat != challenge.Lat || long != challenge.Long || !sameGroupIDs(storedGroups, requestedGroups) {
+		if !samePublicationMetadata(feedrepo.NewChallenge{
+			Caption:       caption,
+			Audience:      audience,
+			Lat:           lat,
+			Long:          long,
+			HideLocation:  hideLocation,
+			MIMEType:      mimeType,
+			ByteSize:      byteSize,
+			ContentDigest: contentDigest,
+		}, challenge) || !sameGroupIDs(storedGroups, requestedGroups) {
 			return nil, feedrepo.ErrConflict
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -108,20 +140,92 @@ func (r *Repository) ReserveFeedChallenge(ctx context.Context, challenge feedrep
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
-	challenge.GroupIDs = sortedGroupIDs(challenge.GroupIDs)
 	return reservationState, nil
 }
 
 type feedPublicationReservation struct {
-	tx       pgx.Tx
-	groups   *groups.Repository
-	existing bool
-	groupIDs []string
+	tx              pgx.Tx
+	pool            database.Pool
+	groups          *groups.Repository
+	challenge       feedrepo.NewChallenge
+	lockKeys        []string
+	existing        bool
+	created         bool
+	commitUncertain bool
+	groupIDs        []string
 }
 
 func (r *feedPublicationReservation) Existing() bool { return r.existing }
 
 func (r *feedPublicationReservation) GroupIDs() []string { return append([]string(nil), r.groupIDs...) }
+
+func (r *feedPublicationReservation) Resolve(ctx context.Context) (feedrepo.PublicationResolution, error) {
+	if r.existing {
+		return feedrepo.PublicationAlreadyCommitted, nil
+	}
+	if r.created {
+		return feedrepo.PublicationCommitted, nil
+	}
+	if !r.commitUncertain {
+		return feedrepo.PublicationNotCommitted, nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return feedrepo.PublicationNotCommitted, err
+	}
+	rollback := func() { _ = tx.Rollback(ctx) }
+	for _, lockKey := range r.lockKeys {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey); err != nil {
+			rollback()
+			return feedrepo.PublicationNotCommitted, err
+		}
+	}
+
+	stored, err := queryFeedPublication(ctx, tx, r.challenge.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		r.tx = tx
+		r.commitUncertain = false
+		return feedrepo.PublicationNotCommitted, nil
+	}
+	if err != nil {
+		rollback()
+		return feedrepo.PublicationNotCommitted, err
+	}
+	if stored.owner != r.challenge.UserID || !samePublicationMetadata(stored.challenge(), r.challenge) {
+		if err := tx.Commit(ctx); err != nil {
+			rollback()
+			return feedrepo.PublicationNotCommitted, err
+		}
+		r.commitUncertain = false
+		return feedrepo.PublicationConflict, nil
+	}
+	groups, err := feedChallengeGroups(ctx, tx, r.challenge.ID)
+	if err != nil {
+		rollback()
+		return feedrepo.PublicationNotCommitted, err
+	}
+	if !sameGroupIDs(groups, sortedGroupIDs(r.challenge.GroupIDs)) {
+		if err := tx.Commit(ctx); err != nil {
+			rollback()
+			return feedrepo.PublicationNotCommitted, err
+		}
+		r.commitUncertain = false
+		return feedrepo.PublicationConflict, nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		rollback()
+		return feedrepo.PublicationNotCommitted, err
+	}
+	r.commitUncertain = false
+	r.groupIDs = groups
+	if stored.publicationToken == r.challenge.PublicationToken {
+		r.created = true
+		return feedrepo.PublicationCommitted, nil
+	}
+	r.existing = true
+	return feedrepo.PublicationAlreadyCommitted, nil
+}
 
 func (r *feedPublicationReservation) Rollback(ctx context.Context) error {
 	if r.tx == nil {
@@ -142,9 +246,10 @@ func (r *feedPublicationReservation) Create(ctx context.Context, challenge feedr
 	}
 	challenge.GroupIDs = sortedGroupIDs(challenge.GroupIDs)
 	if _, err := r.tx.Exec(ctx, `INSERT INTO public_challenges
-		(id,user_id,caption,audience,storage_key,mime_type,preview,lat,long,created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, challenge.ID, challenge.UserID, challenge.Caption,
-		challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.CreatedAt); err != nil {
+		(id,user_id,caption,audience,storage_key,mime_type,preview,lat,long,hide_location,byte_size,content_digest,publication_token,created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, challenge.ID, challenge.UserID, challenge.Caption,
+		challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long,
+		challenge.HideLocation, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken, challenge.CreatedAt); err != nil {
 		return err
 	}
 
@@ -168,12 +273,48 @@ func (r *feedPublicationReservation) Create(ctx context.Context, challenge feedr
 	}
 	if err := r.tx.Commit(ctx); err != nil {
 		r.tx = nil
+		r.commitUncertain = true
 		return err
 	}
 	r.tx = nil
+	r.created = true
 	r.existing = false
 	r.groupIDs = sortedGroupIDs(challenge.GroupIDs)
 	return nil
+}
+
+type storedFeedPublication struct {
+	owner, caption, audience, mimeType, contentDigest, publicationToken string
+	lat, long                                                           float64
+	hideLocation                                                        bool
+	byteSize                                                            int64
+}
+
+func (p storedFeedPublication) challenge() feedrepo.NewChallenge {
+	return feedrepo.NewChallenge{
+		UserID:        p.owner,
+		Caption:       p.caption,
+		Audience:      p.audience,
+		Lat:           p.lat,
+		Long:          p.long,
+		HideLocation:  p.hideLocation,
+		MIMEType:      p.mimeType,
+		ByteSize:      p.byteSize,
+		ContentDigest: p.contentDigest,
+	}
+}
+
+func queryFeedPublication(ctx context.Context, tx pgx.Tx, id string) (storedFeedPublication, error) {
+	var stored storedFeedPublication
+	err := tx.QueryRow(ctx, `SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges WHERE id = $1 FOR KEY SHARE`, id).Scan(
+		&stored.owner, &stored.caption, &stored.audience, &stored.lat, &stored.long, &stored.hideLocation, &stored.mimeType, &stored.byteSize, &stored.contentDigest, &stored.publicationToken,
+	)
+	return stored, err
+}
+
+func samePublicationMetadata(left, right feedrepo.NewChallenge) bool {
+	return left.Caption == right.Caption && left.Audience == right.Audience && left.Lat == right.Lat && left.Long == right.Long &&
+		left.HideLocation == right.HideLocation && left.MIMEType == right.MIMEType && left.ByteSize == right.ByteSize && left.ContentDigest == right.ContentDigest
 }
 
 func feedChallengeGroups(ctx context.Context, tx pgx.Tx, challengeID string) ([]string, error) {
