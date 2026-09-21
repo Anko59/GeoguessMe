@@ -62,7 +62,11 @@ export async function captureFeedState(page: Page, testInfo: TestInfo, name: str
     ).toBe(true);
     if (dialog) {
         await expect(dialog).toBeVisible();
-        await expectMapFilled(dialog);
+        // Camera-backed dialogs do not render a Leaflet map; only assert tile
+        // coverage for dialogs that actually contain one.
+        if ((await dialog.locator('.leaflet-container').count()) > 0) {
+            await expectMapFilled(dialog);
+        }
         await dialog.evaluate((element) => {
             element.scrollTop = 0;
         });
