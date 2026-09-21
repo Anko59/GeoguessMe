@@ -268,6 +268,19 @@ func TestTimedFeedHandlersUseOwnerAndCoordinateContracts(t *testing.T) {
 	}
 }
 
+func TestTimedMediaStreamsPublicChallengeCanonicalObject(t *testing.T) {
+	a, mock := mockAPI(t)
+	a.store = &fakeStore{}
+	mock.ExpectQuery("SELECT p.storage_key,p.mime_type,p.preview").WithArgs("viewer", testID, pgxmock.AnyArg()).WillReturnRows(
+		pgxmock.NewRows([]string{"key", "mime", "preview"}).AddRow("public-challenges/feed-original", "image/png", []byte("preview")),
+	)
+	w := httptest.NewRecorder()
+	a.TimedMedia(w, request(http.MethodGet, ""))
+	if w.Code != http.StatusOK || w.Body.String() != "original" {
+		t.Fatalf("timed media response %d %q", w.Code, w.Body.String())
+	}
+}
+
 func TestCommentCreatedWithTrimmedContent(t *testing.T) {
 	a, mock := mockAPI(t)
 	mock.ExpectQuery("WITH inserted AS").WithArgs("viewer", pgxmock.AnyArg(), "Great place!", testID).WillReturnRows(pgxmock.NewRows([]string{"at", "name", "avatar"}).AddRow(time.Now(), "Explorer", "avatar.png"))
