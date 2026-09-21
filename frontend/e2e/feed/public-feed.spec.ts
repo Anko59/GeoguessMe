@@ -104,12 +104,15 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await viewer.getByRole('button', { name: 'Play challenge' }).click();
         expect((await accept).ok()).toBe(true);
         expect((await timedMedia).ok()).toBe(true);
-        expect((await delivered).ok()).toBe(true);
         const game = viewer.getByRole('dialog', { name: 'Challenge photo' });
-        await expectPhotoDecoded(game.getByAltText('Geo challenge photo'));
-        await captureFeedState(viewer, testInfo, '04-guess-dialog', game);
+        await expectPhotoDecoded(game.getByAltText('Challenge location'));
+        // The test stack deliberately uses a one-second viewing window. Assert
+        // the decoded image before doing any further response bookkeeping so
+        // the test cannot consume the entire server-owned viewing window.
+        expect((await delivered).ok()).toBe(true);
         await expect(viewer.getByRole('dialog', { name: 'Challenge guessing' })).toBeVisible();
         const guessing = viewer.getByRole('dialog', { name: 'Challenge guessing' });
+        await captureFeedState(viewer, testInfo, '04-guess-dialog', guessing);
         await guessing.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
         const [guess] = await Promise.all([
             viewer.waitForResponse(
@@ -121,7 +124,7 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         const result = await guess.json();
         expect(result.score).toBeLessThan(5000);
         expect(result.distance).toBeGreaterThan(1_000_000);
-        await expect(viewer.getByText(/\d[\d,]* points/)).toBeVisible();
+        await expect(viewer.getByText(/\d[\d,]* (?:points|pts)/)).toBeVisible();
         await captureFeedState(
             viewer,
             testInfo,
