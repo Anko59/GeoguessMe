@@ -1,4 +1,4 @@
-.feed-audience {
+.feed-form .feed-audience {
     display: grid;
     gap: 0.55rem;
     border: 1px solid var(--line);
@@ -12,16 +12,23 @@
     font-size: 0.85rem;
 }
 
-.feed-audience label,
-.feed-group-targets label {
+.feed-form .feed-audience label,
+.feed-form .feed-group-targets label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     font-weight: 500;
+    min-height: 44px;
 }
 
-.feed-audience input {
-    width: auto;
+.feed-form .feed-audience input {
+    width: 1.1rem;
+    height: 1.1rem;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--brand-blue-accessible);
 }
 
 .feed-group-targets {

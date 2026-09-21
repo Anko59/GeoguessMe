@@ -80,6 +80,11 @@ have labeled coordinate fields for keyboard use. Photos load near the viewport
 and release their blob URLs on departure; feed and comment pages use bounded
 cursor requests with indexable seek predicates.
 
+Feed mutations use the existing authenticated rate limit. Reading the feed,
+photos, results, or comments does not consume that write allowance, so browsing
+cannot prevent a subsequent guess or comment. Every read still requires an
+active authenticated account and the applicable media authorization.
+
 ## Storage, deployment, and rollback
 
 migrations **027_public_feed**, **028_group_inbox_reads**,
@@ -116,6 +121,36 @@ errors, and pagination. The integration fixture in
 isolation, independent concurrent guesses, duplicate attempts, reactions,
 comment authorization, and migration cascade cleanup. The browser journey is in
 `frontend/e2e/feed/public-feed.spec.ts`.
+
+The Playwright journey captures the empty feed, composer, audience controls,
+authored post, blurred challenge, guess dialog, result, revealed challenge, and
+reaction/comment thread. A generated landscape exercises real image decoding,
+preview reduction, and blur. Assertions check decoded images, blur removal,
+horizontal overflow, and dialog bounds before screenshots are attached to the
+HTML report. These are visual-review artifacts, not pixel-baseline comparisons.
+The deliberately inaccurate browser guess pins reveal-on-completion behavior.
+The journey also requires a loaded group inbox without alerts and checks compact
+audience controls inside touch targets of at least 44 pixels. The composition
+regression verifies that the group API receives its inbox-capable repository.
+Scrollable dialogs also capture their lower controls. The existing desktop and
+mobile projects both exercise this journey.
+
+The shared map observes container size changes so opening a previously hidden
+dialog fills the entire map with tiles. The screenshot journey verifies tile
+coverage before capture; unit coverage checks resize handling and observer
+cleanup. Deterministic test tiles remove dependency on an external map server;
+Leaflet and all application API, database, and media interactions remain real.
+
+Run the focused screenshot journey through the Dockerized interface:
+
+```sh
+GEOGUESSME_E2E_PROJECTS=desktop,mobile GEOGUESSME_E2E_SPEC=feed/public-feed.spec.ts make test-e2e
+```
+
+Images stay in ignored `frontend/test-results/` and the Playwright HTML report.
+PR CI retains its desktop report and screenshots for seven days, including
+successful runs; download the `geoguessme-e2e-<run>-<shard>` artifact in
+Actions.
 
 ## Roadmap and adjacent maintenance
 

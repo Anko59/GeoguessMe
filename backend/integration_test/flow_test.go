@@ -244,6 +244,13 @@ func TestPublicFeedJourney(t *testing.T) {
 	resp, preview := doJSON(t, "GET", path+"/media", nil, viewer.access, nil)
 	require.Equal(t, 200, resp.StatusCode)
 	require.Equal(t, "private, no-store", resp.Header.Get("Cache-Control"))
+	// Reading a full page of photos must leave the write allowance available
+	// for the guesses, reactions, and comment below.
+	for range 20 {
+		resp, image := doJSON(t, "GET", path+"/media", nil, viewer.access, nil)
+		require.Equal(t, 200, resp.StatusCode)
+		require.Equal(t, preview, image)
+	}
 	resp, original := doJSON(t, "GET", path+"/play", nil, viewer.access, nil)
 	require.Equal(t, 200, resp.StatusCode)
 	require.NotEqual(t, preview, original)
@@ -303,7 +310,6 @@ func TestPublicFeedJourney(t *testing.T) {
 	_, err = feedrepo.NewRepository(db).Guess(guessCtx, publicID, other.userID, 0, 0)
 	require.NoError(t, err, "different players must be able to guess while a shared parent lock is held")
 	require.NoError(t, lock.Rollback(t.Context()))
-	resetRateLimiter(t)
 	resp, data = doJSON(t, "POST", path+"/comments", map[string]string{"content": "  Beautiful!  "}, viewer.access, nil)
 	require.Equal(t, 201, resp.StatusCode)
 	var comment models.PublicComment

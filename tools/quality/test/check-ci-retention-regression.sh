@@ -102,6 +102,11 @@ absent "$CI" 'make verify' "pull requests do not run the operational release gat
 contains "$CI" 'retention-days: 7' "failure artifacts have bounded retention"
 contains "$CI" 'actions/cache@' "live-stack jobs use persistent Docker caches"
 contains "$CI" 'BUILDX_BUILDER:' "Buildx v4 selects its named builder explicitly"
+if sed -n '/name: Upload browser report and screenshots/,/uses:/p' "$CI" | grep -q 'if: always()'; then
+    ok "successful browser runs retain visual-review screenshots"
+else
+    bad "browser screenshots must remain available after successful tests"
+fi
 contains "$CI" 'gckeepstorage = 12000000000' "PR BuildKit cache is bounded"
 
 secret_paths=false

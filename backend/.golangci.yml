@@ -15,6 +15,6 @@ linters:
       enable-all: true
     staticcheck:
       checks: ["all", "-SA1019"]
-  run:
-    tests: true
-    timeout: 3m
+run:
+  tests: true
+  timeout: 3m

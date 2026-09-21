@@ -166,10 +166,11 @@ results screen.
 
 ### Public feed
 
-All feed routes require bearer authentication and use the default authenticated
-rate limit. Posts and comments use a descending `(created_at, id)` cursor;
-`limit` defaults to 20 and accepts 1–50. Read
-[public feed behavior and rollout](public-feed.md) for visibility and retention.
+All feed routes require bearer authentication. Feed mutations use the default
+authenticated rate limit; GET requests do not consume that write allowance.
+Posts and comments use a descending `(created_at, id)` cursor; `limit` defaults
+to 20 and accepts 1–50. Read [public feed behavior and rollout](public-feed.md)
+for visibility and retention.
 
 | Method      | Path                                                | Description                                                    |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------- |
