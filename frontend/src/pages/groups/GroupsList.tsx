@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
 import Icon from '../../components/ui/Icon';
-import TopNavigation from '../../components/navigation/TopNavigation';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import { useGroupPhotoUrl } from './groupPhotoCache';
 import './GroupsList.css';
 
@@ -45,20 +45,18 @@ export default function GroupsList() {
 
     if (loading) {
         return (
-            <div className="groups-list-container">
-                <TopNavigation />
+            <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading your groups…</span>
                 </div>
-            </div>
+            </AuthenticatedPageShell>
         );
     }
 
     if (error)
         return (
-            <div className="groups-list-container">
-                <TopNavigation />
+            <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
                 <div className="groups-state error-message" role="alert">
                     <strong>We couldn’t load your groups</strong>
                     <span>{error}</span>
@@ -73,13 +71,11 @@ export default function GroupsList() {
                         Retry
                     </button>
                 </div>
-            </div>
+            </AuthenticatedPageShell>
         );
 
     return (
-        <div className="groups-list-container">
-            <TopNavigation />
-
+        <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
             <div className="groups-heading-row">
                 <div className="groups-header">
                     <p className="groups-eyebrow">Your game circles</p>
@@ -123,6 +119,6 @@ export default function GroupsList() {
                     ))}
                 </div>
             )}
-        </div>
+        </AuthenticatedPageShell>
     );
 }
