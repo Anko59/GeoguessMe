@@ -125,6 +125,7 @@ describe('ProfilePage', () => {
         );
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('shows an actionable error and retries the profile request', async () => {
@@ -159,6 +160,7 @@ describe('ProfilePage', () => {
         renderProfile();
 
         expect((await screen.findAllByText('Guess a location to enter the ranking')).length).toBeGreaterThan(0);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('loads another player public profile without account details', async () => {
@@ -169,6 +171,7 @@ describe('ProfilePage', () => {
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2');
         expect(screen.queryByText('alice@example.test')).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('renders the feed leaderboard and loads the next page', async () => {
@@ -200,6 +203,7 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('shows only the verified recovery email on the owner profile', async () => {
@@ -217,5 +221,6 @@ describe('ProfilePage', () => {
         // A pending claim is never shown on a profile view; it is managed in
         // account settings.
         expect(screen.queryByText('new@example.test')).not.toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 });
