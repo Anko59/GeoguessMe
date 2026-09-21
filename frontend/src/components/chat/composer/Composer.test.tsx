@@ -74,7 +74,7 @@ describe('Composer', () => {
         expect(screen.getByLabelText('Message')).toHaveValue('');
     });
 
-    it('sends with Enter while Shift+Enter remains available for line breaks', () => {
+    it('keeps the keyboard return action available for line breaks and sends explicitly', () => {
         const send = vi.fn();
         render(
             <Composer
@@ -89,11 +89,16 @@ describe('Composer', () => {
 
         fireEvent.change(textarea, { target: { value: 'hello' } });
         fireEvent.keyDown(textarea, { key: 'Enter' });
-        expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'hello' }));
+        expect(send).not.toHaveBeenCalled();
 
-        fireEvent.change(textarea, { target: { value: 'line one' } });
+        // The browser owns inserting the newline into a textarea. The
+        // explicit send action must preserve that line break in the payload.
+        fireEvent.change(textarea, { target: { value: 'line one\nline two' } });
         fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
-        expect(send).toHaveBeenCalledOnce();
+        expect(send).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'line one\nline two' }));
     });
 
     it('attaches the reply target id when replying to a message', () => {
