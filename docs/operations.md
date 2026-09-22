@@ -84,8 +84,13 @@ browser WebGL support and delivery of `/globe/earth.jpg` or
 `/globe/earth-8192.jpg` from the frontend. At closer zoom the browser requests
 NASA GIBS and OpenStreetMap tiles for the visible viewport. If detail tiles
 fail, the bundled Earth remains underneath; confirm the browser can reach those
-tile services and that cross-origin tile requests are allowed. Standard
-OpenStreetMap tiles use browser caching and its exact host as required by the
+tile services and that the production Caddy Content Security Policy permits
+`https://tile.openstreetmap.org` in `img-src`, plus that host and
+`https://gibs.earthdata.nasa.gov` in `connect-src`. A rollback that removes
+these origins disables detail tiles while the bundled Earth and group history
+remain usable; restore the prior policy by redeploying the Caddy configuration
+with these required origins. Standard OpenStreetMap tiles use browser caching
+and its exact host as required by the
 [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). The
 challenge list remains available when 3D rendering fails.
 

@@ -3,7 +3,7 @@ import { expect, type BrowserContext, type Locator, type Page, type TestInfo } f
 // Keep tile delivery deterministic while exercising real Leaflet rendering,
 // sizing, zooming, and markers. Application API and media requests stay live.
 export async function installMapTiles(context: BrowserContext): Promise<void> {
-    await context.route('https://*.tile.openstreetmap.org/**', (route) =>
+    await context.route('https://tile.openstreetmap.org/**', (route) =>
         route.fulfill({
             contentType: 'image/svg+xml',
             body: `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">

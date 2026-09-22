@@ -72,7 +72,12 @@ Migration 026 adds its history pagination index; allow for index creation time
 on large photo tables. It is compatible with previous application binaries. See
 [migration 026](database-migrations.md#migration-026-group-challenge-globe-index).
 The Earth texture is bundled with the frontend; no imagery API key or new
-environment variable is required.
+environment variable is required. The production Caddy Content Security Policy
+allows the exact OSM host in `img-src`, and exact OSM plus NASA GIBS in
+`connect-src` for globe detail requests. If this policy change is rolled back,
+the bundled Earth and group history remain available but close detail tiles do
+not load; restore those origins in the Caddy policy when re-enabling globe
+detail imagery.
 
 Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
 be validated on dev, and an isolated production backup restore must be

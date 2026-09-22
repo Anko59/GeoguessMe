@@ -56,6 +56,7 @@ lint-sql: ## Run SQLFluff against migrations.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 
 lint-caddy: ## Validate and format-check Caddy configuration.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh /workspace/tools/quality/test/caddy/check-policy.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/watch/Caddyfile
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
