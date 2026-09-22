@@ -415,6 +415,12 @@ func TestPublicTimedFeedJourney(t *testing.T) {
 	resp, completedMedia := doJSON(t, http.MethodGet, timeoutPath+"/media", nil, viewer.access, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, timeoutOriginal, completedMedia)
+	var timeoutPreview []byte
+	err = db.QueryRow(t.Context(), `SELECT preview FROM public_challenges WHERE id=$1`, timeoutID).Scan(&timeoutPreview)
+	require.NoError(t, err)
+	resp, unresolvedMedia := doJSON(t, http.MethodGet, timeoutPath+"/media", nil, other.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, timeoutPreview, unresolvedMedia)
 	resp, data = doJSON(t, http.MethodPost, timeoutPath+"/timed-guess", map[string]float64{"lat": 0, "long": 0}, viewer.access, nil)
 	require.Equal(t, http.StatusGone, resp.StatusCode)
 	require.Contains(t, string(data), "guess_time_expired")

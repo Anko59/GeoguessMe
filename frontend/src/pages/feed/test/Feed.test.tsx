@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PublicChallenge } from '../../../types';
 import { getMocks, post, renderFeed } from './FeedTestHarness';
 
@@ -51,6 +51,50 @@ describe('Public feed', () => {
         expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('reveals an unsolved card after its timed-out guess is persisted', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+        const startedAt = Date.now();
+        const viewExpiresAt = new Date(startedAt + 1000).toISOString();
+        const guessExpiresAt = new Date(startedAt + 3000).toISOString();
+        mocks.acceptTimed.mockResolvedValueOnce({
+            challenge_id: 'post-1',
+            media_url: '/api/v1/feed/challenges/post-1/timed-media',
+            media_type: 'image/jpeg',
+            accepted_at: new Date(startedAt).toISOString(),
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: guessExpiresAt,
+            score_grace_seconds: 30,
+            server_time: new Date(startedAt).toISOString(),
+        });
+        mocks.timedMediaDelivered.mockResolvedValueOnce({
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: guessExpiresAt,
+            score_grace_seconds: 30,
+            server_time: new Date(startedAt).toISOString(),
+        });
+
+        try {
+            renderFeed();
+            fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
+            await waitFor(() => expect(mocks.timedMediaDelivered).toHaveBeenCalled());
+
+            await act(async () => {
+                vi.setSystemTime(startedAt + 4000);
+                await vi.advanceTimersByTimeAsync(200);
+            });
+
+            await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
+            expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
+            expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('shows owners and previous guessers clear photos', async () => {

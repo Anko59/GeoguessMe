@@ -91,6 +91,22 @@ export const getAPIErrorCode = (error: unknown): string | undefined => {
     return data?.error?.code;
 };
 
+/** Decode an API error from binary endpoints, where Axios keeps JSON error bodies as Blob values. */
+export const getAPIErrorCodeAsync = async (error: unknown): Promise<string | undefined> => {
+    if (typeof error !== 'object' || error === null) return undefined;
+    const data: unknown = (error as { response?: { data?: unknown } }).response?.data;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+        try {
+            const parsed: unknown = JSON.parse(await data.text());
+            if (typeof parsed !== 'object' || parsed === null) return undefined;
+            return (parsed as APIErrorBody).error?.code;
+        } catch {
+            return undefined;
+        }
+    }
+    return getAPIErrorCode(error);
+};
+
 const refreshAccessToken = async (): Promise<string | null> => {
     const response = await refreshAuthSession();
     return response?.access_token ?? null;

@@ -11,11 +11,10 @@ const mocks = vi.hoisted(() => ({
     timedTimeout: vi.fn(),
 }));
 
-vi.mock('../../../api', () => ({
-    publicFeedAPI: mocks,
-    getAPIErrorCode: (error: { response?: { data?: { error?: { code?: string } } } }) =>
-        error.response?.data?.error?.code,
-}));
+vi.mock('../../../api', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../api')>();
+    return { ...actual, publicFeedAPI: mocks };
+});
 
 const signal = new AbortController().signal;
 
@@ -116,7 +115,14 @@ describe('feed timed-game adapter', () => {
             guesses: [],
             server_time: '2026-01-01T00:00:00Z',
         });
-        mocks.media.mockRejectedValue({ response: { data: { error: { code: 'media_removed' } } } });
+        mocks.media.mockRejectedValue({
+            response: {
+                status: 410,
+                data: new Blob([JSON.stringify({ error: { code: 'media_removed' } })], {
+                    type: 'application/json',
+                }),
+            },
+        });
 
         const loaded = await feedTimedGameAdapter.loadResults('feed-2', signal);
 
@@ -134,7 +140,9 @@ describe('feed timed-game adapter', () => {
             guesses: [],
             server_time: '2026-01-01T00:00:00Z',
         });
-        mocks.media.mockRejectedValue(new Error('Network unavailable'));
+        mocks.media.mockRejectedValue({
+            response: { status: 503, data: new Blob(['service unavailable'], { type: 'text/plain' }) },
+        });
 
         const loaded = await feedTimedGameAdapter.loadResults('feed-3', signal);
 

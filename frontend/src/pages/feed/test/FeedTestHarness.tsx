@@ -33,6 +33,17 @@ vi.mock('../../../api', () => ({
     getAPIErrorMessage: (error: Error) => error.message,
     getAPIErrorCode: (error: { response?: { data?: { error?: { code?: string } } } }) =>
         error.response?.data?.error?.code,
+    getAPIErrorCodeAsync: async (error: { response?: { data?: { error?: { code?: string } } | Blob } }) => {
+        const data = error.response?.data;
+        if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            try {
+                return JSON.parse(await data.text()).error?.code as string | undefined;
+            } catch {
+                return undefined;
+            }
+        }
+        return data && 'error' in data ? data.error?.code : undefined;
+    },
 }));
 
 vi.mock('../../../components/map/Map', () => ({

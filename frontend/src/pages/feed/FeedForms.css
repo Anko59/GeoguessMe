@@ -187,7 +187,7 @@
     align-items: start;
     gap: 0.8rem;
     min-width: 0;
-    padding: 0.7rem 0;
+    padding: 0.5rem 0;
     font-size: 0.85rem;
 }
 .feed-comments li > div {

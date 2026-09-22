@@ -1,6 +1,13 @@
 import axios, { AxiosError } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
-import api, { getAPIErrorCode, getAPIErrorMessage, getAccessToken, publicFeedAPI, setAccessToken } from './api';
+import api, {
+    getAPIErrorCode,
+    getAPIErrorCodeAsync,
+    getAPIErrorMessage,
+    getAccessToken,
+    publicFeedAPI,
+    setAccessToken,
+} from './api';
 
 describe('api client', () => {
     it('stores tokens and exposes secure defaults', () => {
@@ -87,6 +94,19 @@ describe('api client', () => {
         ).toBe('upload failed');
         expect(getAPIErrorMessage(null, 'fallback')).toBe('fallback');
         expect(getAPIErrorMessage('unknown', 'fallback')).toBe('fallback');
+    });
+
+    it('decodes a JSON API error returned as a blob by a binary request', async () => {
+        const errorBody = new Blob([JSON.stringify({ error: { code: 'media_removed' } })], {
+            type: 'application/json',
+        });
+
+        await expect(getAPIErrorCodeAsync({ response: { status: 410, data: errorBody } })).resolves.toBe(
+            'media_removed',
+        );
+        await expect(
+            getAPIErrorCodeAsync({ response: { status: 503, data: new Blob(['unavailable']) } }),
+        ).resolves.toBe(undefined);
     });
 
     it('requests a profile-scoped feed leaderboard with a stable cursor', async () => {

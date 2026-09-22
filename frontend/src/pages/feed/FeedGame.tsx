@@ -45,6 +45,7 @@ export default function FeedGame({
         checkResultsBeforeAccept: false,
         adapter: feedTimedGameAdapter,
         onStatusChange,
+        onTimedOut: onResolved,
         onClose: handleClose,
     });
 

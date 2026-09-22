@@ -7,14 +7,14 @@
 }
 
 .result-map-column .result-map {
-    min-height: 14rem;
-    flex: 1 1 55%;
+    min-height: 12rem;
+    flex: 1 1 35%;
 }
 
 .result-footer {
     min-width: 0;
     min-height: 0;
-    flex: 1 1 45%;
+    flex: 1 1 65%;
     overflow-y: auto;
     overscroll-behavior: contain;
 }

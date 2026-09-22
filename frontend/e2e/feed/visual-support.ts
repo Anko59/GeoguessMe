@@ -41,10 +41,56 @@ export async function expectFeedDiscussionReachableAtViewports(
                 scroller.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight),
             )
             .toBe(true);
-        await scroller.evaluate((element) => {
-            element.scrollTop = element.scrollHeight;
-        });
         const lastCommentRow = dialog.locator('.feed-comments li').filter({ hasText: lastComment });
+        const measureReachability = () =>
+            lastCommentRow.evaluate((row, scrollerSelector) => {
+                const element = row.closest<HTMLElement>(scrollerSelector);
+                if (!element) return { visibleRatio: 0, scrollTop: 0 };
+                const container = element.getBoundingClientRect();
+                const comment = row.getBoundingClientRect();
+                const visible = Math.max(
+                    0,
+                    Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                );
+                return {
+                    visibleRatio: comment.height > 0 ? visible / comment.height : 0,
+                    scrollTop: element.scrollTop,
+                };
+            }, viewport.scroller);
+        const initialReachability = await measureReachability();
+        await scroller.evaluate((element, commentText) => {
+            const row = Array.from(element.querySelectorAll('.feed-comments li')).find((candidate) =>
+                candidate.textContent?.includes(commentText),
+            );
+            if (!row) throw new Error(`Could not find the last feed comment: ${commentText}`);
+            const container = element.getBoundingClientRect();
+            const comment = row.getBoundingClientRect();
+            const delta =
+                comment.bottom > container.bottom
+                    ? comment.bottom - container.bottom
+                    : comment.top < container.top
+                      ? comment.top - container.top
+                      : 0;
+            element.scrollTop += delta;
+        }, lastComment);
+        const reachability = await measureReachability();
+        if (initialReachability.visibleRatio <= 0.5)
+            expect(reachability.scrollTop).not.toBe(initialReachability.scrollTop);
+        expect(reachability.visibleRatio).toBeGreaterThan(0.5);
+        if (viewport.width === 1280) {
+            const visibleCommentCount = await scroller.evaluate((element) => {
+                const container = element.getBoundingClientRect();
+                return Array.from(element.querySelectorAll('.feed-comments li')).filter((row) => {
+                    const comment = row.getBoundingClientRect();
+                    const visible = Math.max(
+                        0,
+                        Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                    );
+                    return comment.height > 0 && visible / comment.height > 0.5;
+                }).length;
+            });
+            expect(visibleCommentCount).toBeGreaterThanOrEqual(3);
+        }
         await expect(lastCommentRow).toBeVisible();
         await expect(dialog.getByText(lastComment)).toBeInViewport();
         const geometry = await lastCommentRow.evaluate((row) => {

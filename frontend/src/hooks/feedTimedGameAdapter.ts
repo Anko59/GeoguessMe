@@ -1,4 +1,4 @@
-import { getAPIErrorCode, publicFeedAPI } from '../api';
+import { getAPIErrorCodeAsync, publicFeedAPI } from '../api';
 import type { ChallengeResults, PublicTimedResults } from '../types';
 import type { TimedGameAdapter, TimedGameMedia } from './useTimedGame';
 
@@ -15,7 +15,7 @@ export const feedTimedGameAdapter: TimedGameAdapter = {
             media = { blob, mediaType: blob.type || undefined };
         } catch (error) {
             if (signal.aborted) throw error;
-            if (getAPIErrorCode(error) === 'media_removed') mediaAvailable = false;
+            if ((await getAPIErrorCodeAsync(error)) === 'media_removed') mediaAvailable = false;
             else mediaLoadFailed = true;
         }
         return { results: normalizeResults(id, results, mediaAvailable, mediaLoadFailed), media };
