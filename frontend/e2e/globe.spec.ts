@@ -56,6 +56,21 @@ const GLOBE_SCREENSHOT_TIMEOUT_MS = 20_000;
 async function captureGlobe(page: Page, testInfo: TestInfo, state: string) {
     const name = `globe-${state}`;
     const path = testInfo.outputPath(`${name}.png`);
+    const fallbackNotice = page.locator('.globe-detail-notice');
+    if (await fallbackNotice.isVisible()) {
+        const [noticeBox, creditBox] = await Promise.all([
+            fallbackNotice.boundingBox(),
+            page.locator('.globe-credit').boundingBox(),
+        ]);
+        expect(noticeBox).not.toBeNull();
+        expect(creditBox).not.toBeNull();
+        const overlaps =
+            noticeBox!.left < creditBox!.right &&
+            noticeBox!.right > creditBox!.left &&
+            noticeBox!.top < creditBox!.bottom &&
+            noticeBox!.bottom > creditBox!.top;
+        expect(overlaps, 'fallback status must not cover the imagery attribution').toBe(false);
+    }
     // Software-rendered WebGL on CI runners can stall Chromium's screenshot
     // readback on the continuously rendered globe, and an unbounded capture
     // then consumes the whole journey budget. Bound each attempt, resync to a

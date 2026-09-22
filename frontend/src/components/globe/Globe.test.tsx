@@ -113,4 +113,39 @@ describe('Globe', () => {
         render(<Globe items={[]} selectedID={null} onSelect={vi.fn()} />);
         expect(await screen.findByText(/3D rendering is unavailable/)).toBeInTheDocument();
     });
+
+    it('credits every detail provider whose mesh remains visible during a transition', async () => {
+        let sourcesChanged: ((providers: ('nasa' | 'osm')[]) => void) | undefined;
+        mocks.create.mockImplementationOnce(
+            (
+                _host: HTMLDivElement,
+                _onSelect: unknown,
+                _onError: unknown,
+                onReady: (() => void) | undefined,
+                _onFallback: unknown,
+                onSources: ((providers: ('nasa' | 'osm')[]) => void) | undefined,
+            ) => {
+                sourcesChanged = onSources;
+                onReady?.();
+                return mocks;
+            },
+        );
+        render(<Globe items={[]} selectedID={null} onSelect={vi.fn()} />);
+
+        expect(await screen.findByRole('link', { name: 'Blue Marble Next Generation (2004)' })).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'NASA GIBS (NASA ESDIS)' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: '© OpenStreetMap contributors' })).not.toBeInTheDocument();
+
+        act(() => sourcesChanged?.(['nasa']));
+        expect(await screen.findByRole('link', { name: 'NASA GIBS (NASA ESDIS)' })).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: '© OpenStreetMap contributors' })).not.toBeInTheDocument();
+
+        act(() => sourcesChanged?.(['nasa', 'osm']));
+        expect(screen.getByRole('link', { name: 'NASA GIBS (NASA ESDIS)' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: '© OpenStreetMap contributors' })).toBeInTheDocument();
+
+        act(() => sourcesChanged?.(['osm']));
+        expect(await screen.findByRole('link', { name: '© OpenStreetMap contributors' })).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'NASA GIBS (NASA ESDIS)' })).not.toBeInTheDocument();
+    });
 });

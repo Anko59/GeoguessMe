@@ -14,6 +14,8 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
     const latestOnSelect = useRef(onSelect);
     const latestView = useRef({ items, selectedID });
     const [error, setError] = useState('');
+    const [detailUnavailable, setDetailUnavailable] = useState(false);
+    const [detailSources, setDetailSources] = useState<('nasa' | 'osm')[]>([]);
     const [textureReady, setTextureReady] = useState(false);
 
     useEffect(() => {
@@ -38,6 +40,12 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
                     },
                     () => {
                         if (active) setTextureReady(true);
+                    },
+                    (unavailable) => {
+                        if (active) setDetailUnavailable(unavailable);
+                    },
+                    (providers) => {
+                        if (active) setDetailSources(providers);
                     },
                 );
                 if (!active) {
@@ -76,6 +84,11 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
                     {error}
                 </p>
             )}
+            {detailUnavailable && textureReady && !error && (
+                <p className="globe-notice globe-detail-notice" role="status">
+                    Some detail imagery is unavailable; showing available layers.
+                </p>
+            )}
             {textureReady && !error && (
                 <div className="globe-controls" role="group" aria-label="Globe controls">
                     <button
@@ -106,7 +119,32 @@ export default function Globe({ items, selectedID, onSelect }: GlobeProps) {
                     </button>
                 </div>
             )}
-            <span className="globe-credit">Earth imagery: NASA / Three.js</span>
+            <span className="globe-credit" aria-label="Earth imagery credits">
+                Earth imagery:{' '}
+                <a href="https://svs.gsfc.nasa.gov/3615/" target="_blank" rel="noreferrer">
+                    Blue Marble Next Generation (2004)
+                </a>{' '}
+                · NASA/Goddard Space Flight Center
+                {detailSources.includes('nasa') && (
+                    <>
+                        {' '}
+                        · Detail imagery:{' '}
+                        <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noreferrer">
+                            NASA GIBS (NASA ESDIS)
+                        </a>
+                    </>
+                )}
+                {detailSources.includes('osm') && (
+                    <>
+                        {' '}
+                        · Map data{' '}
+                        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+                            © OpenStreetMap contributors
+                        </a>
+                    </>
+                )}{' '}
+                · Three.js
+            </span>
         </div>
     );
 }

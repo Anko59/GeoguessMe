@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { GroupChallenge } from '../../types';
+import { createGlobeDetailLayer } from './globeDetailTiles';
+import { isGlobeMobile, maxUsefulGlobeZoom } from './globeZoom';
 
 export const HIGH_RES_EARTH_TEXTURE_URL = '/globe/earth-8192.jpg';
 export const FALLBACK_EARTH_TEXTURE_URL = '/globe/earth.jpg';
@@ -8,12 +10,16 @@ export const HIGH_RES_TEXTURE_SIZE = 8192;
 export const HIGH_RES_MIN_DISTANCE = 1.05;
 export const FALLBACK_MIN_DISTANCE = 1.15;
 
-export function earthTextureURL(maxTextureSize: number): string {
-    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE ? HIGH_RES_EARTH_TEXTURE_URL : FALLBACK_EARTH_TEXTURE_URL;
+export function earthTextureURL(maxTextureSize: number, mobile = false): string {
+    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE && !mobile ? HIGH_RES_EARTH_TEXTURE_URL : FALLBACK_EARTH_TEXTURE_URL;
 }
 
-export function earthMinDistance(maxTextureSize: number): number {
-    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE ? HIGH_RES_MIN_DISTANCE : FALLBACK_MIN_DISTANCE;
+export function earthMinDistance(maxTextureSize: number, mobile = false): number {
+    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE && !mobile ? HIGH_RES_MIN_DISTANCE : FALLBACK_MIN_DISTANCE;
+}
+
+export function earthTextureSize(maxTextureSize: number, mobile = false): number {
+    return maxTextureSize >= HIGH_RES_TEXTURE_SIZE && !mobile ? HIGH_RES_TEXTURE_SIZE : 2048;
 }
 
 // Matches the equirectangular texture's Greenwich meridian and north pole.
@@ -36,6 +42,8 @@ export function createGlobeScene(
     onSelect: (id: string) => void,
     onError: (message: string) => void,
     onReady?: () => void,
+    onDetailFallback?: (unavailable: boolean) => void,
+    onDetailSources?: (providers: ('nasa' | 'osm')[]) => void,
 ) {
     let disposed = false;
     const cleanup: (() => void)[] = [];
@@ -51,24 +59,28 @@ export function createGlobeScene(
             renderer.forceContextLoss();
             renderer.domElement.remove();
         });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        renderer.setPixelRatio(pixelRatio);
         renderer.domElement.setAttribute('aria-hidden', 'true');
         host.appendChild(renderer.domElement);
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
         camera.position.copy(globePosition(22, 12, 3.5));
+        camera.zoom = 1;
+        camera.updateProjectionMatrix();
         const controls = new OrbitControls(camera, renderer.domElement);
         cleanup.push(() => controls.dispose());
         controls.enablePan = false;
+        // Zoom is controlled through camera.zoom so the view can move beyond
+        // the old camera-distance limit without entering the Earth mesh.
+        controls.enableZoom = false;
         const maxTextureSize = renderer.capabilities.maxTextureSize;
-        // Keep a safe margin around the textured sphere while allowing a
-        // useful close view of a pin on a phone-sized viewport. Devices that
-        // cannot upload the high-resolution asset retain the old limit so the
-        // fallback texture is not magnified beyond its useful detail.
-        controls.minDistance = earthMinDistance(maxTextureSize);
+        const mobile = isGlobeMobile(host.clientWidth, window.matchMedia('(pointer: coarse)').matches);
+        const baseTextureSize = earthTextureSize(maxTextureSize, mobile);
+        controls.minDistance = earthMinDistance(maxTextureSize, mobile);
         controls.maxDistance = 6;
         controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-        controls.zoomToCursor = true;
+        controls.zoomToCursor = false;
         controls.minPolarAngle = POLE_MARGIN;
         controls.maxPolarAngle = Math.PI - POLE_MARGIN;
         // Render only on interaction: no idle animation or motion preference override.
@@ -79,10 +91,9 @@ export function createGlobeScene(
         // finger one to one: rotateSpeed = tan(fov/2)·√(d²−1)/π for radius 1.
         const syncControls = () => {
             const distance = camera.position.length();
+            const effectiveFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.zoom);
             controls.rotateSpeed = Math.min(
-                (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
-                    Math.sqrt(Math.max(distance * distance - 1, 0.0025))) /
-                    Math.PI,
+                (Math.tan(effectiveFov / 2) * Math.sqrt(Math.max(distance * distance - 1, 0.0025))) / Math.PI,
                 1,
             );
         };
@@ -116,8 +127,18 @@ export function createGlobeScene(
             if (frame) cancelAnimationFrame(frame);
         });
         const render = () => renderer.render(scene, camera);
+        let scheduleDetailUpdate = () => {};
+        let syncPinScale = () => {};
+        const syncDetailTiles = () => {
+            syncPinScale();
+            scheduleDetailUpdate();
+        };
         controls.addEventListener('change', render);
-        cleanup.push(() => controls.removeEventListener('change', render));
+        controls.addEventListener('change', syncDetailTiles);
+        cleanup.push(() => {
+            controls.removeEventListener('change', render);
+            controls.removeEventListener('change', syncDetailTiles);
+        });
         const earthGeometry = new THREE.SphereGeometry(1, 96, 64);
         cleanup.push(() => earthGeometry.dispose());
         const earthMaterial = new THREE.MeshPhongMaterial({ color: 0xb9d9f5, shininess: 8 });
@@ -129,7 +150,7 @@ export function createGlobeScene(
         light.position.set(-3, 5, 4);
         scene.add(light);
         const texture = new THREE.TextureLoader().load(
-            earthTextureURL(maxTextureSize),
+            earthTextureURL(maxTextureSize, mobile),
             (loaded) => {
                 if (disposed) return;
                 loaded.colorSpace = THREE.SRGBColorSpace;
@@ -151,7 +172,7 @@ export function createGlobeScene(
             },
         );
         cleanup.push(() => texture.dispose());
-        const pinGeometry = new THREE.SphereGeometry(0.018, 10, 8);
+        const pinGeometry = new THREE.SphereGeometry(1, 10, 8);
         cleanup.push(() => pinGeometry.dispose());
         // Instanced colors are only consumed by Three.js materials with
         // vertex colors enabled. Without this flag, the CPU-side colors set
@@ -166,6 +187,39 @@ export function createGlobeScene(
         let selectedIndex: number | undefined;
         const pinIndexes = new Map<string, number>();
         scene.add(pins);
+        const cameraPosition = new THREE.Vector3();
+        const screenScale = new THREE.Vector3();
+        const pinMatrix = new THREE.Matrix4();
+        syncPinScale = () => {
+            if (host.clientHeight <= 0) return;
+            camera.updateMatrixWorld();
+            for (let index = 0; index < positions.length; index += 1) {
+                cameraPosition.copy(positions[index]).applyMatrix4(camera.matrixWorldInverse);
+                const depth = Math.max(-cameraPosition.z, 0.1);
+                const diameter = index === selectedIndex ? 8 : 6;
+                const radius =
+                    (diameter * depth * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2))) /
+                    host.clientHeight;
+                screenScale.setScalar(radius);
+                pinMatrix.compose(positions[index], new THREE.Quaternion(), screenScale);
+                pins.setMatrixAt(index, pinMatrix);
+            }
+            pins.instanceMatrix.needsUpdate = true;
+        };
+        const detailLayer = createGlobeDetailLayer(
+            scene,
+            camera,
+            host,
+            pixelRatio,
+            baseTextureSize,
+            renderer.capabilities.getMaxAnisotropy(),
+            mobile,
+            render,
+            (unavailable) => onDetailFallback?.(unavailable),
+            (providers) => onDetailSources?.(providers),
+        );
+        scheduleDetailUpdate = () => detailLayer.scheduleUpdate();
+        cleanup.push(() => detailLayer.dispose());
         const resize = () => {
             const width = Math.max(host.clientWidth, 1);
             const height = Math.max(host.clientHeight, 1);
@@ -173,7 +227,9 @@ export function createGlobeScene(
             camera.updateProjectionMatrix();
             renderer.setSize(width, height);
             syncControls();
+            syncPinScale();
             render();
+            detailLayer.scheduleUpdate();
         };
         const observer = new ResizeObserver(resize);
         cleanup.push(() => observer.disconnect());
@@ -181,7 +237,28 @@ export function createGlobeScene(
         const raycaster = new THREE.Raycaster();
         let pointerStart: { x: number; y: number } | null = null;
         let dragged = false;
+        const touchPointers = new Map<number, { x: number; y: number }>();
+        let previousPinchDistance: number | null = null;
+        const applyZoom = (factor: number) => {
+            camera.zoom = THREE.MathUtils.clamp(
+                camera.zoom * factor,
+                1,
+                maxUsefulGlobeZoom(camera, host.clientWidth, pixelRatio),
+            );
+            camera.updateProjectionMatrix();
+            syncControls();
+            syncPinScale();
+            render();
+            detailLayer.scheduleUpdate();
+        };
         const pointerDown = (event: PointerEvent) => {
+            if (event.pointerType === 'touch') {
+                touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                if (touchPointers.size === 2) {
+                    const [first, second] = [...touchPointers.values()];
+                    previousPinchDistance = Math.hypot(first.x - second.x, first.y - second.y);
+                }
+            }
             if (event.button !== 0) return;
             if (pointerStart) {
                 dragged = true;
@@ -190,14 +267,31 @@ export function createGlobeScene(
             pointerStart = { x: event.clientX, y: event.clientY };
             dragged = false;
         };
-        const pointerCancel = () => {
+        const pointerCancel = (event: PointerEvent) => {
+            if (event.pointerType === 'touch') {
+                touchPointers.delete(event.pointerId);
+                previousPinchDistance = null;
+            }
             pointerStart = null;
         };
         const pointerMove = (event: PointerEvent) => {
+            if (event.pointerType === 'touch' && touchPointers.has(event.pointerId)) {
+                touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                if (touchPointers.size >= 2) {
+                    const [first, second] = [...touchPointers.values()];
+                    const distance = Math.hypot(first.x - second.x, first.y - second.y);
+                    if (previousPinchDistance && distance > 0) applyZoom(distance / previousPinchDistance);
+                    previousPinchDistance = distance;
+                }
+            }
             if (pointerStart && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 6)
                 dragged = true;
         };
         const pointerUp = (event: PointerEvent) => {
+            if (event.pointerType === 'touch') {
+                touchPointers.delete(event.pointerId);
+                previousPinchDistance = null;
+            }
             if (!pointerStart || dragged) {
                 pointerStart = null;
                 return;
@@ -240,17 +334,23 @@ export function createGlobeScene(
             event.preventDefault();
             onError('3D rendering is unavailable. You can still browse every challenge below.');
         };
+        const wheelZoom = (event: WheelEvent) => {
+            event.preventDefault();
+            applyZoom(Math.exp(-event.deltaY * 0.002));
+        };
         renderer.domElement.addEventListener('pointerdown', pointerDown);
         renderer.domElement.addEventListener('pointermove', pointerMove);
         renderer.domElement.addEventListener('pointerup', pointerUp);
         renderer.domElement.addEventListener('pointercancel', pointerCancel);
         renderer.domElement.addEventListener('webglcontextlost', contextLost);
+        renderer.domElement.addEventListener('wheel', wheelZoom, { passive: false });
         cleanup.push(() => {
             renderer.domElement.removeEventListener('pointerdown', pointerDown);
             renderer.domElement.removeEventListener('pointermove', pointerMove);
             renderer.domElement.removeEventListener('pointerup', pointerUp);
             renderer.domElement.removeEventListener('pointercancel', pointerCancel);
             renderer.domElement.removeEventListener('webglcontextlost', contextLost);
+            renderer.domElement.removeEventListener('wheel', wheelZoom);
         });
         controls.update();
         resize();
@@ -291,6 +391,7 @@ export function createGlobeScene(
                 selectedIndex = selectedID === null ? undefined : pinIndexes.get(selectedID);
                 if (selectedIndex !== undefined) pins.setColorAt(selectedIndex, new THREE.Color('#ffffff'));
                 if (pins.instanceColor) pins.instanceColor.needsUpdate = true;
+                syncPinScale();
                 render();
             },
             focus(item: GroupChallenge) {
@@ -298,25 +399,23 @@ export function createGlobeScene(
                 camera.position.copy(globePosition(item.lat, item.long, camera.position.length()));
                 syncControls();
                 controls.update();
+                syncPinScale();
             },
             rotate(horizontal: number, vertical: number) {
                 const spherical = new THREE.Spherical().setFromVector3(camera.position);
-                spherical.theta += horizontal;
-                spherical.phi = THREE.MathUtils.clamp(spherical.phi + vertical, POLE_MARGIN, Math.PI - POLE_MARGIN);
+                spherical.theta += horizontal / camera.zoom;
+                spherical.phi = THREE.MathUtils.clamp(
+                    spherical.phi + vertical / camera.zoom,
+                    POLE_MARGIN,
+                    Math.PI - POLE_MARGIN,
+                );
                 camera.position.setFromSpherical(spherical);
                 syncControls();
                 controls.update();
+                syncPinScale();
             },
             zoom(factor: number) {
-                camera.position.setLength(
-                    THREE.MathUtils.clamp(
-                        camera.position.length() * factor,
-                        controls.minDistance,
-                        controls.maxDistance,
-                    ),
-                );
-                syncControls();
-                controls.update();
+                applyZoom(1 / factor);
             },
             controls,
             dispose,

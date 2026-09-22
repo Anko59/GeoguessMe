@@ -117,8 +117,8 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
             <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
                 <ObserveMapSize />
                 <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+                    url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <FitBoundsToMarkers guesses={guesses} actualLocation={actualLocation} />
                 <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />
