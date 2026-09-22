@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import Avatar from '../../components/common/Avatar';
+import MessageInput from '../../components/common/MessageInput';
 import { useFeedActions, usePublicComments } from './useFeed';
 
 export default function FeedComments({ id, onCountChange }: { id: string; onCountChange: (delta: number) => void }) {
@@ -15,12 +16,6 @@ export default function FeedComments({ id, onCountChange }: { id: string; onCoun
             comments.add(comment);
             setContent('');
             onCountChange(1);
-        }
-    }
-    async function remove(commentID: string) {
-        if (await actions.removeComment(commentID)) {
-            comments.remove(commentID);
-            onCountChange(-1);
         }
     }
     return (
@@ -43,23 +38,13 @@ export default function FeedComments({ id, onCountChange }: { id: string; onCoun
                             username={comment.username}
                             className="feed-comment-avatar"
                         />
-                        <div>
+                        <div className="feed-comment-copy">
                             <strong>{comment.username}</strong>
                             <p>{comment.content}</p>
                             <time dateTime={comment.created_at}>
                                 {new Date(comment.created_at).toLocaleDateString()}
                             </time>
                         </div>
-                        {comment.can_delete && (
-                            <button
-                                className="feed-text-button"
-                                aria-label={`Delete comment by ${comment.username}`}
-                                disabled={actions.pending}
-                                onClick={() => void remove(comment.id)}
-                            >
-                                Delete
-                            </button>
-                        )}
                     </li>
                 ))}
             </ul>
@@ -74,11 +59,12 @@ export default function FeedComments({ id, onCountChange }: { id: string; onCoun
             )}
             <form className="feed-comment-form" onSubmit={submit}>
                 <label htmlFor={inputID}>Add a comment</label>
-                <textarea
+                <MessageInput
                     id={inputID}
                     value={content}
                     maxLength={1000}
                     required
+                    className="feed-comment-input"
                     placeholder="What did you think of this place?"
                     disabled={actions.pending || !comments.loaded}
                     onChange={(e) => setContent(e.target.value)}

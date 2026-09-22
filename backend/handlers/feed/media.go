@@ -306,7 +306,7 @@ func (a *API) serveMedia(w http.ResponseWriter, r *http.Request, playing bool) {
 	if !validID(w, r) {
 		return
 	}
-	asset, err := a.repo.Media(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r))
+	asset, err := a.repo.Media(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r), a.clock())
 	if err != nil {
 		writeError(w, err)
 		return

@@ -193,10 +193,6 @@ export const publicFeedAPI = {
         (await api.get<PublicCommentsPage>(`${publicPostPath(id)}/comments`, { params: { cursor }, signal })).data,
     comment: async (id: string, content: string, signal: AbortSignal) =>
         (await api.post<PublicComment>(`${publicPostPath(id)}/comments`, { content }, { signal })).data,
-    removeComment: async (id: string, commentID: string, signal: AbortSignal) => {
-        await api.delete(`${publicPostPath(id)}/comments/${encodeURIComponent(commentID)}`, { signal });
-        return true;
-    },
 };
 
 export const groupsAPI = {

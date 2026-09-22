@@ -1,4 +1,12 @@
-import { useCallback, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+    useCallback,
+    useId,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type MouseEvent as ReactMouseEvent,
+    type ReactNode,
+} from 'react';
 import { Link } from 'react-router-dom';
 import type { PublicChallenge } from '../../types';
 import Avatar from '../../components/common/Avatar';
@@ -65,7 +73,7 @@ function FeedSocialSummary({
     );
 }
 
-function FeedResultsFooter({
+export function FeedResultsFooter({
     post,
     onUpdate,
 }: {
@@ -130,6 +138,15 @@ export default function FeedCard({
     function openChallenge() {
         setPlaying(true);
     }
+    function openFromCard(event: ReactMouseEvent<HTMLElement>) {
+        if (
+            !revealed ||
+            (event.target instanceof Element &&
+                event.target.closest('a,button,input,textarea,select,[role="button"],[contenteditable="true"]'))
+        )
+            return;
+        openChallenge();
+    }
     function onMediaKeyDown(event: KeyboardEvent<HTMLDivElement>) {
         if (!revealed || (event.key !== 'Enter' && event.key !== ' ')) return;
         event.preventDefault();
@@ -138,7 +155,11 @@ export default function FeedCard({
     const resultsFooter: ReactNode = revealed ? <FeedResultsFooter post={post} onUpdate={onUpdate} /> : undefined;
 
     return (
-        <article className="feed-card" aria-label={`Geo challenge by ${post.username}`}>
+        <article
+            className={`feed-card${revealed ? ' feed-card--interactive' : ''}`}
+            aria-label={`Geo challenge by ${post.username}`}
+            onClick={openFromCard}
+        >
             <header className="feed-card-header">
                 <Avatar userID={post.user_id} avatar={post.avatar} username={post.username} className="feed-avatar" />
                 <div className="feed-author">
@@ -232,7 +253,8 @@ export default function FeedCard({
             {playing && (
                 <FeedGame
                     id={post.id}
-                    alreadyResolved={post.is_owner || post.resolved}
+                    isOwner={post.is_owner}
+                    openResultsDirectly={revealed}
                     restoreFocus={restorePlayFocus}
                     onClose={() => setPlaying(false)}
                     onResolved={() => onUpdate({ id: post.id, resolved: true })}

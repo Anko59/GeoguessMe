@@ -25,6 +25,45 @@ export async function expectPhotoDecoded(photo: Locator): Promise<void> {
         .toBe(true);
 }
 
+export async function expectFeedDiscussionReachableAtViewports(
+    page: Page,
+    dialog: Locator,
+    lastComment: string,
+): Promise<void> {
+    for (const viewport of [
+        { width: 1280, height: 720, scroller: '.result-footer' },
+        { width: 393, height: 727, scroller: '.result-content' },
+    ]) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        const scroller = dialog.locator(viewport.scroller);
+        await expect
+            .poll(() =>
+                scroller.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight),
+            )
+            .toBe(true);
+        await scroller.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
+        const lastCommentRow = dialog.locator('.feed-comments li').filter({ hasText: lastComment });
+        await expect(lastCommentRow).toBeVisible();
+        await expect(dialog.getByText(lastComment)).toBeInViewport();
+        const geometry = await lastCommentRow.evaluate((row) => {
+            const avatar = row.querySelector('.feed-comment-avatar')?.getBoundingClientRect();
+            const copy = row.querySelector('.feed-comment-copy')?.getBoundingClientRect();
+            const bounds = row.getBoundingClientRect();
+            return {
+                rowWidth: bounds.width,
+                avatarWidth: avatar?.width ?? 0,
+                copyWidth: copy?.width ?? 0,
+                copyStartsAfterAvatar: copy && avatar ? copy.left >= avatar.right : false,
+            };
+        });
+        expect(geometry.avatarWidth).toBeLessThanOrEqual(40);
+        expect(geometry.copyWidth / geometry.rowWidth).toBeGreaterThan(0.7);
+        expect(geometry.copyStartsAfterAvatar).toBe(true);
+    }
+}
+
 async function expectMapFilled(dialog: Locator): Promise<void> {
     const map = dialog.locator('.leaflet-container');
     await expect

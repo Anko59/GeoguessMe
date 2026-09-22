@@ -4,13 +4,18 @@ import { feedTimedGameAdapter } from '../../../hooks/feedTimedGameAdapter';
 const mocks = vi.hoisted(() => ({
     timedResults: vi.fn(),
     timedMedia: vi.fn(),
+    media: vi.fn(),
     acceptTimed: vi.fn(),
     timedMediaDelivered: vi.fn(),
     timedGuess: vi.fn(),
     timedTimeout: vi.fn(),
 }));
 
-vi.mock('../../../api', () => ({ publicFeedAPI: mocks }));
+vi.mock('../../../api', () => ({
+    publicFeedAPI: mocks,
+    getAPIErrorCode: (error: { response?: { data?: { error?: { code?: string } } } }) =>
+        error.response?.data?.error?.code,
+}));
 
 const signal = new AbortController().signal;
 
@@ -47,7 +52,7 @@ describe('feed timed-game adapter', () => {
             ],
             server_time: '2026-01-01T00:00:02Z',
         });
-        mocks.timedMedia.mockResolvedValue(new Blob(['photo'], { type: 'image/jpeg' }));
+        mocks.media.mockResolvedValue(new Blob(['photo'], { type: 'image/jpeg' }));
 
         const loaded = await feedTimedGameAdapter.loadResults('feed-1', signal);
 
@@ -64,7 +69,8 @@ describe('feed timed-game adapter', () => {
         expect(loaded.results.guesses[1]).toMatchObject({ user_id: 'user-2', score: 0, timed_out: true });
         expect(loaded.results.guesses[1]).not.toHaveProperty('lat');
         expect(loaded.media).toMatchObject({ mediaType: 'image/jpeg' });
-        expect(mocks.timedMedia).toHaveBeenCalledWith('feed-1', signal);
+        expect(mocks.media).toHaveBeenCalledWith('feed-1', false, signal);
+        expect(mocks.timedMedia).not.toHaveBeenCalled();
     });
 
     it('forwards the timed lifecycle without falling back to legacy feed endpoints', async () => {
@@ -102,7 +108,7 @@ describe('feed timed-game adapter', () => {
         expect(mocks.timedTimeout).toHaveBeenCalledWith('feed-1', signal);
     });
 
-    it('keeps map results usable when media has been removed', async () => {
+    it('marks media as removed only for an explicit media_removed response', async () => {
         mocks.timedResults.mockResolvedValue({
             challenge_id: 'feed-2',
             actual_lat: 1,
@@ -110,12 +116,30 @@ describe('feed timed-game adapter', () => {
             guesses: [],
             server_time: '2026-01-01T00:00:00Z',
         });
-        mocks.timedMedia.mockRejectedValue(new Error('media expired'));
+        mocks.media.mockRejectedValue({ response: { data: { error: { code: 'media_removed' } } } });
 
         const loaded = await feedTimedGameAdapter.loadResults('feed-2', signal);
 
         expect(loaded.results.actual_lat).toBe(1);
         expect(loaded.results.media_available).toBe(false);
+        expect(loaded.results.mediaLoadFailed).toBeUndefined();
+        expect(loaded.media).toBeUndefined();
+    });
+
+    it('keeps result media available when a transient media request fails', async () => {
+        mocks.timedResults.mockResolvedValue({
+            challenge_id: 'feed-3',
+            actual_lat: 1,
+            actual_long: 2,
+            guesses: [],
+            server_time: '2026-01-01T00:00:00Z',
+        });
+        mocks.media.mockRejectedValue(new Error('Network unavailable'));
+
+        const loaded = await feedTimedGameAdapter.loadResults('feed-3', signal);
+
+        expect(loaded.results.media_available).toBe(true);
+        expect(loaded.results.mediaLoadFailed).toBe(true);
         expect(loaded.media).toBeUndefined();
     });
 });

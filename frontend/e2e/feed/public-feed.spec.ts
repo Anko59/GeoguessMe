@@ -7,7 +7,13 @@ import {
     signupWithToken,
 } from '../support/helpers';
 import { cameraOptions } from '../support/challengeScenario';
-import { captureAudienceControls, captureFeedState, expectPhotoDecoded, installMapTiles } from './visual-support';
+import {
+    captureAudienceControls,
+    captureFeedState,
+    expectFeedDiscussionReachableAtViewports,
+    expectPhotoDecoded,
+    installMapTiles,
+} from './visual-support';
 
 test('a public post can be guessed, liked, and commented on by someone outside the author’s groups', async ({
     browser,
@@ -78,15 +84,11 @@ test('a public post can be guessed, liked, and commented on by someone outside t
             )
             .toEqual({ lat: '48.8566', long: '2.3522' });
         await expect(owner).toHaveURL(/\/feed\/[a-f0-9-]{36}$/);
-        await expect(owner.getByText('Your challenge')).toBeVisible();
-        await expectPhotoDecoded(owner.getByAltText('Geo challenge photo'));
-        await captureFeedState(owner, testInfo, '02-authored-post');
+        const ownerResults = owner.getByRole('dialog', { name: 'Challenge results' });
+        await expect(ownerResults).toBeVisible();
+        await expectPhotoDecoded(ownerResults.getByAltText('Challenge location'));
+        await captureFeedState(owner, testInfo, '02-authored-post', ownerResults);
         const postURL = owner.url();
-        await viewer.goto(postURL);
-        const blurred = viewer.getByAltText('Blurred preview of an unsolved geo challenge');
-        await expectPhotoDecoded(blurred);
-        await expect(blurred).toHaveCSS('filter', 'blur(12px) brightness(0.85)');
-        await captureFeedState(viewer, testInfo, '03-blurred-challenge');
         const accept = viewer.waitForResponse(
             (response) =>
                 response.url().endsWith('/api/v1/feed/challenges/' + publishedID + '/accept') &&
@@ -102,7 +104,7 @@ test('a public post can be guessed, liked, and commented on by someone outside t
                 response.url().endsWith('/api/v1/feed/challenges/' + publishedID + '/media-delivered') &&
                 response.request().method() === 'POST',
         );
-        await viewer.getByRole('button', { name: 'Play challenge' }).click();
+        await viewer.goto(postURL);
         expect((await accept).ok()).toBe(true);
         expect((await timedMedia).ok()).toBe(true);
         const game = viewer.getByRole('dialog', { name: 'Challenge photo' });
@@ -113,7 +115,7 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         expect((await delivered).ok()).toBe(true);
         await expect(viewer.getByRole('dialog', { name: 'Challenge guessing' })).toBeVisible();
         const guessing = viewer.getByRole('dialog', { name: 'Challenge guessing' });
-        await captureFeedState(viewer, testInfo, '04-guess-dialog', guessing);
+        await captureFeedState(viewer, testInfo, '03-guess-dialog', guessing);
         await guessing.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
         const [guess] = await Promise.all([
             viewer.waitForResponse(
@@ -129,7 +131,7 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await captureFeedState(
             viewer,
             testInfo,
-            '05-guess-result',
+            '04-guess-result',
             viewer.getByRole('dialog', { name: 'Challenge results' }),
         );
         await viewer.getByRole('button', { name: 'Close' }).click();
@@ -137,23 +139,60 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         const revealed = viewer.getByAltText('Geo challenge photo');
         await expectPhotoDecoded(revealed);
         await expect(revealed).toHaveCSS('filter', 'none');
-        await captureFeedState(viewer, testInfo, '06-revealed-challenge');
+        await captureFeedState(viewer, testInfo, '05-revealed-challenge');
         await viewer.getByRole('button', { name: 'Like challenge' }).click();
         await expect(viewer.getByRole('button', { name: 'Unlike challenge' })).toHaveAttribute('aria-pressed', 'true');
         await viewer.getByRole('button', { name: '0 comments' }).click();
         await viewer.getByRole('textbox', { name: 'Add a comment' }).fill('Such a lovely place!');
         await viewer.getByRole('button', { name: 'Post comment' }).click();
         await expect(viewer.getByText('Such a lovely place!')).toBeVisible();
-        await captureFeedState(viewer, testInfo, '07-reaction-and-comments');
+        const extraComments = [
+            'A lovely view.',
+            'I would visit again.',
+            'The light is beautiful.',
+            'Thanks for sharing.',
+            'One more great memory.',
+        ];
+        for (const comment of extraComments) {
+            await viewer.getByRole('textbox', { name: 'Add a comment' }).fill(comment);
+            await viewer.getByRole('button', { name: 'Post comment' }).click();
+            await expect(viewer.getByText(comment)).toBeVisible();
+        }
+        const article = viewer.getByRole('article', { name: /Geo challenge by/ });
+        await expect(article.getByRole('button', { name: 'Unlike challenge' })).toHaveAttribute('aria-pressed', 'true');
+        await expect(viewer.getByRole('dialog')).toHaveCount(0);
+        const author = article.locator('.feed-author');
+        const authorBounds = await author.boundingBox();
+        expect(authorBounds).not.toBeNull();
+        await author.click({ position: { x: authorBounds!.width - 2, y: authorBounds!.height / 2 } });
+        const results = viewer.getByRole('dialog', { name: 'Challenge results' });
+        await expect(results).toBeVisible();
+        await expect(results.getByText('Such a lovely place!')).toBeVisible();
+        await expect(results.getByText('One more great memory.')).toBeVisible();
+        await captureFeedState(viewer, testInfo, '06-result-discussion', results);
+        await expectFeedDiscussionReachableAtViewports(viewer, results, 'One more great memory.');
         await viewer.reload();
-        await expect(viewer.getByText('✓ Revealed')).toBeVisible();
-        await expect(viewer.getByRole('button', { name: 'Unlike challenge' })).toBeVisible();
-        await owner.reload();
-        await owner.getByRole('button', { name: '1 comment' }).click();
-        await expect(owner.getByText('Such a lovely place!')).toBeVisible();
+        const reopenedCard = viewer.getByRole('article', { name: /Geo challenge by/ });
+        await expect(reopenedCard).toBeVisible();
+        const reopenedAuthor = reopenedCard.locator('.feed-author');
+        const reopenedAuthorBounds = await reopenedAuthor.boundingBox();
+        expect(reopenedAuthorBounds).not.toBeNull();
+        await reopenedAuthor.click({
+            position: { x: reopenedAuthorBounds!.width - 2, y: reopenedAuthorBounds!.height / 2 },
+        });
+        const reopenedResults = viewer.getByRole('dialog', { name: 'Challenge results' });
+        await expect(reopenedResults).toBeVisible();
+        await expect(reopenedResults.getByRole('button', { name: 'Unlike challenge' })).toBeVisible();
+        await expect(reopenedResults.locator('.feed-comments li')).toHaveCount(6);
+        await owner.goto(postURL);
+        const ownResults = owner.getByRole('dialog', { name: 'Challenge results' });
+        await expect(ownResults).toBeVisible();
+        await expect(ownResults.getByText('Such a lovely place!')).toBeVisible();
+        await expect(ownResults.locator('.feed-comments li')).toHaveCount(6);
+        await owner.goto('/feed');
         await owner.getByRole('button', { name: 'Delete post' }).click();
         await owner.getByRole('button', { name: 'Confirm delete' }).click();
-        await expect(owner.getByText('This challenge has been removed')).toBeVisible();
+        await expect(owner.getByText('The world is waiting for your first post')).toBeVisible();
         publishedID = undefined;
     } finally {
         try {

@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import FeedCard from './FeedCard';
+import FeedCard, { FeedResultsFooter } from './FeedCard';
 import FeedComposer from './FeedComposer';
 import { useFeed } from './useFeed';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
+import FeedGame from './FeedGame';
 import './FeedForms.css';
 import './Feed.css';
 import './FeedAudience.css';
 
-function FeedPage({ id }: { id?: string }) {
-    const feed = useFeed(id);
+function FeedPage() {
+    const feed = useFeed();
     const navigate = useNavigate();
     const [composing, setComposing] = useState(false);
     return (
@@ -19,7 +20,7 @@ function FeedPage({ id }: { id?: string }) {
                     <section className="feed-heading">
                         <div>
                             <p className="feed-eyebrow">Community challenges</p>
-                            <h1>{id ? 'Geo challenge' : 'Explore the world'}</h1>
+                            <h1>Explore the world</h1>
                             <p>Open a photo. Guess the place. Make it clear in your feed.</p>
                         </div>
                         <button className="btn btn-primary" onClick={() => setComposing(true)}>
@@ -27,7 +28,7 @@ function FeedPage({ id }: { id?: string }) {
                         </button>
                     </section>
                     <div className="feed-section-label">
-                        <h2>{id ? 'Shared with the community' : 'Latest challenges'}</h2>
+                        <h2>Latest challenges</h2>
                     </div>
                     {feed.error && (
                         <div className="feed-empty" role="alert">
@@ -49,9 +50,7 @@ function FeedPage({ id }: { id?: string }) {
                     {feed.loaded && feed.items.length === 0 && (
                         <section className="feed-empty">
                             <img src="/globe_icon.png" alt="" />
-                            <h2>
-                                {id ? 'This challenge has been removed' : 'The world is waiting for your first post'}
-                            </h2>
+                            <h2>The world is waiting for your first post</h2>
                             <p>Take a photo now and let your device add the location.</p>
                             <button className="btn btn-secondary" onClick={() => setComposing(true)}>
                                 Post a geo challenge
@@ -69,11 +68,6 @@ function FeedPage({ id }: { id?: string }) {
                         >
                             {feed.pending ? 'Loading…' : 'More adventures'}
                         </button>
-                    )}
-                    {id && (
-                        <Link className="feed-back-link" to="/feed">
-                            Explore more challenges →
-                        </Link>
                     )}
                 </div>
                 <aside className="feed-sidebar">
@@ -110,7 +104,53 @@ function FeedPage({ id }: { id?: string }) {
     );
 }
 
+function FeedResultsRoute({ id }: { id: string }) {
+    const feed = useFeed(id);
+    const post = feed.items[0];
+    const navigate = useNavigate();
+
+    return (
+        <AuthenticatedPageShell className="public-feed">
+            <main className="feed-result-route">
+                {!feed.loaded && !feed.error && <p role="status">Loading challenge results…</p>}
+                {feed.error && (
+                    <div role="alert">
+                        <p>{feed.error}</p>
+                        <button className="btn btn-secondary" disabled={feed.pending} onClick={() => void feed.load()}>
+                            Try again
+                        </button>
+                    </div>
+                )}
+                {feed.loaded && !post && !feed.error && (
+                    <section className="feed-empty">
+                        <h1>Challenge unavailable</h1>
+                        <p>This challenge is no longer available.</p>
+                        <Link className="btn btn-secondary" to="/feed">
+                            Back to feed
+                        </Link>
+                    </section>
+                )}
+                {post && (
+                    <FeedGame
+                        id={post.id}
+                        isOwner={post.is_owner}
+                        openResultsDirectly={post.is_owner || post.resolved}
+                        restoreFocus={() => {}}
+                        onClose={() => navigate('/feed')}
+                        onResolved={() => feed.update({ id: post.id, resolved: true })}
+                        resultsFooter={
+                            post.is_owner || post.resolved ? (
+                                <FeedResultsFooter post={post} onUpdate={feed.update} />
+                            ) : undefined
+                        }
+                    />
+                )}
+            </main>
+        </AuthenticatedPageShell>
+    );
+}
+
 export default function Feed() {
     const { id } = useParams();
-    return <FeedPage key={id ?? 'all'} id={id} />;
+    return id ? <FeedResultsRoute key={id} id={id} /> : <FeedPage />;
 }

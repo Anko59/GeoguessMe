@@ -364,34 +364,6 @@
     font-weight: 800;
 }
 
-.message-input {
-    min-width: 0;
-    min-height: 48px;
-    max-height: 10rem;
-    flex: 1;
-    align-self: flex-end;
-    padding: 0.8rem 0.95rem;
-    background: var(--surface-soft);
-    border-color: transparent;
-    border-radius: var(--radius-md);
-    overflow-y: auto;
-    resize: none;
-}
-
-.message-input:placeholder-shown {
-    overflow-y: hidden;
-}
-
-.message-input::placeholder {
-    color: var(--ink-subtle);
-}
-
-.message-input:focus {
-    background: var(--surface);
-    border-color: var(--brand-blue-accessible);
-    box-shadow: var(--focus-ring);
-}
-
 .attachment-button {
     width: 48px;
     height: 48px;
