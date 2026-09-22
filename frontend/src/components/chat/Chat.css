@@ -378,6 +378,10 @@
     resize: none;
 }
 
+.message-input:placeholder-shown {
+    overflow-y: hidden;
+}
+
 .message-input::placeholder {
     color: var(--ink-subtle);
 }
