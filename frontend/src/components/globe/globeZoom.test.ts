@@ -25,6 +25,11 @@ function tileResponse(): Response {
     return { ok: true, status: 200, blob: async () => new Blob(['tile']) } as Response;
 }
 
+function isGibsTileRequest(input: RequestInfo | URL): boolean {
+    const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    return new URL(href).hostname === 'gibs.earthdata.nasa.gov';
+}
+
 function meshWaiter() {
     let layer: THREE.Group | undefined;
     const waiters: { predicate: () => boolean; resolve: () => void }[] = [];
@@ -73,6 +78,12 @@ function cameraAt(latitude: number, longitude: number, aspect: number) {
 }
 
 describe('globe detail resolution', () => {
+    it('matches the NASA tile host exactly', () => {
+        expect(isGibsTileRequest('https://gibs.earthdata.nasa.gov/tiles/example')).toBe(true);
+        expect(isGibsTileRequest('https://gibs.earthdata.nasa.gov.attacker.example/tiles/example')).toBe(false);
+        expect(isGibsTileRequest('https://attacker.example/?from=gibs.earthdata.nasa.gov')).toBe(false);
+    });
+
     it('uses Mercator row spacing for OSM geometry and linear latitude for NASA', () => {
         const osmTile = { provider: 'osm' as const, level: 3, row: 0, column: 0 };
         const expectedMercatorLatitude = THREE.MathUtils.radToDeg(Math.atan(Math.sinh(Math.PI * (1 - 1 / 8))));
@@ -189,7 +200,7 @@ describe('globe detail resolution', () => {
         await vi.advanceTimersByTimeAsync(120);
         await nasaComplete;
         expect(fetchMock).toHaveBeenCalledTimes(nasaTiles.length);
-        expect(fetchMock.mock.calls.every(([url]) => String(url).includes('gibs.earthdata.nasa.gov'))).toBe(true);
+        expect(fetchMock.mock.calls.every(([url]) => isGibsTileRequest(url))).toBe(true);
         expect(bitmaps).toHaveLength(nasaTiles.length);
         expect(sources).toHaveBeenLastCalledWith(['nasa']);
 
@@ -202,7 +213,7 @@ describe('globe detail resolution', () => {
         const heldOsm = deferred<Response>();
         let osmRequests = 0;
         fetchMock.mockImplementation(async (url) => {
-            if (String(url).includes('gibs.earthdata.nasa.gov')) return tileResponse();
+            if (isGibsTileRequest(url)) return tileResponse();
             osmRequests += 1;
             return osmRequests === 1 ? heldOsm.promise : tileResponse();
         });
