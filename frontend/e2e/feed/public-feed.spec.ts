@@ -116,7 +116,12 @@ test('a public post can be guessed, liked, and commented on by someone outside t
         await expect(viewer.getByRole('dialog', { name: 'Challenge guessing' })).toBeVisible();
         const guessing = viewer.getByRole('dialog', { name: 'Challenge guessing' });
         await captureFeedState(viewer, testInfo, '03-guess-dialog', guessing);
-        await guessing.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
+        const guessMap = guessing.locator('.leaflet-container');
+        const mapBounds = await guessMap.boundingBox();
+        expect(mapBounds).not.toBeNull();
+        await guessMap.click({
+            position: { x: mapBounds!.width * 0.15, y: mapBounds!.height * 0.85 },
+        });
         const [guess] = await Promise.all([
             viewer.waitForResponse(
                 (response) => response.url().endsWith('/timed-guess') && response.request().method() === 'POST',
