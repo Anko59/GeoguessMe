@@ -31,6 +31,8 @@ case "$environment" in
 esac
 
 release=$(release_dir "$revision")
+prune_releases "$APP_ROOT" "$STATE_ROOT" "$CONFIG_ROOT" "$revision" ||
+    die 'cannot safely prune hosted source releases; inspect current and previous metadata'
 if [ ! -d "$release" ]; then
     archive=$(mktemp)
     staging=$(mktemp -d "$APP_ROOT/releases/.staging.XXXXXX")

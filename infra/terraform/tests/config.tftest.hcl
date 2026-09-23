@@ -95,27 +95,6 @@ run "hosted_plan" {
       runtime_revision = var.runtime_revision
       tunnel_token     = "mock-tunnel-token"
       runtime_bundle   = local.runtime_bundle
-      runtime_hashes = join("\n", [
-        for relative_path, absolute_path in {
-          "bin/alert.sh"                       = "../../deployment/scripts/hosted/alert.sh"
-          "bin/backup.sh"                      = "../../deployment/scripts/hosted/backup.sh"
-          "bin/common.sh"                      = "../../deployment/scripts/hosted/common.sh"
-          "bin/deploy.sh"                      = "../../deployment/scripts/hosted/deploy.sh"
-          "bin/forced-command.sh"              = "../../deployment/scripts/hosted/forced-command.sh"
-          "bin/health-check.sh"                = "../../deployment/scripts/hosted/health-check.sh"
-          "bin/restore-rehearsal.sh"           = "../../deployment/scripts/hosted/restore-rehearsal.sh"
-          "bin/verify-deployment-hashes.sh"    = "../../deployment/scripts/hosted/verify-deployment-hashes.sh"
-          "bin/watch-health.sh"                = "../../deployment/scripts/hosted/watch-health.sh"
-          "bin/watch-refresh-metrics-token.sh" = "../../deployment/scripts/hosted/watch-refresh-metrics-token.sh"
-          "bin/watch-capacity.sh"              = "../../deployment/scripts/hosted/watch-capacity.sh"
-          "config/compose.hosted.yaml"         = "../../deployment/compose.hosted.yaml"
-          "config/compose.production.yaml"     = "../../deployment/compose.production.yaml"
-          "config/compose.watch.yaml"          = "../../deployment/compose.watch.yaml"
-          "config/watch/Caddyfile"             = "../../deployment/watch/Caddyfile"
-          "config/watch/vector.yaml"           = "../../deployment/watch/vector.yaml"
-          "config/watch/victoria-metrics.yaml" = "../../deployment/watch/victoria-metrics.yaml"
-        } : "${filesha256(absolute_path)}  ${relative_path}"
-      ])
     }))) <= 32768
     error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
   }

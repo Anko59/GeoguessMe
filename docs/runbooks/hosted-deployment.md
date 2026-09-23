@@ -51,7 +51,13 @@ backup/restore replacement procedure; a newly created host always receives the
 current template. Runtime scripts and compose definitions must be updated as one
 exact-revision set using the procedure in
 [docs/runbooks/runtime-hardening.md](runtime-hardening.md#applying-monitored-host-definitions);
-copying only the latest changed file creates an unverifiable host state.
+copying only the latest changed file creates an unverifiable host state. After
+installing a runtime that adds release cleanup, run
+`sudo sh -c '. /opt/geoguessme/bin/common.sh; prune_releases /opt/geoguessme /var/lib/geoguessme /opt/geoguessme/config <revision>'`
+from the operator session, using the active dev revision for `<revision>`. This
+preserves all current/rollback/runtime source revisions while removing only
+unreferenced release source and abandoned staging directories. Verify dev and
+production runtime hashes and health before closing the maintenance window.
 
 The deployment and backup locks live below `/run`, which is cleared at boot.
 Cloud-init installs `/etc/tmpfiles.d/geoguessme.conf` so systemd recreates

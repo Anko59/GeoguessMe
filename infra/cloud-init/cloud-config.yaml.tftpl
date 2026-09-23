@@ -85,6 +85,8 @@ write_files:
       #!/bin/sh
       set -eu
       bundle=$${1:?runtime bundle path is required}
+      manifest=$(mktemp /opt/geoguessme/config/runtime-hashes.XXXXXX)
+      trap 'rm -f "$manifest"' EXIT INT TERM
       exec 3<"$bundle"
       IFS= read -r magic <&3
       [ "$magic" = GEOGUESSME_RUNTIME_BUNDLE_V1 ]
@@ -99,6 +101,10 @@ write_files:
         [ -n "$path" ] || continue
         size=$1
         shift
+        case "$path" in
+          /opt/geoguessme/bin/* | /opt/geoguessme/config/*) ;;
+          *) exit 1 ;;
+        esac
         install -d -m 0755 "$(dirname "$path")"
         temporary=$(mktemp "$path.XXXXXX")
         dd if=/dev/fd/3 of="$temporary" bs=1 count="$size" 2>/dev/null
@@ -106,6 +112,8 @@ write_files:
         chown root:root "$temporary"
         chmod "$mode" "$temporary"
         mv -f "$temporary" "$path"
+        printf '%s  %s\n' "$(sha256sum "$path" | cut -d' ' -f1)" \
+          "$${path#/opt/geoguessme/}" >>"$manifest"
       done <<'FILES'
       /opt/geoguessme/bin/common.sh 0755
       /opt/geoguessme/bin/deploy.sh 0755
@@ -125,16 +133,15 @@ write_files:
       /opt/geoguessme/config/watch/vector.yaml 0444
       /opt/geoguessme/config/watch/victoria-metrics.yaml 0444
       FILES
+      chown root:root "$manifest"
+      chmod 0444 "$manifest"
+      mv -f "$manifest" /opt/geoguessme/config/runtime-hashes
+      trap - EXIT INT TERM
   - path: /opt/geoguessme/config/runtime-revision
     owner: root:root
     permissions: "0444"
     content: |
       ${runtime_revision}
-  - path: /opt/geoguessme/config/runtime-hashes
-    owner: root:root
-    permissions: "0444"
-    content: |
-      ${runtime_hashes}
   - path: /etc/systemd/system/geoguessme-backup@.service
     permissions: "0644"
     content: |

@@ -190,6 +190,8 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/prune-releases.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-bundle.sh
 
 watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
 	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
