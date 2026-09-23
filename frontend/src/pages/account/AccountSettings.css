@@ -1,7 +1,8 @@
 .account-settings-container {
-    width: 100%;
+    width: min(100%, 64rem);
     min-height: 0;
-    padding: 0;
+    margin-inline: auto;
+    padding: clamp(1rem, 3vw, 2rem);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -22,6 +23,15 @@
     width: min(100%, 46rem);
     padding: clamp(1.25rem, 4vw, 2.5rem);
     text-align: left;
+}
+
+.account-settings-container > .account-settings-card {
+    width: min(100%, 46rem);
+    margin-block: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
 }
 
 .account-header {
@@ -223,16 +233,8 @@
 }
 
 @media (max-width: 640px) {
-    .account-settings-container {
-        padding: 0;
-        background: var(--surface);
-    }
-
     .account-settings-card {
-        min-height: 100dvh;
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
+        min-height: 0;
     }
 
     .account-header > img {
