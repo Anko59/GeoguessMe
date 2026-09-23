@@ -44,6 +44,81 @@ valid_image_reference() {
     [ "${#candidate_digest}" -eq 64 ]
 }
 
+valid_release_revision() {
+    case "$1" in *[!0-9a-f]* | '') return 1 ;; esac
+    [ "${#1}" -eq 40 ]
+}
+
+prune_releases() {
+    prune_app_root=$1 prune_state_root=$2 prune_config_root=$3 prune_incoming_revision=$4
+    prune_releases_root="$prune_app_root/releases"
+    valid_release_revision "$prune_incoming_revision" || return 1
+    [ -d "$prune_releases_root" ] || return 0
+    prune_protected_revisions=" $prune_incoming_revision "
+    prune_protect_revision() {
+        case "$prune_protected_revisions" in
+            *" $1 "*) ;;
+            *) prune_protected_revisions="${prune_protected_revisions}${1} " ;;
+        esac
+    }
+
+    for prune_environment in dev production; do
+        prune_current_link="$prune_app_root/$prune_environment/current"
+        prune_active_revision=''
+        if [ -e "$prune_current_link" ] || [ -L "$prune_current_link" ]; then
+            [ -L "$prune_current_link" ] || return 1
+            prune_target=$(readlink "$prune_current_link") || return 1
+            case "$prune_target" in
+                "$prune_releases_root"/*) prune_active_revision=${prune_target#"$prune_releases_root"/} ;;
+                *) return 1 ;;
+            esac
+            valid_release_revision "$prune_active_revision" || return 1
+            prune_protect_revision "$prune_active_revision"
+        fi
+        for prune_kind in current previous; do
+            prune_metadata="$prune_state_root/releases/$prune_environment/$prune_kind.env"
+            [ -e "$prune_metadata" ] || [ -L "$prune_metadata" ] || continue
+            [ -f "$prune_metadata" ] && [ ! -L "$prune_metadata" ] || return 1
+            prune_count=$(awk -F= '$1 == "REVISION" { count++ } END { print count + 0 }' "$prune_metadata")
+            prune_metadata_revision=$(sed -n 's/^REVISION=//p' "$prune_metadata" | tail -n 1)
+            if [ "$prune_count" -ne 1 ] || ! valid_release_revision "$prune_metadata_revision"; then
+                if [ "$prune_kind" = current ] && [ -n "$prune_active_revision" ]; then
+                    printf 'release cleanup: ignoring incomplete current metadata for %s; preserving active symlink %s\n' \
+                        "$prune_environment" "$prune_active_revision" >&2
+                    continue
+                fi
+                return 1
+            fi
+            prune_protect_revision "$prune_metadata_revision"
+        done
+    done
+
+    prune_runtime_revision_file="$prune_config_root/runtime-revision"
+    if [ -e "$prune_runtime_revision_file" ] || [ -L "$prune_runtime_revision_file" ]; then
+        [ -f "$prune_runtime_revision_file" ] && [ ! -L "$prune_runtime_revision_file" ] || return 1
+        prune_runtime_revision=$(cat "$prune_runtime_revision_file")
+        valid_release_revision "$prune_runtime_revision" || return 1
+        prune_protect_revision "$prune_runtime_revision"
+    fi
+
+    prune_removed_releases=0 prune_removed_staging=0
+    for prune_path in "$prune_releases_root"/.staging.*; do
+        if [ ! -d "$prune_path" ] || [ -L "$prune_path" ]; then continue; fi
+        rm -rf -- "$prune_path"
+        prune_removed_staging=$((prune_removed_staging + 1))
+    done
+    for prune_path in "$prune_releases_root"/*; do
+        if [ ! -d "$prune_path" ] || [ -L "$prune_path" ]; then continue; fi
+        prune_candidate_revision=${prune_path##*/}
+        valid_release_revision "$prune_candidate_revision" || continue
+        case "$prune_protected_revisions" in *" $prune_candidate_revision "*) continue ;; esac
+        rm -rf -- "$prune_path"
+        prune_removed_releases=$((prune_removed_releases + 1))
+    done
+    printf 'release cleanup complete: removed %s unreferenced releases and %s abandoned staging directories\n' \
+        "$prune_removed_releases" "$prune_removed_staging"
+}
+
 validate_image_reference() {
     reference=$1
     label=$2

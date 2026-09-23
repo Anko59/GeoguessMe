@@ -147,6 +147,17 @@ database, restore through `make db-restore FILE=...`, run `make migrate-status`,
 and exercise `make smoke` against the restored application. Keep database and S3
 backups together because the database stores media object keys.
 
+Hosted deployment source releases are stored under `/opt/geoguessme/releases`.
+Before staging a revision, the installed deploy runtime removes abandoned
+staging directories and releases that are not referenced by either environment's
+current/previous metadata or the host runtime revision. It keeps those active
+and rollback releases intact; database, media, and backup data live separately.
+When recovering a host that filled before this cleanup was installed, use the
+operator route and the
+[runtime hardening procedure](../docs/runbooks/runtime-hardening.md#applying-monitored-host-definitions)
+to install the complete reviewed runtime set, then run its release cleanup and
+verify both environments before retrying deployment.
+
 ## Rollback and restart
 
 Rollback deploys a previously known-good immutable image. Migrations are

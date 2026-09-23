@@ -127,6 +127,17 @@ Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
 
+The host also stores an immutable source directory for each deployed revision.
+The deploy runtime retains the current and previous revision for dev and
+production, plus the root-owned runtime-definition revision. It removes other
+release directories and abandoned staging directories before downloading the
+next release. This keeps update storage separate from database, media, and
+backup retention. If deployment reports `No space left on device` before that
+runtime is installed, use the Access-protected operator route to inspect disk
+usage and apply the complete runtime set in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#applying-monitored-host-definitions);
+do not delete release directories by wildcard.
+
 ## Android release operations
 
 The production release workflow treats the Android App Bundle as a separate,

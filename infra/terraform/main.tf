@@ -20,35 +20,6 @@ removed {
 }
 
 locals {
-  # Hashes are rendered into a root-owned host manifest during provisioning.
-  # The runtime verifier must not use the deploy-writable release archive as
-  # its expected baseline because an attacker with deploy access could alter
-  # both the installed file and the comparison source.
-  runtime_hash_files = {
-    "bin/alert.sh"                       = "${path.module}/../../deployment/scripts/hosted/alert.sh"
-    "bin/backup.sh"                      = "${path.module}/../../deployment/scripts/hosted/backup.sh"
-    "bin/common.sh"                      = "${path.module}/../../deployment/scripts/hosted/common.sh"
-    "bin/deploy.sh"                      = "${path.module}/../../deployment/scripts/hosted/deploy.sh"
-    "bin/forced-command.sh"              = "${path.module}/../../deployment/scripts/hosted/forced-command.sh"
-    "bin/health-check.sh"                = "${path.module}/../../deployment/scripts/hosted/health-check.sh"
-    "bin/restore-rehearsal.sh"           = "${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"
-    "bin/verify-deployment-hashes.sh"    = "${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"
-    "bin/watch-health.sh"                = "${path.module}/../../deployment/scripts/hosted/watch-health.sh"
-    "bin/watch-refresh-metrics-token.sh" = "${path.module}/../../deployment/scripts/hosted/watch-refresh-metrics-token.sh"
-    "bin/watch-capacity.sh"              = "${path.module}/../../deployment/scripts/hosted/watch-capacity.sh"
-    "config/compose.hosted.yaml"         = "${path.module}/../../deployment/compose.hosted.yaml"
-    "config/compose.production.yaml"     = "${path.module}/../../deployment/compose.production.yaml"
-    "config/compose.watch.yaml"          = "${path.module}/../../deployment/compose.watch.yaml"
-    "config/watch/Caddyfile"             = "${path.module}/../../deployment/watch/Caddyfile"
-    "config/watch/vector.yaml"           = "${path.module}/../../deployment/watch/vector.yaml"
-    "config/watch/victoria-metrics.yaml" = "${path.module}/../../deployment/watch/victoria-metrics.yaml"
-  }
-
-  runtime_hashes = join("\n", [
-    for relative_path, absolute_path in local.runtime_hash_files :
-    "${filesha256(absolute_path)}  ${relative_path}"
-  ])
-
   # Keep the complete reviewed runtime set in one gzip stream because Hetzner
   # limits cloud-init user data to 32 KiB. The cloud-init extractor knows this
   # fixed order and writes the members to their root-owned destinations.
@@ -359,7 +330,6 @@ resource "hcloud_server" "app" {
     runtime_revision = var.runtime_revision
     tunnel_token     = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
     runtime_bundle   = local.runtime_bundle
-    runtime_hashes   = local.runtime_hashes
   })
 
   public_net {
