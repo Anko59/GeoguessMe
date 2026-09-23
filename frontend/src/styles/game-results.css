@@ -7,13 +7,16 @@
 }
 
 .result-map-column .result-map {
-    flex: 1;
+    min-height: 12rem;
+    flex: 1 1 35%;
 }
 
 .result-footer {
     min-width: 0;
-    max-height: 14rem;
+    min-height: 0;
+    flex: 1 1 65%;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 @media (max-width: 760px) {
@@ -23,5 +26,7 @@
 
     .result-footer {
         max-height: none;
+        flex: none;
+        overflow: visible;
     }
 }

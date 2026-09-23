@@ -148,6 +148,9 @@
     margin-bottom: 1.75rem;
     box-shadow: var(--shadow-xs);
 }
+.feed-card--interactive {
+    cursor: pointer;
+}
 .feed-card-header {
     display: flex;
     align-items: center;
@@ -422,6 +425,12 @@
 }
 .feed-load-more {
     width: 100%;
+}
+.feed-result-route {
+    min-height: 40vh;
+    display: grid;
+    place-items: center;
+    padding: 2rem 1rem;
 }
 
 @media (max-width: 900px) {

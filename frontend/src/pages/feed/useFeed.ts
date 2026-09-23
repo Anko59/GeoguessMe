@@ -99,7 +99,6 @@ export function usePublicComments(id: string) {
         loaded,
         load,
         add: (comment: PublicComment) => setItems((old) => [comment, ...old]),
-        remove: (commentID: string) => setItems((old) => old.filter((c) => c.id !== commentID)),
     };
 }
 
@@ -111,7 +110,5 @@ export function useFeedActions(id: string) {
         remove: () => request.run((signal) => publicFeedAPI.remove(id, signal)),
         react: (liked: boolean) => request.run((signal) => publicFeedAPI.react(id, liked, signal)),
         comment: (content: string) => request.run((signal) => publicFeedAPI.comment(id, content, signal)),
-        removeComment: (commentID: string) =>
-            request.run((signal) => publicFeedAPI.removeComment(id, commentID, signal)),
     };
 }

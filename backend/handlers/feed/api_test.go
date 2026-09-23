@@ -87,7 +87,7 @@ func TestFeedMediaOnlyStreamsOriginalForResolvedViewerOrExplicitPlay(t *testing.
 			a, mock := mockAPI(t)
 			store := &fakeStore{}
 			a.store = store
-			mock.ExpectQuery("SELECT p.storage_key,p.mime_type,p.preview").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"key", "mime", "preview", "revealed"}).AddRow("secret-key", "image/png", []byte("blurred"), tc.revealed))
+			mock.ExpectQuery("SELECT p.storage_key,p.mime_type,p.preview").WithArgs("viewer", testID, pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"key", "mime", "preview", "revealed"}).AddRow("secret-key", "image/png", []byte("blurred"), tc.revealed))
 			w := httptest.NewRecorder()
 			a.serveMedia(w, request("GET", ""), tc.playing)
 			if w.Code != 200 || w.Body.String() != tc.want {

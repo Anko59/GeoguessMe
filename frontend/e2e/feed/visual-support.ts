@@ -25,6 +25,91 @@ export async function expectPhotoDecoded(photo: Locator): Promise<void> {
         .toBe(true);
 }
 
+export async function expectFeedDiscussionReachableAtViewports(
+    page: Page,
+    dialog: Locator,
+    lastComment: string,
+): Promise<void> {
+    for (const viewport of [
+        { width: 1280, height: 720, scroller: '.result-footer' },
+        { width: 393, height: 727, scroller: '.result-content' },
+    ]) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        const scroller = dialog.locator(viewport.scroller);
+        await expect
+            .poll(() =>
+                scroller.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight),
+            )
+            .toBe(true);
+        const lastCommentRow = dialog.locator('.feed-comments li').filter({ hasText: lastComment });
+        const measureReachability = () =>
+            lastCommentRow.evaluate((row, scrollerSelector) => {
+                const element = row.closest<HTMLElement>(scrollerSelector);
+                if (!element) return { visibleRatio: 0, scrollTop: 0 };
+                const container = element.getBoundingClientRect();
+                const comment = row.getBoundingClientRect();
+                const visible = Math.max(
+                    0,
+                    Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                );
+                return {
+                    visibleRatio: comment.height > 0 ? visible / comment.height : 0,
+                    scrollTop: element.scrollTop,
+                };
+            }, viewport.scroller);
+        const initialReachability = await measureReachability();
+        await scroller.evaluate((element, commentText) => {
+            const row = Array.from(element.querySelectorAll('.feed-comments li')).find((candidate) =>
+                candidate.textContent?.includes(commentText),
+            );
+            if (!row) throw new Error(`Could not find the last feed comment: ${commentText}`);
+            const container = element.getBoundingClientRect();
+            const comment = row.getBoundingClientRect();
+            const delta =
+                comment.bottom > container.bottom
+                    ? comment.bottom - container.bottom
+                    : comment.top < container.top
+                      ? comment.top - container.top
+                      : 0;
+            element.scrollTop += delta;
+        }, lastComment);
+        const reachability = await measureReachability();
+        if (initialReachability.visibleRatio <= 0.5)
+            expect(reachability.scrollTop).not.toBe(initialReachability.scrollTop);
+        expect(reachability.visibleRatio).toBeGreaterThan(0.5);
+        if (viewport.width === 1280) {
+            const visibleCommentCount = await scroller.evaluate((element) => {
+                const container = element.getBoundingClientRect();
+                return Array.from(element.querySelectorAll('.feed-comments li')).filter((row) => {
+                    const comment = row.getBoundingClientRect();
+                    const visible = Math.max(
+                        0,
+                        Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                    );
+                    return comment.height > 0 && visible / comment.height > 0.5;
+                }).length;
+            });
+            expect(visibleCommentCount).toBeGreaterThanOrEqual(3);
+        }
+        await expect(lastCommentRow).toBeVisible();
+        await expect(dialog.getByText(lastComment)).toBeInViewport();
+        const geometry = await lastCommentRow.evaluate((row) => {
+            const avatar = row.querySelector('.feed-comment-avatar')?.getBoundingClientRect();
+            const copy = row.querySelector('.feed-comment-copy')?.getBoundingClientRect();
+            const bounds = row.getBoundingClientRect();
+            return {
+                rowWidth: bounds.width,
+                avatarWidth: avatar?.width ?? 0,
+                copyWidth: copy?.width ?? 0,
+                copyStartsAfterAvatar: copy && avatar ? copy.left >= avatar.right : false,
+            };
+        });
+        expect(geometry.avatarWidth).toBeLessThanOrEqual(40);
+        expect(geometry.copyWidth / geometry.rowWidth).toBeGreaterThan(0.7);
+        expect(geometry.copyStartsAfterAvatar).toBe(true);
+    }
+}
+
 async function expectMapFilled(dialog: Locator): Promise<void> {
     const map = dialog.locator('.leaflet-container');
     await expect

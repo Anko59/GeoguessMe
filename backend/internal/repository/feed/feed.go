@@ -205,11 +205,14 @@ type Media struct {
 	Revealed             bool
 }
 
-func (r *Repository) Media(ctx context.Context, id, viewer string) (Media, error) {
+func (r *Repository) Media(ctx context.Context, id, viewer string, now time.Time) (Media, error) {
 	var media Media
 	err := r.pool.QueryRow(ctx, `SELECT p.storage_key,p.mime_type,p.preview,
-		p.user_id=$1 OR EXISTS (SELECT 1 FROM public_guesses WHERE challenge_id=$2 AND user_id=$1)
-		FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id).Scan(&media.StorageKey, &media.MIMEType, &media.Preview, &media.Revealed)
+		p.user_id=$1
+		OR EXISTS (SELECT 1 FROM public_guesses WHERE challenge_id=$2 AND user_id=$1)
+		OR EXISTS (SELECT 1 FROM public_challenge_views v WHERE v.challenge_id=$2 AND v.user_id=$1
+			AND v.media_delivered_at IS NOT NULL AND v.guess_expires_at <= $3)
+		FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id, now).Scan(&media.StorageKey, &media.MIMEType, &media.Preview, &media.Revealed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return media, ErrNotFound
 	}

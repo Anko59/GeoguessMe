@@ -296,8 +296,8 @@
 
 .result-view {
     width: min(calc(100% - 2rem), 70rem);
-    height: min(94dvh, 54rem);
-    max-height: 94dvh;
+    height: min(98dvh, 54rem);
+    max-height: 98dvh;
     padding: clamp(0.75rem, 2vw, 1.5rem);
     display: flex;
     flex-direction: column;

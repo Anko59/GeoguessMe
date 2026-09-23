@@ -1,4 +1,4 @@
-import { publicFeedAPI } from '../api';
+import { getAPIErrorCodeAsync, publicFeedAPI } from '../api';
 import type { ChallengeResults, PublicTimedResults } from '../types';
 import type { TimedGameAdapter, TimedGameMedia } from './useTimedGame';
 
@@ -8,14 +8,17 @@ export const feedTimedGameAdapter: TimedGameAdapter = {
     async loadResults(id, signal) {
         const results = await publicFeedAPI.timedResults(id, signal);
         let media: TimedGameMedia | undefined;
+        let mediaAvailable = true;
+        let mediaLoadFailed = false;
         try {
-            const blob = await publicFeedAPI.timedMedia(id, signal);
+            const blob = await publicFeedAPI.media(id, false, signal);
             media = { blob, mediaType: blob.type || undefined };
-        } catch {
-            // Results remain useful when an old feed media object has been
-            // removed; the shared results view already handles no media.
+        } catch (error) {
+            if (signal.aborted) throw error;
+            if ((await getAPIErrorCodeAsync(error)) === 'media_removed') mediaAvailable = false;
+            else mediaLoadFailed = true;
         }
-        return { results: normalizeResults(id, results, media !== undefined), media };
+        return { results: normalizeResults(id, results, mediaAvailable, mediaLoadFailed), media };
     },
 
     async accept(id, signal) {
@@ -54,7 +57,12 @@ export const feedTimedGameAdapter: TimedGameAdapter = {
     },
 };
 
-function normalizeResults(id: string, data: PublicTimedResults, mediaAvailable: boolean): ChallengeResults {
+function normalizeResults(
+    id: string,
+    data: PublicTimedResults,
+    mediaAvailable: boolean,
+    mediaLoadFailed: boolean,
+): ChallengeResults {
     return {
         photo_id: id,
         group_id: 'feed',
@@ -75,6 +83,7 @@ function normalizeResults(id: string, data: PublicTimedResults, mediaAvailable: 
             created_at: guess.created_at,
         })),
         media_available: mediaAvailable,
+        ...(mediaLoadFailed ? { mediaLoadFailed: true } : {}),
         media_url: null,
         media_type: 'image/jpeg',
         server_time: data.server_time,

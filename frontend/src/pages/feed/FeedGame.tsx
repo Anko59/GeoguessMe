@@ -9,14 +9,16 @@ import { feedTimedGameAdapter } from '../../hooks/feedTimedGameAdapter';
  * group game view so feed challenges cannot drift into a second game UX. */
 export default function FeedGame({
     id,
-    alreadyResolved,
+    isOwner,
+    openResultsDirectly,
     restoreFocus,
     onClose,
     onResolved,
     resultsFooter,
 }: {
     id: string;
-    alreadyResolved: boolean;
+    isOwner: boolean;
+    openResultsDirectly: boolean;
     restoreFocus: () => void;
     onClose: () => void;
     onResolved: () => void;
@@ -38,11 +40,12 @@ export default function FeedGame({
         challengeId: id,
         currentUserId: user?.id,
         requiresCurrentUser: false,
-        isOwner: alreadyResolved,
-        openResultsDirectly: alreadyResolved,
+        isOwner,
+        openResultsDirectly,
         checkResultsBeforeAccept: false,
         adapter: feedTimedGameAdapter,
         onStatusChange,
+        onTimedOut: onResolved,
         onClose: handleClose,
     });
 

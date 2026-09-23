@@ -324,6 +324,11 @@ function GameResultsView({
                                 The original media has been removed; scores remain available.
                             </p>
                         )}
+                        {state.results.mediaLoadFailed && (
+                            <p className="result-notice" role="status">
+                                The photo could not be loaded. Close and reopen results to try again.
+                            </p>
+                        )}
                         <div className="score-list" aria-label="Submitted scores">
                             {state.results.guesses.map((guess) => (
                                 <div

@@ -87,6 +87,8 @@ export type ChallengeGuess = Omit<components['schemas']['Guess'], 'username' | '
 /** Challenge results with the guesses narrowed to the client's render model. */
 export type ChallengeResults = Omit<components['schemas']['ChallengeResults'], 'guesses'> & {
     guesses: ChallengeGuess[];
+    /** Client view state: the results remain usable, but the original media request can be retried. */
+    mediaLoadFailed?: boolean;
 };
 
 // --- Client-only types (not OpenAPI schemas) ---

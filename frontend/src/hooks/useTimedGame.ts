@@ -63,6 +63,7 @@ export interface UseTimedGameOptions {
     checkResultsBeforeAccept?: boolean;
     adapter: TimedGameAdapter;
     onStatusChange?: (id: string, status: 'accepted' | 'guessed' | 'results') => void;
+    onTimedOut?: (id: string) => void;
     onClose: () => void;
 }
 
@@ -90,6 +91,7 @@ export function useTimedGame({
     checkResultsBeforeAccept = true,
     adapter,
     onStatusChange,
+    onTimedOut,
     onClose,
 }: UseTimedGameOptions): UseTimedGameResult {
     const [state, dispatch] = useReducer(gameReducer, initialGameState);
@@ -362,9 +364,14 @@ export function useTimedGame({
             const controller = operationControllerRef.current;
             if (!id || !controller || !isCurrent(id, controller.signal)) return;
             dispatch({ type: 'guess-timeout' });
-            void adapter.timeout(id, controller.signal).catch(() => undefined);
+            void adapter
+                .timeout(id, controller.signal)
+                .then(() => {
+                    if (isCurrent(id, controller.signal)) onTimedOut?.(id);
+                })
+                .catch(() => undefined);
         }
-    }, [adapter, guessRemaining, isCurrent, state.guessDeadline, state.photoId, state.status]);
+    }, [adapter, guessRemaining, isCurrent, onTimedOut, state.guessDeadline, state.photoId, state.status]);
 
     useEffect(() => {
         if (!challengeId || (requiresCurrentUser && !currentUserId)) {

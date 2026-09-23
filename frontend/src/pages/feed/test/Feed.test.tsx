@@ -1,167 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PublicChallenge } from '../../../types';
-import Feed from '../Feed';
+import { getMocks, post, renderFeed } from './FeedTestHarness';
 
-const mocks = vi.hoisted(() => ({
-    list: vi.fn(),
-    get: vi.fn(),
-    publish: vi.fn(),
-    remove: vi.fn(),
-    media: vi.fn(),
-    acceptTimed: vi.fn(),
-    timedMedia: vi.fn(),
-    timedMediaDelivered: vi.fn(),
-    timedGuess: vi.fn(),
-    timedTimeout: vi.fn(),
-    timedResults: vi.fn(),
-    guess: vi.fn(),
-    react: vi.fn(),
-    comments: vi.fn(),
-    comment: vi.fn(),
-    removeComment: vi.fn(),
-    inbox: vi.fn(),
-}));
-vi.mock('../../../api', () => ({
-    publicFeedAPI: mocks,
-    groupsAPI: { inbox: mocks.inbox, markRead: vi.fn() },
-    getAPIErrorMessage: (error: Error) => error.message,
-}));
-vi.mock('../../../components/map/Map', () => ({
-    default: ({ onLocationSelect }: { onLocationSelect: (lat: number, long: number) => void }) => (
-        <button type="button" onClick={() => onLocationSelect(48.8, 2.3)}>
-            Select map point
-        </button>
-    ),
-}));
-vi.mock('../../../components/camera/Camera', () => ({
-    default: (props: Record<string, unknown>) => (
-        <button
-            type="button"
-            aria-label="Take photo"
-            onClick={() => {
-                void (
-                    props.uploadCaptured as (
-                        blob: Blob,
-                        filename: string,
-                        position: GeolocationPosition,
-                        options: {
-                            audience: 'public' | 'friends';
-                            caption: string;
-                            groupIDs: string[];
-                            hideLocation: boolean;
-                            idempotencyKey: string;
-                        },
-                    ) => Promise<unknown>
-                )(
-                    new Blob(['camera'], { type: 'image/jpeg' }),
-                    'capture.jpg',
-                    {
-                        coords: { latitude: 48.8566, longitude: 2.3522 },
-                    } as GeolocationPosition,
-                    {
-                        audience: 'public',
-                        caption: '',
-                        groupIDs: [],
-                        hideLocation: false,
-                        idempotencyKey: '11111111-1111-4111-8111-111111111111',
-                    },
-                )
-                    .then(() => (props.onUploadComplete as () => void)())
-                    .catch(() => undefined);
-            }}
-        >
-            Take photo
-        </button>
-    ),
-}));
-
-function post(overrides: Partial<PublicChallenge> = {}): PublicChallenge {
-    return {
-        id: 'post-1',
-        user_id: 'author',
-        username: 'Explorer',
-        avatar: 'avatar.png',
-        caption: 'A little corner of the world',
-        created_at: '2026-09-12T10:00:00Z',
-        is_owner: false,
-        resolved: false,
-        reacted: false,
-        reaction_count: 2,
-        comment_count: 0,
-        ...overrides,
-    };
-}
-
-function renderFeed() {
-    return render(
-        <MemoryRouter initialEntries={['/feed']}>
-            <Routes>
-                <Route path="/feed" element={<Feed />} />
-                <Route path="/feed/:id" element={<Feed />} />
-            </Routes>
-        </MemoryRouter>,
-    );
-}
-
-beforeEach(() => {
-    vi.resetAllMocks();
-    vi.stubGlobal('IntersectionObserver', undefined);
-    mocks.list.mockResolvedValue({ items: [post()], next_cursor: '' });
-    mocks.inbox.mockResolvedValue([]);
-    mocks.media.mockResolvedValue(new Blob(['image'], { type: 'image/jpeg' }));
-    mocks.acceptTimed.mockResolvedValue({
-        challenge_id: 'post-1',
-        media_url: '/api/v1/feed/challenges/post-1/timed-media',
-        media_type: 'image/jpeg',
-        accepted_at: new Date().toISOString(),
-        view_expires_at: new Date(Date.now() + 1000).toISOString(),
-        guess_after: new Date(Date.now() + 1000).toISOString(),
-        guess_expires_at: new Date(Date.now() + 121000).toISOString(),
-        score_grace_seconds: 30,
-        server_time: new Date().toISOString(),
-    });
-    mocks.timedMedia.mockResolvedValue(new Blob(['timed-image'], { type: 'image/jpeg' }));
-    mocks.timedMediaDelivered.mockResolvedValue({
-        view_expires_at: new Date(Date.now() + 1000).toISOString(),
-        guess_after: new Date(Date.now() + 1000).toISOString(),
-        guess_expires_at: new Date(Date.now() + 121000).toISOString(),
-        score_grace_seconds: 30,
-        server_time: new Date().toISOString(),
-    });
-    mocks.timedGuess.mockImplementation((id: string, point: { lat: number; long: number }, signal: AbortSignal) =>
-        mocks.guess(id, point, signal),
-    );
-    mocks.timedTimeout.mockResolvedValue(undefined);
-    mocks.timedResults.mockResolvedValue({
-        challenge_id: 'post-1',
-        actual_lat: 48.81,
-        actual_long: 2.31,
-        guesses: [],
-        server_time: new Date().toISOString(),
-    });
-    mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
-    mocks.react.mockResolvedValue(true);
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    vi.stubGlobal(
-        'createImageBitmap',
-        vi.fn().mockImplementation(async () => ({ width: 800, height: 600, close: vi.fn() })),
-    );
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-        drawImage: vi.fn(),
-    } as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) {
-        this.open = true;
-    });
-    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
-        this.open = false;
-    });
-});
-
-afterEach(() => vi.unstubAllGlobals());
+const mocks = getMocks();
 
 describe('Public feed', () => {
     it('blurs unsolved photos and reveals only after a successful guess', async () => {
@@ -208,6 +51,50 @@ describe('Public feed', () => {
         expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('reveals an unsolved card after its timed-out guess is persisted', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+        const startedAt = Date.now();
+        const viewExpiresAt = new Date(startedAt + 1000).toISOString();
+        const guessExpiresAt = new Date(startedAt + 3000).toISOString();
+        mocks.acceptTimed.mockResolvedValueOnce({
+            challenge_id: 'post-1',
+            media_url: '/api/v1/feed/challenges/post-1/timed-media',
+            media_type: 'image/jpeg',
+            accepted_at: new Date(startedAt).toISOString(),
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: guessExpiresAt,
+            score_grace_seconds: 30,
+            server_time: new Date(startedAt).toISOString(),
+        });
+        mocks.timedMediaDelivered.mockResolvedValueOnce({
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: guessExpiresAt,
+            score_grace_seconds: 30,
+            server_time: new Date(startedAt).toISOString(),
+        });
+
+        try {
+            renderFeed();
+            fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
+            await waitFor(() => expect(mocks.timedMediaDelivered).toHaveBeenCalled());
+
+            await act(async () => {
+                vi.setSystemTime(startedAt + 4000);
+                await vi.advanceTimersByTimeAsync(200);
+            });
+
+            await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
+            expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
+            expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('shows owners and previous guessers clear photos', async () => {
@@ -264,6 +151,44 @@ describe('Public feed', () => {
         expect(mocks.timedResults).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
     });
 
+    it.each([
+        ['the challenge author', post({ is_owner: true })],
+        ['another player who resolved it', post({ resolved: true })],
+    ])('shows likes and comments below results for %s', async (_label, challenge) => {
+        mocks.list.mockResolvedValue({ items: [challenge], next_cursor: '' });
+        renderFeed();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge results' });
+
+        expect(within(dialog).getByText('2 likes')).toBeInTheDocument();
+        expect(await within(dialog).findByText('No comments yet. Start the conversation.')).toBeInTheDocument();
+        expect(mocks.comments).toHaveBeenCalledWith('post-1', '', expect.any(AbortSignal));
+    });
+
+    it('opens resolved results from card whitespace while keeping social controls independent', async () => {
+        mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
+        renderFeed();
+        const card = await screen.findByRole('article', { name: 'Geo challenge by Explorer' });
+
+        fireEvent.click(within(card).getByRole('button', { name: 'Like challenge' }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        fireEvent.click(card);
+        expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
+    });
+
+    it('opens a shared challenge URL directly in results without rendering a single-card feed page', async () => {
+        mocks.get.mockResolvedValue(post({ is_owner: true }));
+        renderFeed('/feed/post-1');
+
+        expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Explore the world' })).not.toBeInTheDocument();
+        expect(screen.queryByText('Explore more challenges →')).not.toBeInTheDocument();
+        expect(mocks.get).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
+        expect(mocks.list).not.toHaveBeenCalled();
+    });
+
     it('reopens the saved result without submitting another guess', async () => {
         mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
         mocks.timedResults.mockResolvedValue({
@@ -277,6 +202,24 @@ describe('Public feed', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
         expect(mocks.timedGuess).not.toHaveBeenCalled();
+    });
+
+    it('shows a recoverable notice when result media cannot be fetched', async () => {
+        mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
+        mocks.media
+            .mockResolvedValueOnce(new Blob(['feed photo'], { type: 'image/jpeg' }))
+            .mockRejectedValueOnce(new Error('Network unavailable'));
+        renderFeed();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge results' });
+
+        expect(
+            await within(dialog).findByText('The photo could not be loaded. Close and reopen results to try again.'),
+        ).toBeInTheDocument();
+        expect(
+            within(dialog).queryByText('The original media has been removed; scores remain available.'),
+        ).not.toBeInTheDocument();
     });
 
     it('persists reactions, reverses them, and preserves state on failure', async () => {
@@ -304,7 +247,7 @@ describe('Public feed', () => {
         expect(mocks.react).toHaveBeenLastCalledWith('post-1', false, expect.any(AbortSignal));
     });
 
-    it('opens comments deliberately and supports posting and moderation', async () => {
+    it('opens comments deliberately, posts with the shared message input, and omits comment deletion controls', async () => {
         const comment = {
             id: 'comment-1',
             user_id: 'viewer',
@@ -315,7 +258,6 @@ describe('Public feed', () => {
             can_delete: true,
         };
         mocks.comment.mockResolvedValue(comment);
-        mocks.removeComment.mockResolvedValue(true);
         renderFeed();
         expect(await screen.findByText('Comments may contain clues or spoilers.')).toBeInTheDocument();
         expect(mocks.comments).not.toHaveBeenCalled();
@@ -329,9 +271,7 @@ describe('Public feed', () => {
         expect(screen.getByRole('img', { name: 'Me' })).toHaveAttribute('src', '/avatars/avatar-viewer.png');
         expect(screen.getByRole('button', { name: '1 comment' })).toBeInTheDocument();
         expect(mocks.comment).toHaveBeenCalledWith('post-1', 'Beautiful place!', expect.any(AbortSignal));
-        fireEvent.click(screen.getByRole('button', { name: 'Delete comment by Me' }));
-        await waitFor(() => expect(screen.queryByText('Beautiful place!')).not.toBeInTheDocument());
-        expect(screen.getByRole('button', { name: '0 comments' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Delete comment by Me' })).not.toBeInTheDocument();
     });
 
     it('keeps a new comment count when an earlier reaction request finishes later', async () => {
@@ -399,7 +339,7 @@ describe('Public feed', () => {
         fireEvent.click(screen.getByRole('button', { name: '+ Post a challenge' }));
         const dialog = screen.getByRole('dialog');
         fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
-        expect(await screen.findByText('Your challenge')).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         const form = mocks.publish.mock.calls[0][0] as FormData;
         expect(form.get('photo')).toBeInstanceOf(Blob);
         expect(form.get('caption')).toBe('');
@@ -407,7 +347,6 @@ describe('Public feed', () => {
         expect(form.get('lat')).toBe('48.8566');
         expect(form.get('long')).toBe('2.3522');
         expect(form.has('group_ids')).toBe(false);
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('requires confirmation before removing an authored post', async () => {
