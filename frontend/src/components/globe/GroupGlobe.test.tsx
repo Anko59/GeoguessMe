@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GroupChallenge } from '../../types';
 import GroupGlobe from './GroupGlobe';
@@ -45,6 +45,31 @@ beforeEach(() => {
 });
 
 describe('GroupGlobe', () => {
+    it('uses the shared group header with a labelled close action and only relevant globe actions', async () => {
+        get.mockResolvedValue({ data: { items: [] } });
+        render(
+            <GroupGlobe
+                {...props}
+                groupPhotoURL="/friends.png"
+                headerActions={
+                    <a href="/profile" aria-label="Open your profile">
+                        Profile
+                    </a>
+                }
+            />,
+        );
+        const dialog = await screen.findByRole('dialog', { name: "Your group's world" });
+        expect(within(dialog).getByRole('heading', { name: "Your group's world" })).toHaveAttribute(
+            'id',
+            'group-globe-title',
+        );
+        expect(within(dialog).getByRole('button', { name: 'Close group globe' })).toBeInTheDocument();
+        expect(within(dialog).getByRole('link', { name: 'Open your profile' })).toHaveAttribute('href', '/profile');
+        expect(within(dialog).queryByRole('button', { name: 'Open group settings' })).toBeNull();
+        expect(within(dialog).queryByRole('button', { name: /Party/ })).toBeNull();
+        expect(dialog.querySelector('.header-logo')).toHaveAttribute('src', '/friends.png');
+    });
+
     it('raises the challenge sheet when a pin is selected and toggles it closed', async () => {
         get.mockResolvedValue({ data: { items: [challenge] } });
         render(<GroupGlobe {...props} />);

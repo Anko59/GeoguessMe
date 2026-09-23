@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { GroupChallenge, Message } from '../../types';
+import GroupHeader from '../navigation/GroupHeader';
 import Icon from '../ui/Icon';
 import Globe from './Globe';
 import ChallengeHistory from './ChallengeHistory';
@@ -10,6 +11,8 @@ import './GroupGlobe.css';
 interface GroupGlobeProps {
     groupID: string;
     groupName: string;
+    groupPhotoURL?: string;
+    headerActions?: ReactNode;
     /** Changes when a realtime challenge is published for this group. */
     challengeRevision?: string;
     onClose: () => void;
@@ -19,6 +22,8 @@ interface GroupGlobeProps {
 export default function GroupGlobe({
     groupID,
     groupName,
+    groupPhotoURL = '/logo.png',
+    headerActions,
     challengeRevision = '',
     onClose,
     onChallenge,
@@ -163,15 +168,16 @@ export default function GroupGlobe({
                 onClose();
             }}
         >
-            <header className="globe-header">
-                <div>
-                    <p className="globe-eyebrow">{groupName}</p>
-                    <h2 id="group-globe-title">Your group's world</h2>
-                </div>
-                <button type="button" className="globe-close" onClick={onClose} aria-label="Close group globe">
-                    <Icon name="close" />
-                </button>
-            </header>
+            <GroupHeader
+                groupName={groupName}
+                photoURL={groupPhotoURL}
+                eyebrow={groupName}
+                heading="Your group's world"
+                headingID="group-globe-title"
+                headingLevel={2}
+                onClose={onClose}
+                actions={headerActions}
+            />
             <div className="globe-layout">
                 <Globe items={items} selectedID={selectedID} onSelect={selectFromGlobe} />
                 <section

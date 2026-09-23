@@ -13,39 +13,6 @@
 .group-globe::backdrop {
     background: #07162be6;
 }
-.globe-header {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: var(--surface);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1.2rem 1.5rem;
-}
-.globe-eyebrow {
-    margin: 0 0 0.25rem;
-    color: var(--ink-subtle);
-    font-size: 0.8rem;
-    overflow-wrap: anywhere;
-}
-.globe-header h2 {
-    margin: 0;
-    color: var(--brand-navy);
-    font-size: clamp(1.2rem, 3vw, 1.7rem);
-}
-.globe-close {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    flex: none;
-    color: var(--ink-muted);
-    background: var(--surface-soft);
-    border: 1px solid var(--line);
-    border-radius: 50%;
-}
 .globe-layout {
     display: grid;
     grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
@@ -90,6 +57,12 @@
     left: 1rem;
     color: #afc1d2;
     font-size: 0.65rem;
+    line-height: 1.35;
+    max-width: calc(100% - 2rem);
+}
+.globe-credit a {
+    color: inherit;
+    text-decoration: underline;
 }
 .globe-history-actions {
     display: flex;
@@ -136,6 +109,18 @@
     color: #fff;
     background: #102d49;
     border-radius: 12px;
+}
+.globe-detail-notice {
+    top: 1rem;
+    right: auto;
+    left: 50%;
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    text-align: center;
+    transform: translateX(-50%);
 }
 .globe-history {
     max-height: min(70dvh, 42rem);
@@ -350,12 +335,19 @@
     }
     .globe-credit {
         top: 0.6rem;
-        right: 0.8rem;
+        right: 0.5rem;
         bottom: auto;
-        left: auto;
+        left: 0.5rem;
+        max-width: none;
+        font-size: 0.56rem;
+        line-height: 1.25;
+        text-align: center;
     }
-    .globe-header {
-        padding: max(0.8rem, env(safe-area-inset-top)) 1rem 0.8rem;
+    .globe-detail-notice {
+        top: 3.2rem;
+        max-width: calc(100% - 1rem);
+        padding: 0.4rem 0.6rem;
+        font-size: 0.68rem;
     }
 }
 

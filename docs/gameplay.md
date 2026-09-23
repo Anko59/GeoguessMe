@@ -54,9 +54,12 @@ data to the browser.
 
 The globe has no automatic motion and supports keyboard controls. Tab and
 Shift+Tab cycle through its visible, enabled controls; Escape closes the globe
-and restores focus to its header button. When WebGL or the local Earth texture
-is unavailable, the challenge list remains usable. Earth imagery attribution is
-in the [asset documentation](../frontend/public/globe/README.md).
+and restores focus to its header button. Its bundled Earth texture stays in view
+while closer detail tiles load. The globe uses NASA GIBS imagery at medium zoom
+and OpenStreetMap tiles for close views; if a tile source is offline, the
+bundled Earth texture and challenge list remain usable. Tile requests include
+the current viewport only. Earth imagery and tile-service attribution are in the
+[asset documentation](../frontend/public/globe/README.md).
 
 ## Timing
 
