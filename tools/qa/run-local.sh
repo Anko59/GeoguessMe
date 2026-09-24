@@ -31,6 +31,11 @@ case "$budget" in
         exit 2
         ;;
 esac
+if [[ "$budget" != fast && "${QA_MAILBOX_PROVIDER:-mailtm}" != cloudflare ]]; then
+    echo "Full and nightly hosted QA require QA_MAILBOX_PROVIDER=cloudflare and the controlled relay configuration." >&2
+    echo "See docs/qa-agent.md; the public mailbox fallback is not accepted as release evidence." >&2
+    exit 2
+fi
 case "$runtime" in
     codex | pi) ;;
     *)

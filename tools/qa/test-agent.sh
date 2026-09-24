@@ -51,6 +51,7 @@ if rg -q 'CF_ACCESS_CLIENT_ID|CF_ACCESS_CLIENT_SECRET' "$root_dir/tools/qa/cloud
 rg -q 'qa_access_cleanup_on_exit' "$root_dir/tools/qa/cloudflare-access.sh"
 rg -q 'qa_mailbox_provision' "$root_dir/tools/qa/run-local.sh"
 rg -q 'QA_ACCOUNT_PASSWORD is required' "$root_dir/tools/qa/run-local.sh"
+rg -q 'Full and nightly hosted QA require QA_MAILBOX_PROVIDER=cloudflare' "$root_dir/tools/qa/run-local.sh"
 rg -q 'temporary literal Email Routing rule' "$root_dir/tools/qa/cloudflare-mailbox.sh"
 rg -q 'QA_MAILBOX_ACCESS_CLIENT_ID' "$root_dir/tools/qa/browser-mcp.mjs"
 if rg -n 'playwright test|actions/workflows/qa.yml|QA_PASSWORD|QA_USERNAME' "$root_dir/tools/qa" "$root_dir/.agents/qa" --glob '!test-agent.sh'; then

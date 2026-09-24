@@ -34,12 +34,14 @@ product link.
 
 The same MCP server exposes a high-level disposable mailbox contract:
 `mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
-default provider is Mail.tm, which requires no operator mailbox credential; the
+adapter default is Mail.tm, which requires no operator mailbox credential; the
 gateway keeps provider tokens and mailbox passwords out of the model output, and
 tokenized product links are opened server-side without being returned or
 recorded. Mailbox accounts are deleted when the MCP process exits. This is
-intentionally limited to throwaway QA mailboxes; it must not be used for real
-user mail. The provider's public API is documented at
+limited to throwaway QA mailboxes and adapter development; it must not be used
+for real user mail. Full and nightly hosted runs require the controlled
+Cloudflare relay described below and stop before starting the LLM when it is
+absent. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
 For hosted mail providers that do not deliver to disposable domains, the gateway
