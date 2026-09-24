@@ -192,12 +192,8 @@ async function call(name, args) {
     return { closed: args.session_id };
   }
   if (name === "qa_account_login") {
-    if (process.env.QA_ACCOUNT_PASSWORD) {
-      const result = await loginAccount(sessionFor(args).page, baseUrl, args.account_role);
-      coverage.role(args.session_id, args.account_role);
-      return result;
-    }
-    const result = await startEmailAccountSignup(args);
+    const result = await loginAccount(sessionFor(args).page, baseUrl, args.account_role);
+    coverage.role(args.session_id, args.account_role);
     return result;
   }
   if (name === "qa_email_account_signup") {

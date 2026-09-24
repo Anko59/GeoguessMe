@@ -61,6 +61,15 @@ with `QA_MAILBOX_ALLOWED_LINK_ORIGINS`, for example
 unprotected relay must use a unique per-run address and contain only disposable
 QA messages. A hosted run must not claim email coverage until `mailbox_search`,
 `mailbox_read`, and `mailbox_open_link` succeed through the configured provider.
+The local `CLOUDFLARE_API_TOKEN` therefore needs Email Routing Rules read and
+edit access for the relay zone in addition to the Access permissions used by the
+browser. The runner validates this by reading the configured seed rule before it
+starts the LLM and fails if the permission or rule is missing. A visible
+“verification sent” page proves only that the identity service accepted the
+request; it is not delivery evidence. During the September 2026 recovery, the
+public Mail.tm fallback reached that page but received no message, while the
+controlled relay configuration was absent and the local token could not read
+Email Routing rules. Do not retry that combination as an authenticated QA run.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -115,6 +124,24 @@ the browser dependencies once with `make bootstrap-e2e`, then pass
 `QA_SKIP_BOOTSTRAP=1` to each QA target so they do not update the shared
 Playwright dependency volume at the same time.
 
+The dedicated account-pool password is an operator secret stored in the local
+Secret Service keyring, never in the repository. Its canonical attributes are
+`service=codex-api`, `provider=qa`, `project=geoguessme`, and
+`name=QA_ACCOUNT_PASSWORD`. The repository-local `.envrc` loads that item as
+`QA_ACCOUNT_PASSWORD`; after creating or changing the entry, approve the local
+file with `direnv allow`. Verify only that the value is present, without
+printing it:
+
+```text
+direnv exec . sh -c 'test -n "$QA_ACCOUNT_PASSWORD"'
+```
+
+The runner stops before starting an LLM or browser when this credential is
+missing. The three usernames are `qa_release_owner`, `qa_release_member`, and
+`qa_release_outsider`; they are persistent dev-only accounts. Rotate all three
+password hashes together and update the one keyring entry in the same operation.
+Do not substitute an interactive Cloudflare email login for this credential.
+
 ## Budget tiers
 
 - `make qa-agent` (default, `fast`): the routine acceptance pass after every
@@ -128,22 +155,19 @@ The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
-Full and nightly runs use three role accounts: an owner, member, and outsider.
-They then use the opaque invite handoff to exercise invitation, group
-conversation, and authorization boundaries in separate browser sessions. When
-`QA_ACCOUNT_PASSWORD` is supplied, the role usernames default to
-`qa_release_owner`, `qa_release_member`, and `qa_release_outsider` and may be
-overridden with the corresponding `QA_ACCOUNT_*_USERNAME` variables. When the
-password is absent, `qa_account_login` provisions fresh disposable
-mailbox-backed accounts through the visible signup flow and retains generated
-credentials only in the browser provider. The owner signup also supports the
-identity-provider verification flow. Full and nightly runs call
-`qa_email_account_signup` once for the owner, then use `qa_account_login` for
-the member and outsider. Complete identity-provider email verification for each
-mailbox-backed role before using it. In both modes, credentials are never placed
-in the prompt, report, or CI. If account provisioning, verification, or the
-configured mailbox provider is unavailable, the affected journey is reported as
-blocked rather than silently treated as passed.
+All runs require the dedicated account pool. Full and nightly runs require three
+roles: an owner, member, and outsider. They then use the opaque invite handoff
+to exercise invitation, group conversation, and authorization boundaries in
+separate browser sessions. Pool usernames default to `qa_release_owner`,
+`qa_release_member`, and `qa_release_outsider` and may be overridden with the
+corresponding `QA_ACCOUNT_*_USERNAME` variables. Full and nightly runs call
+`qa_email_account_signup` once for the owner, then use pool accounts through
+`qa_account_login` for the member and outsider. Complete identity-provider email
+verification for the mailbox-backed owner before using it. In both modes,
+credentials are never placed in the prompt, report, or CI. If account
+provisioning, verification, or the configured mailbox provider is unavailable,
+the affected journey is reported as blocked rather than silently treated as
+passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised

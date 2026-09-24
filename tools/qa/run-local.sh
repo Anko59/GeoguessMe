@@ -11,6 +11,11 @@ if [[ -z "$base_url" ]]; then
     echo "QA_BASE_URL is required and must be the deployed dev URL." >&2
     exit 2
 fi
+if [[ -z "${QA_ACCOUNT_PASSWORD:-}" ]]; then
+    echo "QA_ACCOUNT_PASSWORD is required for the dedicated dev QA account pool." >&2
+    echo "Load it from the operator keyring before starting an agent; see docs/qa-agent.md." >&2
+    exit 2
+fi
 if [[ ! "$base_url" =~ ^https:// ]] && [[ "$(printenv QA_ALLOW_LOCAL 2>/dev/null || true)" != 1 ]]; then
     echo "QA_BASE_URL must use https for a deployed environment." >&2
     exit 2
