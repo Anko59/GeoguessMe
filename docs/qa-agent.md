@@ -43,19 +43,24 @@ user mail. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
 For hosted mail providers that do not deliver to disposable domains, the gateway
-also supports an Access-protected HTTP mailbox relay with
-`QA_MAILBOX_PROVIDER=cloudflare`, `QA_MAILBOX_API_URL`, and
-`QA_MAILBOX_ADDRESS`. For a release run, also provide the relay zone and the
-dedicated seed rule through `QA_MAILBOX_ZONE_ID` and
+also supports an HTTP mailbox relay with `QA_MAILBOX_PROVIDER=cloudflare`,
+`QA_MAILBOX_API_URL`, and `QA_MAILBOX_ADDRESS`. For a release run, also provide
+the relay zone and the dedicated seed rule through `QA_MAILBOX_ZONE_ID` and
 `QA_MAILBOX_ROUTING_RULE_ID`. The local runner creates a temporary literal Email
 Routing rule with a unique address derived from the seed, then removes that rule
 on exit. This prevents a previously verified QA address from making a fresh run
 appear to be an application verification failure. The relay must retain only
-short-lived test messages. Access credentials are passed to the mailbox gateway
-from the existing short-lived QA Access session; they are never placed in the
-prompt, report, or mailbox output. A hosted run must not claim email coverage
-until `mailbox_search`, `mailbox_read`, and `mailbox_open_link` succeed through
-the configured provider.
+short-lived test messages. When the relay API shares the app's origin, the
+runner uses the same short-lived `QA_ACCESS_*` session for both. For a relay on
+a different origin, its Access credentials must be supplied separately through
+`QA_MAILBOX_ACCESS_CLIENT_ID` and `QA_MAILBOX_ACCESS_CLIENT_SECRET`; app Access
+credentials are never sent to another origin. When identity email links use a
+separate identity origin, allow only that origin for server-side link opening
+with `QA_MAILBOX_ALLOWED_LINK_ORIGINS`, for example
+`https://auth.geoguessme.com`; links to other origins remain blocked. An
+unprotected relay must use a unique per-run address and contain only disposable
+QA messages. A hosted run must not claim email coverage until `mailbox_search`,
+`mailbox_read`, and `mailbox_open_link` succeed through the configured provider.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -98,10 +103,17 @@ The local runner uses the existing `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` to create a one-hour service token and a policy scoped
 only to the matching Access application, then removes both on exit. Existing
 `QA_ACCESS_CLIENT_ID` and `QA_ACCESS_CLIENT_SECRET` values are also accepted
-when an operator already has them. Access values are passed to the browser
-context only; they are not put in the prompt or report. The default runtime is
-`codex`; select Pi explicitly with `QA_RUNTIME=pi`. Use `make qa-agent-fast` for
-a short investigation or `make qa-agent-nightly` for the extended budget.
+when an operator already has a token scoped to that dev app. General deployment
+`CF_ACCESS_*` credentials are not reused because they may authorize a different
+application. Access values are passed to the browser context only; they are not
+put in the prompt or report. The default runtime is `codex`; select Pi
+explicitly with `QA_RUNTIME=pi`. Use `make qa-agent-fast` for a short
+investigation or `make qa-agent-nightly` for the extended budget. Set
+`QA_AGENT_FOCUS` to prioritize a feature area for that run, for example
+`QA_AGENT_FOCUS="group invitations and globe"`. For concurrent runs, bootstrap
+the browser dependencies once with `make bootstrap-e2e`, then pass
+`QA_SKIP_BOOTSTRAP=1` to each QA target so they do not update the shared
+Playwright dependency volume at the same time.
 
 ## Budget tiers
 
@@ -116,19 +128,22 @@ The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
-Full and nightly runs use the dedicated account pool for an owner, member, and
-outsider, plus a separate mailbox-backed account for authentication and
-recovery. They then use the opaque invite handoff to exercise invitation, group
+Full and nightly runs use three role accounts: an owner, member, and outsider.
+They then use the opaque invite handoff to exercise invitation, group
 conversation, and authorization boundaries in separate browser sessions. When
 `QA_ACCOUNT_PASSWORD` is supplied, the role usernames default to
 `qa_release_owner`, `qa_release_member`, and `qa_release_outsider` and may be
 overridden with the corresponding `QA_ACCOUNT_*_USERNAME` variables. When the
-password is absent, `qa_account_login` provisions fresh email-free QA accounts
-through the visible signup flow and retains their generated credentials only in
-the browser provider. In both modes, credentials are never placed in the prompt,
-report, or CI. If account provisioning or the configured mailbox provider is
-unavailable, the affected journey is reported as blocked rather than silently
-treated as passed.
+password is absent, `qa_account_login` provisions fresh disposable
+mailbox-backed accounts through the visible signup flow and retains generated
+credentials only in the browser provider. The owner signup also supports the
+identity-provider verification flow. Full and nightly runs call
+`qa_email_account_signup` once for the owner, then use `qa_account_login` for
+the member and outsider. Complete identity-provider email verification for each
+mailbox-backed role before using it. In both modes, credentials are never placed
+in the prompt, report, or CI. If account provisioning, verification, or the
+configured mailbox provider is unavailable, the affected journey is reported as
+blocked rather than silently treated as passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised
