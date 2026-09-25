@@ -27,6 +27,18 @@
     font-size: clamp(1.5rem, 4vw, 2.15rem);
 }
 
+.leaderboard-scope {
+    align-self: flex-start;
+    margin-left: auto;
+    padding: 0.35rem 0.6rem;
+    color: var(--brand-blue-accessible);
+    background: var(--surface-brand);
+    border-radius: var(--radius-pill);
+    font-size: 0.7rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
 .leaderboard-icon {
     width: 3.75rem;
     height: 3.75rem;
@@ -131,12 +143,36 @@
     margin-top: var(--space-2);
 }
 
+.leaderboard-error {
+    min-height: 8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    color: var(--ink-muted);
+    text-align: center;
+}
+
+.leaderboard-error p {
+    margin: 0;
+}
+
 .leaderboard-list {
     width: min(100%, 52rem);
     margin-inline: auto;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    list-style: none;
+}
+
+.leaderboard-pagination {
+    width: min(100%, 52rem);
+    margin: var(--space-5) auto 0;
+    display: flex;
+    justify-content: center;
 }
 
 .leaderboard-entry {
@@ -363,5 +399,14 @@
     .entry-score {
         min-width: 3.15rem;
         font-size: 1.05rem;
+    }
+
+    .leaderboard-header {
+        align-items: flex-start;
+    }
+
+    .leaderboard-scope {
+        margin-top: 0.25rem;
+        font-size: 0.62rem;
     }
 }

@@ -28,6 +28,39 @@ ready → accepted → viewing window → guessable → expired → removed
    enqueues a durable object-deletion job. The media bytes are no longer
    available.
 
+## Group globe
+
+The globe icon in the group chat header opens a 3D Earth for that group. Drag to
+rotate and use the labelled rotation and zoom buttons (or the familiar touch
+gestures) to explore. On phones, swipe the bottom sheet up or down to browse
+challenges; its grabber also provides a keyboard-accessible toggle. Select a pin
+or a challenge in the list to play it or view its results. The list includes the
+group's full challenge history, even after media removal; it loads independently
+of the currently visible chat messages and refreshes when a new challenge
+arrives. Use the icon-only **Refresh geochallenges** control to fetch newly
+revealed locations on demand.
+
+Search the full history by player, or filter the list to challenges ready to
+play or locations already revealed. The list shows 50 challenges per page to
+keep long histories responsive; the globe still shows all revealed locations.
+Selecting a challenge brings its details into view and puts keyboard focus next
+to **Play challenge** or **View results**. Pins have expanded touch targets.
+
+Only locations the current member can view in results are pinned. Unplayed
+challenges stay in the list without coordinates. The poster's timed location
+privacy setting still applies after a guess or challenge expiry. An author can
+always see their own locations. The server enforces these rules before sending
+data to the browser.
+
+The globe has no automatic motion and supports keyboard controls. Tab and
+Shift+Tab cycle through its visible, enabled controls; Escape closes the globe
+and restores focus to its header button. Its bundled Earth texture stays in view
+while closer detail tiles load. The globe uses NASA GIBS imagery at medium zoom
+and OpenStreetMap tiles for close views; if a tile source is offline, the
+bundled Earth texture and challenge list remain usable. Tile requests include
+the current viewport only. Earth imagery and tile-service attribution are in the
+[asset documentation](../frontend/public/globe/README.md).
+
 ## Timing
 
 | Parameter           | Default    | Description                                                      |
@@ -138,13 +171,17 @@ the same time.
 
 The result endpoint (`GET /api/v1/challenges/{photoID}/results`) returns
 `actual_lat`, `actual_long`, all guesses with `username`, `score`, `elo_delta`,
-`distance`, and `media_url` plus `media_type` (with `?result=1`) if the media is
-still available. `elo_delta` is the signed change in the player's weekly Elo
-rating caused by this challenge — the results page shows the weekly change only.
-It is zero when the challenge has fewer than two guesses or was created before
-the current calendar week started (such challenges no longer belong to any
-weekly ladder). Result photos can be opened full screen; videos retain playback
-controls in the result panel.
+`distance`, `time_to_guess_ms`, and `media_url` plus `media_type` (with
+`?result=1`) if the media is still available. `time_to_guess_ms` is how long
+after that player's guessing window opened they submitted, in milliseconds — the
+results page shows it next to the distance (for example "0.5 km away in 1min
+12sec"). It is omitted for timed-out guesses and for legacy guesses without a
+recorded viewing window. `elo_delta` is the signed change in the player's weekly
+Elo rating caused by this challenge — the results page shows the weekly change
+only. It is zero when the challenge has fewer than two guesses or was created
+before the current calendar week started (such challenges no longer belong to
+any weekly ladder). Result photos can be opened full screen; videos retain
+playback controls in the result panel.
 
 When a poster hid the location (`hide_location`), the exact spot stays private
 for the `LOCATION_HIDE_DURATION` (48 hours by default): the response omits

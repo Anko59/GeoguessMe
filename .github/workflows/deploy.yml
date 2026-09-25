@@ -1,7 +1,7 @@
-# Development pipeline. The complete dev gate runs as four parallel jobs
-# (quality, backend integration, Chromium E2E, operational rehearsals); the
-# full browser matrix and the load profile remain part of the complete nightly
-# gate. Publishing waits for all four, then deploys the exact
+# Development pipeline. The complete dev gate runs as five parallel jobs
+# (quality, backend integration, Chromium E2E, Android emulator, operational
+# rehearsals); the full browser matrix and the load profile remain part of the
+# complete nightly gate. Publishing waits for all five, then deploys the exact
 # signed digest.
 name: Deploy development
 
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -126,13 +126,32 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
 
+  mobile:
+    name: Android emulator gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Bootstrap mobile tools
+        run: make bootstrap-mobile
+      - name: Run Android emulator journey
+        run: make test-mobile
+      - name: Upload Android diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: geoguessme-dev-mobile-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: .local/mobile/artifacts/
+
   operational:
     name: Operational gate
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         id: buildx
         with:
           buildkitd-config-inline: |
@@ -162,7 +181,7 @@ jobs:
 
   publish:
     name: Publish signed development images
-    needs: [quality, integration, e2e, operational]
+    needs: [quality, integration, e2e, mobile, operational]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -172,10 +191,11 @@ jobs:
     outputs:
       backend: ${{ steps.refs.outputs.backend }}
       web: ${{ steps.refs.outputs.web }}
+      keycloak: ${{ steps.refs.outputs.keycloak }}
       restic: ${{ steps.refs.outputs.restic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.5
@@ -192,11 +212,12 @@ jobs:
           {
             echo "backend=ghcr.io/$owner/geoguessme-backend:dev-${GITHUB_SHA}"
             echo "web=ghcr.io/$owner/geoguessme-web:dev-${GITHUB_SHA}"
+            echo "keycloak=ghcr.io/$owner/geoguessme-keycloak:dev-${GITHUB_SHA}"
             echo "restic=ghcr.io/$owner/geoguessme-restic:dev-${GITHUB_SHA}"
           } >> "$GITHUB_OUTPUT"
       - name: Build and push backend with SBOM and provenance
         id: backend
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: deployment/docker/backend.Dockerfile
@@ -208,7 +229,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=dev-backend
       - name: Build and push web with SBOM and provenance
         id: web
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: deployment/docker/frontend.Dockerfile
@@ -218,9 +239,23 @@ jobs:
           provenance: mode=max
           cache-from: type=gha,scope=dev-web
           cache-to: type=gha,mode=max,scope=dev-web
+      - name: Build and push patched Keycloak with SBOM and provenance
+        id: keycloak
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: deployment/docker/keycloak-patched
+          file: deployment/docker/keycloak-patched/Dockerfile
+          build-args: GEOGUESSME_REVISION=${{ github.sha }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.keycloak }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=dev-keycloak
+          cache-to: type=gha,mode=max,scope=dev-keycloak
       - name: Build and push patched Restic with SBOM and provenance
         id: restic
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: deployment/docker/restic-tools.Dockerfile
@@ -234,9 +269,10 @@ jobs:
         env:
           BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
           WEB: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+          KEYCLOAK: ${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}
           RESTIC: ${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}
         run: |
-          for image in "$BACKEND" "$WEB" "$RESTIC"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$RESTIC"; do
             cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
           done
       - name: Export immutable references
@@ -245,6 +281,7 @@ jobs:
           {
             echo "backend=${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}"
             echo "web=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}"
+            echo "keycloak=${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}"
             echo "restic=${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}"
           } >> "$GITHUB_OUTPUT"
       - name: Scan published images for fixed High/Critical CVEs
@@ -254,6 +291,7 @@ jobs:
         env:
           BACKEND_IMAGE: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
           WEB_IMAGE: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+          KEYCLOAK_IMAGE: ${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}
           RESTIC_IMAGE: ${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}
         run: |
           # Buildx pushes without loading the images into the runner. Pull the
@@ -261,6 +299,7 @@ jobs:
           # credential-less Trivy scanning.
           docker pull "$BACKEND_IMAGE"
           docker pull "$WEB_IMAGE"
+          docker pull "$KEYCLOAK_IMAGE"
           docker pull "$RESTIC_IMAGE"
           make audit-images
       - name: Upload image-scan reports and SBOMs

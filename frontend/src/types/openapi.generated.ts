@@ -5,6 +5,368 @@
  */
 
 export interface paths {
+    '/group/challenges': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group challenges for the globe.
+         * @description Member-only history, newest first by creation time and photo ID, including challenges whose media was removed. Pages contain at most 100 items. Coordinates follow the results authorization and timed location privacy rules: owners, members who guessed, or members after challenge expiry can see a location, unless the poster's location hide period still applies. Unavailable coordinates are omitted entirely. No private media is returned.
+         */
+        get: operations['listGroupChallenges'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse public challenges, newest first */
+        get: operations['getPublicFeed'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/leaderboard': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank the community by total public feed score
+         * @description Returns player usernames, avatar markers, and total feed score. Profile details remain protected by the existing shared-group visibility rules.
+         */
+        get: operations['getPublicFeedLeaderboard'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/leaderboard/{profileID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank players who guessed a profile owner's feed challenges
+         * @description Ranks players by their total score on the requested profile owner's public and viewer-visible friends feed challenges. The profile owner is never included. The requested profile follows the existing shared-group profile visibility rule.
+         */
+        get: operations['getProfileFeedLeaderboard'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a feed challenge and optional group challenges */
+        post: operations['createPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a public challenge without revealing its answer */
+        get: operations['getPublicChallenge'];
+        put?: never;
+        post?: never;
+        /** Delete your public post and its comments and reactions */
+        delete: operations['deletePublicChallenge'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/media': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a blurred preview, or the original for an owner or resolved viewer */
+        get: operations['getPublicChallengeMedia'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/play': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Open the original photo to make one untimed guess */
+        get: operations['playPublicChallenge'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/accept': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a public feed challenge and create a timed session */
+        post: operations['acceptPublicTimedChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-media': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream the original media for an accepted timed feed challenge
+         * @description The client must call media-delivered after the complete response is received; streaming bytes alone does not start the server-owned view window.
+         */
+        get: operations['getPublicTimedChallengeMedia'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/media-delivered': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm complete delivery and start the public timed view window */
+        post: operations['confirmPublicTimedChallengeMediaDelivered'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-guess': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit one server-timed feed challenge guess */
+        post: operations['submitPublicTimedChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-timeout': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist a timed-out public feed guess after the server deadline */
+        post: operations['timeoutPublicTimedChallengeGuess'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/timed-results': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read authorized public feed timed challenge map results
+         * @description The answer and guess coordinates are returned only to the owner, a viewer who resolved the challenge, or a viewer whose server-owned timed session has expired.
+         */
+        get: operations['getPublicTimedChallengeResults'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/guess': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read your completed guess and the answer */
+        get: operations['getPublicGuess'];
+        put?: never;
+        /**
+         * Record one immutable guess and reveal the answer
+         * @description Repeated submissions return the original result. Public scores do not contribute to private group rankings or profile progression.
+         */
+        post: operations['guessPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/results': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read all ranked guesses and the signed all-time Elo delta */
+        get: operations['getPublicChallengeResults'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/reaction': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Add your heart reaction */
+        put: operations['likePublicChallenge'];
+        post?: never;
+        /** Remove your heart reaction */
+        delete: operations['unlikePublicChallenge'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/comments': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read comments, newest first; comments may contain spoilers */
+        get: operations['getPublicComments'];
+        put?: never;
+        /** Add a comment to a public challenge */
+        post: operations['commentPublicChallenge'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/feed/challenges/{id}/comments/{commentID}': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove your comment or moderate a comment on your post */
+        delete: operations['deletePublicComment'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/auth/signup': {
         parameters: {
             query?: never;
@@ -286,6 +648,43 @@ export interface paths {
         /** List the authenticated user's groups. */
         get: operations['listUserGroups'];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/user/groups/inbox': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group rail summaries for the authenticated user.
+         * @description Unread counts are derived from persisted message read markers. Latest message metadata never includes message content or media.
+         */
+        get: operations['listUserGroupInbox'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/user/groups/inbox/read': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark a group inbox as read. */
+        put: operations['markUserGroupRead'];
         post?: never;
         delete?: never;
         options?: never;
@@ -832,6 +1231,203 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        GroupChallenge: {
+            /** Format: uuid */
+            photo_id: string;
+            /** Format: uuid */
+            group_id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @enum {string} */
+            status: 'available' | 'results' | 'guessed' | 'expired';
+            lat?: number;
+            long?: number;
+            /**
+             * Format: date-time
+             * @description End of the poster's hide period; results access is still required.
+             */
+            location_reveals_at?: string;
+        };
+        GroupChallengesPage: {
+            items: components['schemas']['GroupChallenge'][];
+            next_cursor?: string;
+            /** Format: date-time */
+            server_time: string;
+        };
+        APIError: {
+            error: {
+                code: string;
+                message: string;
+            };
+        };
+        PublicChallenge: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            caption: string;
+            /**
+             * @description Public is visible to all signed-in users. Friends is visible to shared-group members, optionally limited to selected groups.
+             * @enum {string}
+             */
+            audience?: 'public' | 'friends';
+            /** Format: date-time */
+            created_at: string;
+            is_owner: boolean;
+            /** @description True only after this viewer submits a guess. */
+            resolved: boolean;
+            reaction_count: number;
+            reacted: boolean;
+            comment_count: number;
+        };
+        PublicFeedPage: {
+            items: components['schemas']['PublicChallenge'][];
+            next_cursor: string;
+        };
+        PublicFeedLeaderboardEntry: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            total_score: number;
+        };
+        PublicFeedLeaderboardPage: {
+            items: components['schemas']['PublicFeedLeaderboardEntry'][];
+            next_cursor: string;
+        };
+        GroupChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            group_id: string;
+        };
+        ChallengePublication: {
+            /** Format: uuid */
+            id: string;
+            photos: components['schemas']['GroupChallengePublication'][];
+        };
+        PublicChallengeAccepted: {
+            /** Format: uuid */
+            challenge_id: string;
+            media_url: string;
+            /** @enum {string} */
+            media_type: 'image/jpeg' | 'image/png' | 'image/webp';
+            /** Format: date-time */
+            accepted_at: string;
+            /** Format: date-time */
+            view_expires_at: string;
+            /** Format: date-time */
+            guess_after: string;
+            /**
+             * Format: date-time
+             * @description Server-authoritative deadline for the timed guess.
+             */
+            guess_expires_at: string;
+            score_grace_seconds: number;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicChallengeMediaDelivered: {
+            /** Format: date-time */
+            view_expires_at: string;
+            /** Format: date-time */
+            guess_after: string;
+            /** Format: date-time */
+            guess_expires_at: string;
+            score_grace_seconds: number;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicTimedGuessResponse: {
+            /** Format: uuid */
+            guess_id: string;
+            /** Format: uuid */
+            challenge_id: string;
+            score: number;
+            /** @description Distance in meters; omitted for authoritative timeouts. */
+            distance?: number;
+            timed_out: boolean;
+            /** Format: date-time */
+            created_at: string;
+            duplicate: boolean;
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicTimedResultGuess: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            long?: number;
+            score: number;
+            /** @description Distance in meters; omitted for timeouts. */
+            distance?: number;
+            timed_out: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PublicTimedResults: {
+            /** Format: uuid */
+            challenge_id: string;
+            /** Format: double */
+            actual_lat: number;
+            /** Format: double */
+            actual_long: number;
+            guesses: components['schemas']['PublicTimedResultGuess'][];
+            /** Format: date-time */
+            server_time: string;
+        };
+        PublicGuessResult: {
+            score: number;
+            /** @description Distance in meters. */
+            distance: number;
+            lat: number;
+            long: number;
+            actual_lat: number;
+            actual_long: number;
+        };
+        PublicFeedResult: {
+            rank: number;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            score: number;
+            /** @description Distance in meters. */
+            distance: number;
+            /** @description Signed all-time Elo change caused by this challenge in the global history replay. */
+            elo_delta: number;
+            is_viewer: boolean;
+        };
+        PublicComment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            content: string;
+            /** Format: date-time */
+            created_at: string;
+            can_delete: boolean;
+        };
+        PublicCommentsPage: {
+            items: components['schemas']['PublicComment'][];
+            next_cursor: string;
+        };
         AuthUser: {
             /** Format: uuid */
             id: string;
@@ -860,12 +1456,6 @@ export interface components {
             access_token: string;
             expires_in: number;
             user: components['schemas']['AuthUser'];
-        };
-        APIError: {
-            error: {
-                code: string;
-                message: string;
-            };
         };
         OIDCConfig: {
             enabled: boolean;
@@ -913,6 +1503,22 @@ export interface components {
             name: string;
             /** Format: date-time */
             created_at: string;
+        };
+        InboxMessageMeta: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: 'text' | 'challenge' | 'media' | 'system';
+            username: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        GroupInbox: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            unread_count: number;
+            latest_message?: components['schemas']['InboxMessageMeta'] | null;
         };
         /** @description Another player's progression profile. Never contains email or account details; only visible when the player shares a group with the requester. */
         PublicProfile: {
@@ -1177,6 +1783,8 @@ export interface components {
             guess_expires_at: string;
             /** Format: date-time */
             challenge_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };
@@ -1190,6 +1798,8 @@ export interface components {
              * @description Server-authoritative deadline for submitting the guess; guessing is refused after this instant even when the client lost its timer
              */
             guess_expires_at: string;
+            /** @description Seconds after the guessing window opens during which the full 5000-point maximum is still achievable; afterwards the achievable score decays linearly down to 20% of the maximum just before guess_expires_at, and a missing guess scores 0 from guess_expires_at onward. */
+            score_grace_seconds: number;
             /** Format: date-time */
             server_time: string;
         };
@@ -1235,6 +1845,8 @@ export interface components {
             elo_delta: number;
             /** @description Omitted while the location is hidden or when timed_out is true. */
             distance?: number;
+            /** @description Elapsed milliseconds from when the guessing window opened to the guesser's submission. Omitted for timed-out guesses or when the reference window is unknown. */
+            time_to_guess_ms?: number;
             /** @description True when the guess timed out (score 0). */
             timed_out?: boolean;
             /** Format: date-time */
@@ -1303,6 +1915,709 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listGroupChallenges: {
+        parameters: {
+            query: {
+                group_id: string;
+                /** @description Opaque next_cursor from the previous page in this group. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A private page. next_cursor is omitted on the last page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GroupChallengesPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicFeed: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicFeedLeaderboard: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable cursor page ordered by total feed score, username, and user ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedLeaderboardPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getProfileFeedLeaderboard: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                profileID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable cursor page ordered by total score, username, and user ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedLeaderboardPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    createPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'multipart/form-data': {
+                    /**
+                     * Format: binary
+                     * @description JPG, PNG or WebP, within configured upload limits.
+                     */
+                    photo: string;
+                    caption?: string;
+                    /**
+                     * @description Friends posts are visible to users sharing a group with the author.
+                     * @default public
+                     * @enum {string}
+                     */
+                    audience?: 'public' | 'friends';
+                    /** @description Repeated multipart field. Each selected group receives a normal private challenge; the author must belong to every selected group. Friends feed visibility is also limited to these groups when supplied. */
+                    group_id?: string[];
+                    /**
+                     * @description Hide the exact location on the selected private group challenges.
+                     * @default false
+                     */
+                    hide_location?: boolean;
+                    /**
+                     * Format: uuid
+                     * @description Stable client-generated key reused when retrying the same capture.
+                     */
+                    idempotency_key?: string;
+                    lat: number;
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The same capture was already published; the idempotent result is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChallengePublication'];
+                };
+            };
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChallengePublication'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            502: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallenge'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    deletePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted; physical photo deletion is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallengeMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    playPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private image bytes. Feed media is a reduced preview for unresolved viewers; play explicitly opens the original for guessing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    acceptPublicTimedChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-owned viewing and guessing deadlines. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallengeAccepted'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicTimedChallengeMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private original image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'image/jpeg': string;
+                    'image/png': string;
+                    'image/webp': string;
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+            503: components['responses']['ErrorResponse'];
+        };
+    };
+    confirmPublicTimedChallengeMediaDelivered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative viewing and guessing deadlines. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicChallengeMediaDelivered'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+        };
+    };
+    submitPublicTimedChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: double */
+                    lat: number;
+                    /** Format: double */
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing guess returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            /** @description Guess recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+            410: components['responses']['ErrorResponse'];
+        };
+    };
+    timeoutPublicTimedChallengeGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Existing guess or timeout returned idempotently. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            /** @description Timeout recorded with score zero. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedGuessResponse'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            409: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicTimedChallengeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Map-ready challenge results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicTimedResults'];
+                };
+            };
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicGuess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    guessPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    lat: number;
+                    long: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicGuessResult'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicChallengeResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All guesses for the visible public challenge, ranked by score. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicFeedResult'][];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    likePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Liked; repeat requests are idempotent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    unlikePublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reaction removed; repeat requests are idempotent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    getPublicComments: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicCommentsPage'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    commentPublicChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': {
+                    content: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['PublicComment'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    deletePublicComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comment deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
     signup: {
         parameters: {
             query?: never;
@@ -1320,6 +2635,8 @@ export interface operations {
                      */
                     email?: string;
                     password: string;
+                    /** @description Must be true. Confirms the user meets the minimum age of 15 published in the terms of use and privacy policy. Signup is rejected with 400 age_attestation_required otherwise. */
+                    age_attested: boolean;
                 };
             };
         };
@@ -1751,6 +3068,52 @@ export interface operations {
                 };
             };
             401: components['responses']['ErrorResponse'];
+        };
+    };
+    listUserGroupInbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group inbox summaries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['GroupInbox'][];
+                };
+            };
+            401: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    markUserGroupRead: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group messages are read through the server timestamp. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            403: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
         };
     };
     getUserProfile: {

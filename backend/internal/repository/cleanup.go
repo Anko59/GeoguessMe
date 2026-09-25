@@ -277,13 +277,13 @@ func (r CleanupRunner) drainDeletionQueue(ctx context.Context, logger *slog.Logg
 			return
 		}
 		for _, job := range jobs {
-			if err := r.Store.Delete(ctx, job.StorageKey); err != nil {
+			jobCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			err := r.Repos.DeleteObjectIfUnreferenced(jobCtx, job.ID, job.StorageKey, r.Store.Delete)
+			cancel()
+			if err != nil {
 				logger.Warn("object deletion failed", "job_id", job.ID, "key", job.StorageKey, "attempt", job.Attempts, "error", err)
 				_ = r.Repos.FailDeletionJob(ctx, job.ID, err.Error())
 				continue
-			}
-			if err := r.Repos.CompleteDeletionJob(ctx, job.ID); err != nil {
-				logger.Warn("marking deletion job complete failed", "job_id", job.ID, "error", err)
 			}
 		}
 	}

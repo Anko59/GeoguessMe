@@ -6,9 +6,10 @@ interface HoldToRecordOptions {
     onHold: (isStillPressed: () => boolean) => Promise<void>;
     onStop: () => void;
     onTap: () => void;
+    enableHold?: boolean;
 }
 
-export function useHoldToRecord({ onHold, onStop, onTap }: HoldToRecordOptions) {
+export function useHoldToRecord({ onHold, onStop, onTap, enableHold = true }: HoldToRecordOptions) {
     const timerRef = useRef<number | null>(null);
     const pressingRef = useRef(false);
     const suppressClickRef = useRef(false);
@@ -21,12 +22,13 @@ export function useHoldToRecord({ onHold, onStop, onTap }: HoldToRecordOptions) 
     const onPointerDown = useCallback(() => {
         pressingRef.current = true;
         suppressClickRef.current = false;
+        if (!enableHold) return;
         timerRef.current = window.setTimeout(() => {
             timerRef.current = null;
             suppressClickRef.current = true;
             void onHold(() => pressingRef.current);
         }, HOLD_TO_RECORD_MS);
-    }, [onHold]);
+    }, [enableHold, onHold]);
 
     const onPointerUp = useCallback(() => {
         pressingRef.current = false;

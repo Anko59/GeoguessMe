@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import Map from '../map/Map';
 import Icon from '../ui/Icon';
 import FullScreenImage from '../ui/FullScreenImage';
-import type { GameState, GamePosition } from './gameState';
+import { MAX_GUESS_SCORE, type GameState, type GamePosition } from './gameState';
+import '../../styles/game-results.css';
 
 // locationRevealClause renders the remaining hide duration for a hidden
 // challenge location from the API's location_reveals_at timestamp so the UI
@@ -12,6 +13,20 @@ function locationRevealClause(revealsAt: string, referenceMs: number): string {
     if (hours < 1) return 'in under an hour';
     if (hours === 1) return 'after 1 hour';
     return `after ${hours} hours`;
+}
+
+// formatGuessDuration renders the server-computed guess duration
+// (time_to_guess_ms, from when the guessing window opened to the submission)
+// as a compact label like "1min 12sec". Zero units are omitted, except that a
+// sub-minute duration shows only seconds (matching the "0.5 km away in 1min
+// 12sec" example).
+function formatGuessDuration(ms: number): string {
+    const totalSeconds = Math.round(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes === 0) return `${seconds}sec`;
+    if (seconds === 0) return `${minutes}min`;
+    return `${minutes}min ${seconds}sec`;
 }
 
 interface GameViewProps {
@@ -24,10 +39,17 @@ interface GameViewProps {
     guessRemaining: number;
     /** Full guessing-window length in seconds (view end to guess deadline). */
     guessTotalSeconds: number;
+    /** Points still achievable with a pinpoint guess at this instant
+     *  (undefined when the server did not publish the decay policy). */
+    potentialScore?: number;
+    /** Transient answering-phase notice, owned and auto-cleared by Game. */
+    scoreNotice?: 'grace-ended';
     /** The client clock offset by the server offset (used for reveal clauses). */
     serverNowMs: number;
     /** Optional score-feedback overlay rendered above the active phase. */
     feedback: ReactNode | null;
+    /** Optional source-specific social content rendered below the results map. */
+    resultsFooter?: ReactNode;
     currentUserId?: string;
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
@@ -35,8 +57,51 @@ interface GameViewProps {
 }
 
 function GameOverlay({ children, label }: { children: ReactNode; label: string }) {
+    const dialogRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        dialogRef.current?.focus();
+    }, []);
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Escape') {
+            // Active timed games are intentionally not dismissible: closing
+            // here would leave the server-side viewing/guess window running.
+            event.preventDefault();
+            return;
+        }
+        if (event.key !== 'Tab' || !dialogRef.current) return;
+        const focusable = Array.from(
+            dialogRef.current.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+        );
+        if (focusable.length === 0) {
+            event.preventDefault();
+            dialogRef.current.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
     return (
-        <div className="game-overlay" role="dialog" aria-modal="true" aria-label={label}>
+        <div
+            ref={dialogRef}
+            className="game-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label={label}
+            tabIndex={-1}
+            onKeyDown={handleKeyDown}
+        >
             {children}
         </div>
     );
@@ -109,15 +174,38 @@ function GameWaitingView({ remaining }: { remaining: number }) {
 // the brand colors. The fill ratio derives from the server-published window
 // length, and the countdown keeps running across app restarts because the
 // deadline itself is server-authoritative.
-function GuessTimerBar({ remaining, total }: { remaining: number; total: number }) {
+//
+// With a server-published decay policy the fill tracks the still-achievable
+// score and the potential points are shown next to the countdown; without one
+// it falls back to the raw remaining-time fraction.
+function GuessTimerBar({ remaining, total, potential }: { remaining: number; total: number; potential?: number }) {
     const label = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
-    const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+    const timeFraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+    // When the server published the decay policy, the fill tracks the score
+    // potential instead of raw time: it stays full during the grace period,
+    // drains with the decay, and stops at the 20% floor instead of
+    // suggesting points below it before the deadline cliff.
+    const fraction =
+        potential !== undefined && total > 0 ? Math.min(1, Math.max(0, potential / MAX_GUESS_SCORE)) : timeFraction;
+    const decaying = potential !== undefined && potential < MAX_GUESS_SCORE;
+    const scoreNumber = potential !== undefined ? potential.toLocaleString('en-US') : undefined;
+    const ariaLabel =
+        scoreNumber === undefined
+            ? `Time left to guess: ${label}`
+            : `${decaying ? `Potential score: ${scoreNumber} points` : `Full points available: ${scoreNumber} points`}. Time left to guess: ${label}${
+                  remaining <= 15 ? '. Guess now or the score drops to 0' : ''
+              }`;
     return (
         <div
-            className={`guess-timer-bar${remaining <= 15 ? ' guess-timer-bar--urgent' : ''}`}
+            className={`guess-timer-bar${scoreNumber === undefined ? ' guess-timer-bar--time-only' : ''}${decaying ? ' guess-timer-bar--decaying' : ''}${remaining <= 15 ? ' guess-timer-bar--urgent' : ''}`}
             role="timer"
-            aria-label={`Time left to guess: ${label}`}
+            aria-label={ariaLabel}
         >
+            {scoreNumber !== undefined && (
+                <span className="guess-timer-bar__score" aria-hidden="true">
+                    {scoreNumber}
+                </span>
+            )}
             <span className="guess-timer-bar__label" aria-hidden="true">
                 {label}
             </span>
@@ -132,12 +220,16 @@ function GameGuessingView({
     state,
     guessRemaining,
     guessTotalSeconds,
+    potentialScore,
+    scoreNotice,
     onSelectLocation,
     onSubmitGuess,
 }: {
     state: GameState;
     guessRemaining: number;
     guessTotalSeconds: number;
+    potentialScore?: number;
+    scoreNotice?: 'grace-ended';
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
 }) {
@@ -149,6 +241,11 @@ function GameGuessingView({
                     <h3>Where was this taken?</h3>
                     <p>Tap the map to place your guess.</p>
                 </div>
+                {scoreNotice === 'grace-ended' && (
+                    <p className="score-notice" role="status">
+                        Full points have ended — the achievable score now decreases.
+                    </p>
+                )}
                 <Map
                     onLocationSelect={(lat, long) => onSelectLocation({ lat, long })}
                     selectedLocation={state.selectedLocation ?? null}
@@ -168,7 +265,7 @@ function GameGuessingView({
                         'Select a location…'
                     )}
                 </button>
-                <GuessTimerBar remaining={guessRemaining} total={guessTotalSeconds} />
+                <GuessTimerBar remaining={guessRemaining} total={guessTotalSeconds} potential={potentialScore} />
             </div>
         </GameOverlay>
     );
@@ -178,11 +275,13 @@ function GameResultsView({
     state,
     currentUserId,
     serverNowMs,
+    resultsFooter,
     onClose,
 }: {
     state: GameState;
     currentUserId?: string;
     serverNowMs: number;
+    resultsFooter?: ReactNode;
     onClose: () => void;
 }) {
     if (!state.results) return null;
@@ -225,6 +324,11 @@ function GameResultsView({
                                 The original media has been removed; scores remain available.
                             </p>
                         )}
+                        {state.results.mediaLoadFailed && (
+                            <p className="result-notice" role="status">
+                                The photo could not be loaded. Close and reopen results to try again.
+                            </p>
+                        )}
                         <div className="score-list" aria-label="Submitted scores">
                             {state.results.guesses.map((guess) => (
                                 <div
@@ -237,12 +341,16 @@ function GameResultsView({
                                             <span>Timed out — 0 pts</span>
                                         ) : (
                                             guess.distance !== undefined && (
-                                                <span>{(guess.distance / 1000).toFixed(1)} km away</span>
+                                                <span>
+                                                    {(guess.distance / 1000).toFixed(1)} km away
+                                                    {guess.time_to_guess_ms !== undefined &&
+                                                        ` in ${formatGuessDuration(guess.time_to_guess_ms)}`}
+                                                </span>
                                             )
                                         )}
                                     </div>
                                     <div className="score-card__value">
-                                        <b>{guess.score} pts</b>
+                                        <b>{guess.score.toLocaleString('en-US')} pts</b>
                                         {guess.elo_delta !== 0 && (
                                             <span
                                                 className={`elo-delta ${guess.elo_delta > 0 ? 'elo-delta--gain' : 'elo-delta--loss'}`}
@@ -258,28 +366,31 @@ function GameResultsView({
                             ))}
                         </div>
                     </div>
-                    <div className="result-map" aria-label="Challenge map">
-                        {state.results.location_hidden && (
-                            <div className="result-location-hidden" role="note">
-                                <strong>The poster hasn’t revealed this location yet</strong>
-                                <span>
-                                    Only your own guess is shown on the map. The exact spot and everyone else’s guesses
-                                    will appear here {revealClause}.
-                                </span>
-                            </div>
-                        )}
-                        <Map
-                            onLocationSelect={() => undefined}
-                            selectedLocation={null}
-                            actualLocation={
-                                state.results.actual_lat !== undefined &&
-                                state.results.actual_long !== undefined &&
-                                !state.results.location_hidden
-                                    ? { lat: state.results.actual_lat, long: state.results.actual_long }
-                                    : null
-                            }
-                            guesses={state.results.guesses}
-                        />
+                    <div className="result-map-column">
+                        <div className="result-map" aria-label="Challenge map">
+                            {state.results.location_hidden && (
+                                <div className="result-location-hidden" role="note">
+                                    <strong>The poster hasn’t revealed this location yet</strong>
+                                    <span>
+                                        Only your own guess is shown on the map. The exact spot and everyone else’s
+                                        guesses will appear here {revealClause}.
+                                    </span>
+                                </div>
+                            )}
+                            <Map
+                                onLocationSelect={() => undefined}
+                                selectedLocation={null}
+                                actualLocation={
+                                    state.results.actual_lat !== undefined &&
+                                    state.results.actual_long !== undefined &&
+                                    !state.results.location_hidden
+                                        ? { lat: state.results.actual_lat, long: state.results.actual_long }
+                                        : null
+                                }
+                                guesses={state.results.guesses}
+                            />
+                        </div>
+                        {resultsFooter && <div className="result-footer">{resultsFooter}</div>}
                     </div>
                 </div>
                 <button onClick={onClose} className="next-button btn btn-primary">
@@ -315,8 +426,11 @@ export default function GameView({
     remaining,
     guessRemaining,
     guessTotalSeconds,
+    potentialScore,
+    scoreNotice,
     serverNowMs,
     feedback,
+    resultsFooter,
     currentUserId,
     onSelectLocation,
     onSubmitGuess,
@@ -340,6 +454,8 @@ export default function GameView({
                     state={state}
                     guessRemaining={guessRemaining}
                     guessTotalSeconds={guessTotalSeconds}
+                    potentialScore={potentialScore}
+                    scoreNotice={scoreNotice}
                     onSelectLocation={onSelectLocation}
                     onSubmitGuess={onSubmitGuess}
                 />
@@ -354,6 +470,7 @@ export default function GameView({
                     state={state}
                     currentUserId={currentUserId}
                     serverNowMs={serverNowMs}
+                    resultsFooter={resultsFooter}
                     onClose={onClose}
                 />
             );

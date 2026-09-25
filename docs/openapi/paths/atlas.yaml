@@ -1,0 +1,29 @@
+groupChallenges:
+  get:
+    operationId: listGroupChallenges
+    summary: List group challenges for the globe.
+    description: >
+      Member-only history, newest first by creation time and photo ID, including
+      challenges whose media was removed. Pages contain at most 100 items.
+      Coordinates follow the results authorization and timed location privacy
+      rules: owners, members who guessed, or members after challenge expiry can
+      see a location, unless the poster's location hide period still applies.
+      Unavailable coordinates are omitted entirely. No private media is returned.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - name: cursor
+        in: query
+        description: Opaque next_cursor from the previous page in this group.
+        schema: { type: string, maxLength: 512 }
+    responses:
+      "200":
+        description: A private page. next_cursor is omitted on the last page.
+        content:
+          application/json:
+            schema: { $ref: "../components/schemas-atlas.yaml#/GroupChallengesPage" }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }

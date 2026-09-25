@@ -35,7 +35,7 @@ func main() {
 			u := fmt.Sprintf("%s_%d", suffix, idx)
 			c := credentials{Username: u, Password: "ReconnPass123!"}
 			resp, body, err := doJSON(http.MethodPost, "/api/v1/auth/signup",
-				map[string]string{"username": u, "email": u + "@test.geoguessme", "password": c.Password},
+				signupBody(u, u+"@test.geoguessme", c.Password),
 				"", nil)
 			if err != nil || resp.StatusCode != http.StatusOK {
 				fmt.Fprintf(os.Stderr, "signup %d failed: %v %s\n", idx, err, string(body))

@@ -20,6 +20,10 @@ const (
 	// ChatMediaKeyPrefix is the canonical key prefix for chat attachments
 	// served by ServeChatMedia.
 	ChatMediaKeyPrefix = "chat-media/"
+	// PublicChallengeKeyPrefix is the canonical key prefix for public-feed
+	// challenge originals. Public-feed media has its own lifecycle and cleanup
+	// trigger, but it is still served media rather than quarantine data.
+	PublicChallengeKeyPrefix = "public-challenges/"
 	// QuarantineKeyPrefix holds raw asynchronous uploads (videos) while a
 	// processing job is outstanding. Nothing ever serves from this prefix.
 	QuarantineKeyPrefix = "quarantine/"
@@ -52,11 +56,17 @@ func IsQuarantineKey(key string) bool {
 	return strings.HasPrefix(key, QuarantineKeyPrefix)
 }
 
+// PublicChallengeKey returns the canonical storage key for a public-feed
+// challenge original.
+func PublicChallengeKey(id string) string { return PublicChallengeKeyPrefix + id }
+
 // IsCanonicalKey reports whether a storage key lives under one of the served
-// canonical prefixes (photos/ or chat-media/). The media serving handlers
-// reject any key that is not canonical as a defense-in-depth guard: even a
-// database row that referenced a quarantine or unknown key could never stream
-// raw quarantine objects.
+// canonical prefixes (photos/, chat-media/, or public-challenges/). The media
+// serving handlers reject any key that is not canonical as a defense-in-depth
+// guard: even a database row that referenced a quarantine or unknown key could
+// never stream raw quarantine objects.
 func IsCanonicalKey(key string) bool {
-	return strings.HasPrefix(key, PhotoKeyPrefix) || strings.HasPrefix(key, ChatMediaKeyPrefix)
+	return strings.HasPrefix(key, PhotoKeyPrefix) ||
+		strings.HasPrefix(key, ChatMediaKeyPrefix) ||
+		strings.HasPrefix(key, PublicChallengeKeyPrefix)
 }

@@ -88,37 +88,14 @@ run "hosted_plan" {
   }
 
   assert {
-    condition = length(templatefile("../cloud-init/cloud-config.yaml.tftpl", {
-      admin_key          = var.admin_ssh_public_key
-      dev_ci_key         = var.dev_ci_ssh_public_key
-      production_key     = var.production_ci_ssh_public_key
-      runtime_revision   = var.runtime_revision
-      tunnel_token       = "mock-tunnel-token"
-      common_script      = base64gzip(file("../../deployment/scripts/hosted/common.sh"))
-      deploy_script      = base64gzip(file("../../deployment/scripts/hosted/deploy.sh"))
-      forced_script      = base64gzip(file("../../deployment/scripts/hosted/forced-command.sh"))
-      verify_script      = base64gzip(file("../../deployment/scripts/hosted/verify-deployment-hashes.sh"))
-      backup_script      = base64gzip(file("../../deployment/scripts/hosted/backup.sh"))
-      restore_script     = base64gzip(file("../../deployment/scripts/hosted/restore-rehearsal.sh"))
-      health_script      = base64gzip(file("../../deployment/scripts/hosted/health-check.sh"))
-      alert_script       = base64gzip(file("../../deployment/scripts/hosted/alert.sh"))
-      production_compose = base64gzip(file("../../deployment/compose.production.yaml"))
-      hosted_compose     = base64gzip(file("../../deployment/compose.hosted.yaml"))
-      runtime_hashes = join("\n", [
-        for relative_path, absolute_path in {
-          "bin/alert.sh"                    = "../../deployment/scripts/hosted/alert.sh"
-          "bin/backup.sh"                   = "../../deployment/scripts/hosted/backup.sh"
-          "bin/common.sh"                   = "../../deployment/scripts/hosted/common.sh"
-          "bin/deploy.sh"                   = "../../deployment/scripts/hosted/deploy.sh"
-          "bin/forced-command.sh"           = "../../deployment/scripts/hosted/forced-command.sh"
-          "bin/health-check.sh"             = "../../deployment/scripts/hosted/health-check.sh"
-          "bin/restore-rehearsal.sh"        = "../../deployment/scripts/hosted/restore-rehearsal.sh"
-          "bin/verify-deployment-hashes.sh" = "../../deployment/scripts/hosted/verify-deployment-hashes.sh"
-          "config/compose.hosted.yaml"      = "../../deployment/compose.hosted.yaml"
-          "config/compose.production.yaml"  = "../../deployment/compose.production.yaml"
-        } : "${filesha256(absolute_path)}  ${relative_path}"
-      ])
-    })) <= 32768
+    condition = nonsensitive(length(templatefile("../cloud-init/cloud-config.yaml.tftpl", {
+      admin_key        = var.admin_ssh_public_key
+      dev_ci_key       = var.dev_ci_ssh_public_key
+      production_key   = var.production_ci_ssh_public_key
+      runtime_revision = var.runtime_revision
+      tunnel_token     = "mock-tunnel-token"
+      runtime_bundle   = local.runtime_bundle
+    }))) <= 32768
     error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
   }
 
@@ -158,6 +135,19 @@ run "hosted_plan" {
 
   assert {
     condition = (
+      cloudflare_zero_trust_access_application.watch.domain == "watch.geoguessme.com" &&
+      length(cloudflare_zero_trust_access_application.watch.allowed_idps) == 1 &&
+      cloudflare_zero_trust_access_identity_provider.email_otp.type == "onetimepin" &&
+      cloudflare_zero_trust_access_application.watch.auto_redirect_to_identity &&
+      length(cloudflare_zero_trust_access_application.watch.policies) == 1 &&
+      cloudflare_zero_trust_access_application.watch.policies[0].decision == "allow" &&
+      contains([for inc in cloudflare_zero_trust_access_application.watch.policies[0].include : try(inc.email.email, "")], "jeancollette138@gmail.com")
+    )
+    error_message = "Monitoring Access must allow only the owner email through one policy."
+  }
+
+  assert {
+    condition = (
       length([for p in cloudflare_zero_trust_access_application.dev_health.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.dev_health_token_id]) > 0]) == 1 &&
       length([for p in cloudflare_zero_trust_access_application.dev_deployment.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.dev_deploy_token_id]) > 0]) == 1 &&
       length([for p in cloudflare_zero_trust_access_application.prod_deployment.policies : p if length([for inc in p.include : try(inc.service_token.token_id, "") if try(inc.service_token.token_id, "") == var.prod_deploy_token_id]) > 0]) == 1
@@ -169,7 +159,9 @@ run "hosted_plan" {
     condition = (
       var.domain == "geoguessme.com" &&
       cloudflare_dns_record.tunnel["auth"].name == "auth" &&
+      cloudflare_dns_record.tunnel["watch"].name == "watch" &&
       strcontains(jsonencode(cloudflare_zero_trust_tunnel_cloudflared_config.app.config), "http://127.0.0.1:8083") &&
+      strcontains(jsonencode(cloudflare_zero_trust_tunnel_cloudflared_config.app.config), "http://127.0.0.1:8084") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&
@@ -178,8 +170,11 @@ run "hosted_plan" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-backup@dev.timer") &&
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-watch-health.timer") &&
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "watch-refresh-metrics-token") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.production.yaml")
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.production.yaml") &&
+      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.watch.yaml")
     )
     error_message = "Cloud-init must secure SSH, recreate volatile locks, and schedule backups."
   }

@@ -1,6 +1,6 @@
 import { createElement } from 'react';
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Map from './Map';
 
 // react-leaflet renders a real map that needs a browser viewport; mock the
@@ -44,10 +44,39 @@ const { useMap, useMapEvents } = vi.mocked(await import('react-leaflet')) as any
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('ResizeObserver', undefined);
     useMap.mockReturnValue({ fitBounds: vi.fn() });
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('Map component', () => {
+    it('remeasures when a hidden dialog opens or changes size and stops observing on unmount', () => {
+        let resized!: ResizeObserverCallback;
+        const observe = vi.fn();
+        const disconnect = vi.fn();
+        class Observer {
+            constructor(callback: ResizeObserverCallback) {
+                resized = callback;
+            }
+            observe = observe;
+            disconnect = disconnect;
+        }
+        vi.stubGlobal('ResizeObserver', Observer);
+        const container = document.createElement('div');
+        const invalidateSize = vi.fn();
+        useMap.mockReturnValue({ getContainer: () => container, invalidateSize, fitBounds: vi.fn() });
+        const view = render(<Map onLocationSelect={vi.fn()} selectedLocation={null} />);
+        expect(observe).toHaveBeenCalledWith(container);
+        act(() => resized([], {} as ResizeObserver));
+        expect(invalidateSize).toHaveBeenCalledWith({ animate: false });
+        act(() => resized([], {} as ResizeObserver));
+        expect(invalidateSize).toHaveBeenCalledTimes(2);
+        view.unmount();
+        expect(disconnect).toHaveBeenCalledTimes(1);
+        act(() => resized([], {} as ResizeObserver));
+        expect(invalidateSize).toHaveBeenCalledTimes(2);
+    });
     it('renders the map container', () => {
         render(<Map onLocationSelect={vi.fn()} selectedLocation={null} />);
         expect(screen.getByRole('application', { name: 'Guess map' })).toBeInTheDocument();

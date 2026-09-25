@@ -193,6 +193,24 @@ describe('Camera file and upload flows', () => {
         expect(onUploadComplete).toHaveBeenCalled();
     });
 
+    it('keeps feed options usable when the groups endpoint returns no list', async () => {
+        mocks.getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+        mocks.get.mockResolvedValueOnce({ data: null });
+        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        await useDeviceFallback();
+
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText('Choose photo from device'), {
+                target: { files: [new File(['image'], 'upload.jpg', { type: 'image/jpeg' })] },
+            });
+        });
+        await waitFor(() => expect(screen.getByAltText('Captured')).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Challenge options' }));
+
+        expect(await screen.findByRole('dialog', { name: 'Challenge options' })).toBeInTheDocument();
+        expect(screen.getByText('Loading your groups…')).toBeInTheDocument();
+    });
+
     it('shows error when geolocation is denied during upload', async () => {
         mocks.getUserMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
         mocks.getCurrentPosition.mockImplementation((_resolve: PositionCallback, reject: PositionErrorCallback) => {

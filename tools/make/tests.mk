@@ -5,7 +5,7 @@
 test-debt-markers-regression: ## Exercise owned and unowned maintenance-marker fixtures.
 	tools/quality/debt/check-markers-test.sh
 
-test-unit: test-backend test-frontend test-reconnect-harness ## Run application and operational-tool unit tests.
+test-unit: test-backend test-frontend test-reconnect-harness test-play-api ## Run application and operational-tool unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
@@ -15,6 +15,9 @@ test-frontend: ## Run frontend unit tests.
 
 test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/load/reconnect-rehearsal && go test ./...'
+
+test-play-api: ## Run the Google Play Publisher API client unit tests.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/mobile/play-publisher && go test ./...'
 
 test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
@@ -47,8 +50,14 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
 
+test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
+	bash tools/mobile/test-release-bundle-contract.sh
+
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
+
+test-load-harness-regression: ## Verify the k6 load profile attests age on every signup.
+	bash tools/quality/test/load-harness/check-load-attestation.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh && bash tools/quality/test/check-restart-regression.sh --determinism
@@ -74,7 +83,10 @@ test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 test-qa-agent: ## Validate the provider-neutral QA contract and MCP lifecycle in Docker.
 	bash tools/qa/test-agent.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser-mcp.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser/tool-definitions.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/email-account.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-account-pool.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-email-account.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-coverage.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mcp.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mailbox.mjs
@@ -83,8 +95,9 @@ test-qa-mailbox-live: ## Verify the disposable QA mailbox provider from the Play
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps -e QA_LIVE_MAILBOX=1 playwright node /workspace/tools/qa/test-mcp.mjs
 
 qa-agent: ## Run the local LLM-driven source-blind QA agent against deployed dev.
-	$(MAKE) bootstrap-e2e
-	@QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" QA_MAILBOX_PROVIDER="$(QA_MAILBOX_PROVIDER)" QA_MAILBOX_API_URL="$(QA_MAILBOX_API_URL)" QA_MAILBOX_ADDRESS="$(QA_MAILBOX_ADDRESS)" QA_MAILBOX_ZONE_ID="$(QA_MAILBOX_ZONE_ID)" QA_MAILBOX_ROUTING_RULE_ID="$(QA_MAILBOX_ROUTING_RULE_ID)" QA_ACCOUNT_PASSWORD="$(QA_ACCOUNT_PASSWORD)" QA_ACCOUNT_OWNER_USERNAME="$(QA_ACCOUNT_OWNER_USERNAME)" QA_ACCOUNT_MEMBER_USERNAME="$(QA_ACCOUNT_MEMBER_USERNAME)" QA_ACCOUNT_OUTSIDER_USERNAME="$(QA_ACCOUNT_OUTSIDER_USERNAME)" \
+	@test -n "$(QA_BUILD_SHA)" || { echo 'QA_BUILD_SHA must identify the deployed revision' >&2; exit 2; }
+	@if [ "$(QA_SKIP_BOOTSTRAP)" = "1" ]; then echo 'Using the already bootstrapped QA browser dependencies'; else $(MAKE) bootstrap-e2e; fi
+	@QA_BASE_URL="$(QA_BASE_URL)" QA_BUILD_SHA="$(QA_BUILD_SHA)" QA_BUDGET="$(QA_BUDGET)" QA_RUNTIME="$(QA_RUNTIME)" QA_REPORT_DIR="$(abspath $(QA_REPORT_DIR))" QA_AGENT_FOCUS="$(QA_AGENT_FOCUS)" QA_DEBUG="$(QA_DEBUG)" QA_MAILBOX_PROVIDER="$(QA_MAILBOX_PROVIDER)" QA_MAILBOX_API_URL="$(QA_MAILBOX_API_URL)" QA_MAILBOX_ADDRESS="$(QA_MAILBOX_ADDRESS)" QA_MAILBOX_ALLOWED_LINK_ORIGINS="$(QA_MAILBOX_ALLOWED_LINK_ORIGINS)" QA_ACCOUNT_OWNER_USERNAME="$(QA_ACCOUNT_OWNER_USERNAME)" QA_ACCOUNT_MEMBER_USERNAME="$(QA_ACCOUNT_MEMBER_USERNAME)" QA_ACCOUNT_OUTSIDER_USERNAME="$(QA_ACCOUNT_OUTSIDER_USERNAME)" \
 		bash tools/qa/run-local.sh
 
 qa-agent-fast: ## Run the short local LLM QA budget against deployed dev.
@@ -103,7 +116,7 @@ qa-browser-mcp: ## Run the Dockerized provider-neutral browser MCP server.
 		-e QA_BASE_URL -e QA_BUILD_SHA -e QA_RUNTIME -e QA_BUDGET \
 		-e QA_ACCESS_CLIENT_ID -e QA_ACCESS_CLIENT_SECRET \
 		-e QA_ACCOUNT_PASSWORD -e QA_ACCOUNT_OWNER_USERNAME -e QA_ACCOUNT_MEMBER_USERNAME -e QA_ACCOUNT_OUTSIDER_USERNAME \
-		-e QA_MAILBOX_PROVIDER -e QA_MAILBOX_API_URL -e QA_MAILBOX_ADDRESS -e QA_MAILBOX_ZONE_ID -e QA_MAILBOX_ROUTING_RULE_ID -e QA_FAKE_LATITUDE -e QA_FAKE_LONGITUDE -e QA_FAKE_LOCATION_ACCURACY \
+		-e QA_MAILBOX_PROVIDER -e QA_MAILBOX_API_URL -e QA_MAILBOX_ADDRESS -e QA_MAILBOX_ACCESS_CLIENT_ID -e QA_MAILBOX_ACCESS_CLIENT_SECRET -e QA_MAILBOX_ALLOWED_LINK_ORIGINS -e QA_FAKE_LATITUDE -e QA_FAKE_LONGITUDE -e QA_FAKE_LOCATION_ACCURACY \
 		-e QA_ARTIFACT_DIR=/tmp/qa-artifacts \
 		-e QA_HOST_ARTIFACT_DIR="$(abspath $(QA_REPORT_DIR))" \
 		-v "$(abspath $(QA_REPORT_DIR)):/tmp/qa-artifacts" \

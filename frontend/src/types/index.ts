@@ -12,6 +12,19 @@
 // drift gate is `make openapi-check`.
 
 import type { components } from './openapi.generated';
+export type PublicChallenge = components['schemas']['PublicChallenge'];
+export type PublicFeedPage = components['schemas']['PublicFeedPage'];
+export type PublicFeedLeaderboardEntry = components['schemas']['PublicFeedLeaderboardEntry'];
+export type PublicFeedLeaderboardPage = components['schemas']['PublicFeedLeaderboardPage'];
+export type PublicComment = components['schemas']['PublicComment'];
+export type PublicCommentsPage = components['schemas']['PublicCommentsPage'];
+export type PublicGuessResult = components['schemas']['PublicGuessResult'];
+export type PublicFeedResult = components['schemas']['PublicFeedResult'];
+export type PublicChallengeAccepted = components['schemas']['PublicChallengeAccepted'];
+export type PublicChallengeMediaDelivered = components['schemas']['PublicChallengeMediaDelivered'];
+export type PublicTimedGuessResponse = components['schemas']['PublicTimedGuessResponse'];
+export type PublicTimedResults = components['schemas']['PublicTimedResults'];
+export type ChallengePublication = components['schemas']['ChallengePublication'];
 
 // --- Wire types (generated from docs/openapi.yaml) ---
 
@@ -23,6 +36,7 @@ export type PublicProfile = components['schemas']['PublicProfile'];
 export type AuthResponse = components['schemas']['AuthResponse'];
 export type OIDCConfig = components['schemas']['OIDCConfig'];
 export type Group = components['schemas']['Group'];
+export type GroupInbox = components['schemas']['GroupInbox'];
 export type Member = components['schemas']['Member'];
 export type LeaderboardEntry = components['schemas']['LeaderboardEntry'];
 export type ChallengeAcceptance = components['schemas']['ChallengeAccepted'];
@@ -38,6 +52,8 @@ export type InvitePreview = components['schemas']['InvitePreview'];
 export type InviteListItem = components['schemas']['InviteListItem'];
 export type MediaProcessingJob = components['schemas']['MediaProcessingJob'];
 export type PartyStatus = components['schemas']['PartyStatus'];
+export type GroupChallenge = components['schemas']['GroupChallenge'];
+export type GroupChallengesPage = components['schemas']['GroupChallengesPage'];
 
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 
@@ -71,6 +87,8 @@ export type ChallengeGuess = Omit<components['schemas']['Guess'], 'username' | '
 /** Challenge results with the guesses narrowed to the client's render model. */
 export type ChallengeResults = Omit<components['schemas']['ChallengeResults'], 'guesses'> & {
     guesses: ChallengeGuess[];
+    /** Client view state: the results remain usable, but the original media request can be retried. */
+    mediaLoadFailed?: boolean;
 };
 
 // --- Client-only types (not OpenAPI schemas) ---

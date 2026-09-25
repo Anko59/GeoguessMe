@@ -29,10 +29,13 @@ GeoGuessMe is a multiplayer location game for the moments that deserve a story.
 Create a private group, send a photo or video challenge, and let your friends
 guess where it was taken. Every guess becomes part of the group’s leaderboard.
 
-The app is a responsive, installable web app: open
-**[geoguessme.com](https://geoguessme.com)** in a browser, or add it to your
-phone’s home screen for a more app-like experience. No native install is
-required.
+The app is a responsive, installable web app at
+**[geoguessme.com](https://geoguessme.com)** and shares that React application
+with its Capacitor Android distribution. A browser or PWA installation remains
+fully supported; native installation is optional. The
+[public feed](docs/public-feed.md) lets signed-in players publish photo
+challenges for the community. Photos stay blurred until you complete a guess;
+leave a heart reaction or join the comments after discovering a place.
 
 ## 🎥 See it in action
 
@@ -54,14 +57,13 @@ illustrations below are part of GeoGuessMe’s own visual language.
 <table>
   <tr>
     <td width="50%"><img src="docs/assets/geoguessme-signup.png" alt="GeoGuessMe account creation screen" /></td>
-    <td width="50%"><strong>Ready for your group?</strong><br /><br />Create an account, invite friends with a private group code, and start sending places worth guessing.</td>
+    <td width="50%"><strong>Ready for your group?</strong><br /><br />Create an account, invite friends with a private invite link, and start sending places worth guessing.</td>
   </tr>
 </table>
 
 ## 🎮 How a round works
 
-1. **Create or join a group.** Share the group code or invite link with your
-   friends.
+1. **Create or join a group.** Share a private invite link with your friends.
 2. **Capture a moment.** Send a photo or a short video from the camera, with
    optional face-tracking lenses and banners.
 3. **Accept the challenge.** Each member gets a server-controlled viewing window
@@ -73,6 +75,8 @@ illustrations below are part of GeoGuessMe’s own visual language.
 ## ✨ What you can do
 
 - **Challenge your people** with private, short-lived photo and video prompts.
+- **Explore your group's world** on a rotatable 3D Earth, opened from the globe
+  icon in group chat. Browse all challenges while hidden locations stay private.
 - **Keep the conversation moving** with messenger-style hidden message actions,
   emoji reactions, and replies.
 - **Make groups feel like yours** with a group photo and independent
@@ -177,16 +181,17 @@ on CI or infrastructure.
 
 ## 📚 Find your way around
 
-| If you want to…             | Start here                                                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Play the game               | [geoguessme.com](https://geoguessme.com)                                                                      |
-| Learn the rules             | [Gameplay](docs/gameplay.md)                                                                                  |
-| Run it locally              | [Local development](docs/local-development.md)                                                                |
-| Understand the system       | [Architecture](docs/architecture.md)                                                                          |
-| Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)                                        |
-| Test a change               | [Testing guide](docs/testing.md)                                                                              |
-| Deploy or operate it        | [Deployment guide](deployment/README.md) and [Operations](docs/operations.md)                                 |
-| Review privacy and security | [Public privacy policy](https://geoguessme.com/privacy) and [security controls](docs/security-and-privacy.md) |
+| If you want to…             | Start here                                                                                                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Play the game               | [geoguessme.com](https://geoguessme.com)                                                                                                                                                                   |
+| Learn the rules             | [Gameplay](docs/gameplay.md)                                                                                                                                                                               |
+| Run it locally              | [Local development](docs/local-development.md)                                                                                                                                                             |
+| Build or test Android       | [Mobile application](docs/mobile.md)                                                                                                                                                                       |
+| Understand the system       | [Architecture](docs/architecture.md)                                                                                                                                                                       |
+| Use the API                 | [API reference](docs/api.md) and [OpenAPI contract](docs/openapi.yaml)                                                                                                                                     |
+| Test a change               | [Testing guide](docs/testing.md)                                                                                                                                                                           |
+| Deploy or operate it        | [Deployment guide](deployment/README.md) and [Operations](docs/operations.md)                                                                                                                              |
+| Review privacy and security | [Public privacy policy](https://geoguessme.com/privacy), [terms of use](https://geoguessme.com/terms), [legal notice](https://geoguessme.com/legal), and [security controls](docs/security-and-privacy.md) |
 
 The complete documentation map is in [`docs/index.md`](docs/index.md). Run
 `make help` to see every supported Dockerized workflow.

@@ -8,7 +8,7 @@ export default function Home() {
     const auth = useContext(AuthContext);
     const location = useLocation();
     const loggingOut = (location.state as { loggingOut?: boolean } | null)?.loggingOut === true;
-    if (auth?.isAuthenticated && !auth.loading && !loggingOut) return <Navigate to="/groups" replace />;
+    if (auth?.isAuthenticated && !auth.loading && !loggingOut) return <Navigate to="/feed" replace />;
 
     return (
         <>

@@ -1,0 +1,8 @@
+[Unit]
+After=geoguessme-watch.service
+Requires=geoguessme-watch.service
+OnFailure=geoguessme-alert@watch.service
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/opt/geoguessme/bin/watch-health.sh

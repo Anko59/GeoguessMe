@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 
+	"geoguessme/internal/models"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,6 +69,36 @@ func TestPublicProfileVisibility(t *testing.T) {
 	// Unknown players are not found.
 	resp, _ = doJSON(t, http.MethodGet, "/api/v1/user/profile/does-not-exist", nil, alice.access, nil)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+// TestProfileFeedLeaderboardExcludesOwner verifies the profile-specific
+// aggregate through the HTTP contract. The owner publishes one public post;
+// two other players guess it and only those guessers appear in the result.
+// This test is intentionally part of the Docker integration suite and is not
+// run by the local backend unit-test target.
+func TestProfileFeedLeaderboardExcludesOwner(t *testing.T) {
+	owner := signup(t, unique("leader-owner"), unique("leader-owner")+"@example.test", "StrongPassword123")
+	first := signup(t, unique("leader-first"), unique("leader-first")+"@example.test", "StrongPassword123")
+	second := signup(t, unique("leader-second"), unique("leader-second")+"@example.test", "StrongPassword123")
+	challengeID := uploadPublicPhoto(t, owner.access)
+	path := "/api/v1/feed/challenges/" + challengeID + "/guess"
+
+	for _, player := range []tokenPair{first, second} {
+		resp, data := doJSON(t, http.MethodPost, path, map[string]float64{"lat": 48.8, "long": 2.3}, player.access, nil)
+		require.Equalf(t, http.StatusOK, resp.StatusCode, "guess: %s", data)
+	}
+
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/feed/leaderboard/"+owner.userID, nil, owner.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "profile leaderboard: %s", data)
+	var page models.PublicFeedLeaderboardPage
+	require.NoError(t, json.Unmarshal(data, &page))
+	require.Len(t, page.Items, 2)
+	for _, entry := range page.Items {
+		require.NotEqual(t, owner.userID, entry.UserID)
+		require.NotEmpty(t, entry.Avatar)
+	}
+	ids := []string{page.Items[0].UserID, page.Items[1].UserID}
+	require.ElementsMatch(t, []string{first.userID, second.userID}, ids)
 }
 
 // TestVerificationTokenIsBoundToPendingEmail proves a token issued for one

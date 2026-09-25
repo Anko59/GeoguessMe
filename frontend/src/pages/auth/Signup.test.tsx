@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import Signup from './Signup';
@@ -49,11 +49,81 @@ describe('Signup Page', () => {
         expect(screen.queryByRole('link', { name: 'Sign up with GitHub' })).not.toBeInTheDocument();
         expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
         expect(screen.getByDisplayValue('create')).toHaveAttribute('name', 'prompt');
+        expect(screen.getByLabelText(/I confirm I am at least 15 years old/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Continue to create account' })).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+    });
+
+    it('blocks the provider signup redirect until the age attestation is confirmed', async () => {
+        mockGet.mockResolvedValueOnce({
+            data: { enabled: true, login_path: '/oauth2/start', social_providers: ['google'] },
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        const google = await screen.findByRole('link', { name: 'Sign up with Google' });
+        const attestation = screen.getByLabelText(/I confirm I am at least 15 years old/i);
+
+        fireEvent.click(google);
+        expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBeNull();
+
+        fireEvent.click(attestation);
         fireEvent.click(google);
         expect(sessionStorage.getItem('geoguessme_oidc_return_to')).toBe('/groups');
+    });
+
+    it('blocks native signup until the age attestation is confirmed', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        await screen.findByPlaceholderText('Username');
+        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
+        fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        const attestation = screen.getByLabelText(/I confirm I am at least 15 years old/i);
+        expect(attestation).toBeRequired();
+        fireEvent.submit(screen.getByRole('button', { name: /sign up/i }).closest('form')!);
+        expect(mockPost).not.toHaveBeenCalled();
+        expect(screen.getByText('Please confirm the minimum age to create an account.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+    });
+
+    it('sends the age attestation with native signup', async () => {
+        mockPost.mockResolvedValue({
+            data: { token: 'fake-token', user: { id: '1', username: 'newuser' } },
+        });
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        await screen.findByPlaceholderText('Username');
+        fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
+        fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        fireEvent.click(screen.getByLabelText(/I confirm I am at least 15 years old/i));
+        fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+
+        await waitFor(() => {
+            expect(mockPost).toHaveBeenCalledWith('/auth/signup', {
+                username: 'newuser',
+                password: 'StrongPass123',
+                age_attested: true,
+            });
+        });
     });
 
     it('renders signup form when OIDC is explicitly disabled', async () => {
@@ -68,6 +138,22 @@ describe('Signup Page', () => {
         expect(await screen.findByPlaceholderText('Username')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
+    });
+
+    it('shows the first-layer terms and privacy notice beside the signup form', async () => {
+        render(
+            <AuthContext.Provider value={authValue}>
+                <BrowserRouter>
+                    <Signup />
+                </BrowserRouter>
+            </AuthContext.Provider>,
+        );
+
+        // The consent note sits inside the form; the age-gate hint and the
+        // global footer repeat the same destinations, so scope to the note.
+        const legalNote = await screen.findByText(/By creating an account you agree/i);
+        expect(within(legalNote).getByRole('link', { name: 'Terms of Use' })).toHaveAttribute('href', '/terms');
+        expect(within(legalNote).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
     });
 
     it('submits form with valid data', async () => {
@@ -92,6 +178,7 @@ describe('Signup Page', () => {
             target: { value: 'new@example.com' },
         });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        fireEvent.click(screen.getByLabelText(/I confirm I am at least 15 years old/i));
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
 
         await waitFor(() => {
@@ -99,6 +186,7 @@ describe('Signup Page', () => {
                 username: 'newuser',
                 email: 'new@example.com',
                 password: 'StrongPass123',
+                age_attested: true,
             });
         });
     });
@@ -117,11 +205,13 @@ describe('Signup Page', () => {
         await screen.findByPlaceholderText('Username');
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'emailfree' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        fireEvent.click(screen.getByLabelText(/I confirm I am at least 15 years old/i));
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
         await waitFor(() =>
             expect(mockPost).toHaveBeenCalledWith('/auth/signup', {
                 username: 'emailfree',
                 password: 'StrongPass123',
+                age_attested: true,
             }),
         );
     });
@@ -140,6 +230,7 @@ describe('Signup Page', () => {
         await screen.findByPlaceholderText('Username');
         fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'taken' } });
         fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'StrongPass123' } });
+        fireEvent.click(screen.getByLabelText(/I confirm I am at least 15 years old/i));
         fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
 
         await waitFor(() => {

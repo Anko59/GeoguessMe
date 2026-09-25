@@ -9,10 +9,14 @@ import (
 
 	chatHub "geoguessme/internal/chat"
 	"geoguessme/internal/config"
+	"geoguessme/internal/game"
 	"geoguessme/internal/models"
 	chatrepo "geoguessme/internal/repository/chat"
 	"geoguessme/internal/repository/groups"
+	"geoguessme/internal/repository/groups/atlas"
 	"geoguessme/internal/storage"
+
+	"github.com/google/uuid"
 )
 
 type GuessRequest struct {
@@ -243,7 +247,7 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	// until the hide duration has passed; the owner always sees their own spot.
 	// While hidden, other players' guessed points and distances are not sent at
 	// all (score-only), and only the viewer's own guessed point is returned.
-	hidden := photo.HideLocation && photo.UserID != viewerID && now.Before(photo.CreatedAt.Add(a.cfg.LocationHide))
+	hidden := game.LocationHidden(photo, viewerID, now, a.cfg.LocationHide)
 	if guesses == nil {
 		guesses = []groups.GuessWithUser{}
 	}
@@ -264,6 +268,18 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 			Username:  guess.Username,
 			Avatar:    guess.Avatar,
 			EloDelta:  eloDelta,
+		}
+		// The time a guess took is measured from when that player's guessing
+		// window opened (their recorded view end) to their submission, the
+		// same elapsed value the scoring time penalty uses. Timed-out guesses
+		// have no guess time to report, and legacy guesses without a recorded
+		// window omit the field entirely.
+		if !guess.TimedOut && guess.ViewExpiresAt.Valid {
+			elapsed := guess.CreatedAt.Sub(guess.ViewExpiresAt.Time)
+			if elapsed >= 0 {
+				timeToGuessMs := int(elapsed.Milliseconds())
+				item.TimeToGuessMs = &timeToGuessMs
+			}
 		}
 		if !hidden || guess.UserID == viewerID {
 			if !guess.TimedOut {
@@ -289,23 +305,53 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, response)
 }
 
+// GetGroupChallenges returns every challenge through a bounded private feed.
+func (a *GameAPI) GetGroupChallenges(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+	groupID := r.URL.Query().Get("group_id")
+	if _, err := uuid.Parse(groupID); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid_group_id", "group_id must be a UUID")
+		return
+	}
+	viewerID := GetUserIDFromContext(r)
+	if !a.requireMember(w, r, groupID, viewerID) {
+		return
+	}
+	page, err := a.groups.ChallengeMap(r.Context(), groupID, viewerID, r.URL.Query().Get("cursor"), a.clock(), a.cfg.LocationHide)
+	if errors.Is(err, atlas.ErrInvalidCursor) {
+		WriteError(w, http.StatusBadRequest, "invalid_cursor", "Invalid challenge cursor")
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(r.Context(), "load group challenge map", "group_id", groupID, "error", err)
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load group challenges")
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	WriteJSON(w, http.StatusOK, page)
+}
+
 // resultsGuess is the results payload for a single guess. Lat, long, and
 // distance are optional and omitted while a hidden-location challenge keeps
 // other players' guessed points private. TimedOut marks a player who let the
 // guess window expire (score 0, no location). EloDelta is the signed change
 // in the player's weekly Elo rating caused by this challenge.
 type resultsGuess struct {
-	ID        string    `json:"id"`
-	PhotoID   string    `json:"photo_id"`
-	UserID    string    `json:"user_id"`
-	GroupID   string    `json:"group_id"`
-	Lat       *float64  `json:"lat,omitempty"`
-	Long      *float64  `json:"long,omitempty"`
-	Score     int       `json:"score"`
-	Distance  *float64  `json:"distance,omitempty"`
-	TimedOut  bool      `json:"timed_out"`
-	CreatedAt time.Time `json:"created_at"`
-	Username  string    `json:"username"`
-	Avatar    string    `json:"avatar"`
-	EloDelta  int       `json:"elo_delta"`
+	ID            string    `json:"id"`
+	PhotoID       string    `json:"photo_id"`
+	UserID        string    `json:"user_id"`
+	GroupID       string    `json:"group_id"`
+	Lat           *float64  `json:"lat,omitempty"`
+	Long          *float64  `json:"long,omitempty"`
+	Score         int       `json:"score"`
+	Distance      *float64  `json:"distance,omitempty"`
+	TimeToGuessMs *int      `json:"time_to_guess_ms,omitempty"`
+	TimedOut      bool      `json:"timed_out"`
+	CreatedAt     time.Time `json:"created_at"`
+	Username      string    `json:"username"`
+	Avatar        string    `json:"avatar"`
+	EloDelta      int       `json:"elo_delta"`
 }

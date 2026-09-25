@@ -2,12 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api';
 import type { MediaProcessingJob } from '../../types';
 
-const LOCATION_OPTIONS: PositionOptions = {
-    enableHighAccuracy: false,
-    timeout: 10_000,
-    maximumAge: 60_000,
-};
-
 export function dataURLToBlob(dataURL: string): Blob {
     const [header, encoded] = dataURL.split(',', 2);
     const binary = atob(encoded);
@@ -24,13 +18,6 @@ export function fitDimensions(width: number, height: number): { width: number; h
 
 export function isFilterableImageType(mimeType: string): boolean {
     return FILTERABLE_IMAGE_TYPES.has(mimeType.toLowerCase());
-}
-
-export function getCurrentPosition(options: PositionOptions = LOCATION_OPTIONS): Promise<GeolocationPosition> {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('Geolocation is not supported by your browser'));
-        navigator.geolocation.getCurrentPosition(resolve, reject, options);
-    });
 }
 
 /** True when a response body is the asynchronous media-processing job reference. */

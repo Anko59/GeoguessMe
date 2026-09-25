@@ -16,6 +16,32 @@ x-host-tools: &host-tools
     - host.docker.internal:host-gateway
 
 services:
+  mobile-tools:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/tools/mobile-tools.Dockerfile
+    image: geoguessme/mobile-tools:android-36-maestro-2.10.0
+    network_mode: host
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - ./:/workspace
+      - ./.local/mobile/android-sdk:/opt/android-sdk
+      - ./.local/mobile/android-home:/root/.android
+      - ./.local/mobile/gradle:/root/.gradle
+      - frontend-node-modules:/workspace/frontend/node_modules
+    tmpfs:
+      - /emulator-data:size=8g,mode=1777
+
+  mobile-tools-kvm:
+    extends: mobile-tools
+    image: geoguessme/mobile-tools:android-36-maestro-2.10.0
+    devices:
+      - /dev/kvm:/dev/kvm
+
   go-tools:
     <<: *host-tools
     build:
@@ -45,6 +71,9 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
+      args:
+        TOOLS_UID: ${TOOLS_UID:-1000}
+        TOOLS_GID: ${TOOLS_GID:-1000}
     image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -59,6 +88,9 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/node-tools.Dockerfile
+      args:
+        TOOLS_UID: ${TOOLS_UID:-1000}
+        TOOLS_GID: ${TOOLS_GID:-1000}
     image: geoguessme/node-tools:22.23.2
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -68,11 +100,11 @@ services:
       - frontend-node-modules:/workspace/frontend/node_modules
       - npm-cache:/npm-cache
 
-  # Playwright 1.62.0 with browser binaries and OS dependencies preinstalled.
+  # Playwright 1.63.0 with browser binaries and OS dependencies preinstalled.
   # Browsers are baked into the pinned image; no cache volume is needed.
   playwright:
     <<: *host-tools
-    image: mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07
+    image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
     environment:
       PATH: /workspace/frontend/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:

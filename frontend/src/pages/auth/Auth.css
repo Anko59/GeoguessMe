@@ -159,6 +159,57 @@
     font-size: 0.875rem;
 }
 
+.auth-age-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    background: var(--surface-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+
+.auth-age-check input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15rem;
+    flex: none;
+    accent-color: var(--brand-blue-accessible);
+}
+
+.auth-age-check label {
+    color: var(--ink-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.auth-age-check a {
+    color: var(--brand-blue-accessible);
+    font-weight: 750;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.auth-legal-note {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+    line-height: 1.55;
+}
+
+.auth-legal-note a {
+    color: var(--brand-blue-accessible);
+    font-weight: 750;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.auth-legal-note a:hover {
+    text-decoration-color: currentcolor;
+}
+
 .auth-link {
     min-height: 44px;
     display: inline-flex;

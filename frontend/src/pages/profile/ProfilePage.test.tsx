@@ -5,10 +5,11 @@ import { AuthContext } from '../../context/AuthContext';
 import type { User } from '../../types';
 import ProfilePage from './ProfilePage';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), profileLeaderboard: vi.fn() }));
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
+    publicFeedAPI: { profileLeaderboard: mocks.profileLeaderboard },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -90,6 +91,9 @@ const renderProfile = (initialEntry = '/profile') =>
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
+    mocks.profileLeaderboard.mockReset();
+    mocks.get.mockResolvedValue({ data: { items: [], next_cursor: '' } });
+    mocks.profileLeaderboard.mockResolvedValue({ items: [], next_cursor: '' });
 });
 
 describe('ProfilePage', () => {
@@ -121,6 +125,7 @@ describe('ProfilePage', () => {
         );
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
         expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('shows an actionable error and retries the profile request', async () => {
@@ -132,6 +137,10 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Profile service unavailable');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'alice' })).toBeInTheDocument());
+        // The profile mounts FeedLeaderboard after the retry. Wait for that
+        // child request to settle before the test cleanup unmounts the tree;
+        // otherwise a fast response can update state after the test ends.
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledTimes(2);
     });
 
@@ -151,6 +160,7 @@ describe('ProfilePage', () => {
         renderProfile();
 
         expect((await screen.findAllByText('Guess a location to enter the ranking')).length).toBeGreaterThan(0);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('loads another player public profile without account details', async () => {
@@ -161,6 +171,29 @@ describe('ProfilePage', () => {
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2');
         expect(screen.queryByText('alice@example.test')).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+    });
+
+    it('renders the feed leaderboard and loads the next page', async () => {
+        mocks.get.mockResolvedValueOnce({ data: profile });
+        mocks.profileLeaderboard
+            .mockResolvedValueOnce({
+                items: [{ rank: 1, user_id: 'user-2', username: 'bob', avatar: 'avatar-bob.png', total_score: 5000 }],
+                next_cursor: 'next-page',
+            })
+            .mockResolvedValueOnce({
+                items: [
+                    { rank: 2, user_id: 'user-3', username: 'carol', avatar: 'avatar-carol.png', total_score: 4200 },
+                ],
+                next_cursor: '',
+            });
+        renderProfile();
+
+        expect(await screen.findByRole('heading', { name: 'Best at guessing alice' })).toBeInTheDocument();
+        expect(await screen.findByRole('link', { name: 'bob' })).toHaveAttribute('href', '/profile/user-2');
+        fireEvent.click(screen.getByRole('button', { name: 'More players' }));
+        expect(await screen.findByText('carol')).toBeInTheDocument();
+        expect(mocks.profileLeaderboard).toHaveBeenLastCalledWith('user-1', 'next-page', expect.any(AbortSignal));
     });
 
     it('shows the edit link when viewing yourself through the public route', async () => {
@@ -170,6 +203,7 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('shows only the verified recovery email on the owner profile', async () => {
@@ -187,5 +221,6 @@ describe('ProfilePage', () => {
         // A pending claim is never shown on a profile view; it is managed in
         // account settings.
         expect(screen.queryByText('new@example.test')).not.toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 });

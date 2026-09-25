@@ -77,6 +77,33 @@ describe('Camera capture', () => {
         expect(play).toHaveBeenCalled();
     });
 
+    it('uses a new idempotency key after retaking a failed feed send', async () => {
+        stubUserMedia();
+        stubGeolocation();
+        Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        const uploadCaptured = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('network unavailable'))
+            .mockResolvedValueOnce(null);
+        render(<Camera variant="feed" uploadCaptured={uploadCaptured} onUploadComplete={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(uploadCaptured).toHaveBeenCalledTimes(1));
+        const firstKey = (uploadCaptured.mock.calls[0][3] as { idempotencyKey: string }).idempotencyKey;
+        await screen.findByText('network unavailable');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retake' }));
+        await waitFor(() => expect(mocks.getUserMedia).toHaveBeenCalledTimes(2));
+        fireEvent.click(screen.getByRole('button', { name: 'Take photo' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(uploadCaptured).toHaveBeenCalledTimes(2));
+        const secondKey = (uploadCaptured.mock.calls[1][3] as { idempotencyKey: string }).idempotencyKey;
+        expect(secondKey).not.toBe(firstKey);
+    });
+
     it('clears the capture flash after the flash duration', async () => {
         stubUserMedia();
         Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });

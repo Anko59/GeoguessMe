@@ -15,9 +15,22 @@ import (
 
 // ------- API helpers -------
 
+// signupBody is the account-creation payload. Signup enforces a hard 15+
+// age-attestation gate, so the rehearsal always attests rather than relying
+// on a default: a missing field is a 400 age_attestation_required, not a
+// backdoor.
+func signupBody(username, email, password string) map[string]any {
+	return map[string]any{
+		"username":     username,
+		"email":        email,
+		"password":     password,
+		"age_attested": true,
+	}
+}
+
 func signup(username, email, password string) (credentials, error) {
 	resp, body, err := doJSON(http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": username, "email": email, "password": password},
+		signupBody(username, email, password),
 		"", nil)
 	if err != nil {
 		return credentials{}, err

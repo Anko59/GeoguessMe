@@ -1,0 +1,7 @@
+[Unit]
+Description=GeoGuessMe %i host health check
+OnFailure=geoguessme-alert@%i.service
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/opt/geoguessme/bin/health-check.sh %i

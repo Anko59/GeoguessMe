@@ -20,7 +20,7 @@ var allConfigVariables = []string{
 	"UPLOAD_MAX_BYTES", "AVATAR_MAX_BYTES", "UPLOAD_MAX_PIXELS",
 	"CHALLENGE_TTL", "LOCATION_HIDE_DURATION", "PHOTO_VIEW_WINDOW", "GUESS_WINDOW", "PHOTO_RETENTION", "UPLOAD_DIR",
 	"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "LOG_LEVEL", "METRICS_TOKEN",
-	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
+	"RATE_LIMIT_LOGIN", "RATE_LIMIT_SIGNUP", "RATE_LIMIT_EMAIL", "RATE_LIMIT_RESET", "RATE_LIMIT_PUSH", "RATE_LIMIT_DEFAULT", "RATE_LIMIT_WRITE", "RATE_LIMIT_FAIL_CLOSED", "RATE_LIMIT_STORE_CAP",
 	"VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "PUSH_ENDPOINT_ALLOWLIST",
 	"PUSH_MAX_SUBSCRIPTIONS_PER_USER", "PUSH_SUBSCRIPTION_EXPIRY",
 	"PUSH_DELIVERY_WORKERS", "PUSH_DELIVERY_PER_HOST", "PUSH_DELIVERY_TIMEOUT", "PUSH_QUEUE_DEPTH",
@@ -197,8 +197,12 @@ func validConfig() *Config {
 				{Type: "trustedIP", Limit: 20, Window: time.Hour},
 			}},
 			{Name: "default", Buckets: []RateLimitBucket{
-				{Type: "identity", Limit: 10, Window: time.Minute},
-				{Type: "trustedIP", Limit: 60, Window: time.Minute},
+				{Type: "route", Limit: 120, Window: time.Minute},
+				{Type: "trustedIP", Limit: 1200, Window: time.Minute},
+			}},
+			{Name: "write", Buckets: []RateLimitBucket{
+				{Type: "route", Limit: 60, Window: time.Minute},
+				{Type: "trustedIP", Limit: 600, Window: time.Minute},
 			}},
 		},
 		RateLimitFailClosed: []string{"login", "signup", "email", "reset"},

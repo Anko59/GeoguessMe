@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api, { getAPIErrorMessage } from '../../../api';
 import type { Message } from '../../../types';
 import Icon from '../../ui/Icon';
+import MessageInput from '../../common/MessageInput';
 import type { ConnectionStatus } from '../../../hooks/useGroupMessages';
 
 interface ComposerProps {
@@ -21,7 +22,6 @@ export default function Composer({ wsRef, groupID, connectionStatus, replyingTo,
     const [attachment, setAttachment] = useState<File | null>(null);
     const [uploadError, setUploadError] = useState('');
     const [uploading, setUploading] = useState(false);
-
     const sendMessage = (event: React.FormEvent): void => {
         event.preventDefault();
         const content = input.trim();
@@ -93,13 +93,11 @@ export default function Composer({ wsRef, groupID, connectionStatus, replyingTo,
             <label htmlFor="chat-message" className="visually-hidden">
                 Message
             </label>
-            <input
+            <MessageInput
                 id="chat-message"
-                type="text"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Type a message…"
-                className="message-input"
                 maxLength={1000}
                 disabled={connectionStatus !== 'connected' || uploading}
             />

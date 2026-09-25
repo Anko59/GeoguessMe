@@ -16,29 +16,32 @@
 include tools/make/setup.mk
 include tools/make/quality.mk
 include tools/make/tests.mk
+include tools/make/mobile.mk
 include tools/make/deployment.mk
 include tools/make/maintenance.mk
 include tools/make/docs-agent-config.mk
 include tools/make/openapi-contract.mk
 
-.PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e bootstrap-operational hooks-install hooks-check tools-self-test tools-clean \
+.PHONY: help impact bootstrap bootstrap-preflight bootstrap-integration bootstrap-e2e bootstrap-mobile bootstrap-operational hooks-install hooks-check tools-self-test tools-clean \
 	dev-local-state dev up dev-social-init dev-social dev-social-down down restart status logs logs-backend logs-frontend identity-config identity-up identity-down identity-logs \
 	format format-check fmt fmt-check mod-tidy lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \
-	test-unit test-backend test-frontend test-reconnect-harness test-race test-verified test-structure-regression test-debt-markers-regression \
+	test-unit test-backend test-frontend test-reconnect-harness test-play-api test-race test-verified test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
-	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
+	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-load-harness-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
+	mobile-init mobile-prepare mobile-sync mobile-build mobile-keystore mobile-build-release mobile-verify-release mobile-release-manifest play-api-check play-api-publish mobile-test test-mobile \
+	test-mobile-release-contract \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
 	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
-	build build-backend build-frontend build-images clean-build build-security-tool-images audit-images \
+	build build-backend build-frontend build-images build-keycloak-image clean-build build-security-tool-images audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test operational-gate \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \
 	prod-config prod-migrate prod-legacy-identity-plan prod-legacy-identity-provision prod-up prod-down prod-logs \
-	hosted-config hosted-contract-test cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate identity-secrets-generate \
+	hosted-config hosted-contract-test watch-config watch-rehearsal cloudflared-access-ssh deployment-hash-check terraform-fmt terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-apply secrets-encrypt secrets-generate identity-secrets-generate \
 	vapid-keys \
 	preflight preflight-docs pr-backend pr-frontend quality verify pre-commit pre-push ci \
 	maintenance-report cache-status prune-report prune disk-cleanup-report disk-cleanup build-cache-prune artifacts-clean clean reset-dev \

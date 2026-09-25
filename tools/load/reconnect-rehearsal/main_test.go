@@ -98,3 +98,49 @@ func TestFlagsParsed(t *testing.T) {
 		t.Fatalf("default baseURL: %q", *baseURL)
 	}
 }
+
+// TestSignupBodyAttestsAge is the regression guard for the 15+ signup gate.
+// Every harness signup must carry age_attested=true; omitting it makes the
+// rehearsal fail immediately with 400 age_attestation_required.
+func TestSignupBodyAttestsAge(t *testing.T) {
+	body := signupBody("player_1", "player_1@test.geoguessme", "ReconnPass123!")
+	if attested, ok := body["age_attested"].(bool); !ok || !attested {
+		t.Fatalf("age_attested = %#v, want true", body["age_attested"])
+	}
+	if body["username"] != "player_1" || body["email"] != "player_1@test.geoguessme" || body["password"] != "ReconnPass123!" {
+		t.Fatalf("signup body = %#v", body)
+	}
+}
+
+// TestSignupSendsAgeAttestation exercises the real HTTP path so that a future
+// edit bypassing signupBody is caught by CI rather than by a failed rehearsal.
+func TestSignupSendsAgeAttestation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/auth/signup" {
+			http.NotFound(w, r)
+			return
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode signup: %v", err)
+		}
+		if attested, _ := payload["age_attested"].(bool); !attested {
+			t.Errorf("signup request age_attested = %#v, want true", payload["age_attested"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"token-1"}`))
+	}))
+	defer server.Close()
+
+	previousBaseURL := *baseURL
+	*baseURL = server.URL
+	defer func() { *baseURL = previousBaseURL }()
+
+	creds, err := signup("player_2", "player_2@test.geoguessme", "ReconnPass123!")
+	if err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	if creds.Access != "token-1" || creds.Username != "player_2" {
+		t.Fatalf("credentials = %#v", creds)
+	}
+}

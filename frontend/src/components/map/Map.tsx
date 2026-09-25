@@ -37,6 +37,25 @@ interface MapProps {
     guesses?: Guess[];
 }
 
+// Dialogs initially hide their children. Leaflet must remeasure the map when
+// its container becomes visible or changes size, not only on window resize.
+function ObserveMapSize() {
+    const map = useMap();
+    useEffect(() => {
+        if (typeof ResizeObserver === 'undefined') return;
+        let active = true;
+        const observer = new ResizeObserver(() => {
+            if (active) map.invalidateSize({ animate: false });
+        });
+        observer.observe(map.getContainer());
+        return () => {
+            active = false;
+            observer.disconnect();
+        };
+    }, [map]);
+    return null;
+}
+
 function LocationMarker({
     onLocationSelect,
     position,
@@ -96,9 +115,10 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
     return (
         <div role="application" aria-label="Guess map" style={{ height: '100%', width: '100%' }}>
             <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
+                <ObserveMapSize />
                 <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+                    url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <FitBoundsToMarkers guesses={guesses} actualLocation={actualLocation} />
                 <LocationMarker onLocationSelect={onLocationSelect} position={selectedLocation} />

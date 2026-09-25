@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ChallengeResults } from '../../types';
-import { gameReducer, initialGameState, type GameAction, type GameState, type GameStatus } from './gameState';
+import {
+    MAX_GUESS_SCORE,
+    gameReducer,
+    initialGameState,
+    scoreMultiplier,
+    type GameAction,
+    type GameState,
+    type GameStatus,
+} from './gameState';
 
 const results: ChallengeResults = {
     photo_id: 'photo-1',
@@ -53,6 +61,7 @@ describe('gameReducer', () => {
                 mediaType: 'image/jpeg',
                 deadline: 5000,
                 guessDeadline: 125000,
+                scoreGraceSeconds: 60,
                 serverOffset: 10,
             });
             expect(next).toEqual({
@@ -62,6 +71,7 @@ describe('gameReducer', () => {
                 mediaType: 'image/jpeg',
                 deadline: 5000,
                 guessDeadline: 125000,
+                scoreGraceSeconds: 60,
                 serverOffset: 10,
             });
         });
@@ -73,6 +83,7 @@ describe('gameReducer', () => {
                 photoId: 'photo-1',
                 deadline: 1000,
                 guessDeadline: 121000,
+                scoreGraceSeconds: 60,
                 serverOffset: 5,
             });
             expect(next).toEqual({
@@ -80,6 +91,7 @@ describe('gameReducer', () => {
                 photoId: 'photo-1',
                 deadline: 1000,
                 guessDeadline: 121000,
+                scoreGraceSeconds: 60,
                 serverOffset: 5,
             });
         });
@@ -248,6 +260,7 @@ describe('gameReducer', () => {
                         mediaUrl: 'blob:x',
                         deadline: 1000,
                         guessDeadline: 121000,
+                        scoreGraceSeconds: 60,
                         serverOffset: 0,
                     },
                 ],
@@ -258,6 +271,7 @@ describe('gameReducer', () => {
                         photoId: 'photo-1',
                         deadline: 1000,
                         guessDeadline: 121000,
+                        scoreGraceSeconds: 60,
                         serverOffset: 0,
                     },
                 ],
@@ -282,6 +296,7 @@ describe('gameReducer', () => {
                         mediaUrl: 'blob:x',
                         deadline: 1000,
                         guessDeadline: 121000,
+                        scoreGraceSeconds: 60,
                         serverOffset: 0,
                     },
                 ],
@@ -301,6 +316,7 @@ describe('gameReducer', () => {
                         mediaUrl: 'blob:x',
                         deadline: 1000,
                         guessDeadline: 121000,
+                        scoreGraceSeconds: 60,
                         serverOffset: 0,
                     },
                 ],
@@ -323,5 +339,72 @@ describe('gameReducer', () => {
             });
             expect(stale).toBe(accepting);
         });
+    });
+
+    describe('score notice', () => {
+        it('show-score-notice is overlay-only and legal while guessing', () => {
+            const state = at('guessing', { scoreNotice: undefined });
+            const next = reduce(state, { type: 'show-score-notice', notice: 'grace-ended' });
+            expect(next).toEqual({ ...state, scoreNotice: 'grace-ended' });
+        });
+
+        it('show-score-notice is rejected outside the guessing phase', () => {
+            const state = at('viewing');
+            expect(reduce(state, { type: 'show-score-notice', notice: 'grace-ended' })).toBe(state);
+        });
+
+        it('clear-score-notice dismisses the notice from any phase', () => {
+            const noticing = at('guessing', { scoreNotice: 'grace-ended' });
+            expect(reduce(noticing, { type: 'clear-score-notice' })).toEqual(at('guessing'));
+            expect(reduce(at('idle'), { type: 'clear-score-notice' })).toEqual(at('idle'));
+        });
+
+        it('terminal close and reset drop the notice with the challenge', () => {
+            const noticing = at('results', { scoreNotice: 'grace-ended' });
+            expect(reduce(noticing, { type: 'close' })).toEqual(initialGameState);
+            expect(reduce(noticing, { type: 'reset' })).toEqual(initialGameState);
+        });
+    });
+});
+
+describe('scoreMultiplier', () => {
+    // Test vectors mirror backend/internal/game/score_timed_test.go so the
+    // answering display and the server never disagree about the decay.
+    const windowSeconds = 300;
+    const graceSeconds = 60;
+
+    it('keeps the full score during the grace period', () => {
+        expect(scoreMultiplier(0, windowSeconds, graceSeconds)).toBe(1);
+        expect(scoreMultiplier(30, windowSeconds, graceSeconds)).toBe(1);
+        expect(scoreMultiplier(59, windowSeconds, graceSeconds)).toBe(1);
+    });
+
+    it('decays linearly after the grace period towards the 20% floor', () => {
+        // At 150s: 1 - 0.8 * 90/239 ≈ 0.6987 — spot-check the formula so a
+        // display drift cannot hide behind a threshold-only assertion.
+        expect(scoreMultiplier(150, windowSeconds, graceSeconds)).toBeCloseTo(0.698744769874477, 12);
+        expect(scoreMultiplier(150, windowSeconds, graceSeconds)).toBeLessThan(1);
+        expect(scoreMultiplier(299, windowSeconds, graceSeconds)).toBe(0.2);
+    });
+
+    it('reaches zero at the deadline', () => {
+        expect(scoreMultiplier(300, windowSeconds, graceSeconds)).toBe(0);
+        expect(scoreMultiplier(360, windowSeconds, graceSeconds)).toBe(0);
+    });
+
+    it('treats a missing window as no decay', () => {
+        expect(scoreMultiplier(120, 0, graceSeconds)).toBe(1);
+    });
+
+    it('supports grace periods other than the current policy value', () => {
+        expect(scoreMultiplier(10, 60, 30)).toBe(1);
+        expect(scoreMultiplier(30, 60, 30)).toBe(1);
+        expect(scoreMultiplier(59, 60, 30)).toBe(0.2);
+        expect(scoreMultiplier(60, 60, 30)).toBe(0);
+    });
+
+    it('pairs with MAX_GUESS_SCORE the same way the backend scales 5000', () => {
+        expect(Math.round(MAX_GUESS_SCORE * scoreMultiplier(299, windowSeconds, graceSeconds))).toBe(1000);
+        expect(Math.round(MAX_GUESS_SCORE * scoreMultiplier(300, windowSeconds, graceSeconds))).toBe(0);
     });
 });

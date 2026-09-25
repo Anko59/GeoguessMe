@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { Group } from '../../types';
 import Icon from '../../components/ui/Icon';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import { useGroupPhotoUrl } from './groupPhotoCache';
 import './GroupsList.css';
 
@@ -44,18 +45,18 @@ export default function GroupsList() {
 
     if (loading) {
         return (
-            <div className="groups-list-container">
+            <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading your groups…</span>
                 </div>
-            </div>
+            </AuthenticatedPageShell>
         );
     }
 
     if (error)
         return (
-            <div className="groups-list-container">
+            <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
                 <div className="groups-state error-message" role="alert">
                     <strong>We couldn’t load your groups</strong>
                     <span>{error}</span>
@@ -70,28 +71,11 @@ export default function GroupsList() {
                         Retry
                     </button>
                 </div>
-            </div>
+            </AuthenticatedPageShell>
         );
 
     return (
-        <div className="groups-list-container">
-            <header className="groups-topbar">
-                <Link to="/groups" className="groups-brand" aria-label="GeoGuessMe groups">
-                    <img src="/logo.png" alt="" />
-                    <span>GeoGuessMe</span>
-                </Link>
-                <div className="groups-account-links">
-                    <Link to="/profile" className="groups-account-link" aria-label="Profile">
-                        <Icon name="user" className="groups-account-icon" />
-                        <span className="groups-account-label">Profile</span>
-                    </Link>
-                    <Link to="/settings" className="groups-account-link" aria-label="Settings">
-                        <Icon name="gear" className="groups-account-icon" />
-                        <span className="groups-account-label">Settings</span>
-                    </Link>
-                </div>
-            </header>
-
+        <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
             <div className="groups-heading-row">
                 <div className="groups-header">
                     <p className="groups-eyebrow">Your game circles</p>
@@ -123,7 +107,10 @@ export default function GroupsList() {
                     <img src="/globe_icon.png" alt="" className="empty-icon" />
                     <h2>No groups yet</h2>
                     <p>You haven't joined any groups yet</p>
-                    <p className="empty-subtitle">Create or join a group to start playing!</p>
+                    <p className="empty-subtitle">Create or join a group to play with friends.</p>
+                    <Link to="/feed" className="btn btn-secondary">
+                        Play public challenges
+                    </Link>
                 </div>
             ) : (
                 <div className="groups-grid">
@@ -132,6 +119,6 @@ export default function GroupsList() {
                     ))}
                 </div>
             )}
-        </div>
+        </AuthenticatedPageShell>
     );
 }

@@ -8,6 +8,8 @@ export default function LegalFooter() {
                 <span>GeoGuessMe · Play the world together</span>
                 <nav className="legal-footer-links" aria-label="Legal links">
                     <Link to="/privacy">Privacy policy</Link>
+                    <Link to="/terms">Terms of use</Link>
+                    <Link to="/legal">Legal notice</Link>
                     <a href="mailto:privacy@geoguessme.com">Privacy contact</a>
                 </nav>
             </div>

@@ -100,11 +100,27 @@ page reachable from chat and leaderboards.
 
 ### Groups
 
+`GET /api/v1/group/challenges?group_id=&cursor=` serves the group globe's
+member-only challenge history, newest first by `(created_at, photo_id)`. Each
+page contains at most 100 `items`, a `server_time`, and an optional opaque
+`next_cursor`. Pass that cursor with the same group ID to read the next page; it
+is omitted at the end. Responses use `Cache-Control: private, no-store`.
+Malformed group IDs/cursors return 400, unauthenticated requests 401,
+non-members 403, and read failures 500.
+
+The feed includes expired challenges and challenges whose media was removed,
+without returning media URLs. Latitude and longitude are omitted unless the
+viewer has results access and the location hide period permits disclosure.
+`location_reveals_at` is returned while a poster's hide period is active;
+passing that time alone does not grant access to an unplayed active challenge.
+
 | Method | Path                                                         | Auth   | Description                                                                            |
 | ------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
 | GET    | `/api/v1/user/groups`                                        | Bearer | List user's groups                                                                     |
+| GET    | `/api/v1/user/groups/inbox`                                  | Bearer | Group rail identity, latest-message metadata, and authoritative unread counts          |
+| PUT    | `/api/v1/user/groups/inbox/read?group_id=`                   | Bearer | Mark one group inbox read through the server timestamp                                 |
 | POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
-| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{code}`                                                                    |
+| POST   | `/api/v1/group/join`                                         | Bearer | Join group `{invite_token}`                                                            |
 | GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |
 | GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                             |
 | GET    | `/api/v1/group/leaderboard?group_id=&period=&metric=`        | Bearer | Total, average, or Elo leaderboard for a calendar week/month or all time (member only) |
@@ -140,6 +156,56 @@ starts at that first confirmed full delivery rather than at acceptance, so a
 slow connection gets the full viewing time instead of having the download
 consume it. A re-fetch after the window has closed is always denied, and
 guessing is only allowed once the window has ended — the media stays view-once.
+Both endpoints publish `score_grace_seconds`: the number of seconds after the
+guessing window opens during which the full 5000-point maximum is still
+achievable. Afterwards the achievable score decays linearly down to 20% of the
+maximum just before `guess_expires_at`, and a missing guess scores 0 from
+`guess_expires_at` onward. Clients use the field to visualize the decay while
+the player is choosing a guess instead of revealing the mechanic only on the
+results screen.
+
+### Public feed
+
+All feed routes require bearer authentication. Feed mutations use the default
+authenticated rate limit; GET requests do not consume that write allowance.
+Posts and comments use a descending `(created_at, id)` cursor; `limit` defaults
+to 20 and accepts 1–50. Read [public feed behavior and rollout](public-feed.md)
+for visibility and retention.
+
+| Method      | Path                                                | Description                                                                                                                                        |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                                                                                                     |
+| GET         | `/api/v1/feed/leaderboard`                          | Community feed totals; usernames, avatars, and total score                                                                                         |
+| GET         | `/api/v1/feed/leaderboard/{profileID}`              | Players ranked by guesses on one profile owner's feed posts                                                                                        |
+| POST        | `/api/v1/feed/challenges`                           | Publish `multipart(photo,caption,audience,group_id*,hide_location,idempotency_key,lat,long)`; creates selected private group challenges atomically |
+| GET, DELETE | `/api/v1/feed/challenges/{id}`                      | Read post; author-only deletion                                                                                                                    |
+| GET         | `/api/v1/feed/challenges/{id}/media`                | Preview until guessed; original for owner or resolved viewer                                                                                       |
+| GET         | `/api/v1/feed/challenges/{id}/play`                 | Original photo for an explicit, untimed attempt                                                                                                    |
+| GET, POST   | `/api/v1/feed/challenges/{id}/guess`                | Read result or submit one immutable `{lat,long}` guess                                                                                             |
+| GET         | `/api/v1/feed/challenges/{id}/results`              | Rank every guess and show each signed all-time Elo delta                                                                                           |
+| POST        | `/api/v1/feed/challenges/{id}/accept`               | Accept timed feed challenge and receive server deadlines                                                                                           |
+| GET         | `/api/v1/feed/challenges/{id}/timed-media`          | Stream original media for the accepted timed session                                                                                               |
+| POST        | `/api/v1/feed/challenges/{id}/media-delivered`      | Acknowledge delivery and start the view window                                                                                                     |
+| POST        | `/api/v1/feed/challenges/{id}/timed-guess`          | Submit one deadline-enforced timed `{lat,long}` guess                                                                                              |
+| POST        | `/api/v1/feed/challenges/{id}/timed-timeout`        | Persist an idempotent zero-point timeout                                                                                                           |
+| GET         | `/api/v1/feed/challenges/{id}/timed-results`        | Read authorized map-ready timed results                                                                                                            |
+| PUT, DELETE | `/api/v1/feed/challenges/{id}/reaction`             | Add or remove your heart reaction                                                                                                                  |
+| GET, POST   | `/api/v1/feed/challenges/{id}/comments`             | Paginate comments or submit `{content}`                                                                                                            |
+| DELETE      | `/api/v1/feed/challenges/{id}/comments/{commentID}` | Delete own comment or moderate own post                                                                                                            |
+
+Feed publication accepts at most 20 selected groups. One request writes one
+public-feed object plus one private object for each selected group, so object
+storage and cleanup work scale with the fan-out even though the database rows
+commit together. The authenticated mutation rate limit applies to the request;
+the deployment's storage quota and cleanup backlog are the operational limits
+for the resulting objects.
+
+The database transaction is authoritative for publication rows and destination
+membership. Object storage does not provide the same transaction boundary: if a
+later object write or the database commit fails, the API compensates by deleting
+every attempted object. Each deletion attempt has a bounded 10-second timeout;
+failures are enqueued for the durable media-deletion worker, so operators should
+monitor the cleanup backlog and storage-error metrics.
 
 ### WebSocket
 

@@ -36,6 +36,14 @@ not manage those short-lived QA objects. The Hetzner token should be scoped to
 the dedicated project. Do not reuse either token in application or deployment
 jobs.
 
+The local QA token does not need Email Routing Rules permission. The controlled
+relay uses a permanent seed rule and Cloudflare subaddressing for unique test
+inboxes; keep subaddressing enabled for `geoguessme.com` and verify mail to a
+tagged seed address reaches the Worker before a release QA run. See
+[docs/qa-agent.md](../qa-agent.md) for the seed, keyring lookup, and exact
+deployed-revision command. The Terraform token above has broader permissions for
+infrastructure management and must not be substituted for the QA token.
+
 ## Provision
 
 Run `make terraform-validate`, inspect `make terraform-plan`, and apply only the
@@ -51,7 +59,13 @@ backup/restore replacement procedure; a newly created host always receives the
 current template. Runtime scripts and compose definitions must be updated as one
 exact-revision set using the procedure in
 [docs/runbooks/runtime-hardening.md](runtime-hardening.md#applying-monitored-host-definitions);
-copying only the latest changed file creates an unverifiable host state.
+copying only the latest changed file creates an unverifiable host state. After
+installing a runtime that adds release cleanup, run
+`sudo sh -c '. /opt/geoguessme/bin/common.sh; prune_releases /opt/geoguessme /var/lib/geoguessme /opt/geoguessme/config <revision>'`
+from the operator session, using the active dev revision for `<revision>`. This
+preserves all current/rollback/runtime source revisions while removing only
+unreferenced release source and abandoned staging directories. Verify dev and
+production runtime hashes and health before closing the maintenance window.
 
 The deployment and backup locks live below `/run`, which is cleared at boot.
 Cloud-init installs `/etc/tmpfiles.d/geoguessme.conf` so systemd recreates
@@ -60,6 +74,12 @@ bootstrap improvement to an existing host, install that same tmpfiles rule and
 run `systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf` through the
 Access-protected operator route before rerunning a deployment. Do not broaden
 the restricted CI deployment key into shell access for this repair.
+
+The hourly backup keeps its nonblocking lock acquisition so overlapping timer
+runs fail and alert rather than queue. A deployment pre-backup waits up to five
+minutes for an already-running backup to finish; it then fails closed if the
+lock remains held. Do not remove the lock file manually: `flock` releases the
+lock when its owning process exits.
 
 Use the Access-protected operator SSH route. Store the corresponding private
 operator key in the team's password manager (not this repository) and retain a
@@ -113,6 +133,14 @@ defines the exact Google callback, existing-account continuity requirements, and
 provider-specific checks. The generator writes inert placeholders for Apple and
 GitHub until their separately reviewed rollout.
 
+The hosted deploy decrypts the tracked
+`deployment/secrets/{dev,production}.env.enc` payloads; it does not read the
+corresponding `*.env.example` templates. Whenever an environment template gains
+a runtime setting, regenerate and commit the matching encrypted payload as part
+of the same change. In particular, production OIDC requires the complete
+`OIDC_*` and `OAUTH2_PROXY_*` set so the deployment starts OAuth2 Proxy and
+exposes the configured social providers.
+
 Both environments set `APP_ENV=production`. The backend disables Push when all
 three VAPID variables are absent, but rejects a partial keypair or invalid
 contact subject. Store each configured environment's pair outside the
@@ -142,7 +170,7 @@ values must be reused whenever that secret file is regenerated.
   backup values.
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
-age private keys. Unless both GHCR packages are public, add a read-only
+age private keys. Unless all GHCR packages are public, add a read-only
 `read:packages` token as `GHCR_TOKEN` in each encrypted host environment; it
 must have no repository-write scope. Set the Terraform Access service-token
 outputs, SSH private key, and SSH known-host line as environment-scoped GitHub
@@ -170,10 +198,17 @@ tree and that revision deployed successfully. Create that branch from `main` and
 materialize the `dev` tree on it; this preserves linear squash history without
 rewriting protected branches. The release workflow checks tree equality,
 verifies the dev signatures, promotes the same manifests without rebuilding,
-adds the production signature, selects the next semantic patch version (with
-reads the committed `.release-version` manifest, validates that it is newer than
-the latest semantic release tag, creates the GitHub release/tag, and deploys
-production. Pull-request jobs never receive deployment secrets.
+adds the production signature, reads the committed `.release-version` manifest,
+validates that it is newer than the latest semantic release tag, creates the
+GitHub release/tag, and deploys production. Pull-request jobs never receive
+deployment secrets.
+
+The patched Keycloak runtime is built from its pinned upstream image with the
+checksum-verified FreeMarker 2.3.35 jar, then signed and scanned as a fourth
+release artifact. Development deploys run realm reconciliation without
+restarting the shared identity service. Production backs up the shared Keycloak
+database before switching to the promoted digest, records that digest with
+release metadata, and restores the prior image if deployment fails.
 
 Both branches require signed commits, the aggregate Dockerized verification
 check, PRs, linear history, resolved conversations, admin enforcement, and

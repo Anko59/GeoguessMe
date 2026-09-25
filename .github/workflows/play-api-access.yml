@@ -1,0 +1,71 @@
+name: Play API access check
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: Android package to inspect
+        required: true
+        default: com.geoguessme.app
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect Play app identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Validate OIDC configuration
+        env:
+          PLAY_WIF_PROVIDER: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          PLAY_SERVICE_ACCOUNT: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PLAY_WIF_PROVIDER" || {
+            echo 'Missing production variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
+            exit 1
+          }
+          test -n "$PLAY_SERVICE_ACCOUNT" || {
+            echo 'Missing production variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
+            exit 1
+          }
+          [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
+            echo 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER is not a Google WIF provider resource.' >&2
+            exit 1
+          }
+          [[ "$PLAY_SERVICE_ACCOUNT" == *@*.iam.gserviceaccount.com ]] || {
+            echo 'PLAY_GCP_SERVICE_ACCOUNT is not a service-account email.' >&2
+            exit 1
+          }
+
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+
+      - name: Bootstrap API client tools
+        run: make bootstrap-preflight
+
+      - name: Inspect Play app identity
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PLAY_API_PACKAGE_NAME: ${{ inputs.package_name }}
+          PLAY_RELEASE_TRACK: ${{ vars.PLAY_RELEASE_TRACK }}
+        run: make play-api-check

@@ -1,0 +1,28 @@
+GroupChallenge:
+  type: object
+  required: [photo_id, group_id, user_id, username, created_at, expires_at, status]
+  properties:
+    photo_id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    user_id: { type: string, format: uuid }
+    username: { type: string }
+    created_at: { type: string, format: date-time }
+    expires_at: { type: string, format: date-time }
+    status: { type: string, enum: [available, results, guessed, expired] }
+    lat: { type: number, minimum: -90, maximum: 90 }
+    long: { type: number, minimum: -180, maximum: 180 }
+    location_reveals_at:
+      type: string
+      format: date-time
+      description: End of the poster's hide period; results access is still required.
+
+GroupChallengesPage:
+  type: object
+  required: [items, server_time]
+  properties:
+    items:
+      type: array
+      maxItems: 100
+      items: { $ref: "#/GroupChallenge" }
+    next_cursor: { type: string }
+    server_time: { type: string, format: date-time }

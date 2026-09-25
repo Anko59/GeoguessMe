@@ -26,7 +26,7 @@ upload:
       "201":
         {
           description: Challenge created.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeCreated" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/ChallengeCreated" } } },
         }
       "202":
         {
@@ -48,7 +48,7 @@ accept:
       "200":
         {
           description: Challenge accepted.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeAccepted" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/ChallengeAccepted" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
@@ -87,7 +87,8 @@ mediaDelivered:
       "200":
         {
           description: Authoritative viewing deadline.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeMediaDelivered" } } },
+          content:
+            { application/json: { schema: { $ref: "../components/schemas-game.yaml#/ChallengeMediaDelivered" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
@@ -113,12 +114,12 @@ guess:
       "201":
         {
           description: Guess recorded.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/GuessResponse" } } },
         }
       "200":
         {
           description: Existing guess returned idempotently.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/GuessResponse" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "409":
@@ -144,12 +145,12 @@ timeout:
       "201":
         {
           description: Timeout recorded (score 0).,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/GuessResponse" } } },
         }
       "200":
         {
           description: Existing guess returned idempotently.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/GuessResponse" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/GuessResponse" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
@@ -172,7 +173,7 @@ results:
       "200":
         {
           description: Challenge results.,
-          content: { application/json: { schema: { $ref: "../components/schemas.yaml#/ChallengeResults" } } },
+          content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/ChallengeResults" } } },
         }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

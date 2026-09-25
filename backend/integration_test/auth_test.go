@@ -14,7 +14,7 @@ import (
 
 func TestSignupValidation(t *testing.T) {
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": "ab", "email": "bad", "password": "weak"}, "", nil)
+		map[string]any{"username": "ab", "email": "bad", "password": "weak", "age_attested": true}, "", nil)
 	require.Equalf(t, http.StatusBadRequest, resp.StatusCode, "body: %s", data)
 	var envelope struct {
 		Error struct {
@@ -38,14 +38,14 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 
 	// Duplicate username collides with the generic conflict.
 	resp, data := doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": user, "email": "other" + email, "password": "StrongPassword123"}, "", nil)
+		map[string]any{"username": user, "email": "other" + email, "password": "StrongPassword123", "age_attested": true}, "", nil)
 	require.Equalf(t, http.StatusConflict, resp.StatusCode, "duplicate username: %s", data)
 	usernameConflict := data
 
 	// The same address is claimable by another account while it is still an
 	// unverified pending claim: signup must not reveal registration status.
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": user + "2", "email": email, "password": "StrongPassword123"}, "", nil)
+		map[string]any{"username": user + "2", "email": email, "password": "StrongPassword123", "age_attested": true}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "second pending claim: %s", data)
 
 	// Once one account verifies the address, signup still accepts it as a
@@ -55,7 +55,7 @@ func TestSignupLoginAndDuplicate(t *testing.T) {
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/verify", map[string]string{"token": verifyToken}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "verify: %s", data)
 	resp, data = doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": user + "3", "email": email, "password": "StrongPassword123"}, "", nil)
+		map[string]any{"username": user + "3", "email": email, "password": "StrongPassword123", "age_attested": true}, "", nil)
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "verified email pending claim: %s", data)
 	require.NotEqual(t, usernameConflict, data)
 	// Reset rate limiter so login requests aren't throttled by the preceding
@@ -204,7 +204,7 @@ func TestAccountDeletionImmediateLossAndReuse(t *testing.T) {
 
 	// Identity can be reused.
 	resp, _ = doJSON(t, http.MethodPost, "/api/v1/auth/signup",
-		map[string]string{"username": user, "email": email, "password": pass}, "", nil)
+		map[string]any{"username": user, "email": email, "password": pass, "age_attested": true}, "", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 

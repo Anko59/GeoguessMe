@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
 import { useAvatarUrl } from '../../components/common/avatarCache';
 import RankBadge from '../../components/progression/RankBadge';
+import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import type { Profile, PublicProfile } from '../../types';
+import FeedLeaderboard from './FeedLeaderboard';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
@@ -53,18 +55,29 @@ export default function ProfilePage() {
 
     if (loading) {
         return (
-            <main className="profile-page profile-state" aria-busy="true">
+            <AuthenticatedPageShell
+                className="profile-page-shell"
+                contentClassName="profile-page profile-state"
+                contentAs="main"
+                showSettings={isSelf}
+                ariaBusy
+            >
                 <div className="loading" role="status">
                     <div className="spinner" />
                     <span>Loading profile…</span>
                 </div>
-            </main>
+            </AuthenticatedPageShell>
         );
     }
 
     if (error || !profile) {
         return (
-            <main className="profile-page profile-state">
+            <AuthenticatedPageShell
+                className="profile-page-shell"
+                contentClassName="profile-page profile-state"
+                contentAs="main"
+                showSettings={isSelf}
+            >
                 <div className="profile-error" role="alert">
                     <strong>We couldn’t load this profile</strong>
                     <span>{error || 'This profile is temporarily unavailable.'}</span>
@@ -72,7 +85,7 @@ export default function ProfilePage() {
                         Retry
                     </button>
                 </div>
-            </main>
+            </AuthenticatedPageShell>
         );
     }
 
@@ -80,19 +93,12 @@ export default function ProfilePage() {
     const remaining = rank.next_points ? rank.points_to_next - rank.points_in_rank : 0;
 
     return (
-        <main className="profile-page">
-            <header className="profile-topbar">
-                <Link to="/groups" className="profile-back-link">
-                    <Icon name="arrow-left" className="profile-back-icon" />
-                    Groups
-                </Link>
-                {isSelf && (
-                    <Link to="/settings" className="profile-settings-link">
-                        Settings
-                    </Link>
-                )}
-            </header>
-
+        <AuthenticatedPageShell
+            className="profile-page-shell"
+            contentClassName="profile-page"
+            contentAs="main"
+            showSettings={isSelf}
+        >
             <section className="profile-hero" aria-labelledby="profile-title">
                 <div className="profile-identity">
                     <div className="profile-avatar-ring">
@@ -210,6 +216,7 @@ export default function ProfilePage() {
                     <span>{rank.progress_percent}%</span>
                 </div>
             </section>
-        </main>
+            <FeedLeaderboard profileID={profile.id} profileUsername={profile.username} />
+        </AuthenticatedPageShell>
     );
 }

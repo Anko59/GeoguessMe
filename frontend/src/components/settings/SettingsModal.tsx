@@ -5,6 +5,8 @@ import type { InviteCreateResponse, InviteListItem, Member } from '../../types';
 import Avatar from '../common/Avatar';
 import LogoutButton from '../navigation/LogoutButton';
 import Icon from '../ui/Icon';
+import { publicWebURL } from '../../platform/endpoints';
+import { shareOrCopy } from '../../platform/sharing';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -161,21 +163,18 @@ export default function SettingsModal({
             .catch(() => setInviteError('Unable to revoke that invite. Try again.'));
     };
 
-    const inviteLink = createdInvite ? `${window.location.origin}${createdInvite.invite_url}` : '';
+    const inviteLink = createdInvite ? publicWebURL(createdInvite.invite_url) : '';
     const copyInvite = () => {
         if (!createdInvite) return;
-        if (!navigator.clipboard) {
-            setInviteError('Clipboard access is unavailable. Select and copy the link manually.');
-            return;
-        }
         setInviteError('');
-        void navigator.clipboard
-            .writeText(inviteLink)
-            .then(() => {
+        void shareOrCopy('Join my GeoGuessMe group', `Join ${groupName} on GeoGuessMe`, inviteLink).then((result) => {
+            if (result === 'shared' || result === 'copied') {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
-            })
-            .catch(() => setInviteError('Unable to copy the invite. Select and copy the link manually.'));
+                return;
+            }
+            setInviteError('Unable to copy the invite. Select and copy the link manually.');
+        });
     };
 
     const toggleNotifications = () => {

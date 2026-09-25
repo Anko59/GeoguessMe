@@ -10,6 +10,16 @@ The concrete hosted implementation and launch checklist is in the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
 
+Android distribution is part of the production release boundary but remains a
+separate artifact from the hosted services. The production workflow builds and
+verifies the signed Android App Bundle before image promotion, retains its
+provenance manifest, and publishes that exact artifact to the configured Play
+track only after the production deployment succeeds. The Play publication job
+uses GitHub OIDC and fails closed on access, digest, version, edit-validation,
+or post-commit track checks. See the [mobile release guide](mobile.md) and
+[Google Play account runbook](runbooks/google-play-console.md) for the
+configuration and recovery procedure.
+
 The hosted system has three Compose projects: isolated dev and production game
 stacks on loopback ports `8082` and `8081`, plus shared Keycloak and its own
 PostgreSQL database on `8083` for `auth.geoguessme.com`. Each game stack keeps
@@ -46,17 +56,41 @@ infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
 `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
 `GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
 
+Development, integration/E2E, and the optional `local-minio` profile pull the
+MinIO release from the public `quay.io/thanos/minio` mirror. All three pin the
+same release and immutable manifest digest previously used for
+`quay.io/minio/minio`; the mirror serves that exact manifest. Verify the digest
+before changing registries. Registry access failures do not require a data
+migration or volume reset.
+
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure
 and rollback evidence.
 
 ## Live acceptance
 
+The group globe uses the standard application rollout and migration job.
+Migration 026 adds its history pagination index; allow for index creation time
+on large photo tables. It is compatible with previous application binaries. See
+[migration 026](database-migrations.md#migration-026-group-challenge-globe-index).
+The Earth texture is bundled with the frontend; no imagery API key or new
+environment variable is required. The production Caddy Content Security Policy
+allows the exact OSM host in `img-src`, and exact OSM plus NASA GIBS in
+`connect-src` for globe detail requests. If this policy change is rolled back,
+the bundled Earth and group history remain available but close detail tiles do
+not load; restore those origins in the Caddy policy when re-enabling globe
+detail imagery.
+
 Repository rehearsals remain disposable. Live R2, Access, Tunnel, and Brevo must
 be validated on dev, and an isolated production backup restore must be
 completed, before the first production promotion to `main`. There is no fixed
 24-hour soak or quarantine delay; promotion may proceed once this live evidence
 and every automated release gate pass for the exact deployed revision.
+
+Hosted application deployments wait up to five minutes for an in-progress hourly
+backup to release the per-environment backup lock. This avoids rejecting a valid
+deployment because the timer fired during the CI gate while retaining a bounded
+failure for a backup that does not complete.
 
 ## Compatibility-removal rollout
 

@@ -64,10 +64,6 @@ qa_access_require_success() {
 }
 
 qa_access_provision() {
-    if [[ -z "${QA_ACCESS_CLIENT_ID:-}" && -n "${CF_ACCESS_CLIENT_ID:-}" && -n "${CF_ACCESS_CLIENT_SECRET:-}" ]]; then
-        export QA_ACCESS_CLIENT_ID="$CF_ACCESS_CLIENT_ID"
-        export QA_ACCESS_CLIENT_SECRET="$CF_ACCESS_CLIENT_SECRET"
-    fi
     if [[ -n "${QA_ACCESS_CLIENT_ID:-}" || -n "${QA_ACCESS_CLIENT_SECRET:-}" ]]; then
         if [[ -z "${QA_ACCESS_CLIENT_ID:-}" || -z "${QA_ACCESS_CLIENT_SECRET:-}" ]]; then
             echo 'QA_ACCESS_CLIENT_ID and QA_ACCESS_CLIENT_SECRET must be supplied together.' >&2

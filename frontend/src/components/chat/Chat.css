@@ -235,6 +235,8 @@
 
 .message-caption {
     padding: 0.3rem 0.3rem 0.1rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .message-container.own .message-content.text {
@@ -360,14 +362,6 @@
     border: 0;
     font: inherit;
     font-weight: 800;
-}
-
-.message-input {
-    min-width: 0;
-    flex: 1;
-    background: var(--surface-soft);
-    border-color: transparent;
-    border-radius: var(--radius-pill);
 }
 
 .attachment-button {

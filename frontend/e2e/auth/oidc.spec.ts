@@ -128,6 +128,7 @@ test.describe('Local social-auth visual validation', () => {
 
         await page.goto('/signup');
         await page.getByPlaceholder('you@example.com').fill(email);
+        await page.check('#signup-age-attested');
         await Promise.all([
             page.waitForURL(/https:\/\/auth-dev\.geoguessme\.com\//, {
                 waitUntil: 'domcontentloaded',
@@ -215,6 +216,7 @@ test.describe('Local social-auth visual validation', () => {
         const emailSignup = page.getByRole('button', { name: 'Continue to create account' });
         await expect(emailSignup).toBeVisible();
         await expect(page.locator('#signup-username')).toHaveCount(0);
+        await page.check('#signup-age-attested');
         await waitForAuthCardVisuals(page);
         await page.screenshot({ path: testInfo.outputPath('02-app-signup.png'), fullPage: true });
 

@@ -30,6 +30,11 @@ body {
     overflow-x: hidden;
 }
 
+.native-runtime body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
 button,
 input,
 textarea,

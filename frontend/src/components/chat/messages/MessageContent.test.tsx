@@ -40,6 +40,14 @@ describe('MessageContent', () => {
         expect(bubble.className).toContain('text');
     });
 
+    it('renders interior line breaks as separate visible lines', () => {
+        const { container } = renderContent({ message: message({ content: 'First line\nSecond line' }) });
+        const caption = container.querySelector<HTMLElement>('.message-caption');
+
+        expect(caption).toBeInTheDocument();
+        expect(caption?.querySelectorAll('br')).toHaveLength(1);
+    });
+
     it('renders a system message without a bubble styling collision', () => {
         renderContent({ message: message({ kind: 'system', content: 'System update' }), isSystem: true });
         const bubble = screen.getByText('System update').closest('.message-content') as HTMLElement;

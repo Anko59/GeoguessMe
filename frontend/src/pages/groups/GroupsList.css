@@ -1,6 +1,5 @@
 .groups-list-container {
     width: min(100%, 70rem);
-    min-height: 100dvh;
     margin-inline: auto;
     padding: clamp(1rem, 3vw, 2rem);
     display: flex;
@@ -8,55 +7,8 @@
     gap: var(--space-6);
 }
 
-.groups-topbar {
-    min-height: 3.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-}
-
-.groups-brand,
-.groups-account-link {
-    border-radius: var(--radius-sm);
-    color: var(--brand-navy);
-    font-weight: 800;
-    text-decoration: none;
-}
-
-.groups-account-links {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-
-.groups-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    letter-spacing: -0.02em;
-}
-
-.groups-brand img {
-    width: 2.75rem;
-    height: 2.75rem;
-    object-fit: contain;
-}
-
-.groups-account-link {
-    min-height: 44px;
-    padding-inline: var(--space-3);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--brand-blue-accessible);
-    font-size: 0.875rem;
-}
-
-.groups-account-icon {
-    width: 1.15rem;
-    height: 1.15rem;
-    flex: none;
+.groups-page-shell {
+    background: var(--surface-soft);
 }
 
 .groups-heading-row {
@@ -267,10 +219,6 @@
 }
 
 @media (hover: hover) {
-    .groups-account-link:hover {
-        background: var(--surface);
-    }
-
     .action-btn:hover,
     .group-card:hover {
         transform: translateY(-2px);
@@ -284,18 +232,6 @@
 }
 
 @media (max-width: 600px) {
-    .groups-list-container {
-        gap: var(--space-4);
-    }
-
-    .groups-account-label {
-        display: none;
-    }
-
-    .groups-account-link {
-        padding-inline: 0.6rem;
-    }
-
     .groups-heading-row {
         min-height: auto;
         padding: 1.35rem;

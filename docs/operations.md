@@ -62,7 +62,37 @@ protected response.
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://backend:8080/metrics
 ```
 
+## Hosted monitoring
+
+When enabled on the shared hosted VM, the protected monitoring entry point is
+`https://watch.geoguessme.com/`. Beszel is at the root, VictoriaLogs is at
+`/logs/select/vmui/`, and VictoriaMetrics is at `/metrics/vmui/`. Cloudflare
+Access permits only the owner email, and Beszel retains its own administrator
+login. The monitoring stack consumes production logs and metrics without
+exposing the application's bearer token or Docker socket publicly.
+
+The capacity gate, installation, token rotation, alert behavior, backup, and
+rollback procedure are canonical in the
+[monitoring runbook](runbooks/monitoring.md).
+
 ## Logging
+
+The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
+`load group challenge map` with the group ID and database error; coordinates are
+not logged. If the challenge list works but the Earth does not render, check
+browser WebGL support and delivery of `/globe/earth.jpg` or
+`/globe/earth-8192.jpg` from the frontend. At closer zoom the browser requests
+NASA GIBS and OpenStreetMap tiles for the visible viewport. If detail tiles
+fail, the bundled Earth remains underneath; confirm the browser can reach those
+tile services and that the production Caddy Content Security Policy permits
+`https://tile.openstreetmap.org` in `img-src`, plus that host and
+`https://gibs.earthdata.nasa.gov` in `connect-src`. A rollback that removes
+these origins disables detail tiles while the bundled Earth and group history
+remain usable; restore the prior policy by redeploying the Caddy configuration
+with these required origins. Standard OpenStreetMap tiles use browser caching
+and its exact host as required by the
+[tile usage policy](https://operations.osmfoundation.org/policies/tiles/). The
+challenge list remains available when 3D rendering fails.
 
 The backend uses `slog` with JSON handler output. Every HTTP request is logged
 with:
@@ -87,9 +117,44 @@ it without touching the active volume. The 15-minute host check fails when the
 latest backup is older than two hours, disk usage reaches 85%, the tunnel is
 down, or containers/readiness are unhealthy.
 
+An application deployment takes the same per-environment backup lock as the
+hourly job. If an hourly backup is already running, the deployment waits up to
+five minutes for it to finish before failing closed; scheduled backups remain
+fail-fast so they never queue behind another backup. The lock is released by the
+operating system when the backup process exits.
+
 Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
+
+The host also stores an immutable source directory for each deployed revision.
+The deploy runtime retains the current and previous revision for dev and
+production, plus the root-owned runtime-definition revision. It removes other
+release directories and abandoned staging directories before downloading the
+next release. This keeps update storage separate from database, media, and
+backup retention. If deployment reports `No space left on device` before that
+runtime is installed, use the Access-protected operator route to inspect disk
+usage and apply the complete runtime set in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#applying-monitored-host-definitions);
+do not delete release directories by wildcard.
+
+## Android release operations
+
+The production release workflow treats the Android App Bundle as a separate,
+revision-bound artifact. It builds and verifies the signed bundle before image
+promotion, stores the bundle and provenance manifest as one short-lived workflow
+artifact, and publishes the same files to Google Play only after the hosted
+deployment has succeeded. It authenticates with GitHub OIDC and a short-lived
+Android Publisher token; no service-account JSON key or credential file is used.
+
+The `play-access` job blocks image promotion when the Play configuration or
+app-scoped permission is invalid. The `play-publish` job blocks the Play write
+when the artifact provenance, version monotonicity, edit validation, or
+post-commit track readback is invalid. A Play publication failure therefore does
+not silently upload a different bundle; inspect the exact release run and the
+restricted manifest evidence before retrying. For the full state model,
+configuration, and Play-track recovery actions, use the
+[Google Play account runbook](runbooks/google-play-console.md).
 
 ### Database
 
@@ -331,6 +396,12 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 
 ## Incident response
 
+If a local or CI stack fails before startup with `pull access denied` for MinIO,
+check access to the public `quay.io/thanos/minio` mirror and confirm it still
+serves the pinned manifest digest. Compose keeps the original immutable MinIO
+digest; see the [deployment guide](deployment.md). Keep existing volumes intact;
+registry access failures do not require a storage reset.
+
 | Scenario          | Response                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
 | Leaked JWT secret | Rotate secret, restart replicas, revoke refresh sessions                                                   |
@@ -339,3 +410,8 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 | Abusive user      | Revoke sessions, delete account via `DELETE /auth/account`, preserve request IDs                           |
 | Failed migration  | Restore from backup — migrations are forward-only                                                          |
 | Storage outage    | Backend returns 502/503 on media endpoints; gameplay continues without media                               |
+
+Suspected personal-data breaches follow
+[runbooks/data-breach-response](runbooks/data-breach-response.md), including the
+72-hour CNIL notification duty; the compliance record lives in
+[data-protection](data-protection.md).

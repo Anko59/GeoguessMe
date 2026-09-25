@@ -10,6 +10,41 @@ userGroups:
         content: { application/json: { schema: { type: array, items: { $ref: "../components/schemas.yaml#/Group" } } } }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
 
+userGroupsInbox:
+  get:
+    operationId: listUserGroupInbox
+    summary: List group rail summaries for the authenticated user.
+    description: >
+      Unread counts are derived from persisted message read markers. Latest
+      message metadata never includes message content or media.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Group inbox summaries.
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "../components/schemas.yaml#/GroupInbox" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
+markUserGroupRead:
+  put:
+    operationId: markUserGroupRead
+    summary: Mark a group inbox as read.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "204": { description: Group messages are read through the server timestamp. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 userProfile:
   get:
     operationId: getUserProfile
@@ -254,7 +289,7 @@ groupParty:
     responses:
       "200":
         description: Party state.
-        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+        content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/PartyStatus" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
   post:
@@ -279,7 +314,7 @@ groupParty:
     responses:
       "201":
         description: Party started; the response carries the active window.
-        content: { application/json: { schema: { $ref: "../components/schemas.yaml#/PartyStatus" } } }
+        content: { application/json: { schema: { $ref: "../components/schemas-game.yaml#/PartyStatus" } } }
       "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "403": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "404": { $ref: "../components/responses.yaml#/ErrorResponse" }

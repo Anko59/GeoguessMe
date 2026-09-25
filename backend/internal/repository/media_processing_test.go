@@ -9,7 +9,7 @@ import (
 
 	"geoguessme/internal/models"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // processingJobRow builds the row produced by the job SELECTs/RETURNING.

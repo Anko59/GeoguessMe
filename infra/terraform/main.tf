@@ -20,27 +20,48 @@ removed {
 }
 
 locals {
-  # Hashes are rendered into a root-owned host manifest during provisioning.
-  # The runtime verifier must not use the deploy-writable release archive as
-  # its expected baseline because an attacker with deploy access could alter
-  # both the installed file and the comparison source.
-  runtime_hash_files = {
-    "bin/alert.sh"                    = "${path.module}/../../deployment/scripts/hosted/alert.sh"
-    "bin/backup.sh"                   = "${path.module}/../../deployment/scripts/hosted/backup.sh"
-    "bin/common.sh"                   = "${path.module}/../../deployment/scripts/hosted/common.sh"
-    "bin/deploy.sh"                   = "${path.module}/../../deployment/scripts/hosted/deploy.sh"
-    "bin/forced-command.sh"           = "${path.module}/../../deployment/scripts/hosted/forced-command.sh"
-    "bin/health-check.sh"             = "${path.module}/../../deployment/scripts/hosted/health-check.sh"
-    "bin/restore-rehearsal.sh"        = "${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"
-    "bin/verify-deployment-hashes.sh" = "${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"
-    "config/compose.hosted.yaml"      = "${path.module}/../../deployment/compose.hosted.yaml"
-    "config/compose.production.yaml"  = "${path.module}/../../deployment/compose.production.yaml"
-  }
+  # Keep the complete reviewed runtime set, including host units, in one gzip stream because Hetzner
+  # limits cloud-init user data to 32 KiB. The cloud-init extractor knows this
+  # fixed order and writes the members to their root-owned destinations.
+  runtime_bundle_files = [
+    file("${path.module}/../../deployment/scripts/hosted/common.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/deploy.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/backup.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/health-check.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/alert.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/watch-health.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/watch-refresh-metrics-token.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/watch-capacity.sh"),
+    file("${path.module}/../../deployment/compose.production.yaml"),
+    file("${path.module}/../../deployment/compose.hosted.yaml"),
+    file("${path.module}/../../deployment/compose.watch.yaml"),
+    file("${path.module}/../../deployment/watch/Caddyfile"),
+    file("${path.module}/../../deployment/watch/vector.yaml"),
+    file("${path.module}/../../deployment/watch/victoria-metrics.yaml"),
+    file("${path.module}/../cloud-init/units/geoguessme-backup@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-backup@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-health@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-health@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-restore-rehearsal@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-restore-rehearsal@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-alert@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-health.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-health.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-refresh-metrics-token.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-refresh-metrics-token.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.timer"),
+  ]
 
-  runtime_hashes = join("\n", [
-    for relative_path, absolute_path in local.runtime_hash_files :
-    "${filesha256(absolute_path)}  ${relative_path}"
-  ])
+  runtime_bundle = base64gzip(join("", concat(
+    ["GEOGUESSME_RUNTIME_BUNDLE_V1\n"],
+    [for content in local.runtime_bundle_files : "${length(content)}\n"],
+    local.runtime_bundle_files,
+  )))
 }
 
 resource "random_bytes" "tunnel_secret" {
@@ -63,6 +84,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "app" {
       { hostname = var.domain, service = "http://127.0.0.1:8081" },
       { hostname = "dev.${var.domain}", service = "http://127.0.0.1:8082" },
       { hostname = "auth.${var.domain}", service = "http://127.0.0.1:8083" },
+      { hostname = "watch.${var.domain}", service = "http://127.0.0.1:8084" },
       # Development CI reaches SSH through deploy.geoguessme.com and production
       # CI through deploy-prod.geoguessme.com; the Access application on each
       # hostname accepts only its own service token (F-05 isolation).
@@ -71,6 +93,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "app" {
       { service = "http_status:404" }
     ]
   }
+  depends_on = [cloudflare_zero_trust_access_application.watch]
 }
 
 data "cloudflare_zero_trust_tunnel_cloudflared_token" "app" {
@@ -79,13 +102,14 @@ data "cloudflare_zero_trust_tunnel_cloudflared_token" "app" {
 }
 
 resource "cloudflare_dns_record" "tunnel" {
-  for_each = toset(["@", "auth", "dev", "deploy", "deploy-prod"])
-  zone_id  = var.cloudflare_zone_id
-  name     = each.value
-  type     = "CNAME"
-  content  = "${cloudflare_zero_trust_tunnel_cloudflared.app.id}.cfargotunnel.com"
-  proxied  = true
-  ttl      = 1
+  for_each   = toset(["@", "auth", "dev", "deploy", "deploy-prod", "watch"])
+  zone_id    = var.cloudflare_zone_id
+  name       = each.value
+  type       = "CNAME"
+  content    = "${cloudflare_zero_trust_tunnel_cloudflared.app.id}.cfargotunnel.com"
+  proxied    = true
+  ttl        = 1
+  depends_on = [cloudflare_zero_trust_access_application.watch]
 }
 
 resource "cloudflare_dns_record" "brevo" {
@@ -269,6 +293,22 @@ resource "cloudflare_zero_trust_access_application" "prod_deployment" {
   }]
 }
 
+resource "cloudflare_zero_trust_access_application" "watch" {
+  account_id                = var.cloudflare_account_id
+  name                      = "GeoGuessMe monitoring"
+  domain                    = "watch.${var.domain}"
+  type                      = "self_hosted"
+  session_duration          = "24h"
+  allowed_idps              = [cloudflare_zero_trust_access_identity_provider.email_otp.id]
+  auto_redirect_to_identity = true
+  policies = [{
+    name       = "Owner monitoring access"
+    decision   = "allow"
+    precedence = 1
+    include    = [{ email = { email = var.access_email } }]
+  }]
+}
+
 resource "cloudflare_r2_bucket" "media" {
   for_each      = toset(["geoguessme-dev-media", "geoguessme-production-media"])
   account_id    = var.cloudflare_account_id
@@ -298,22 +338,12 @@ resource "hcloud_server" "app" {
   rebuild_protection = true
   firewall_ids       = [hcloud_firewall.deny_inbound.id]
   user_data = templatefile("${path.module}/../cloud-init/cloud-config.yaml.tftpl", {
-    admin_key          = var.admin_ssh_public_key
-    dev_ci_key         = var.dev_ci_ssh_public_key
-    production_key     = var.production_ci_ssh_public_key
-    runtime_revision   = var.runtime_revision
-    tunnel_token       = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
-    common_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/common.sh"))
-    deploy_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/deploy.sh"))
-    forced_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"))
-    verify_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"))
-    backup_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/backup.sh"))
-    restore_script     = base64gzip(file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"))
-    health_script      = base64gzip(file("${path.module}/../../deployment/scripts/hosted/health-check.sh"))
-    alert_script       = base64gzip(file("${path.module}/../../deployment/scripts/hosted/alert.sh"))
-    production_compose = base64gzip(file("${path.module}/../../deployment/compose.production.yaml"))
-    hosted_compose     = base64gzip(file("${path.module}/../../deployment/compose.hosted.yaml"))
-    runtime_hashes     = local.runtime_hashes
+    admin_key        = var.admin_ssh_public_key
+    dev_ci_key       = var.dev_ci_ssh_public_key
+    production_key   = var.production_ci_ssh_public_key
+    runtime_revision = var.runtime_revision
+    tunnel_token     = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
+    runtime_bundle   = local.runtime_bundle
   })
 
   public_net {

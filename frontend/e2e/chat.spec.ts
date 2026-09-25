@@ -50,6 +50,31 @@ async function addMember(
 }
 
 test.describe('Chat via WebSocket', () => {
+    test('empty message input hides its scrollbar while long drafts remain scrollable', async ({
+        browser,
+        contextOptions,
+    }) => {
+        const scenario = await createScenario(browser, contextOptions);
+        try {
+            const input = scenario.owner.locator('#chat-message');
+            await expectConnected(scenario.owner);
+            await expect(input).toHaveCSS('overflow-y', 'hidden');
+
+            await input.fill('line '.repeat(200));
+            await expect(input).toHaveCSS('overflow-y', 'auto');
+            const hasScrollableOverflow = await input.evaluate(
+                (textarea) => textarea.scrollHeight > textarea.clientHeight,
+            );
+            expect(hasScrollableOverflow).toBe(true);
+
+            await scenario.owner.getByRole('button', { name: 'Send message' }).click();
+            await expect(input).toHaveValue('');
+            await expect(input).toHaveCSS('overflow-y', 'hidden');
+        } finally {
+            await scenario.ownerContext.close();
+        }
+    });
+
     test('chat connect, send message, receive in real-time', async ({ browser, contextOptions }) => {
         const scenario = await createScenario(browser, contextOptions);
         const member = await addMember(browser, contextOptions, scenario);
