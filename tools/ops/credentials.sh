@@ -159,6 +159,7 @@ wait_for_access_policy() {
 operator_ssh() {
     local environment=$1
     local hostname
+    local host_key_alias='deploy.geoguessme.com'
     local account_id=${CLOUDFLARE_ACCOUNT_ID:-$DEFAULT_CLOUDFLARE_ACCOUNT_ID}
     local applications_response
     local application_count
@@ -279,14 +280,16 @@ operator_ssh() {
 
     proxy_command="make -s cloudflared-access-ssh HOST=%h 2>'$scratch_dir/cloudflared.stderr'"
     if [[ -n "${OPS_SSH_COMMAND:-}" ]]; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=20 -o "ProxyCommand=$proxy_command" \
+        if ssh -o BatchMode=yes -o ConnectTimeout=20 -o "HostKeyAlias=$host_key_alias" \
+            -o "ProxyCommand=$proxy_command" \
             "ops@$hostname" "$OPS_SSH_COMMAND"; then
             ssh_status=0
         else
             ssh_status=$?
         fi
     else
-        if ssh -o BatchMode=yes -o ConnectTimeout=20 -o "ProxyCommand=$proxy_command" \
+        if ssh -o BatchMode=yes -o ConnectTimeout=20 -o "HostKeyAlias=$host_key_alias" \
+            -o "ProxyCommand=$proxy_command" \
             "ops@$hostname"; then
             ssh_status=0
         else
