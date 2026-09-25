@@ -71,7 +71,7 @@ The gates intentionally become broader as a change approaches deployment:
 | Shared or deployment PR      | Fast, backend integration, Chromium E2E, and Android emulator jobs in parallel                                                                                |
 | Merge to `dev`               | Five parallel gate jobs (quality, backend integration, Chromium E2E, Android emulator, operational), then signed-image publication and development deployment |
 | Successful dev deployment    | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                                  |
-| Before a release PR          | `make qa-agent-full` against deployed dev; retain the report with the release record                                                                          |
+| Before a release PR          | `make qa-agent-full QA_BUILD_SHA=<deployed dev SHA>` against deployed dev; retain the report with the release record                                          |
 | Release PR to `main`         | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                                      |
 | Merge to `main`              | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                                     |
 | Nightly                      | Complete `make verify`                                                                                                                                        |

@@ -18,15 +18,43 @@ const identityVerificationMessage = {
   text: "Verify: https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=secret-token&client_id=qa",
   html: "<a href=\"https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=secret-token&amp;client_id=qa\">Verify</a>",
 };
+const identityResetMessage = {
+  ...identityVerificationMessage,
+  id: "message-idp-reset",
+  subject: "Reset password",
+};
 const rawMessage = [
   "From: no-reply@geoguessme.com",
-  "To: qa-release-20260815-1@geoguessme.com",
-  "Subject: =?UTF-8?Q?Verify_your_GeoGuessMe_account?=",
+  "To: qa-release-20260815-1+run-test@geoguessme.com",
+  "Subject: Base64 fixture",
   `Date: ${message.createdAt}`,
   "Content-Type: text/plain; charset=utf-8",
   "Content-Transfer-Encoding: base64",
   "",
   Buffer.from(message.text).toString("base64"),
+  "",
+].join("\r\n");
+const quotedPrintableMessage = [
+  "From: no-reply@geoguessme.com",
+  "To: qa-release-20260815-1+run-test@geoguessme.com",
+  "Subject: Verify your GeoGuessMe account",
+  `Date: ${message.createdAt}`,
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/alternative; boundary="qa-boundary"',
+  "",
+  "--qa-boundary",
+  "Content-Type: text/plain; charset=UTF-8",
+  "Content-Transfer-Encoding: quoted-printable",
+  "",
+  "Verify: https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=3Dsynthetic-verifi=",
+  "cation-token&client_id=3Dqa",
+  "--qa-boundary",
+  "Content-Type: text/html; charset=UTF-8",
+  "Content-Transfer-Encoding: quoted-printable",
+  "",
+  '<a href=3D"https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=3Dsynthetic-verifi=',
+  'cation-token&amp;client_id=3Dqa">Verify</a>',
+  "--qa-boundary--",
   "",
 ].join("\r\n");
 const cloudflareAccessHeaders = [];
@@ -79,18 +107,23 @@ if (mailTmCredentials.mailboxAccessClientId || mailTmCredentials.mailboxAccessCl
 }
 
 const server = createServer((request, response) => {
-  if (request.url.startsWith("/v1/inbox/qa-release-20260815-1")) {
+  if (request.url.startsWith("/v1/inbox/qa-release-20260815-1+run-test")) {
     cloudflareAccessHeaders.push({
       clientId: request.headers["cf-access-client-id"],
       clientSecret: request.headers["cf-access-client-secret"],
     });
   }
-  if (request.url === "/v1/inbox/qa-release-20260815-1/message/message-1") {
+  if (request.url === "/v1/inbox/qa-release-20260815-1+run-test/message/message-1") {
     response.setHeader("Content-Type", "message/rfc822");
     response.end(rawMessage);
     return;
   }
-  if (request.url === "/v1/inbox/qa-release-20260815-1") return respond(response, { messages: [{ id: "message-1", created_at: message.createdAt }] });
+  if (request.url === "/v1/inbox/qa-release-20260815-1+run-test/message/message-qp") {
+    response.setHeader("Content-Type", "message/rfc822");
+    response.end(quotedPrintableMessage);
+    return;
+  }
+  if (request.url === "/v1/inbox/qa-release-20260815-1+run-test") return respond(response, { messages: [{ id: "message-1", created_at: message.createdAt }, { id: "message-qp", created_at: message.createdAt }] });
   response.setHeader("Content-Type", "application/json");
   if (request.url === "/domains") return respond(response, { "hydra:member": [{ domain: "example.test", isActive: true, isPrivate: false }] });
   if (request.method === "DELETE" && request.url === "/accounts/account-1") return respond(response, null, 204);
@@ -99,6 +132,7 @@ const server = createServer((request, response) => {
   if (request.url === "/messages") return respond(response, { "hydra:member": [message] });
   if (request.url === "/messages/message-1") return respond(response, message);
   if (request.url === "/messages/message-idp") return respond(response, identityVerificationMessage);
+  if (request.url === "/messages/message-idp-reset") return respond(response, identityResetMessage);
   response.statusCode = 404;
   return respond(response, { error: "not found" });
 });
@@ -128,6 +162,18 @@ const identityLink = await identityGateway.link({ mailbox_id: "mailbox-idp", mes
 if (!identityLink.url.startsWith("https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token")) {
   throw new Error("Configured identity-origin verification link was not resolved");
 }
+const identityResetSafe = await identityGateway.read({ mailbox_id: "mailbox-idp", message_id: "message-idp-reset" });
+if (!identityResetSafe.links_available.includes("password-reset") || identityResetSafe.links_available.includes("verification")) {
+  throw new Error("Identity-provider reset mail was misclassified as verification");
+}
+const identityResetLink = await identityGateway.link({ mailbox_id: "mailbox-idp", message_id: "message-idp-reset", kind: "password-reset" });
+if (!identityResetLink.url.includes("/login-actions/action-token")) throw new Error("Identity-provider reset link was not resolved");
+try {
+  await identityGateway.link({ mailbox_id: "mailbox-idp", message_id: "message-idp-reset", kind: "verification" });
+  throw new Error("Identity-provider reset link was accepted as verification");
+} catch (error) {
+  if (!error.message.includes("No matching safe product link")) throw error;
+}
 try {
   const created = await gateway.create();
   try {
@@ -148,18 +194,25 @@ try {
     provider: "cloudflare",
     productUrl: "https://dev.geoguessme.test",
     apiUrl: `http://127.0.0.1:${port}`,
-    address: "qa-release-20260815-1@geoguessme.com",
+    address: "qa-release-20260815-1+run-test@geoguessme.com",
+    allowedLinkOrigins: ["https://auth.geoguessme.com"],
     accessClientId: "dev-app-access-id",
     accessClientSecret: "dev-app-access-secret",
     ...explicitMailboxCredentials,
   });
   const cloudflareMailbox = await cloudflareGateway.create();
-  const cloudflareFound = await cloudflareGateway.search({ mailbox_id: cloudflareMailbox.mailbox_id, subject_contains: "verify" });
+  const cloudflareFound = await cloudflareGateway.search({ mailbox_id: cloudflareMailbox.mailbox_id, subject_contains: "verify", wait_ms: 0 });
   if (cloudflareFound.messages.length !== 1) throw new Error("Cloudflare mailbox search did not find the fixture");
-  const cloudflareSafe = await cloudflareGateway.read({ mailbox_id: cloudflareMailbox.mailbox_id, message_id: "message-1" });
-  if (cloudflareSafe.body.includes("secret-token") || !cloudflareSafe.links_available.includes("verification")) throw new Error("Cloudflare mailbox redaction contract failed");
-  const cloudflareLink = await cloudflareGateway.link({ mailbox_id: cloudflareMailbox.mailbox_id, message_id: "message-1", kind: "verification" });
-  if (!cloudflareLink.url.includes("secret-token")) throw new Error("Cloudflare mailbox link resolver failed");
+  const cloudflareSafe = await cloudflareGateway.read({ mailbox_id: cloudflareMailbox.mailbox_id, message_id: "message-qp" });
+  if (cloudflareSafe.body.includes("synthetic-verification-token") || cloudflareFound.messages[0].preview.includes("synthetic-verification-token") || !cloudflareSafe.links_available.includes("verification")) {
+    throw new Error("Cloudflare quoted-printable mailbox redaction contract failed");
+  }
+  const cloudflareLink = await cloudflareGateway.link({ mailbox_id: cloudflareMailbox.mailbox_id, message_id: "message-qp", kind: "verification" });
+  if (new URL(cloudflareLink.url).searchParams.get("key") !== "synthetic-verification-token" || new URL(cloudflareLink.url).searchParams.get("client_id") !== "qa") {
+    throw new Error("Cloudflare quoted-printable verification link was not decoded");
+  }
+  const base64Safe = await cloudflareGateway.read({ mailbox_id: cloudflareMailbox.mailbox_id, message_id: "message-1" });
+  if (base64Safe.subject !== "Base64 fixture" || !base64Safe.links_available.includes("verification")) throw new Error("Cloudflare base64 fixture failed");
   await cloudflareGateway.cleanup();
   if (cloudflareGateway.mailboxes.size !== 0) throw new Error("Cloudflare mailbox cleanup contract failed");
   if (cloudflareAccessHeaders.length === 0 || cloudflareAccessHeaders.some(({ clientId, clientSecret }) => clientId !== "mailbox-access-id" || clientSecret !== "mailbox-access-secret")) {

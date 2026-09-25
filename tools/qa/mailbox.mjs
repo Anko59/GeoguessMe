@@ -63,7 +63,9 @@ export class MailboxGateway {
     if (this.provider === "cloudflare") {
       let messages = [];
       do {
-        const listed = await this.request(`/v1/inbox/${encodeURIComponent(mailbox.localPart)}`);
+        // The Worker matches the literal path. Percent-encoding '+' would
+        // produce '%2B', which its path matcher does not decode.
+        const listed = await this.request(`/v1/inbox/${mailbox.localPart}`);
         messages = [];
         for (const entry of Array.isArray(listed?.messages) ? listed.messages : []) {
           const message = await this.cloudflareMessage(mailbox, entry.id);
@@ -115,8 +117,7 @@ export class MailboxGateway {
     const candidate = candidates.find((value) => {
       const url = new URL(value);
       if (!this.allowedLinkOrigins.has(url.origin)) return false;
-      if (kind === "any" || linkPatterns[kind].test(`${url.pathname} ${url.search}`)) return true;
-      return kind === "verification" && url.pathname.includes("/login-actions/action-token");
+      return kind === "any" || matchesLinkKind(url, kind, message.subject);
     });
     if (!candidate) throw new Error("No matching safe product link was found in that mailbox message");
     return { mailbox_id: mailboxId, message_id: messageId, kind, url: candidate };
@@ -148,7 +149,7 @@ export class MailboxGateway {
   }
 
   async cloudflareMessage(mailbox, messageId) {
-    const raw = await this.request(`/v1/inbox/${encodeURIComponent(mailbox.localPart)}/message/${encodeURIComponent(messageId)}`, { raw: true });
+    const raw = await this.request(`/v1/inbox/${mailbox.localPart}/message/${encodeURIComponent(messageId)}`, { raw: true });
     return { id: messageId, ...parseRawMessage(raw) };
   }
 
@@ -189,23 +190,88 @@ function matchesMessage(message, { subject, from, since }) {
 }
 
 function parseRawMessage(raw) {
-  const source = new TextDecoder().decode(raw).replaceAll("\r\n", "\n");
-  const separator = source.indexOf("\n\n");
-  const headerSource = separator < 0 ? source : source.slice(0, separator);
-  const bodySource = separator < 0 ? "" : source.slice(separator + 2).trim();
-  const headers = parseHeaders(headerSource);
-  const body = /^base64$/i.test(headers["content-transfer-encoding"] || "")
-    ? Buffer.from(bodySource.replace(/\s+/g, ""), "base64").toString("utf8")
-    : bodySource;
+  const source = Buffer.from(raw);
+  if (source.length > 2 * 1024 * 1024) throw new Error("QA email exceeds the MIME parser limit");
+  const { headers, body } = splitMimeHeaders(source);
+  const parts = { text: [], html: [], count: 0 };
+  collectMimeParts(headers, body, parts, 0);
+  const text = parts.text.join("\n");
+  const html = parts.html.join("\n");
   return {
     subject: decodeMimeHeader(headers.subject || ""),
     from: { address: extractAddress(headers.from || "") },
     to: [{ address: extractAddress(headers.to || "") }],
     createdAt: headers.date || new Date().toISOString(),
-    intro: body.slice(0, 2000),
-    text: body,
-    html: body,
+    intro: (text || plainText(html)).slice(0, 2000),
+    text,
+    html,
   };
+}
+
+function splitMimeHeaders(source) {
+  const crlf = source.indexOf("\r\n\r\n");
+  const lf = crlf < 0 ? source.indexOf("\n\n") : -1;
+  const separator = crlf < 0 ? lf : crlf;
+  const width = crlf < 0 ? 2 : 4;
+  return {
+    headers: parseHeaders(source.subarray(0, separator < 0 ? source.length : separator).toString("latin1")),
+    body: separator < 0 ? Buffer.alloc(0) : source.subarray(separator + width),
+  };
+}
+
+function collectMimeParts(headers, body, parts, depth) {
+  if (depth > 5 || ++parts.count > 64) throw new Error("QA email has too many MIME parts");
+  const contentType = headers["content-type"] || "text/plain";
+  const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();
+  if (mediaType.startsWith("multipart/")) {
+    const boundary = /(?:^|;)\s*boundary\s*=\s*(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.slice(1).find(Boolean);
+    if (!boundary) throw new Error("QA multipart email has no boundary");
+    for (const part of splitMimeParts(body, boundary)) {
+      const nested = splitMimeHeaders(part);
+      collectMimeParts(nested.headers, nested.body, parts, depth + 1);
+    }
+    return;
+  }
+  if (mediaType !== "text/plain" && mediaType !== "text/html") return;
+  const encoding = (headers["content-transfer-encoding"] || "").trim().toLowerCase();
+  let decoded = body;
+  if (encoding === "base64") decoded = Buffer.from(body.toString("latin1").replace(/\s+/g, ""), "base64");
+  if (encoding === "quoted-printable") decoded = decodeQuotedPrintable(body);
+  const charset = /(?:^|;)\s*charset\s*=\s*(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.slice(1).find(Boolean) || "utf-8";
+  let content;
+  try { content = new TextDecoder(charset).decode(decoded); } catch { content = new TextDecoder().decode(decoded); }
+  parts[mediaType === "text/html" ? "html" : "text"].push(content);
+}
+
+function splitMimeParts(body, boundary) {
+  const marker = `--${boundary}`;
+  const lines = body.toString("latin1").split(/\r?\n/);
+  const result = [];
+  let current = null;
+  for (const line of lines) {
+    if (line === marker || line === `${marker}--`) {
+      if (current) result.push(Buffer.from(current.join("\r\n"), "latin1"));
+      if (line === `${marker}--`) break;
+      current = [];
+    } else if (current) {
+      current.push(line);
+    }
+  }
+  return result;
+}
+
+function decodeQuotedPrintable(body) {
+  const source = body.toString("latin1").replace(/=\r?\n/g, "");
+  const bytes = [];
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === "=" && /^[0-9a-f]{2}$/i.test(source.slice(index + 1, index + 3))) {
+      bytes.push(Number.parseInt(source.slice(index + 1, index + 3), 16));
+      index += 2;
+    } else {
+      bytes.push(source.charCodeAt(index));
+    }
+  }
+  return Buffer.from(bytes);
 }
 
 function parseHeaders(source) {
@@ -240,7 +306,7 @@ function safeMessage(mailboxId, message, allowedLinkOrigins) {
     to: (message.to || []).map((recipient) => safeText(recipient.address)),
     created_at: message.createdAt,
     body: redactMailboxText(body),
-    links_available: availableLinkKinds(`${message.text || ""}\n${message.html || ""}`, allowedLinkOrigins),
+    links_available: availableLinkKinds(message, allowedLinkOrigins),
   };
 }
 
@@ -248,15 +314,19 @@ function extractUrls(value) {
   return [...String(value).replaceAll("&amp;", "&").matchAll(/https?:\/\/[^\s<>"']+/gi)].map((match) => match[0].replace(/[),.;]+$/, ""));
 }
 
-function availableLinkKinds(value, allowedLinkOrigins) {
-  const urls = extractUrls(value).filter((candidate) => {
+function matchesLinkKind(url, kind, subject) {
+  if (url.pathname.includes("/login-actions/action-token")) {
+    if (/\b(?:reset|password)\b/i.test(subject || "")) return kind === "password-reset";
+    if (/\b(?:verify|confirm|email)\b/i.test(subject || "")) return kind === "verification";
+  }
+  return linkPatterns[kind].test(`${url.pathname} ${url.search}`);
+}
+
+function availableLinkKinds(message, allowedLinkOrigins) {
+  const urls = extractUrls(`${message.text || ""}\n${message.html || ""}`).filter((candidate) => {
     try { return allowedLinkOrigins.has(new URL(candidate).origin); } catch { return false; }
   });
-  return [...new Set(Object.keys(linkPatterns).filter((kind) => urls.some((value) => {
-    const url = new URL(value);
-    return linkPatterns[kind].test(value)
-      || (kind === "verification" && url.pathname.includes("/login-actions/action-token"));
-  })))];
+  return Object.keys(linkPatterns).filter((kind) => urls.some((value) => matchesLinkKind(new URL(value), kind, message.subject)));
 }
 
 function plainText(value) {

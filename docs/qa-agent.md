@@ -46,32 +46,38 @@ absent. The provider's public API is documented at
 
 For hosted mail providers that do not deliver to disposable domains, the gateway
 also supports an HTTP mailbox relay with `QA_MAILBOX_PROVIDER=cloudflare`,
-`QA_MAILBOX_API_URL`, and `QA_MAILBOX_ADDRESS`. For a release run, also provide
-the relay zone and the dedicated seed rule through `QA_MAILBOX_ZONE_ID` and
-`QA_MAILBOX_ROUTING_RULE_ID`. The local runner creates a temporary literal Email
-Routing rule with a unique address derived from the seed, then removes that rule
-on exit. This prevents a previously verified QA address from making a fresh run
-appear to be an application verification failure. The relay must retain only
-short-lived test messages. When the relay API shares the app's origin, the
-runner uses the same short-lived `QA_ACCESS_*` session for both. For a relay on
-a different origin, its Access credentials must be supplied separately through
-`QA_MAILBOX_ACCESS_CLIENT_ID` and `QA_MAILBOX_ACCESS_CLIENT_SECRET`; app Access
-credentials are never sent to another origin. When identity email links use a
-separate identity origin, allow only that origin for server-side link opening
-with `QA_MAILBOX_ALLOWED_LINK_ORIGINS`, for example
-`https://auth.geoguessme.com`; links to other origins remain blocked. An
-unprotected relay must use a unique per-run address and contain only disposable
-QA messages. A hosted run must not claim email coverage until `mailbox_search`,
-`mailbox_read`, and `mailbox_open_link` succeed through the configured provider.
-The local `CLOUDFLARE_API_TOKEN` therefore needs Email Routing Rules read and
-edit access for the relay zone in addition to the Access permissions used by the
-browser. The runner validates this by reading the configured seed rule before it
-starts the LLM and fails if the permission or rule is missing. A visible
-“verification sent” page proves only that the identity service accepted the
-request; it is not delivery evidence. During the September 2026 recovery, the
-public Mail.tm fallback reached that page but received no message, while the
-controlled relay configuration was absent and the local token could not read
-Email Routing rules. Do not retry that combination as an authenticated QA run.
+`QA_MAILBOX_API_URL`, and `QA_MAILBOX_ADDRESS`. On deployed dev, the runner
+defaults these to the dedicated `qa-release-20260815-77679@geoguessme.com` seed
+rule and `https://dev.geoguessme.com/_qa-mailbox`. Cloudflare Email Routing must
+have subaddressing enabled for the zone. Each run derives a fresh
+`seed+run-...@geoguessme.com` address. Cloudflare matches it against the
+existing seed rule, while the Worker stores messages under the full tagged
+recipient. No routing-rule API mutation or Email Routing API token permission is
+needed. The unique address prevents a previously verified QA account from
+masking an application verification failure. The relay retains messages for one
+hour. When its API shares the app's origin, the runner uses the same short-lived
+`QA_ACCESS_*` session for both. For a relay on a different origin, its Access
+credentials must be supplied separately through `QA_MAILBOX_ACCESS_CLIENT_ID`
+and `QA_MAILBOX_ACCESS_CLIENT_SECRET`; app Access credentials are never sent to
+another origin. When identity email links use a separate identity origin, allow
+only that origin for server-side link opening with
+`QA_MAILBOX_ALLOWED_LINK_ORIGINS`, for example `https://auth.geoguessme.com`;
+links to other origins remain blocked. An unprotected relay must use a unique
+per-run address and contain only disposable QA messages. A hosted run must not
+claim email coverage until `mailbox_search`, `mailbox_read`, and
+`mailbox_open_link` succeed through the configured provider. The local
+`CLOUDFLARE_API_TOKEN` needs the Access permissions used by the browser; it does
+not need Email Routing Rules access. A visible “verification sent” page proves
+only that the identity service accepted the request; it is not delivery
+evidence. During the September 2026 recovery, the public Mail.tm fallback
+reached that page but received no message. Keycloak mail uses multipart and
+quoted-printable encoding; the gateway decodes both before redacting previews
+and opening links. It classifies Keycloak action-token links by message subject
+so verification and password reset remain distinct. On September 25, a full
+diagnostic run against then-deployed revision
+`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and both reset
+flows through the controlled relay. Release evidence still requires a full run
+against the actual release candidate after that candidate deploys.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -106,13 +112,13 @@ runtime must already be authenticated before running the agent.
 The browser target is the deployed dev environment:
 
 ```text
-export QA_BASE_URL=https://dev.geoguessme.com
-make qa-agent-full QA_REPORT_DIR=qa-artifacts
+make qa-agent-full QA_BUILD_SHA=FULL_DEPLOYED_DEV_SHA
 ```
 
-The local runner uses the existing `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` to create a one-hour service token and a policy scoped
-only to the matching Access application, then removes both on exit. Existing
+The local runner loads the existing `CLOUDFLARE_API_TOKEN` from the operator
+Secret Service keyring when it is not already in the environment, and uses the
+dev account ID to create a one-hour service token and a policy scoped only to
+the matching Access application, then removes both on exit. Existing
 `QA_ACCESS_CLIENT_ID` and `QA_ACCESS_CLIENT_SECRET` values are also accepted
 when an operator already has a token scoped to that dev app. General deployment
 `CF_ACCESS_*` credentials are not reused because they may authorize a different
@@ -129,13 +135,13 @@ Playwright dependency volume at the same time.
 The dedicated account-pool password is an operator secret stored in the local
 Secret Service keyring, never in the repository. Its canonical attributes are
 `service=codex-api`, `provider=qa`, `project=geoguessme`, and
-`name=QA_ACCOUNT_PASSWORD`. The repository-local `.envrc` loads that item as
-`QA_ACCOUNT_PASSWORD`; after creating or changing the entry, approve the local
-file with `direnv allow`. Verify only that the value is present, without
-printing it:
+`name=QA_ACCOUNT_PASSWORD`. The runner looks it up directly when the environment
+does not supply it, so a fresh worktree does not need a copy of the ignored
+`.envrc`. That file remains an optional operator convenience. Verify only that
+the value is present, without printing it:
 
 ```text
-direnv exec . sh -c 'test -n "$QA_ACCOUNT_PASSWORD"'
+test -n "$(secret-tool lookup service codex-api provider qa project geoguessme name QA_ACCOUNT_PASSWORD)"
 ```
 
 The runner stops before starting an LLM or browser when this credential is
@@ -189,10 +195,11 @@ or `FINDINGS` status cannot override that gate.
 ## Release evidence
 
 Run the agent after the development deployment is healthy, with `QA_BUILD_SHA`
-set to the exact deployed `dev` revision (the Make target defaults it to
-`origin/dev`). Review the generated report and retain it with the release
-record. Reproducible `BUG` findings block promotion until the application is
-fixed and the agent is rerun against the new deployed revision.
+set to the exact deployed `dev` revision. The Make target rejects a missing SHA:
+`origin/dev` may be ahead when a deployment fails. Review the generated report
+and retain it with the release record. Reproducible `BUG` findings block
+promotion until the application is fixed and the agent is rerun against the new
+deployed revision.
 
 This is a local acceptance step, not a GitHub Actions workflow. CI does not
 receive LLM credentials and the release workflow does not pretend that a missing

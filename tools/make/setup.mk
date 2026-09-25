@@ -31,7 +31,13 @@ QA_REPORT_DIR ?= qa-artifacts
 # the extended nightly session.
 QA_BUDGET ?= fast
 QA_RUNTIME ?= codex
-QA_BUILD_SHA ?= $(shell git rev-parse origin/dev 2>/dev/null || git rev-parse HEAD)
+QA_BASE_URL ?= https://dev.geoguessme.com
+# Callers must supply the deployed SHA; origin/dev can be ahead of deployment.
+QA_BUILD_SHA ?=
+# Pass caller-supplied QA secrets through the process environment, never in a
+# printed recipe command. The local runner also loads missing values from the
+# shared operator keyring.
+export QA_ACCOUNT_PASSWORD QA_MAILBOX_ACCESS_CLIENT_ID QA_MAILBOX_ACCESS_CLIENT_SECRET
 
 # Optional Docker build flags for CI cache integration (type=local or type=gha).
 # Unset locally so that builds use the default Docker daemon cache.
