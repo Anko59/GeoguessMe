@@ -160,12 +160,14 @@ assert_contains "$ROOT/.github/workflows/release.yml" 'actual_backend'
 verify_line=$(line_of "$DEPLOY" 'COSIGN_IMAGE.*verify')
 backup_line=$(line_of "$DEPLOY" 'backup.sh.*pre-deploy')
 secret_line=$(line_of "$DEPLOY" 'mv.*temporary_secret.*secret_file')
+normalize_secret_line=$(line_of "$DEPLOY" 'normalize_oauth2_proxy_cookie_secret.*temporary_secret')
 pull_line=$(line_of "$DEPLOY" 'pull backend web postgres')
 migrate_line=$(line_of "$DEPLOY" 'migration migrate up')
 [ "$verify_line" -lt "$backup_line" ] || fail 'signature verification must precede backup'
 [ "$verify_line" -lt "$pull_line" ] || fail 'signature verification must precede pull'
 [ "$backup_line" -lt "$pull_line" ] || fail 'pre-deploy backup must precede pull'
 [ "$backup_line" -lt "$secret_line" ] || fail 'backup must precede candidate secret activation'
+[ "$normalize_secret_line" -lt "$secret_line" ] || fail 'legacy cookie secret must be normalized before candidate activation'
 [ "$secret_line" -lt "$pull_line" ] || fail 'candidate secret activation must precede pull'
 [ "$pull_line" -lt "$migrate_line" ] || fail 'pull must precede migration'
 
@@ -235,8 +237,27 @@ printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
     fail 'generated secret payload omitted the supplied Web Push keypair'
 printf '%s\n' "$generated" | grep -Fq 'OIDC_CLIENT_SECRET=keycloak-client-secret' ||
     fail 'generated secret payload omitted the selected Keycloak client secret'
-printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
-    fail 'generated secret payload omitted a random OAuth2 Proxy cookie secret'
+generated_cookie_secret=$(printf '%s\n' "$generated" | sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p')
+case "$generated_cookie_secret" in *[+/]* | '') fail 'generated OAuth2 Proxy cookie secret is not URL-safe Base64' ;; esac
+generated_cookie_secret_bytes=$(printf '%s' "$generated_cookie_secret" | tr -- '-_' '+/' | base64 -d | wc -c | tr -d '[:space:]')
+[ "$generated_cookie_secret_bytes" -eq 32 ] || fail 'generated OAuth2 Proxy cookie secret must decode to 32 bytes'
+
+# Legacy standard Base64 is normalized without changing the decoded AES key.
+cookie_secret_fixture=$(mktemp)
+standard_cookie_secret=$(head -c 32 /dev/zero | tr '\000' '\377' | base64 | tr -d '\n')
+expected_cookie_secret=$(printf '%s' "$standard_cookie_secret" | tr '+/' '-_')
+printf 'OAUTH2_PROXY_COOKIE_SECRET=%s\n' "$standard_cookie_secret" >"$cookie_secret_fixture"
+sh -c '. "$1"; normalize_oauth2_proxy_cookie_secret "$2"' _ "$COMMON" "$cookie_secret_fixture"
+normalized_cookie_secret=$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$cookie_secret_fixture")
+[ "$normalized_cookie_secret" = "$expected_cookie_secret" ] ||
+    fail 'legacy standard Base64 cookie secret was not normalized to URL-safe Base64'
+normalized_cookie_secret_bytes=$(printf '%s' "$normalized_cookie_secret" | tr -- '-_' '+/' | base64 -d | wc -c | tr -d '[:space:]')
+[ "$normalized_cookie_secret_bytes" -eq 32 ] || fail 'cookie secret normalization changed the decoded AES key size'
+printf 'OAUTH2_PROXY_COOKIE_SECRET=0123456789abcdef\n' >"$cookie_secret_fixture"
+sh -c '. "$1"; normalize_oauth2_proxy_cookie_secret "$2"' _ "$COMMON" "$cookie_secret_fixture"
+[ "$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$cookie_secret_fixture")" = '0123456789abcdef' ] ||
+    fail 'raw AES cookie secret was modified'
+rm -f "$cookie_secret_fixture"
 
 identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
     GOOGLE_OAUTH_CLIENT_SECRET=google-secret \

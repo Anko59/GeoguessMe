@@ -111,6 +111,11 @@ make secrets-generate ENV=dev RECIPIENT=age1...
 make secrets-generate ENV=production RECIPIENT=age1...
 ```
 
+The generator emits the OAuth2 Proxy cookie key using URL-safe Base64. The
+deployment script also converts legacy standard Base64 values to the URL-safe
+alphabet after decryption; this preserves the decoded AES key and avoids
+invalidating existing sessions.
+
 Generate the shared identity secret once for both host age recipients. Use
 independent Keycloak client secrets for dev and production and the Google
 credential created for `auth.geoguessme.com`:

@@ -38,11 +38,16 @@ random_base64() {
     head -c "$bytes" /dev/urandom | base64 | tr -d '\n'
 }
 
+random_base64url() {
+    bytes=$1
+    head -c "$bytes" /dev/urandom | base64 | tr -d '\n' | tr '+/' '-_'
+}
+
 postgres_password=$(random_hex 32)
 jwt_secret=$(random_base64 48)
 metrics_token=$(random_hex 32)
 restic_password=$(random_base64 48)
-oauth_cookie_secret=$(random_base64 32)
+oauth_cookie_secret=$(random_base64url 32)
 template="deployment/env/$environment.env.example"
 
 while IFS= read -r line || [ -n "$line" ]; do

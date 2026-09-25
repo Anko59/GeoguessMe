@@ -74,6 +74,9 @@ if [ -f "$encrypted" ]; then
         "/source/deployment/secrets/$environment.env.enc" \
         >"$temporary_secret"
     chmod 600 "$temporary_secret"
+    if oidc_enabled "$temporary_secret"; then
+        normalize_oauth2_proxy_cookie_secret "$temporary_secret"
+    fi
 fi
 
 registry_secret=$secret_file

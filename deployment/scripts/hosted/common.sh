@@ -144,6 +144,42 @@ oidc_enabled() {
     grep -Eq '^OIDC_ENABLED=(true|1)$' "$1"
 }
 
+normalize_oauth2_proxy_cookie_secret() {
+    normalized_env_file=$1
+    normalized_secret_count=$(grep -c '^OAUTH2_PROXY_COOKIE_SECRET=' "$normalized_env_file" || true)
+    case "$normalized_secret_count" in
+        0) return 0 ;;
+        1) ;;
+        *) die 'deployment environment has duplicate OAuth2 Proxy cookie secrets' ;;
+    esac
+
+    normalized_cookie_secret=$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$normalized_env_file")
+    [ -n "$normalized_cookie_secret" ] || die 'OAuth2 Proxy cookie secret is empty'
+    case "$normalized_cookie_secret" in
+        *[!A-Za-z0-9_+/=-]*) die 'OAuth2 Proxy cookie secret has an unsupported encoding' ;;
+    esac
+
+    normalized_standard_secret=$(printf '%s' "$normalized_cookie_secret" | tr -- '-_' '+/')
+    normalized_decoded_bytes=''
+    if printf '%s' "$normalized_standard_secret" | base64 -d >/dev/null 2>&1; then
+        normalized_decoded_bytes=$(printf '%s' "$normalized_standard_secret" | base64 -d | wc -c | tr -d '[:space:]')
+    fi
+
+    case "$normalized_decoded_bytes" in
+        16 | 24 | 32)
+            # oauth2-proxy accepts URL-safe Base64. Converting the alphabet
+            # preserves the decoded key while supporting legacy standard Base64.
+            sed -i '/^OAUTH2_PROXY_COOKIE_SECRET=/y@+/@-_@' "$normalized_env_file"
+            ;;
+        *)
+            case "${#normalized_cookie_secret}" in
+                16 | 24 | 32) ;;
+                *) die 'OAuth2 Proxy cookie secret must be raw AES key material or Base64 for 16, 24, or 32 bytes' ;;
+            esac
+            ;;
+    esac
+}
+
 release_dir() {
     printf '%s/releases/%s\n' "$APP_ROOT" "$1"
 }
