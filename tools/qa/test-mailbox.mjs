@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { MailboxGateway } from "./mailbox.mjs";
+import { MailboxGateway, resolveMailboxAccessCredentials } from "./mailbox.mjs";
 
 const message = {
   id: "message-1",
@@ -11,6 +11,12 @@ const message = {
   intro: "Verify your account",
   text: "Verify: https://dev.geoguessme.test/verify-email?token=secret-token",
   html: "<a href=\"https://dev.geoguessme.test/verify-email?token=secret-token\">Verify</a>",
+};
+const identityVerificationMessage = {
+  ...message,
+  id: "message-idp",
+  text: "Verify: https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=secret-token&client_id=qa",
+  html: "<a href=\"https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token?key=secret-token&amp;client_id=qa\">Verify</a>",
 };
 const rawMessage = [
   "From: no-reply@geoguessme.com",
@@ -23,8 +29,62 @@ const rawMessage = [
   Buffer.from(message.text).toString("base64"),
   "",
 ].join("\r\n");
+const cloudflareAccessHeaders = [];
+const sameOriginCredentials = resolveMailboxAccessCredentials({
+  provider: "cloudflare",
+  productUrl: "https://dev.geoguessme.test",
+  apiUrl: "https://dev.geoguessme.test/_qa-mailbox",
+  appClientId: "dev-access-id",
+  appClientSecret: "dev-access-secret",
+});
+if (sameOriginCredentials.mailboxAccessClientId !== "dev-access-id" || sameOriginCredentials.mailboxAccessClientSecret !== "dev-access-secret") {
+  throw new Error("Same-origin mailbox relay did not use the QA app Access credentials");
+}
+const unrelatedOriginCredentials = resolveMailboxAccessCredentials({
+  provider: "cloudflare",
+  productUrl: "https://dev.geoguessme.test",
+  apiUrl: "https://mailbox.example.test/_qa-mailbox",
+  appClientId: "dev-access-id",
+  appClientSecret: "dev-access-secret",
+});
+if (unrelatedOriginCredentials.mailboxAccessClientId || unrelatedOriginCredentials.mailboxAccessClientSecret) {
+  throw new Error("QA app Access credentials leaked to a mailbox relay on another origin");
+}
+const explicitMailboxCredentials = resolveMailboxAccessCredentials({
+  provider: "cloudflare",
+  productUrl: "https://dev.geoguessme.test",
+  apiUrl: "https://mailbox.example.test/_qa-mailbox",
+  appClientId: "dev-access-id",
+  appClientSecret: "dev-access-secret",
+  mailboxClientId: "mailbox-access-id",
+  mailboxClientSecret: "mailbox-access-secret",
+});
+if (explicitMailboxCredentials.mailboxAccessClientId !== "mailbox-access-id" || explicitMailboxCredentials.mailboxAccessClientSecret !== "mailbox-access-secret") {
+  throw new Error("Explicit mailbox Access credentials were not selected");
+}
+try {
+  resolveMailboxAccessCredentials({ productUrl: "https://dev.geoguessme.test", mailboxClientId: "mailbox-access-id" });
+  throw new Error("Incomplete mailbox Access credentials were accepted");
+} catch (error) {
+  if (!error.message.includes("must be supplied together")) throw error;
+}
+const mailTmCredentials = resolveMailboxAccessCredentials({
+  productUrl: "https://dev.geoguessme.test",
+  apiUrl: "",
+  appClientId: "dev-access-id",
+  appClientSecret: "dev-access-secret",
+});
+if (mailTmCredentials.mailboxAccessClientId || mailTmCredentials.mailboxAccessClientSecret) {
+  throw new Error("Empty Mail.tm API configuration inherited app Access credentials");
+}
 
 const server = createServer((request, response) => {
+  if (request.url.startsWith("/v1/inbox/qa-release-20260815-1")) {
+    cloudflareAccessHeaders.push({
+      clientId: request.headers["cf-access-client-id"],
+      clientSecret: request.headers["cf-access-client-secret"],
+    });
+  }
   if (request.url === "/v1/inbox/qa-release-20260815-1/message/message-1") {
     response.setHeader("Content-Type", "message/rfc822");
     response.end(rawMessage);
@@ -38,6 +98,7 @@ const server = createServer((request, response) => {
   if (request.url === "/token") return respond(response, { token: "test-token" });
   if (request.url === "/messages") return respond(response, { "hydra:member": [message] });
   if (request.url === "/messages/message-1") return respond(response, message);
+  if (request.url === "/messages/message-idp") return respond(response, identityVerificationMessage);
   response.statusCode = 404;
   return respond(response, { error: "not found" });
 });
@@ -50,8 +111,31 @@ function respond(response, body, status = 200) {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const { port } = server.address();
 const gateway = new MailboxGateway({ productUrl: "https://dev.geoguessme.test", apiUrl: `http://127.0.0.1:${port}` });
+const defaultGateway = new MailboxGateway({ productUrl: "https://dev.geoguessme.test", apiUrl: "" });
+if (defaultGateway.apiUrl !== "https://api.mail.tm") throw new Error("Empty Mail.tm API configuration did not use its provider default");
+const identityGateway = new MailboxGateway({
+  productUrl: "https://dev.geoguessme.test",
+  apiUrl: `http://127.0.0.1:${port}`,
+  allowedLinkOrigins: ["https://auth.geoguessme.com"],
+});
+const identityMailbox = { accountId: "account-1", address: "qa@example.test", token: "test-token" };
+identityGateway.mailboxes.set("mailbox-idp", identityMailbox);
+const identitySafe = await identityGateway.read({ mailbox_id: "mailbox-idp", message_id: "message-idp" });
+if (!identitySafe.links_available.includes("verification") || identitySafe.body.includes("secret-token")) {
+  throw new Error("Configured identity-origin verification links were not safely recognized");
+}
+const identityLink = await identityGateway.link({ mailbox_id: "mailbox-idp", message_id: "message-idp", kind: "verification" });
+if (!identityLink.url.startsWith("https://auth.geoguessme.com/realms/geoguessme/login-actions/action-token")) {
+  throw new Error("Configured identity-origin verification link was not resolved");
+}
 try {
   const created = await gateway.create();
+  try {
+    await gateway.link({ mailbox_id: created.mailbox_id, message_id: "message-idp", kind: "verification" });
+    throw new Error("Unconfigured identity-origin verification link was accepted");
+  } catch (error) {
+    if (!error.message.includes("No matching safe product link")) throw error;
+  }
   const found = await gateway.search({ mailbox_id: created.mailbox_id, subject_contains: "verify" });
   if (found.messages.length !== 1) throw new Error("mailbox search did not find the fixture");
   const safe = await gateway.read({ mailbox_id: created.mailbox_id, message_id: "message-1" });
@@ -60,7 +144,15 @@ try {
   if (!link.url.includes("secret-token")) throw new Error("mailbox link resolver failed");
   await gateway.cleanup();
   if (gateway.mailboxes.size !== 0) throw new Error("mailbox cleanup contract failed");
-  const cloudflareGateway = new MailboxGateway({ provider: "cloudflare", productUrl: "https://dev.geoguessme.test", apiUrl: `http://127.0.0.1:${port}`, address: "qa-release-20260815-1@geoguessme.com" });
+  const cloudflareGateway = new MailboxGateway({
+    provider: "cloudflare",
+    productUrl: "https://dev.geoguessme.test",
+    apiUrl: `http://127.0.0.1:${port}`,
+    address: "qa-release-20260815-1@geoguessme.com",
+    accessClientId: "dev-app-access-id",
+    accessClientSecret: "dev-app-access-secret",
+    ...explicitMailboxCredentials,
+  });
   const cloudflareMailbox = await cloudflareGateway.create();
   const cloudflareFound = await cloudflareGateway.search({ mailbox_id: cloudflareMailbox.mailbox_id, subject_contains: "verify" });
   if (cloudflareFound.messages.length !== 1) throw new Error("Cloudflare mailbox search did not find the fixture");
@@ -70,6 +162,9 @@ try {
   if (!cloudflareLink.url.includes("secret-token")) throw new Error("Cloudflare mailbox link resolver failed");
   await cloudflareGateway.cleanup();
   if (cloudflareGateway.mailboxes.size !== 0) throw new Error("Cloudflare mailbox cleanup contract failed");
+  if (cloudflareAccessHeaders.length === 0 || cloudflareAccessHeaders.some(({ clientId, clientSecret }) => clientId !== "mailbox-access-id" || clientSecret !== "mailbox-access-secret")) {
+    throw new Error("Cloudflare mailbox requests did not isolate mailbox Access credentials from app Access credentials");
+  }
   console.log("Mailbox gateway contract PASSED");
 } finally {
   server.close();

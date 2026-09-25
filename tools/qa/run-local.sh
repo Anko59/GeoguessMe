@@ -11,6 +11,11 @@ if [[ -z "$base_url" ]]; then
     echo "QA_BASE_URL is required and must be the deployed dev URL." >&2
     exit 2
 fi
+if [[ -z "${QA_ACCOUNT_PASSWORD:-}" ]]; then
+    echo "QA_ACCOUNT_PASSWORD is required for the dedicated dev QA account pool." >&2
+    echo "Load it from the operator keyring before starting an agent; see docs/qa-agent.md." >&2
+    exit 2
+fi
 if [[ ! "$base_url" =~ ^https:// ]] && [[ "$(printenv QA_ALLOW_LOCAL 2>/dev/null || true)" != 1 ]]; then
     echo "QA_BASE_URL must use https for a deployed environment." >&2
     exit 2
@@ -26,6 +31,11 @@ case "$budget" in
         exit 2
         ;;
 esac
+if [[ "$budget" != fast && "${QA_MAILBOX_PROVIDER:-mailtm}" != cloudflare ]]; then
+    echo "Full and nightly hosted QA require QA_MAILBOX_PROVIDER=cloudflare and the controlled relay configuration." >&2
+    echo "See docs/qa-agent.md; the public mailbox fallback is not accepted as release evidence." >&2
+    exit 2
+fi
 case "$runtime" in
     codex | pi) ;;
     *)

@@ -7,14 +7,29 @@ const linkPatterns = {
   "password-reset": /(?:reset|password)/i,
 };
 
+export function resolveMailboxAccessCredentials({ provider = "mailtm", productUrl, apiUrl, appClientId = "", appClientSecret = "", mailboxClientId = "", mailboxClientSecret = "" }) {
+  if (Boolean(mailboxClientId) !== Boolean(mailboxClientSecret)) {
+    throw new Error("QA_MAILBOX_ACCESS_CLIENT_ID and QA_MAILBOX_ACCESS_CLIENT_SECRET must be supplied together");
+  }
+  if (mailboxClientId) {
+    return { mailboxAccessClientId: mailboxClientId, mailboxAccessClientSecret: mailboxClientSecret };
+  }
+  const resolvedApiUrl = apiUrl || (provider === "mailtm" ? mailTmApi : "");
+  if (resolvedApiUrl && new URL(resolvedApiUrl, productUrl).origin === new URL(productUrl).origin) {
+    return { mailboxAccessClientId: appClientId, mailboxAccessClientSecret: appClientSecret };
+  }
+  return { mailboxAccessClientId: "", mailboxAccessClientSecret: "" };
+}
+
 export class MailboxGateway {
-  constructor({ provider = "mailtm", productUrl, apiUrl = mailTmApi, address = "", accessClientId = "", accessClientSecret = "" }) {
+  constructor({ provider = "mailtm", productUrl, apiUrl = mailTmApi, address = "", mailboxAccessClientId = "", mailboxAccessClientSecret = "", allowedLinkOrigins = [] }) {
     this.provider = provider;
-    this.apiUrl = String(apiUrl).replace(/\/$/, "");
+    this.apiUrl = String(apiUrl || (provider === "mailtm" ? mailTmApi : "")).replace(/\/$/, "");
     this.productOrigin = new URL(productUrl).origin;
+    this.allowedLinkOrigins = new Set([this.productOrigin, ...allowedLinkOrigins.map((origin) => new URL(origin).origin)]);
     this.fixedAddress = address;
-    this.accessClientId = accessClientId;
-    this.accessClientSecret = accessClientSecret;
+    this.mailboxAccessClientId = mailboxAccessClientId;
+    this.mailboxAccessClientSecret = mailboxAccessClientSecret;
     this.mailboxes = new Map();
     this.lastRequestAt = 0;
   }
@@ -88,7 +103,7 @@ export class MailboxGateway {
 
   async read({ mailbox_id: mailboxId, message_id: messageId }) {
     const message = await this.message(mailboxId, messageId);
-    return safeMessage(mailboxId, message, this.productOrigin);
+    return safeMessage(mailboxId, message, this.allowedLinkOrigins);
   }
 
   async link({ mailbox_id: mailboxId, message_id: messageId, kind = "any" }) {
@@ -99,8 +114,9 @@ export class MailboxGateway {
     const candidates = extractUrls(`${message.text || ""}\n${message.html || ""}`);
     const candidate = candidates.find((value) => {
       const url = new URL(value);
-      if (url.origin !== this.productOrigin) return false;
-      return kind === "any" || linkPatterns[kind].test(`${url.pathname} ${url.search}`);
+      if (!this.allowedLinkOrigins.has(url.origin)) return false;
+      if (kind === "any" || linkPatterns[kind].test(`${url.pathname} ${url.search}`)) return true;
+      return kind === "verification" && url.pathname.includes("/login-actions/action-token");
     });
     if (!candidate) throw new Error("No matching safe product link was found in that mailbox message");
     return { mailbox_id: mailboxId, message_id: messageId, kind, url: candidate };
@@ -147,8 +163,8 @@ export class MailboxGateway {
           Accept: "application/json",
           ...(body ? { "Content-Type": "application/json" } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(this.provider === "cloudflare" && this.accessClientId ? { "CF-Access-Client-Id": this.accessClientId } : {}),
-          ...(this.provider === "cloudflare" && this.accessClientSecret ? { "CF-Access-Client-Secret": this.accessClientSecret } : {}),
+          ...(this.provider === "cloudflare" && this.mailboxAccessClientId ? { "CF-Access-Client-Id": this.mailboxAccessClientId } : {}),
+          ...(this.provider === "cloudflare" && this.mailboxAccessClientSecret ? { "CF-Access-Client-Secret": this.mailboxAccessClientSecret } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(15000),
@@ -214,7 +230,7 @@ function extractAddress(value) {
   return safeText(match ? match[1] : value.split(",")[0].trim());
 }
 
-function safeMessage(mailboxId, message, productOrigin) {
+function safeMessage(mailboxId, message, allowedLinkOrigins) {
   const body = plainText(`${message.text || ""}\n${message.html || ""}`);
   return {
     mailbox_id: mailboxId,
@@ -224,7 +240,7 @@ function safeMessage(mailboxId, message, productOrigin) {
     to: (message.to || []).map((recipient) => safeText(recipient.address)),
     created_at: message.createdAt,
     body: redactMailboxText(body),
-    links_available: availableLinkKinds(`${message.text || ""}\n${message.html || ""}`, productOrigin),
+    links_available: availableLinkKinds(`${message.text || ""}\n${message.html || ""}`, allowedLinkOrigins),
   };
 }
 
@@ -232,11 +248,15 @@ function extractUrls(value) {
   return [...String(value).replaceAll("&amp;", "&").matchAll(/https?:\/\/[^\s<>"']+/gi)].map((match) => match[0].replace(/[),.;]+$/, ""));
 }
 
-function availableLinkKinds(value, productOrigin) {
+function availableLinkKinds(value, allowedLinkOrigins) {
   const urls = extractUrls(value).filter((candidate) => {
-    try { return new URL(candidate).origin === productOrigin; } catch { return false; }
+    try { return allowedLinkOrigins.has(new URL(candidate).origin); } catch { return false; }
   });
-  return [...new Set(Object.keys(linkPatterns).filter((kind) => urls.some((url) => linkPatterns[kind].test(url))))];
+  return [...new Set(Object.keys(linkPatterns).filter((kind) => urls.some((value) => {
+    const url = new URL(value);
+    return linkPatterns[kind].test(value)
+      || (kind === "verification" && url.pathname.includes("/login-actions/action-token"));
+  })))];
 }
 
 function plainText(value) {

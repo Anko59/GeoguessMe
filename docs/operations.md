@@ -396,11 +396,11 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 
 ## Incident response
 
-If a local or CI stack fails before startup with `pull access denied` for
-`minio/minio`, check out the registry fix and rerun the failed Make target. The
-Compose files use the official `quay.io/minio/minio` repository with the same
-immutable digest; see the [deployment guide](deployment.md). Keep existing
-volumes intact; registry access failures do not require a storage reset.
+If a local or CI stack fails before startup with `pull access denied` for MinIO,
+check access to the public `quay.io/thanos/minio` mirror and confirm it still
+serves the pinned manifest digest. Compose keeps the original immutable MinIO
+digest; see the [deployment guide](deployment.md). Keep existing volumes intact;
+registry access failures do not require a storage reset.
 
 | Scenario          | Response                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |

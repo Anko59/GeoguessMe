@@ -10,7 +10,7 @@ const pageServer = createServer((request, response) => {
     response.end(`<!doctype html><title>QA MCP contract</title><main><h1>Reset password</h1><label>Email <input aria-label="Email"></label><button>Send reset link</button></main>`);
     return;
   }
-  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <form action="/groups" method="get"><label>Username <input aria-label="Username"></label><label>Password <input aria-label="Password" type="password"></label><button type="submit">Login</button></form><a href="/forgot-password">Forgot your password?</a><label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
+  response.end(`<!doctype html><title>QA MCP contract</title><main>ready <form action="/groups" method="get"><label>Username or email <input aria-label="Username or email"></label><label>Password <input aria-label="Password" type="password"></label><button type="submit">Login</button></form><a href="/forgot-password">Forgot your password?</a><label>Invite link <input aria-label="Invite link" value="http://${request.headers.host}/group/join#invite=secret-invite"></label></main>`);
 });
 await new Promise((resolve) => pageServer.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${pageServer.address().port}`;
