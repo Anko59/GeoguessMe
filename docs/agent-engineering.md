@@ -102,9 +102,11 @@ budget is defined in [Local verification budget](#local-verification-budget).
 
 ## Canonical commands
 
-Everything below runs in Docker through Make. Never invoke Go, Node, npm,
-linters, Playwright, or migration tools directly on the host. Targets that boot
-a disposable stack (`make test-integration`, `make test-e2e`) are listed for
+Project tools run in Docker through Make. Never invoke Go, Node, npm, linters,
+Playwright, or migration tools directly on the host. The operator credential
+targets use Make while reading the local Secret Service and SSH agent, because
+those credentials must stay on the operator machine. Targets that boot a
+disposable stack (`make test-integration`, `make test-e2e`) are listed for
 reference: PR CI selects them from changed paths and the dev gate runs them on
 the merged revision, so they are never part of the local budget.
 
@@ -125,6 +127,11 @@ the merged revision, so they are never part of the local budget.
 - Infrastructure work: `make terraform-fmt-check`, `make terraform-test`,
   `make lint-caddy`; release rehearsals live in `make verify`
   (`backup-rehearsal`, `restart-rehearsal`, `reconnect-rehearsal`).
+- Operator credentials: run `make credentials-preflight` before requesting
+  access. `make ops-ssh HOST=dev|production` resolves the Cloudflare API token
+  from the environment or Secret Service, creates a temporary application-bound
+  Access token, waits for policy propagation, and removes it when SSH ends. See
+  the [Access token runbook](runbooks/access-tokens.md).
 - Documentation work: `make lint-docs` runs Markdownlint and the
   [docs/agent-config checker](agent-engineering.md#docsagent-config-checker);
   `make format-check` enforces Prettier and shfmt.

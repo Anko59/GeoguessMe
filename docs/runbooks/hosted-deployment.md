@@ -82,27 +82,24 @@ lock remains held. Do not remove the lock file manually: `flock` releases the
 lock when its owning process exits.
 
 Use the Access-protected operator SSH route. Store the corresponding private
-operator key in the team's password manager (not this repository) and retain a
-documented recovery copy. The server-only age identity is deliberately not an
-operator credential and must never be copied off-host:
+operator key in the team's password manager (not this repository), load it in
+`ssh-agent`, and retain a documented recovery copy. Run
+`make credentials-preflight` before asking for access; `make ops-ssh` resolves
+the local Cloudflare API token from Secret Service and creates a temporary token
+scoped to the selected SSH application. The server-only age identity is
+deliberately not an operator credential and must never be copied off-host:
 
 ```text
-ssh -i /path/to/operator-key \
-  -o ProxyCommand='make -s cloudflared-access-ssh HOST=%h' \
-  ops@deploy.geoguessme.com
+make ops-ssh HOST=dev
 ```
 
-Export a Cloudflare Access service-token client ID and client secret as
-`TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` before using this
-non-interactive operator route. Create that token outside Terraform (see
-[docs/runbooks/access-tokens.md](access-tokens.md)); Terraform never holds
-service-token secrets and exposes no service-token outputs. Do not place either
-value on the command line. Read the two generated public age recipients from
-`/etc/geoguessme/age/*-recipient.txt`, fill each environment example with unique
-database/JWT/metrics/Restic credentials and its dedicated R2/Brevo values. Web
-Push is optional: leave all three VAPID variables absent to disable it, or mint
-one stable keypair per environment and export all three alongside the other
-credentials:
+For a one-off command, use `OPS_SSH_COMMAND` as documented in
+[docs/runbooks/access-tokens.md](access-tokens.md). Read the two generated
+public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
+environment example with unique database/JWT/metrics/Restic credentials and its
+dedicated R2/Brevo values. Web Push is optional: leave all three VAPID variables
+absent to disable it, or mint one stable keypair per environment and export all
+three alongside the other credentials:
 
 ```text
 make vapid-keys

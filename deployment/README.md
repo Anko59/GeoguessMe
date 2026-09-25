@@ -61,6 +61,13 @@ private R2 buckets. State belongs in the private R2 state bucket with an S3
 lockfile. Bucket-scoped R2 S3 credentials are deliberately created outside
 Terraform so their secret values never enter state.
 
+Local host maintenance uses `make credentials-preflight` and
+`make ops-ssh HOST=dev|production`. The operator command obtains a short-lived,
+application-scoped Access token from the local Secret Service keyring and uses
+the operator SSH identity from `ssh-agent`; it removes the temporary Access
+objects when the session ends. See the
+[Access token runbook](../docs/runbooks/access-tokens.md).
+
 ## Bootstrap and first deploy
 
 Complete the ordered checklist in

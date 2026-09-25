@@ -69,9 +69,12 @@ Two complementary checks verify the deployed host matches the revision:
 1. `make deployment-hash-check ENVIRONMENT=dev|production` runs the host-side
    hash check over the Cloudflare Access SSH path (requires
    `TUNNEL_SERVICE_TOKEN_ID`, `TUNNEL_SERVICE_TOKEN_SECRET`,
-   `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`). The check compares the
-   installed root-owned `/opt/geoguessme/bin` scripts, `/opt/geoguessme/config`
-   compose files, and GeoGuessMe systemd units against the root-owned
+   `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`). The operator route is
+   available through `make ops-ssh HOST=dev|production`; it retrieves the
+   Cloudflare API token from Secret Service, creates a scoped temporary token,
+   and waits for Access policy propagation. The check compares the installed
+   root-owned `/opt/geoguessme/bin` scripts, `/opt/geoguessme/config` compose
+   files, and GeoGuessMe systemd units against the root-owned
    `/opt/geoguessme/config/runtime-hashes` manifest and exits non-zero on any
    mismatch. It also reports the selected environment's current application
    revision and the root-owned `/opt/geoguessme/config/runtime-revision` for
@@ -99,9 +102,10 @@ rejects.
 
 Terraform deliberately ignores `user_data` changes on the existing stateful
 host, so merging this source does not update `/opt/geoguessme/bin` or
-`/opt/geoguessme/config`. Use the Access-protected `ops` route during a planned
-maintenance window. Choose one exact reviewed revision that has been deployed to
-dev and whose release directory is present on the host. This runtime revision is
+`/opt/geoguessme/config`. Use `make credentials-preflight` followed by the
+Access-protected `make ops-ssh HOST=dev` route during a planned maintenance
+window. Choose one exact reviewed revision that has been deployed to dev and
+whose release directory is present on the host. This runtime revision is
 deliberately independent of the two environments' application revisions: dev and
 production may run different application commits while sharing one host
 configuration. From the chosen release directory, install the complete monitored

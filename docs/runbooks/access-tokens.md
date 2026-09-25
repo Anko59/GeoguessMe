@@ -5,7 +5,8 @@ status: primary
 # Cloudflare Access service-token runbook
 
 Three Cloudflare Access applications protect the hosted environment, each with
-its own 90-day service token so a leaked token cannot cross environments:
+its own long-lived workflow service token so a leaked token cannot cross
+environments:
 
 | Application            | Hostname                     | Used by       | Resource-ID variable   |
 | ---------------------- | ---------------------------- | ------------- | ---------------------- |
@@ -36,6 +37,46 @@ returned values separately:
 
 The client secret is shown only once: treat a lost secret as unrecoverable and
 rotate. Never put either client credential in `terraform.tfvars`.
+
+## Local operator access
+
+Before asking for a credential, run `make credentials-preflight`. It reports
+only whether the supported local sources are available; it never prints secret
+values. The development and production GitHub environment secrets are readable
+by their workflows, but GitHub CLI does not reveal their stored values to a
+local shell. For repository operations, use
+`gh auth status --hostname github.com` to check the local GitHub identity
+without displaying its token.
+
+For operator SSH, the local Secret Service keyring item `service=codex-api`,
+`provider=cloudflare`, `project=geoguessme`, `name=CLOUDFLARE_API_TOKEN` can
+administer Access. The helper also accepts an already-exported
+`CLOUDFLARE_API_TOKEN`. The API token needs `Access: Service Tokens Write` and
+`Access: Apps and Policies Write`. The operator SSH identity must be loaded in
+`ssh-agent`; Docker Compose, `curl`, and `jq` must be available.
+
+Use the supported route:
+
+```text
+make credentials-preflight
+make ops-ssh HOST=dev
+make ops-ssh HOST=production
+```
+
+`ops-ssh` creates a one-hour service token and a policy limited to the selected
+SSH application, waits until Access accepts it, then opens an SSH session as
+`ops`. It removes the policy and token when the session ends. Credentials stay
+in process memory or mode-0600 temporary files and are never printed or passed
+on a command line. If cleanup fails, the token expires within one hour. For a
+non-interactive operation, set `OPS_SSH_COMMAND` to the remote command, for
+example:
+
+```text
+make ops-ssh HOST=dev OPS_SSH_COMMAND='sudo systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf'
+```
+
+The permanent dev and production workflow tokens remain separate and are not
+reused by this local operator route.
 
 ## Local deployed-dev QA access
 
