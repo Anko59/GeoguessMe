@@ -77,8 +77,10 @@ describe('Public feed', () => {
             server_time: new Date(startedAt).toISOString(),
         });
 
+        let unmount = () => {};
         try {
-            renderFeed();
+            ({ unmount } = renderFeed());
+            await screen.findByAltText('Blurred preview of an unsolved geo challenge');
             fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
             await waitFor(() => expect(mocks.timedMediaDelivered).toHaveBeenCalled());
 
@@ -93,6 +95,7 @@ describe('Public feed', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
             expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         } finally {
+            unmount();
             vi.useRealTimers();
         }
     });
