@@ -170,7 +170,7 @@ values must be reused whenever that secret file is regenerated.
   backup values.
 
 Review the encrypted files, commit them, and never commit plaintext dotenv or
-age private keys. Unless both GHCR packages are public, add a read-only
+age private keys. Unless all GHCR packages are public, add a read-only
 `read:packages` token as `GHCR_TOKEN` in each encrypted host environment; it
 must have no repository-write scope. Set the Terraform Access service-token
 outputs, SSH private key, and SSH known-host line as environment-scoped GitHub
@@ -198,10 +198,17 @@ tree and that revision deployed successfully. Create that branch from `main` and
 materialize the `dev` tree on it; this preserves linear squash history without
 rewriting protected branches. The release workflow checks tree equality,
 verifies the dev signatures, promotes the same manifests without rebuilding,
-adds the production signature, selects the next semantic patch version (with
-reads the committed `.release-version` manifest, validates that it is newer than
-the latest semantic release tag, creates the GitHub release/tag, and deploys
-production. Pull-request jobs never receive deployment secrets.
+adds the production signature, reads the committed `.release-version` manifest,
+validates that it is newer than the latest semantic release tag, creates the
+GitHub release/tag, and deploys production. Pull-request jobs never receive
+deployment secrets.
+
+The patched Keycloak runtime is built from its pinned upstream image with the
+checksum-verified FreeMarker 2.3.35 jar, then signed and scanned as a fourth
+release artifact. Development deploys run realm reconciliation without
+restarting the shared identity service. Production backs up the shared Keycloak
+database before switching to the promoted digest, records that digest with
+release metadata, and restores the prior image if deployment fails.
 
 Both branches require signed commits, the aggregate Dockerized verification
 check, PRs, linear history, resolved conversations, admin enforcement, and

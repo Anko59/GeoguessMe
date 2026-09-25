@@ -91,7 +91,7 @@ write_files:
       IFS= read -r magic <&3
       [ "$magic" = GEOGUESSME_RUNTIME_BUNDLE_V1 ]
       lengths=''
-      for _ in $(seq 1 17); do
+      for _ in $(seq 1 31); do
         IFS= read -r size <&3
         case "$size" in *[!0-9]* | '') exit 1 ;; esac
         lengths="$lengths $size"
@@ -102,7 +102,7 @@ write_files:
         size=$1
         shift
         case "$path" in
-          /opt/geoguessme/bin/* | /opt/geoguessme/config/*) ;;
+          /opt/geoguessme/bin/* | /opt/geoguessme/config/* | /etc/systemd/system/geoguessme-*) ;;
           *) exit 1 ;;
         esac
         install -d -m 0755 "$(dirname "$path")"
@@ -112,8 +112,10 @@ write_files:
         chown root:root "$temporary"
         chmod "$mode" "$temporary"
         mv -f "$temporary" "$path"
+        relative=$${path#/opt/geoguessme/}
+        case "$path" in /etc/systemd/system/geoguessme-*) relative=units/$${path##*/} ;; esac
         printf '%s  %s\n' "$(sha256sum "$path" | cut -d' ' -f1)" \
-          "$${path#/opt/geoguessme/}" >>"$manifest"
+          "$relative" >>"$manifest"
       done <<'FILES'
       /opt/geoguessme/bin/common.sh 0755
       /opt/geoguessme/bin/deploy.sh 0755
@@ -132,6 +134,20 @@ write_files:
       /opt/geoguessme/config/watch/Caddyfile 0444
       /opt/geoguessme/config/watch/vector.yaml 0444
       /opt/geoguessme/config/watch/victoria-metrics.yaml 0444
+      /etc/systemd/system/geoguessme-backup@.service 0644
+      /etc/systemd/system/geoguessme-backup@.timer 0644
+      /etc/systemd/system/geoguessme-health@.service 0644
+      /etc/systemd/system/geoguessme-health@.timer 0644
+      /etc/systemd/system/geoguessme-restore-rehearsal@.service 0644
+      /etc/systemd/system/geoguessme-restore-rehearsal@.timer 0644
+      /etc/systemd/system/geoguessme-alert@.service 0644
+      /etc/systemd/system/geoguessme-watch.service 0644
+      /etc/systemd/system/geoguessme-watch-health.service 0644
+      /etc/systemd/system/geoguessme-watch-health.timer 0644
+      /etc/systemd/system/geoguessme-watch-refresh-metrics-token.service 0644
+      /etc/systemd/system/geoguessme-watch-refresh-metrics-token.timer 0644
+      /etc/systemd/system/geoguessme-watch-capacity.service 0644
+      /etc/systemd/system/geoguessme-watch-capacity.timer 0644
       FILES
       chown root:root "$manifest"
       chmod 0444 "$manifest"
@@ -142,145 +158,6 @@ write_files:
     permissions: "0444"
     content: |
       ${runtime_revision}
-  - path: /etc/systemd/system/geoguessme-backup@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i encrypted database backup
-      After=docker.service
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/backup.sh %i scheduled
-  - path: /etc/systemd/system/geoguessme-backup@.timer
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Hourly GeoGuessMe %i backup
-      [Timer]
-      OnCalendar=hourly
-      RandomizedDelaySec=5m
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-health@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i host health check
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/health-check.sh %i
-  - path: /etc/systemd/system/geoguessme-health@.timer
-    permissions: "0644"
-    content: |
-      [Timer]
-      OnCalendar=*:0/15
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i isolated restore rehearsal
-      After=docker.service
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/restore-rehearsal.sh %i
-  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.timer
-    permissions: "0644"
-    content: |
-      [Timer]
-      OnCalendar=Sun *-*-* 03:30:00
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-alert@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Email GeoGuessMe %i host failure alert
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/alert.sh %i
-  - path: /etc/systemd/system/geoguessme-watch.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Requires=docker.service
-      After=docker.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      WorkingDirectory=/opt/geoguessme/config
-      EnvironmentFile=-/var/lib/geoguessme/releases/production/current.env
-      ExecStart=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml up -d
-      ExecStop=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml down
-      RemainAfterExit=true
-  - path: /etc/systemd/system/geoguessme-watch-health.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      After=geoguessme-watch.service
-      Requires=geoguessme-watch.service
-      OnFailure=geoguessme-alert@watch.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/watch-health.sh
-  - path: /etc/systemd/system/geoguessme-watch-health.timer
-    permissions: "0644"
-    content: |
-      [Unit]
-      [Timer]
-      OnCalendar=*:0/15
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-watch-refresh-metrics-token.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      After=geoguessme-watch.service
-      [Service]
-      Type=oneshot
-      User=root
-      ExecStart=/opt/geoguessme/bin/watch-refresh-metrics-token.sh
-  - path: /etc/systemd/system/geoguessme-watch-refresh-metrics-token.timer
-    permissions: "0644"
-    content: |
-      [Unit]
-      [Timer]
-      OnCalendar=*:0/5
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-watch-capacity.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      After=docker.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/watch-capacity.sh
-  - path: /etc/systemd/system/geoguessme-watch-capacity.timer
-    permissions: "0644"
-    content: |
-      [Unit]
-      [Timer]
-      OnCalendar=*:0/5
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-
 runcmd:
   - [mkdir, -p, /etc/geoguessme/age, /etc/geoguessme/watch-metrics, /opt/geoguessme/bin, /opt/geoguessme/config/watch, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases]
   - [/usr/local/sbin/geoguessme-install-runtime-bundle, /tmp/geoguessme-runtime-bundle]

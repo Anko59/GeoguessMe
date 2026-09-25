@@ -70,8 +70,8 @@ Two complementary checks verify the deployed host matches the revision:
    hash check over the Cloudflare Access SSH path (requires
    `TUNNEL_SERVICE_TOKEN_ID`, `TUNNEL_SERVICE_TOKEN_SECRET`,
    `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`). The check compares the
-   installed root-owned `/opt/geoguessme/bin` scripts and
-   `/opt/geoguessme/config` compose files against the root-owned
+   installed root-owned `/opt/geoguessme/bin` scripts, `/opt/geoguessme/config`
+   compose files, and GeoGuessMe systemd units against the root-owned
    `/opt/geoguessme/config/runtime-hashes` manifest and exits non-zero on any
    mismatch. It also reports the selected environment's current application
    revision and the root-owned `/opt/geoguessme/config/runtime-revision` for
@@ -83,6 +83,17 @@ Two complementary checks verify the deployed host matches the revision:
    every 15 minutes through `health-check.sh`. A mismatch fails the systemd
    oneshot and invokes the existing operator alert unit. This needs no remote
    credential and preserves the F-05 Access and GitHub-environment boundaries.
+
+## Staging a deploy-protocol change
+
+Keep the dev workflow on the existing four-field deploy command while the first
+revision adds a backward-compatible host command and deploy script. Merge and
+deploy that revision to dev, then install its complete root-owned runtime bundle
+and verify both host environments. Only after that live cutover may the dev
+workflow switch to the five-field command carrying the Keycloak digest;
+production promotion must wait for the same host verification. This prevents
+GitHub from sending a command that the currently installed forced command
+rejects.
 
 ## Applying monitored host definitions
 
@@ -103,21 +114,23 @@ set—not only the files changed most recently:
 - configuration (root:root, mode 0444): `compose.production.yaml` and
   `compose.hosted.yaml`, `compose.watch.yaml`, `watch/Caddyfile`,
   `watch/vector.yaml`, and `watch/victoria-metrics.yaml`.
+- systemd units (root:root, mode 0644): all 14 `geoguessme-*` service and timer
+  files in `infra/cloud-init/units/`.
 
 Stop both `geoguessme-health@*.timer` units for the short copy window and use
 `install --owner=root --group=root --mode=...` for each file. After every file
 is installed, create a temporary root-owned mode-0444 manifest containing the
-SHA-256 of each installed file under its `bin/...` or `config/...` path, and
-atomically rename it to `/opt/geoguessme/config/runtime-hashes`. Then write the
-chosen 40-character commit to a temporary root-owned mode-0444 file and
-atomically rename it to `/opt/geoguessme/config/runtime-revision`; update this
-marker last so a partial copy can never be recorded as complete. The manifest
-must remain root:root and must not be stored in the deploy-writable release
-archive. Then start the timers again. Do not mix files from different revisions.
-Run `verify dev` and `verify production` over their respective Access SSH
-applications immediately; both must pass before the maintenance window closes.
-Rehearse the alert path by creating and restoring a controlled mismatch on a
-disposable host, never by tampering with production.
+SHA-256 of each installed file under its `bin/...`, `config/...`, or `units/...`
+path, and atomically rename it to `/opt/geoguessme/config/runtime-hashes`. Then
+write the chosen 40-character commit to a temporary root-owned mode-0444 file
+and atomically rename it to `/opt/geoguessme/config/runtime-revision`; update
+this marker last so a partial copy can never be recorded as complete. The
+manifest must remain root:root and must not be stored in the deploy-writable
+release archive. Run `systemctl daemon-reload`, then start the timers again. Do
+not mix files from different revisions. Run `verify dev` and `verify production`
+over their respective Access SSH applications immediately; both must pass before
+the maintenance window closes. Rehearse the alert path by creating and restoring
+a controlled mismatch on a disposable host, never by tampering with production.
 
 Repeat this all-files cutover whenever a later deployed revision changes a
 monitored definition. The root-owned compose files are the definitions the live

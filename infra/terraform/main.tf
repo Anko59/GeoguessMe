@@ -20,7 +20,7 @@ removed {
 }
 
 locals {
-  # Keep the complete reviewed runtime set in one gzip stream because Hetzner
+  # Keep the complete reviewed runtime set, including host units, in one gzip stream because Hetzner
   # limits cloud-init user data to 32 KiB. The cloud-init extractor knows this
   # fixed order and writes the members to their root-owned destinations.
   runtime_bundle_files = [
@@ -41,6 +41,20 @@ locals {
     file("${path.module}/../../deployment/watch/Caddyfile"),
     file("${path.module}/../../deployment/watch/vector.yaml"),
     file("${path.module}/../../deployment/watch/victoria-metrics.yaml"),
+    file("${path.module}/../cloud-init/units/geoguessme-backup@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-backup@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-health@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-health@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-restore-rehearsal@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-restore-rehearsal@.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-alert@.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-health.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-health.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-refresh-metrics-token.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-refresh-metrics-token.timer"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.service"),
+    file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.timer"),
   ]
 
   runtime_bundle = base64gzip(join("", concat(

@@ -8,11 +8,24 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 environment=${1:-}
 backend_image=${2:-}
 web_image=${3:-}
-revision=${4:-}
+case "$#" in
+    4)
+        keycloak_image=''
+        revision=$4
+        ;;
+    5)
+        keycloak_image=$4
+        revision=$5
+        ;;
+    *) die 'expected 4 or 5 deployment arguments' ;;
+esac
 validate_environment "$environment"
 
 validate_image_reference "$backend_image" backend
 validate_image_reference "$web_image" web
+if [ -n "$keycloak_image" ]; then
+    validate_image_reference "$keycloak_image" keycloak
+fi
 case "$revision" in
     *[!0-9a-f]* | '') die 'revision must be a lowercase hexadecimal Git commit' ;;
 esac
@@ -102,12 +115,16 @@ if [ -z "$registry_username" ] || [ -z "$registry_token" ]; then
 fi
 printf '%s' "$registry_token" | docker login ghcr.io \
     --username "$registry_username" --password-stdin >/dev/null
-for image in "$backend_image" "$web_image"; do
+verify_image_signature() {
+    image=$1
     docker run --rm -v "$HOME/.docker:/root/.docker:ro" "$COSIGN_IMAGE" verify \
         --certificate-oidc-issuer https://token.actions.githubusercontent.com \
         --certificate-identity-regexp "$identity" \
         --annotations "revision=$revision" "$image" >/dev/null
-done
+}
+verify_image_signature "$backend_image"
+verify_image_signature "$web_image"
+if [ -n "$keycloak_image" ]; then verify_image_signature "$keycloak_image"; fi
 
 metadata_dir="$STATE_ROOT/releases/$environment"
 mkdir -p "$metadata_dir" "$APP_ROOT/$environment"
@@ -115,6 +132,26 @@ current="$metadata_dir/current.env"
 previous="$metadata_dir/previous.env"
 if [ -f "$current" ]; then
     cp "$current" "$previous"
+fi
+previous_keycloak_image=''
+identity_update_started=false
+if [ -f "$current" ]; then
+    previous_keycloak_image=$(sed -n 's/^KEYCLOAK_IMAGE=//p' "$current" | tail -1)
+fi
+if [ "$oidc_enabled" = true ] && [ "$environment" = production ] &&
+    [ -n "$keycloak_image" ] &&
+    ! valid_image_reference "$previous_keycloak_image"; then
+    active_identity_container=$(compose_identity "$release" ps -q keycloak 2>/dev/null || true)
+    if [ -n "$active_identity_container" ]; then
+        previous_keycloak_image=$(docker inspect --format '{{.Config.Image}}' "$active_identity_container")
+        valid_image_reference "$previous_keycloak_image" ||
+            die 'cannot safely roll back the shared Keycloak image; current image reference is not digest-pinned'
+    elif [ -d "$APP_ROOT/production/current" ]; then
+        die 'cannot safely roll back the shared Keycloak image; production metadata is missing and no current container exists'
+    fi
+    if [ -n "$active_identity_container" ] && [ ! -f "$previous" ]; then
+        die 'cannot safely roll back the shared Keycloak image; production release metadata is missing'
+    fi
 fi
 
 if [ -d "$APP_ROOT/$environment/current" ] &&
@@ -144,6 +181,15 @@ rollback() {
                 valid_image_reference "$old_web" &&
                 [ "$valid_revision" = true ] && [ "${#old_revision}" -eq 40 ]; then
                 old_release=$(release_dir "$old_revision")
+                if [ "$environment" = production ] && [ "$oidc_enabled" = true ] &&
+                    [ "$identity_update_started" = true ]; then
+                    GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
+                        compose_identity "$old_release" up -d --wait keycloak-db keycloak ||
+                        printf 'deployment failed; previous Keycloak image did not restart\n' >&2
+                    GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
+                        compose_identity "$old_release" run --rm --no-deps keycloak-config ||
+                        printf 'deployment failed; previous Keycloak realm config did not reconcile\n' >&2
+                fi
                 if oidc_enabled "$secret_file"; then
                     BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
                         compose "$environment" "$old_release" up -d --wait backend oauth2-proxy web postgres || true
@@ -183,9 +229,19 @@ if [ "$oidc_enabled" = true ]; then
         identity_temporary=''
         chmod 600 "$identity_file"
     fi
-    compose_identity "$release" pull keycloak keycloak-db
-    compose_identity "$release" up -d --wait keycloak-db keycloak
-    compose_identity "$release" run --rm --no-deps keycloak-config
+    if [ "$environment" = production ] && [ -n "$keycloak_image" ]; then
+        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+            compose_identity "$release" pull keycloak keycloak-db
+        identity_update_started=true
+        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+            compose_identity "$release" up -d --wait keycloak-db keycloak
+    fi
+    if [ -n "$keycloak_image" ]; then
+        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+            compose_identity "$release" run --rm --no-deps keycloak-config
+    else
+        compose_identity "$release" run --rm --no-deps keycloak-config
+    fi
 fi
 
 export BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image"
@@ -207,6 +263,12 @@ umask 077
 {
     printf 'BACKEND_IMAGE=%s\n' "$backend_image"
     printf 'WEB_IMAGE=%s\n' "$web_image"
+    if [ "$environment" = production ] && [ "$oidc_enabled" = true ] &&
+        [ -n "$keycloak_image" ]; then
+        printf 'KEYCLOAK_IMAGE=%s\n' "$keycloak_image"
+    elif [ -n "$previous_keycloak_image" ]; then
+        printf 'KEYCLOAK_IMAGE=%s\n' "$previous_keycloak_image"
+    fi
     printf 'REVISION=%s\n' "$revision"
     printf 'DEPLOYED_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$current"
