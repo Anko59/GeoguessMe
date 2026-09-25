@@ -192,22 +192,6 @@ func (c *Client) UpdateTrack(ctx context.Context, packageName, editID, track str
 	return updated, nil
 }
 
-// GetTrack reads the committed state of a track. Callers use this after an
-// edit commit to verify that Play accepted the intended version and status.
-func (c *Client) GetTrack(ctx context.Context, packageName, track string) (Track, error) {
-	for value, name := range map[string]string{packageName: "package name", track: "track"} {
-		if err := validatePathPart(value, name); err != nil {
-			return Track{}, err
-		}
-	}
-	var current Track
-	err := c.doJSON(ctx, http.MethodGet, c.resourceURL("v3", "applications", packageName, "tracks", track), nil, &current)
-	if err != nil {
-		return Track{}, fmt.Errorf("get Play track %q: %w", track, err)
-	}
-	return current, nil
-}
-
 // ValidateEdit asks Play to validate all changes in an edit without publishing.
 func (c *Client) ValidateEdit(ctx context.Context, packageName, editID string) (AppEdit, error) {
 	for value, name := range map[string]string{packageName: "package name", editID: "edit ID"} {
