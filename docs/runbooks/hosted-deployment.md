@@ -36,6 +36,14 @@ not manage those short-lived QA objects. The Hetzner token should be scoped to
 the dedicated project. Do not reuse either token in application or deployment
 jobs.
 
+The local QA token does not need Email Routing Rules permission. The controlled
+relay uses a permanent seed rule and Cloudflare subaddressing for unique test
+inboxes; keep subaddressing enabled for `geoguessme.com` and verify mail to a
+tagged seed address reaches the Worker before a release QA run. See
+[docs/qa-agent.md](../qa-agent.md) for the seed, keyring lookup, and exact
+deployed-revision command. The Terraform token above has broader permissions for
+infrastructure management and must not be substituted for the QA token.
+
 ## Provision
 
 Run `make terraform-validate`, inspect `make terraform-plan`, and apply only the
