@@ -36,7 +36,7 @@ include tools/make/openapi-contract.mk
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
 	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
-	build build-backend build-frontend build-images clean-build build-security-tool-images audit-images \
+	build build-backend build-frontend build-images build-keycloak-image clean-build build-security-tool-images audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test operational-gate \
 	compose-validate container-verify smoke smoke-rehearsal prod-container-verify \

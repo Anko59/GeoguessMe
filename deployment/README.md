@@ -42,6 +42,13 @@ GitHub remain disabled for this rollout. This Compose topology deliberately has
 no Traefik layer: Cloudflare Tunnel provides ingress and Caddy provides the one
 same-origin application gateway.
 
+The hosted release promotes Keycloak as a signed, scanned image digest alongside
+the application images. Its FreeMarker dependency is updated from the pinned
+Keycloak base image using a checksum-verified upstream jar. Development deploys
+reconcile realm configuration without restarting shared auth; production backs
+up the Keycloak database before switching the shared service and records the
+previous digest for image rollback.
+
 Local social-auth development also uses Caddy, but with a dedicated
 `Caddyfile.dev`: `mkcert` supplies a locally trusted certificate and Caddy maps
 `https://geoguessme.localhost` to Vite plus `https://auth-dev.geoguessme.com` to
@@ -116,9 +123,9 @@ rather than rebuild it.
 
 ## Generic first deploy
 
-Set immutable image references (`BACKEND_IMAGE` and `WEB_IMAGE` must include an
-`@sha256:...` digest) and create the ignored production environment file from
-deployment/env/production.env.example.
+Set immutable image references (`BACKEND_IMAGE`, `WEB_IMAGE`, and
+`KEYCLOAK_IMAGE` must include an `@sha256:...` digest) and create the ignored
+production environment file from deployment/env/production.env.example.
 
 ```text
 make compose-validate

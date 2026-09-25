@@ -9,7 +9,7 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
-COMPOSE_IDENTITY := docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
+COMPOSE_IDENTITY := GEOGUESSME_KEYCLOAK_IMAGE=geoguessme-keycloak:local docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
@@ -180,7 +180,7 @@ identity-config: ## Validate the shared auth.geoguessme.com identity stack.
 	@test -f deployment/env/identity.env || { echo 'deployment/env/identity.env is required'; exit 2; }
 	$(COMPOSE_IDENTITY) config --quiet
 
-identity-up: identity-config ## Start shared Keycloak and its database.
+identity-up: identity-config build-keycloak-image ## Start shared Keycloak and its database.
 	$(COMPOSE_IDENTITY) up -d --wait keycloak-db keycloak
 	$(COMPOSE_IDENTITY) run --rm --no-deps keycloak-config
 

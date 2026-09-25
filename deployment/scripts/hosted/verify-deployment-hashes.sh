@@ -30,6 +30,7 @@ set -eu
 
 environment=${1:-}
 validate_environment "$environment"
+unit_root=${GEOGUESSME_SYSTEMD_ROOT:-/etc/systemd/system}
 
 metadata="$STATE_ROOT/releases/$environment/current.env"
 [ -f "$metadata" ] || die "no deployment metadata for $environment: $metadata"
@@ -123,6 +124,21 @@ for watch_file in Caddyfile vector.yaml victoria-metrics.yaml; do
         "config/watch/$watch_file" \
         "$CONFIG_ROOT/watch/$watch_file" \
         "config/watch/$watch_file"
+done
+
+# Host units installed by cloud-init alongside the operator scripts.
+for unit in \
+    geoguessme-backup@.service geoguessme-backup@.timer \
+    geoguessme-health@.service geoguessme-health@.timer \
+    geoguessme-restore-rehearsal@.service geoguessme-restore-rehearsal@.timer \
+    geoguessme-alert@.service geoguessme-watch.service \
+    geoguessme-watch-health.service geoguessme-watch-health.timer \
+    geoguessme-watch-refresh-metrics-token.service geoguessme-watch-refresh-metrics-token.timer \
+    geoguessme-watch-capacity.service geoguessme-watch-capacity.timer; do
+    compare \
+        "units/$unit" \
+        "$unit_root/$unit" \
+        "units/$unit"
 done
 
 if [ "$mismatch" -ne 0 ]; then

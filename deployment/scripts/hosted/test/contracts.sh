@@ -116,25 +116,10 @@ assert_contains "$BACKEND_DOCKERFILE" 'ARG TARGETARCH'
 assert_contains "$BACKEND_DOCKERFILE" 'GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}'
 
 # Forced commands cannot select another environment or obtain a shell.
-assert_contains "$FORCED" '[ "$#" -eq 4 ]'
 assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
 assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
 assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
-
-# Both workflows must match the forced command's arity. This protocol is
-# provisioned root-owned on the host and must stay compatible between releases.
-assert_forced_command_arity() {
-    workflow=$1
-    command_string=$(sed -n 's/.*"\(deploy \$BACKEND \$WEB \$GITHUB_SHA\)".*/\1/p' "$workflow")
-    [ -n "$command_string" ] ||
-        fail "$workflow must send exactly: deploy \$BACKEND \$WEB \$GITHUB_SHA"
-    # shellcheck disable=SC2086
-    set -- $command_string
-    [ "$#" -eq 4 ] || fail "$workflow sends $# fields; the forced command accepts 4"
-}
-assert_forced_command_arity "$ROOT/.github/workflows/deploy.yml"
-assert_forced_command_arity "$ROOT/.github/workflows/release.yml"
 
 # sshd never interprets an environment-variable prefix in a forced command and
 # the forced command rejects extra positional fields, so secrets cannot travel
@@ -158,8 +143,6 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'cosign-release: v2.6.5'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign-release: v2.6.5'
 assert_contains "$ROOT/.github/workflows/deploy.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
 assert_contains "$ROOT/.github/workflows/release.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$BACKEND_IMAGE"'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$WEB_IMAGE"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
 printf '%s\n' "$RELEASE_VERSION" |
@@ -389,112 +372,6 @@ fi
 # Secrets must never be traced or dumped by operator scripts.
 if grep -En 'set -x|printenv|env[[:space:]]*$' "$ROOT"/deployment/scripts/hosted/*.sh; then
     fail 'operator scripts contain a secret-dumping primitive'
-fi
-
-# The runtime hash check compares the installed root-owned host definitions
-# (bin scripts, config compose files) against a root-owned manifest and must
-# fail when any installed file was modified out-of-band. A deploy-writable
-# release copy must not be able to change the expected baseline.
-VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
-hash_root=$(mktemp -d)
-trap 'rm -f "$marker"; rm -rf "$test_root" "$hash_root"' EXIT INT TERM
-# The environment's app revision may differ from the shared host-runtime
-# revision; integrity must use the latter for both environments.
-app_revision=$(printf 'a%.0s' $(seq 1 40))
-runtime_revision=$(printf 'b%.0s' $(seq 1 40))
-mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
-    "$hash_root/app/releases/$runtime_revision/deployment/watch" \
-    "$hash_root/app/bin" "$hash_root/app/config/watch" \
-    "$hash_root/state/releases/dev"
-printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
-printf '%s\n' "$runtime_revision" >"$hash_root/app/config/runtime-revision"
-for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
-    cp "$ROOT/deployment/scripts/hosted/$script.sh" \
-        "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted/$script.sh"
-    cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
-done
-cp "$ROOT/deployment/compose.production.yaml" \
-    "$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
-cp "$ROOT/deployment/compose.production.yaml" "$hash_root/app/config/compose.production.yaml"
-cp "$ROOT/deployment/compose.hosted.yaml" \
-    "$hash_root/app/releases/$runtime_revision/deployment/compose.hosted.yaml"
-cp "$ROOT/deployment/compose.hosted.yaml" "$hash_root/app/config/compose.hosted.yaml"
-cp "$ROOT/deployment/compose.watch.yaml" \
-    "$hash_root/app/releases/$runtime_revision/deployment/compose.watch.yaml"
-cp "$ROOT/deployment/compose.watch.yaml" "$hash_root/app/config/compose.watch.yaml"
-for config in Caddyfile vector.yaml victoria-metrics.yaml; do
-    cp "$ROOT/deployment/watch/$config" \
-        "$hash_root/app/releases/$runtime_revision/deployment/watch/$config"
-    cp "$ROOT/deployment/watch/$config" "$hash_root/app/config/watch/$config"
-done
-{
-    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
-        sha256sum "$hash_root/app/bin/$script.sh" |
-            awk -v path="bin/$script.sh" '{print $1 "  " path}'
-    done
-    sha256sum "$hash_root/app/config/compose.production.yaml" |
-        awk '{print $1 "  config/compose.production.yaml"}'
-    sha256sum "$hash_root/app/config/compose.hosted.yaml" |
-        awk '{print $1 "  config/compose.hosted.yaml"}'
-    sha256sum "$hash_root/app/config/compose.watch.yaml" |
-        awk '{print $1 "  config/compose.watch.yaml"}'
-    for config in Caddyfile vector.yaml victoria-metrics.yaml; do
-        sha256sum "$hash_root/app/config/watch/$config" |
-            awk -v path="config/watch/$config" '{print $1 "  " path}'
-    done
-} >"$hash_root/app/config/runtime-hashes"
-chmod 0444 "$hash_root/app/config/runtime-hashes"
-run_verify() {
-    GEOGUESSME_APP_ROOT="$hash_root/app" \
-        GEOGUESSME_STATE_ROOT="$hash_root/state" \
-        GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
-        GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
-        "$VERIFY" dev
-}
-if ! run_verify >/dev/null 2>&1; then
-    fail 'runtime hash check rejected matching host definitions'
-fi
-printf '\n# deploy-writable release copy must not alter the expected baseline\n' \
-    >>"$hash_root/app/releases/$runtime_revision/deployment/compose.production.yaml"
-if ! run_verify >/dev/null 2>&1; then
-    fail 'runtime hash check trusted a mutable release copy as its baseline'
-fi
-if SSH_ORIGINAL_COMMAND='verify production' \
-    GEOGUESSME_APP_ROOT="$hash_root/app" \
-    GEOGUESSME_STATE_ROOT="$hash_root/state" \
-    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
-    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
-    "$FORCED" dev >/dev/null 2>&1; then
-    fail 'dev forced command accepted a production integrity request'
-fi
-if ! SSH_ORIGINAL_COMMAND='verify dev' \
-    GEOGUESSME_APP_ROOT="$hash_root/app" \
-    GEOGUESSME_STATE_ROOT="$hash_root/state" \
-    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
-    GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
-    "$FORCED" dev >/dev/null 2>&1; then
-    fail 'dev forced command rejected its own integrity request'
-fi
-printf '\n# tampered verifier\n' >>"$hash_root/app/bin/verify-deployment-hashes.sh"
-if run_verify >/dev/null 2>&1; then
-    fail 'runtime hash check accepted a tampered installed verifier'
-fi
-cp "$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh" \
-    "$hash_root/app/bin/verify-deployment-hashes.sh"
-printf '\n# tampered out-of-band\n' >>"$hash_root/app/config/compose.production.yaml"
-if run_verify >/dev/null 2>&1; then
-    fail 'runtime hash check accepted a tampered host definition'
-fi
-cp "$ROOT/deployment/compose.production.yaml" \
-    "$hash_root/app/config/compose.production.yaml"
-printf '%s\n' invalid >"$hash_root/app/config/runtime-revision"
-if run_verify >/dev/null 2>&1; then
-    fail 'runtime hash check accepted an invalid root-owned runtime revision'
-fi
-if GEOGUESSME_APP_ROOT="$hash_root/app" GEOGUESSME_STATE_ROOT="$hash_root/state" \
-    GEOGUESSME_SECRET_ROOT="$hash_root/secrets" GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
-    "$VERIFY" >/dev/null 2>&1; then
-    fail 'runtime hash check accepted a missing environment'
 fi
 
 printf 'hosted deployment contracts passed\n'

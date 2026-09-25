@@ -49,14 +49,22 @@ The target scans the following images (see `AUDIT_IMAGES` in
       `geoguessme-web:local` images when they exist (produced by
       `make build-images`);
     - otherwise a warning is printed and application images are skipped.
+- **Identity image** — the locally built `geoguessme-keycloak:local` image, or
+  the exact `KEYCLOAK_IMAGE` digest supplied by CI. It derives from the
+  digest-pinned Keycloak 26.7.4 image and replaces the bundled FreeMarker jar
+  with the checksum-verified 2.3.35 artifact already selected on Keycloak's
+  `release/26.7` branch. Publication and production promotion both scan the
+  exact signed digest; production rollback retains the previous identity image
+  reference in hosted deployment metadata.
 
 Override the image list with `AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`.
-Images are always referenced by pinned digest, never by a floating tag. Images
-already available in the host Docker daemon are exported with `docker save` and
-scanned from a tarball. This includes private application digests pulled by the
-authenticated publication and promotion workflows, so registry credentials never
-enter the Trivy container. Other registry images are scanned directly by their
-digest-pinned reference.
+Third-party and published images use pinned digests, never floating tags. Local
+images use explicit `:local` build names and are scanned by their Docker image
+ID. Images already available in the host Docker daemon are exported with
+`docker save` and scanned from a tarball. This includes private application and
+Keycloak digests pulled by authenticated publication and promotion workflows, so
+registry credentials never enter the Trivy container. Other registry images are
+scanned directly by their digest-pinned reference.
 
 ## Blocking semantics
 

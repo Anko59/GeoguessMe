@@ -166,6 +166,7 @@ jobs:
     outputs:
       backend: ${{ steps.refs.outputs.backend }}
       web: ${{ steps.refs.outputs.web }}
+      keycloak: ${{ steps.refs.outputs.keycloak }}
       tag: ${{ steps.source.outputs.tag }}
     steps:
       - name: Check out release commit
@@ -239,14 +240,17 @@ jobs:
           {
             echo "backend_source=ghcr.io/$owner/geoguessme-backend:dev-$DEV_SHA"
             echo "web_source=ghcr.io/$owner/geoguessme-web:dev-$DEV_SHA"
+            echo "keycloak_source=ghcr.io/$owner/geoguessme-keycloak:dev-$DEV_SHA"
             echo "backend_release=ghcr.io/$owner/geoguessme-backend:$RELEASE_TAG"
             echo "web_release=ghcr.io/$owner/geoguessme-web:$RELEASE_TAG"
+            echo "keycloak_release=ghcr.io/$owner/geoguessme-keycloak:$RELEASE_TAG"
           } >> "$GITHUB_OUTPUT"
       - name: Resolve immutable development digests
         id: digests
         env:
           BACKEND_SOURCE: ${{ steps.names.outputs.backend_source }}
           WEB_SOURCE: ${{ steps.names.outputs.web_source }}
+          KEYCLOAK_SOURCE: ${{ steps.names.outputs.keycloak_source }}
         shell: bash
         run: |
           set -euo pipefail
@@ -254,7 +258,9 @@ jobs:
             --format '{{json .Manifest.Digest}}' | tr -d '"')
           web=$(docker buildx imagetools inspect "$WEB_SOURCE" \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
-          for digest in "$backend" "$web"; do
+          keycloak=$(docker buildx imagetools inspect "$KEYCLOAK_SOURCE" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          for digest in "$backend" "$web" "$keycloak"; do
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
               echo "Registry returned an invalid digest." >&2
               exit 1
@@ -263,14 +269,16 @@ jobs:
           {
             echo "backend=$backend"
             echo "web=$web"
+            echo "keycloak=$keycloak"
           } >> "$GITHUB_OUTPUT"
       - name: Verify development workflow signatures
         env:
           DEV_SHA: ${{ steps.source.outputs.dev_sha }}
           BACKEND: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_source }}@${{ steps.digests.outputs.web }}
+          KEYCLOAK: ${{ steps.names.outputs.keycloak_source }}@${{ steps.digests.outputs.keycloak }}
         run: |
-          for image in "$BACKEND" "$WEB"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK"; do
             cosign verify \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               --certificate-identity-regexp '^https://github.com/Anko59/GeoguessMe/.github/workflows/deploy\.yml@refs/heads/dev$' \
@@ -280,17 +288,22 @@ jobs:
         env:
           BACKEND_SOURCE: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
           WEB_SOURCE: ${{ steps.names.outputs.web_source }}@${{ steps.digests.outputs.web }}
+          KEYCLOAK_SOURCE: ${{ steps.names.outputs.keycloak_source }}@${{ steps.digests.outputs.keycloak }}
           BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
           WEB_RELEASE: ${{ steps.names.outputs.web_release }}
+          KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
         run: |
           docker buildx imagetools create --tag "$BACKEND_RELEASE" "$BACKEND_SOURCE"
           docker buildx imagetools create --tag "$WEB_RELEASE" "$WEB_SOURCE"
+          docker buildx imagetools create --tag "$KEYCLOAK_RELEASE" "$KEYCLOAK_SOURCE"
       - name: Verify promoted digests
         env:
           BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
           WEB_RELEASE: ${{ steps.names.outputs.web_release }}
+          KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
           WEB_DIGEST: ${{ steps.digests.outputs.web }}
+          KEYCLOAK_DIGEST: ${{ steps.digests.outputs.keycloak }}
         shell: bash
         run: |
           set -euo pipefail
@@ -298,21 +311,21 @@ jobs:
             --format '{{json .Manifest.Digest}}' | tr -d '"')
           actual_web=$(docker buildx imagetools inspect "$WEB_RELEASE" \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
+          actual_keycloak=$(docker buildx imagetools inspect "$KEYCLOAK_RELEASE" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
           [[ "$actual_backend" == "$BACKEND_DIGEST" ]]
           [[ "$actual_web" == "$WEB_DIGEST" ]]
+          [[ "$actual_keycloak" == "$KEYCLOAK_DIGEST" ]]
       - name: Scan exact promoted digest (fixed High/Critical gate)
-        # Pulls the exact promoted digests with authenticated docker (GHCR
-        # login above) and tags them :local so `make audit-images` exports them
-        # with `docker save` for trivy (--input). The trivy service has no
-        # registry credentials and the geoguessme images are private, so trivy
-        # cannot pull them itself. Fails the job when a FIXED High/Critical
-        # finding is present (--exit-code 1); unfixed findings are reported but
-        # do not block. AUDIT_IMAGES= keeps the release gate focused on the
-        # exact promoted digest (the third-party set is scanned in verify and
-        # the weekly security workflow).
+        # Pull exact promoted digests with GHCR credentials. Backend/web are
+        # tagged :local; Keycloak is passed as KEYCLOAK_IMAGE. `make audit-images`
+        # exports them for credential-less Trivy scanning and fails on fixed
+        # High/Critical findings. AUDIT_IMAGES= limits scope to this release;
+        # verify and the weekly workflow scan the full runtime set.
         env:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
+          KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
         shell: bash
         run: |
           set -euo pipefail
@@ -321,13 +334,17 @@ jobs:
           export RESTIC_IMAGE
           docker pull "$BACKEND"
           docker pull "$WEB"
+          docker pull "$KEYCLOAK"
           docker pull "$RESTIC_IMAGE"
           docker tag "$BACKEND" geoguessme-backend:local
           docker tag "$WEB" geoguessme-web:local
+          export KEYCLOAK_IMAGE="$KEYCLOAK"
           make audit-images AUDIT_IMAGES=
-          # Fail closed: the gate must prove it scanned both promoted digests.
+          # Fail closed: the gate must prove it scanned every promoted digest.
           test -s security/image-reports/geoguessme-backend_local/report.json
           test -s security/image-reports/geoguessme-web_local/report.json
+          keycloak_safe=$(printf '%s' "$KEYCLOAK" | tr '/:@' '___')
+          test -s "security/image-reports/$keycloak_safe/report.json"
           restic_safe=$(printf '%s' "$RESTIC_IMAGE" | tr '/:@' '___')
           test -s "security/image-reports/$restic_safe/report.json"
       - name: Upload image-scan reports and SBOMs
@@ -346,8 +363,9 @@ jobs:
         env:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
+          KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
         run: |
-          for image in "$BACKEND" "$WEB"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK"; do
             cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
           done
       - name: Export immutable references
@@ -356,6 +374,7 @@ jobs:
           {
             echo "backend=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}"
             echo "web=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}"
+            echo "keycloak=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}"
           } >> "$GITHUB_OUTPUT"
       - name: Download verified Android release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -378,6 +397,7 @@ jobs:
             ```text
             BACKEND_IMAGE=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
             WEB_IMAGE=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
+            KEYCLOAK_IMAGE=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
             ```
 
             Hosted backup and restore use the digest-pinned Restic reference
@@ -406,6 +426,7 @@ jobs:
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           BACKEND: ${{ needs.promote.outputs.backend }}
           WEB: ${{ needs.promote.outputs.web }}
+          KEYCLOAK: ${{ needs.promote.outputs.keycloak }}
         run: |
           install -d -m 0700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
@@ -414,7 +435,7 @@ jobs:
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
             deploy@deploy-prod.geoguessme.com \
-            "deploy $BACKEND $WEB $GITHUB_SHA"
+            "deploy $BACKEND $WEB $KEYCLOAK $GITHUB_SHA"
 
   play-publish:
     name: Publish verified Android bundle to Play

@@ -1,0 +1,6 @@
+[Unit]
+Description=Email GeoGuessMe %i host failure alert
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/opt/geoguessme/bin/alert.sh %i

@@ -12,12 +12,15 @@ case "$allowed_environment" in dev | production) ;; *) exit 126 ;; esac
 set -- ${SSH_ORIGINAL_COMMAND:-}
 case "${1:-}" in
     deploy)
-        [ "$#" -eq 4 ] || {
-            printf 'expected: deploy BACKEND_IMAGE WEB_IMAGE REVISION\n' >&2
-            exit 126
-        }
         [ "$1" = deploy ] || exit 126
-        exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4"
+        case "$#" in
+            4) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" ;;
+            5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
+            *)
+                printf 'expected: deploy BACKEND_IMAGE WEB_IMAGE [KEYCLOAK_IMAGE] REVISION\n' >&2
+                exit 126
+                ;;
+        esac
         ;;
     verify)
         # Authenticated runtime-integrity check; no credentials or payload are

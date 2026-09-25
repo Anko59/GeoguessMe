@@ -1,0 +1,8 @@
+[Unit]
+Description=GeoGuessMe %i isolated restore rehearsal
+After=docker.service
+OnFailure=geoguessme-alert@%i.service
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/opt/geoguessme/bin/restore-rehearsal.sh %i
