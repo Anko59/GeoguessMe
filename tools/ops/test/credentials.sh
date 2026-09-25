@@ -88,6 +88,7 @@ fi
 
 grep -Fq 'duration: "1h"' "$script"
 grep -Fq 'decision: "non_identity"' "$script"
+grep -Fq "HostKeyAlias=\$host_key_alias" "$script"
 grep -Fq "wait_for_access_policy \"\$hostname\"" "$script"
 grep -Fq 'trap cleanup_access_session EXIT' "$script"
 grep -Fq 'unset TUNNEL_SERVICE_TOKEN_ID TUNNEL_SERVICE_TOKEN_SECRET' "$script"

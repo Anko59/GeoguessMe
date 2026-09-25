@@ -67,9 +67,11 @@ make ops-ssh HOST=production
 SSH application, waits until Access accepts it, then opens an SSH session as
 `ops`. It removes the policy and token when the session ends. Credentials stay
 in process memory or mode-0600 temporary files and are never printed or passed
-on a command line. If cleanup fails, the token expires within one hour. For a
-non-interactive operation, set `OPS_SSH_COMMAND` to the remote command, for
-example:
+on a command line. Both Access SSH applications route to the same server; SSH
+checks the production route against the verified `deploy.geoguessme.com` host
+key recorded in `known_hosts`. If cleanup fails, the token expires within one
+hour. For a non-interactive operation, set `OPS_SSH_COMMAND` to the remote
+command, for example:
 
 ```text
 make ops-ssh HOST=dev OPS_SSH_COMMAND='sudo systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf'
