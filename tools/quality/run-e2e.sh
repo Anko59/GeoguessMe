@@ -36,7 +36,18 @@ mkdir -p "$STAGING_DIR"
 # shellcheck disable=SC2317 # Invoked indirectly by EXIT trap below.
 cleanup() {
     status=$?
-    docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans
+    if [ "$status" -ne 0 ]; then
+        echo "E2E stack state (failure):" >&2
+        docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" ps --all >&2 || true
+        echo "E2E stack logs (failure):" >&2
+        docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" \
+            logs --no-color --tail=80 web backend migration db minio toxiproxy mailpit >&2 || true
+    fi
+    cleanup_status=0
+    docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans || cleanup_status=$?
+    if [ "$status" -eq 0 ]; then
+        status=$cleanup_status
+    fi
     exit "$status"
 }
 trap cleanup EXIT

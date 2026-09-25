@@ -88,6 +88,26 @@ test.describe('Viewport preservation', () => {
         }
     });
 
+    test('authenticated page shell keeps top navigation geometry consistent', async ({ authenticatedPage }) => {
+        const geometry: Array<{ left: number; top: number; width: number; height: number }> = [];
+
+        for (const path of ['/feed', '/groups', '/profile', '/settings']) {
+            await authenticatedPage.goto(path);
+            const navigation = authenticatedPage.locator('.authenticated-page-shell > .app-topbar');
+            await expect(navigation).toBeVisible();
+            const box = await navigation.boundingBox();
+            expect(box).not.toBeNull();
+            geometry.push({
+                left: Math.round(box!.left),
+                top: Math.round(box!.top),
+                width: Math.round(box!.width),
+                height: Math.round(box!.height),
+            });
+        }
+
+        expect(geometry).toEqual([geometry[0], geometry[0], geometry[0], geometry[0]]);
+    });
+
     test('mobile project has touch and mobile user-agent', async ({ page }) => {
         test.skip(test.info().project.name !== 'mobile', 'desktop project — skipped');
 
@@ -150,6 +170,83 @@ test.describe('Group responsive overflow', () => {
         expect(joinBox!.x + joinBox!.width).toBeLessThanOrEqual(viewport!.width);
     });
 
+    test('groups and settings content keeps side gutters while top navigation geometry stays stable', async ({
+        authenticatedPage,
+    }) => {
+        for (const viewport of [
+            { width: 320, height: 700 },
+            { width: 1280, height: 720 },
+        ]) {
+            await authenticatedPage.setViewportSize(viewport);
+            await authenticatedPage.goto('/groups');
+            await expect(authenticatedPage.locator('.groups-actions')).toBeVisible();
+            await expect(authenticatedPage.locator('.empty-state')).toBeVisible();
+
+            const groupsGeometry = await authenticatedPage.evaluate(() => {
+                const bounds = (selector: string) => {
+                    const element = document.querySelector(selector);
+                    if (!element) return null;
+                    const { left, right } = element.getBoundingClientRect();
+                    return { left, right };
+                };
+                const navigation = document.querySelector('.authenticated-page-shell > .app-topbar');
+                if (!navigation) return null;
+                const { left, right, width } = navigation.getBoundingClientRect();
+                return {
+                    navigation: { left, right, width },
+                    actions: bounds('.groups-actions'),
+                    emptyState: bounds('.empty-state'),
+                };
+            });
+            expect(groupsGeometry).not.toBeNull();
+            expect(groupsGeometry!.actions).not.toBeNull();
+            expect(groupsGeometry!.emptyState).not.toBeNull();
+            for (const content of [groupsGeometry!.actions!, groupsGeometry!.emptyState!]) {
+                expect(content.left).toBeGreaterThanOrEqual(12);
+                expect(content.right).toBeLessThanOrEqual(viewport.width - 12);
+            }
+            const expectedNavigationWidth = Math.min(viewport.width, 70 * 16);
+            expect(groupsGeometry!.navigation.width).toBe(expectedNavigationWidth);
+            expect(groupsGeometry!.navigation.left).toBe((viewport.width - expectedNavigationWidth) / 2);
+
+            await authenticatedPage.goto('/settings');
+            await expect(authenticatedPage.locator('.account-settings-card')).toBeVisible();
+            const settingsGeometry = await authenticatedPage.evaluate(() => {
+                const card = document.querySelector('.account-settings-card');
+                const navigation = document.querySelector('.authenticated-page-shell > .app-topbar');
+                if (!card || !navigation) return null;
+                const cardBounds = card.getBoundingClientRect();
+                const navigationBounds = navigation.getBoundingClientRect();
+                const cardStyles = getComputedStyle(card);
+                return {
+                    card: { left: cardBounds.left, right: cardBounds.right },
+                    backgroundColor: cardStyles.backgroundColor,
+                    borderRadius: cardStyles.borderRadius,
+                    navigation: {
+                        left: navigationBounds.left,
+                        right: navigationBounds.right,
+                        width: navigationBounds.width,
+                    },
+                };
+            });
+            expect(settingsGeometry).not.toBeNull();
+            expect(settingsGeometry!.card.left).toBeGreaterThanOrEqual(12);
+            expect(settingsGeometry!.card.right).toBeLessThanOrEqual(viewport.width - 12);
+            expect(settingsGeometry!.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+            expect(settingsGeometry!.borderRadius).not.toBe('0px');
+            expect(settingsGeometry!.navigation).toEqual(groupsGeometry!.navigation);
+
+            const documentHeight = await authenticatedPage.evaluate(() => document.documentElement.scrollHeight);
+            expect(documentHeight).toBeGreaterThan(viewport.height);
+            const footer = authenticatedPage.locator('.account-footer-actions');
+            await footer.scrollIntoViewIfNeeded();
+            const footerBounds = await footer.boundingBox();
+            expect(footerBounds).not.toBeNull();
+            expect(footerBounds!.y).toBeGreaterThanOrEqual(0);
+            expect(footerBounds!.y + footerBounds!.height).toBeLessThanOrEqual(viewport.height);
+        }
+    });
+
     test('group join page form fits within viewport', async ({ authenticatedPage }) => {
         await authenticatedPage.goto('/group/join');
         await expect(authenticatedPage.locator('.group-join-container')).toBeVisible();
@@ -163,7 +260,8 @@ test.describe('Group responsive overflow', () => {
         expect(formBox).not.toBeNull();
         const viewport = authenticatedPage.viewportSize();
         expect(viewport).not.toBeNull();
-        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(formBox!.x).toBeGreaterThanOrEqual(12);
+        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width - 12);
     });
 
     test('group create page form fits within viewport', async ({ authenticatedPage }) => {
@@ -175,7 +273,8 @@ test.describe('Group responsive overflow', () => {
         expect(formBox).not.toBeNull();
         const viewport = authenticatedPage.viewportSize();
         expect(viewport).not.toBeNull();
-        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(formBox!.x).toBeGreaterThanOrEqual(12);
+        expect(formBox!.x + formBox!.width).toBeLessThanOrEqual(viewport!.width - 12);
     });
 
     test('group view layout has no horizontal overflow', async ({ browser, contextOptions }) => {

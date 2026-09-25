@@ -6,14 +6,17 @@ and submit one server-timed guess.
 
 ## Audience guide
 
-| Role                    | Recommended reading                                                                                                                                                                                                        |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Operator / deployer** | [deployment](deployment.md), [configuration](configuration.md), [operations](operations.md), [video-processing](video-processing.md), [database-migrations](database-migrations.md), [troubleshooting](troubleshooting.md) |
-| **Developer**           | [local-development](local-development.md), [architecture](architecture.md), [testing](testing.md), [configuration](configuration.md)                                                                                       |
-| **API consumer**        | [api](api.md), [authentication](authentication.md), [openapi.yaml](openapi.yaml)                                                                                                                                           |
-| **Security reviewer**   | [security-and-privacy](security-and-privacy.md), [authentication](authentication.md), [architecture](architecture.md)                                                                                                      |
+| Role                    | Recommended reading                                                                                                                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Operator / deployer** | [deployment](deployment.md), [configuration](configuration.md), [operations](operations.md), [video-processing](video-processing.md), [database-migrations](database-migrations.md), [troubleshooting](troubleshooting.md), [data protection](data-protection.md) |
+| **Developer**           | [local-development](local-development.md), [architecture](architecture.md), [testing](testing.md), [configuration](configuration.md)                                                                                                                              |
+| **API consumer**        | [api](api.md), [authentication](authentication.md), [openapi.yaml](openapi.yaml)                                                                                                                                                                                  |
+| **Security reviewer**   | [security-and-privacy](security-and-privacy.md), [authentication](authentication.md), [architecture](architecture.md)                                                                                                                                             |
 
 ## Documentation map
+
+- [Public challenge feed](public-feed.md) — publishing, guessing, reactions,
+  comments, storage, and rollout
 
 - [Architecture](architecture.md) — system components, trust boundaries, request
   flows
@@ -21,14 +24,16 @@ and submit one server-timed guess.
   matrix, canonical commands, invariants, and compatibility ledger for AI agents
 - [Local development](local-development.md) — prerequisites, `make dev`, hot
   reload
+- [Mobile application](mobile.md) — Capacitor architecture, Android build and
+  emulator testing, and the iOS enablement path
 - [Configuration](configuration.md) — every environment variable, defaults,
   validation
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility
 - [Photo filters](photo-filters.md) — camera filters, capture behavior, and
   permissions
 - [Rank badges](rank-badges.md) — progression badge artwork and global rank
-- [Custom UI icons](custom-icons.md) — branded icon artwork for camera controls,
-  lens picker, and leaderboard medals
+- [Custom UI icons](custom-icons.md) — branded artwork for camera controls,
+  reactions, feature actions, lens picker, and leaderboard medals
 - [Authentication](authentication.md) — access/refresh tokens, verification,
   account deletion
 - [API reference](api.md) — endpoint conventions, error format, rate limits
@@ -36,6 +41,10 @@ and submit one server-timed guess.
 - [Testing](testing.md) — unit, integration, E2E, CI equivalence
 - [Deployment](deployment.md) — images, topologies, upgrade, rollback
 - [Operations](operations.md) — health, metrics, backups, incident response
+- [Data protection](data-protection.md) — GDPR register, processors and
+  transfers, data-subject requests, breach response
+- [Monitoring runbook](runbooks/monitoring.md) — the self-hosted watch stack,
+  capacity gate, setup, alerts, backup, and rollback
 - [Video processing](video-processing.md) — async video pipeline, quarantine,
   transcoding, cleanup
 - [LLM-driven QA agent](qa-agent.md) — source-blind exploratory release
@@ -48,14 +57,23 @@ and submit one server-timed guess.
 - [Troubleshooting](troubleshooting.md) — frequent issues and solutions
 - [PWA and Web Push](pwa-and-push.md) — installable app, push notifications, iOS
   guidance, VAPID key generation
+- [Google Play developer account runbook](runbooks/google-play-console.md) —
+  Android bundle publishing, Play API access, testing tracks, policy forms, and
+  account maintenance
 - [Hosted deployment runbook](runbooks/hosted-deployment.md) — Hetzner,
   Cloudflare, CI/CD, launch, and recovery checklist
+- [Google Play review access runbook](runbooks/google-play-review-access.md) —
+  dedicated reviewer account, keyring storage, and Play Console instructions
 - [Cloudflare Access service-token runbook](runbooks/access-tokens.md) — three
   isolated service tokens, GitHub secrets, rotation
 - [HSTS rollout runbook](runbooks/hsts-rollout.md) — staged HSTS max-age
   increase after seven green days
 - [DMARC rollout runbook](runbooks/dmarc-rollout.md) — p=none to reject,
   advancing only while aligned mail passes
+- [Data breach response runbook](runbooks/data-breach-response.md) — assessment,
+  72-hour CNIL notification, user information, and post-incident review
+- [Cookie and storage audit runbook](runbooks/cookie-storage-audit.md) —
+  recurring production audit and the consent-banner decision rule
 - [Runtime hardening runbook](runbooks/runtime-hardening.md) — container
   hardening, mandatory rehearsal, host hash verification, closure checklist
 - [Social-auth rollout runbook](runbooks/social-auth-rollout.md) — Keycloak
@@ -69,18 +87,21 @@ and submit one server-timed guess.
 Each subject has exactly one canonical owner document; every other page routes
 to it instead of restating it:
 
-| Subject                               | Canonical owner                                                 |
-| ------------------------------------- | --------------------------------------------------------------- |
-| Deployment, upgrades, rollback        | [deployment](deployment.md)                                     |
-| Environment variables and defaults    | [configuration](configuration.md)                               |
-| Health, metrics, backups, incidents   | [operations](operations.md)                                     |
-| Gates, test strategy, local/CI parity | [testing](testing.md)                                           |
-| API conventions, errors, rate limits  | [api](api.md) (machine contract: [openapi.yaml](openapi.yaml))  |
-| Package map and agent guidance        | [agent-engineering](agent-engineering.md)                       |
-| Local development workflow            | [local-development](local-development.md)                       |
-| Troubleshooting                       | [troubleshooting](troubleshooting.md)                           |
-| Hosted deployment checklist           | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)     |
-| Social-auth account migration         | [runbooks/social-auth-rollout](runbooks/social-auth-rollout.md) |
+| Subject                                 | Canonical owner                                                             |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| Deployment, upgrades, rollback          | [deployment](deployment.md)                                                 |
+| Environment variables and defaults      | [configuration](configuration.md)                                           |
+| Health, metrics, backups, incidents     | [operations](operations.md)                                                 |
+| GDPR register, processors, DSRs, breach | [data-protection](data-protection.md)                                       |
+| Gates, test strategy, local/CI parity   | [testing](testing.md)                                                       |
+| API conventions, errors, rate limits    | [api](api.md) (machine contract: [openapi.yaml](openapi.yaml))              |
+| Package map and agent guidance          | [agent-engineering](agent-engineering.md)                                   |
+| Local development workflow              | [local-development](local-development.md)                                   |
+| Troubleshooting                         | [troubleshooting](troubleshooting.md)                                       |
+| Hosted deployment checklist             | [runbooks/hosted-deployment](runbooks/hosted-deployment.md)                 |
+| Google Play account and Android store   | [runbooks/google-play-console](runbooks/google-play-console.md)             |
+| Google Play review access               | [runbooks/google-play-review-access](runbooks/google-play-review-access.md) |
+| Social-auth account migration           | [runbooks/social-auth-rollout](runbooks/social-auth-rollout.md)             |
 
 Pages that used to duplicate a canonical subject route to it instead. Historical
 incident records live under `docs/runbooks/` and declare `status: archival`;

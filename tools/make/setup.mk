@@ -9,12 +9,15 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
-COMPOSE_IDENTITY := docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
+COMPOSE_IDENTITY := GEOGUESSME_KEYCLOAK_IMAGE=geoguessme-keycloak:local docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
 COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
 TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
-TOOLS_USER := --user $(shell id -u):$(shell id -g)
+TOOLS_UID := $(shell id -u)
+TOOLS_GID := $(shell id -g)
+export TOOLS_UID TOOLS_GID
+TOOLS_USER := --user $(TOOLS_UID):$(TOOLS_GID)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
 ARTIFACTS_USER := --user 0:0
@@ -28,7 +31,13 @@ QA_REPORT_DIR ?= qa-artifacts
 # the extended nightly session.
 QA_BUDGET ?= fast
 QA_RUNTIME ?= codex
-QA_BUILD_SHA ?= $(shell git rev-parse origin/dev 2>/dev/null || git rev-parse HEAD)
+QA_BASE_URL ?= https://dev.geoguessme.com
+# Callers must supply the deployed SHA; origin/dev can be ahead of deployment.
+QA_BUILD_SHA ?=
+# Pass caller-supplied QA secrets through the process environment, never in a
+# printed recipe command. The local runner also loads missing values from the
+# shared operator keyring.
+export QA_ACCOUNT_PASSWORD QA_MAILBOX_ACCESS_CLIENT_ID QA_MAILBOX_ACCESS_CLIENT_SECRET
 
 # Optional Docker build flags for CI cache integration (type=local or type=gha).
 # Unset locally so that builds use the default Docker daemon cache.
@@ -59,7 +68,7 @@ bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and se
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy cloudflared terraform
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
@@ -68,7 +77,7 @@ bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR ga
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy terraform
 	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
 bootstrap-integration: ## Prepare only the Go tools needed by backend integration CI.
 	@mkdir -p frontend/node_modules
@@ -81,7 +90,12 @@ bootstrap-e2e: ## Prepare only the Node and Playwright tools needed by E2E CI.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build node-tools
 	$(COMPOSE_TOOLS) pull playwright
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(shell id -u):$(shell id -g) /workspace/frontend/node_modules /npm-cache'
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
+
+bootstrap-mobile: ## Prepare only the Node and Android tools needed by mobile E2E CI.
+	@mkdir -p frontend/node_modules
+	$(COMPOSE_TOOLS) build mobile-tools node-tools
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
@@ -166,7 +180,7 @@ identity-config: ## Validate the shared auth.geoguessme.com identity stack.
 	@test -f deployment/env/identity.env || { echo 'deployment/env/identity.env is required'; exit 2; }
 	$(COMPOSE_IDENTITY) config --quiet
 
-identity-up: identity-config ## Start shared Keycloak and its database.
+identity-up: identity-config build-keycloak-image ## Start shared Keycloak and its database.
 	$(COMPOSE_IDENTITY) up -d --wait keycloak-db keycloak
 	$(COMPOSE_IDENTITY) run --rm --no-deps keycloak-config
 

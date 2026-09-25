@@ -3,11 +3,18 @@ package groups
 import (
 	"context"
 	"errors"
+	"time"
 
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository/groups/atlas"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// ChallengeMap returns a viewer-filtered page independent of chat pagination.
+func (r *Repository) ChallengeMap(ctx context.Context, groupID, viewerID, cursor string, now time.Time, hideDuration time.Duration) (atlas.Page, error) {
+	return atlas.List(ctx, r.pool, groupID, viewerID, cursor, now, hideDuration)
+}
 
 // Create inserts a group and, when userID is non-empty, its creator's
 // membership in a single transaction.

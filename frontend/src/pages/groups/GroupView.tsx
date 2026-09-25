@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api, { getAPIErrorMessage } from '../../api';
+import api, { getAPIErrorMessage, groupsAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { Group, Message } from '../../types';
 import Chat from '../../components/chat/Chat';
@@ -11,12 +11,11 @@ import Camera from '../../components/camera/Camera';
 import Game from '../../components/game/Game';
 import SettingsModal from '../../components/settings/SettingsModal';
 import TabBar, { type TabType } from '../../components/navigation/TabBar';
-import Avatar from '../../components/common/Avatar';
+import GroupHeader, { GroupHeaderProfile } from '../../components/navigation/GroupHeader';
 import { useGroupMessages } from '../../hooks/useGroupMessages';
 import { useGroupParty } from '../../hooks/useGroupParty';
 import PartyButton from './PartyButton';
-import Icon from '../../components/ui/Icon';
-import FullScreenImage from '../../components/ui/FullScreenImage';
+import GroupGlobe from '../../components/globe/GroupGlobe';
 import './GroupView.css';
 
 function isForbiddenError(error: unknown): boolean {
@@ -35,7 +34,9 @@ export default function GroupView() {
     }>({ id: '', group: null, error: '', accessDenied: false });
     const [gameMessage, setGameMessage] = useState<Message | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [globeGroupID, setGlobeGroupID] = useState<string | null>(null);
     const [groupPhotoRefreshKey, setGroupPhotoRefreshKey] = useState(0);
+    const [inboxState, setInboxState] = useState({ id: '', error: '' });
     const group = groupState.id === id ? groupState.group : null;
     const groupError = groupState.id === id ? groupState.error : '';
     const groupAccessDenied = groupState.id === id && groupState.accessDenied;
@@ -77,6 +78,13 @@ export default function GroupView() {
 
     useEffect(() => {
         if (!id) return;
+        void groupsAPI.markRead(id).catch((requestError: unknown) => {
+            setInboxState({ id, error: getAPIErrorMessage(requestError, 'Unable to update group inbox.') });
+        });
+    }, [id]);
+
+    useEffect(() => {
+        if (!id) return;
         let active = true;
         void api
             .get<Group>('/group/details', { params: { id } })
@@ -103,7 +111,32 @@ export default function GroupView() {
         prefetchLeaderboard(user.id, id);
     }, [groupError, id, user]);
 
-    const error = groupError || messagesError;
+    const inboxError = inboxState.id === id ? inboxState.error : '';
+    const error = groupError || messagesError || inboxError;
+    const challengeRevision = [...messages].reverse().find((message) => message.kind === 'challenge')?.id ?? '';
+    const groupHeaderActions = (includeGroupActions: boolean) => (
+        <>
+            {includeGroupActions && id && (
+                <PartyButton groupId={id} status={partyStatus} onStarted={refreshParty} onRefresh={refreshParty} />
+            )}
+            {user && <GroupHeaderProfile userID={user.id} avatar={user.avatar ?? ''} username={user.username} />}
+            {includeGroupActions && id && group && activeTab === 'chat' && (
+                <button
+                    className="settings-btn"
+                    onClick={() => setGlobeGroupID(id)}
+                    aria-label="Open group globe"
+                    title="Group globe"
+                >
+                    <img src="/globe_feature_icon.png" alt="" />
+                </button>
+            )}
+            {includeGroupActions && group && !groupError && (
+                <button className="settings-btn" onClick={() => setSettingsOpen(true)} aria-label="Open group settings">
+                    <img src="/settings_gear_icon.png" alt="" />
+                </button>
+            )}
+        </>
+    );
 
     if (!id) return <div>Invalid Group ID</div>;
     if (groupError) {
@@ -125,47 +158,14 @@ export default function GroupView() {
     return (
         <>
             <div className="group-view" aria-hidden={gameMessage !== null}>
-                <div className="group-header">
-                    <div className="header-content">
-                        <Link to="/groups" className="back-btn">
-                            <Icon name="arrow-left" className="back-arrow-icon" />
-                            <span className="visually-hidden">Back to groups</span>
-                        </Link>
-                        <FullScreenImage
-                            src={groupPhotoURL}
-                            alt={`${group?.name ?? 'Group'} group photo`}
-                            className="header-logo-toggle"
-                        >
-                            <img src={groupPhotoURL} alt="" className="header-logo" />
-                        </FullScreenImage>
-                        <div className="group-title-block">
-                            <span>Group</span>
-                            <h1 className="group-name">{group?.name ?? 'Group'}</h1>
-                        </div>
-                        {id && (
-                            <PartyButton
-                                groupId={id}
-                                status={partyStatus}
-                                onStarted={refreshParty}
-                                onRefresh={refreshParty}
-                            />
-                        )}
-                        {user && (
-                            <Link to="/profile" className="header-profile-link" aria-label="Open your profile">
-                                <Avatar userID={user.id} avatar={user.avatar} username={user.username} />
-                            </Link>
-                        )}
-                        {group && !groupError && (
-                            <button
-                                className="settings-btn"
-                                onClick={() => setSettingsOpen(true)}
-                                aria-label="Open group settings"
-                            >
-                                <img src="/settings_gear_icon.png" alt="" />
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <GroupHeader
+                    groupName={group?.name ?? 'Group'}
+                    photoURL={groupPhotoURL}
+                    photoAlt={`${group?.name ?? 'Group'} group photo`}
+                    previewPhoto
+                    backHref="/groups"
+                    actions={groupHeaderActions(true)}
+                />
                 {error && (
                     <div className="error-message" role="alert">
                         {error}
@@ -212,6 +212,21 @@ export default function GroupView() {
                 <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
             {partyStatus?.active && <div className="party-border" aria-hidden="true" />}
+            {group && globeGroupID === id && (
+                <GroupGlobe
+                    key={id}
+                    groupID={id}
+                    groupName={group.name}
+                    groupPhotoURL={groupPhotoURL}
+                    headerActions={groupHeaderActions(false)}
+                    challengeRevision={challengeRevision}
+                    onClose={() => setGlobeGroupID(null)}
+                    onChallenge={(message) => {
+                        setGlobeGroupID(null);
+                        setGameMessage(message);
+                    }}
+                />
+            )}
             <Game
                 gameMessage={gameMessage}
                 onChallengeStatusChange={updateChallengeStatus}

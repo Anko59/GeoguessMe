@@ -34,28 +34,50 @@ product link.
 
 The same MCP server exposes a high-level disposable mailbox contract:
 `mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
-default provider is Mail.tm, which requires no operator mailbox credential; the
+adapter default is Mail.tm, which requires no operator mailbox credential; the
 gateway keeps provider tokens and mailbox passwords out of the model output, and
 tokenized product links are opened server-side without being returned or
 recorded. Mailbox accounts are deleted when the MCP process exits. This is
-intentionally limited to throwaway QA mailboxes; it must not be used for real
-user mail. The provider's public API is documented at
+limited to throwaway QA mailboxes and adapter development; it must not be used
+for real user mail. Full and nightly hosted runs require the controlled
+Cloudflare relay described below and stop before starting the LLM when it is
+absent. The provider's public API is documented at
 [Mail.tm API documentation](https://docs.mail.tm/).
 
 For hosted mail providers that do not deliver to disposable domains, the gateway
-also supports an Access-protected HTTP mailbox relay with
-`QA_MAILBOX_PROVIDER=cloudflare`, `QA_MAILBOX_API_URL`, and
-`QA_MAILBOX_ADDRESS`. For a release run, also provide the relay zone and the
-dedicated seed rule through `QA_MAILBOX_ZONE_ID` and
-`QA_MAILBOX_ROUTING_RULE_ID`. The local runner creates a temporary literal Email
-Routing rule with a unique address derived from the seed, then removes that rule
-on exit. This prevents a previously verified QA address from making a fresh run
-appear to be an application verification failure. The relay must retain only
-short-lived test messages. Access credentials are passed to the mailbox gateway
-from the existing short-lived QA Access session; they are never placed in the
-prompt, report, or mailbox output. A hosted run must not claim email coverage
-until `mailbox_search`, `mailbox_read`, and `mailbox_open_link` succeed through
-the configured provider.
+also supports an HTTP mailbox relay with `QA_MAILBOX_PROVIDER=cloudflare`,
+`QA_MAILBOX_API_URL`, and `QA_MAILBOX_ADDRESS`. On deployed dev, the runner
+defaults these to the dedicated `qa-release-20260815-77679@geoguessme.com` seed
+rule and `https://dev.geoguessme.com/_qa-mailbox`. Cloudflare Email Routing must
+have subaddressing enabled for the zone. Each run derives a fresh
+`seed+run-...@geoguessme.com` address. Cloudflare matches it against the
+existing seed rule, while the Worker stores messages under the full tagged
+recipient. No routing-rule API mutation or Email Routing API token permission is
+needed. The unique address prevents a previously verified QA account from
+masking an application verification failure. The relay retains messages for one
+hour. When its API shares the app's origin, the runner uses the same short-lived
+`QA_ACCESS_*` session for both. For a relay on a different origin, its Access
+credentials must be supplied separately through `QA_MAILBOX_ACCESS_CLIENT_ID`
+and `QA_MAILBOX_ACCESS_CLIENT_SECRET`; app Access credentials are never sent to
+another origin. When identity email links use a separate identity origin, allow
+only that origin for server-side link opening with
+`QA_MAILBOX_ALLOWED_LINK_ORIGINS`, for example `https://auth.geoguessme.com`;
+links to other origins remain blocked. An unprotected relay must use a unique
+per-run address and contain only disposable QA messages. A hosted run must not
+claim email coverage until `mailbox_search`, `mailbox_read`, and
+`mailbox_open_link` succeed through the configured provider. The local
+`CLOUDFLARE_API_TOKEN` needs the Access permissions used by the browser; it does
+not need Email Routing Rules access. A visible “verification sent” page proves
+only that the identity service accepted the request; it is not delivery
+evidence. During the September 2026 recovery, the public Mail.tm fallback
+reached that page but received no message. Keycloak mail uses multipart and
+quoted-printable encoding; the gateway decodes both before redacting previews
+and opening links. It classifies Keycloak action-token links by message subject
+so verification and password reset remain distinct. On September 25, a full
+diagnostic run against then-deployed revision
+`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and both reset
+flows through the controlled relay. Release evidence still requires a full run
+against the actual release candidate after that candidate deploys.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -90,18 +112,43 @@ runtime must already be authenticated before running the agent.
 The browser target is the deployed dev environment:
 
 ```text
-export QA_BASE_URL=https://dev.geoguessme.com
-make qa-agent-full QA_REPORT_DIR=qa-artifacts
+make qa-agent-full QA_BUILD_SHA=FULL_DEPLOYED_DEV_SHA
 ```
 
-The local runner uses the existing `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` to create a one-hour service token and a policy scoped
-only to the matching Access application, then removes both on exit. Existing
+The local runner loads the existing `CLOUDFLARE_API_TOKEN` from the operator
+Secret Service keyring when it is not already in the environment, and uses the
+dev account ID to create a one-hour service token and a policy scoped only to
+the matching Access application, then removes both on exit. Existing
 `QA_ACCESS_CLIENT_ID` and `QA_ACCESS_CLIENT_SECRET` values are also accepted
-when an operator already has them. Access values are passed to the browser
-context only; they are not put in the prompt or report. The default runtime is
-`codex`; select Pi explicitly with `QA_RUNTIME=pi`. Use `make qa-agent-fast` for
-a short investigation or `make qa-agent-nightly` for the extended budget.
+when an operator already has a token scoped to that dev app. General deployment
+`CF_ACCESS_*` credentials are not reused because they may authorize a different
+application. Access values are passed to the browser context only; they are not
+put in the prompt or report. The default runtime is `codex`; select Pi
+explicitly with `QA_RUNTIME=pi`. Use `make qa-agent-fast` for a short
+investigation or `make qa-agent-nightly` for the extended budget. Set
+`QA_AGENT_FOCUS` to prioritize a feature area for that run, for example
+`QA_AGENT_FOCUS="group invitations and globe"`. For concurrent runs, bootstrap
+the browser dependencies once with `make bootstrap-e2e`, then pass
+`QA_SKIP_BOOTSTRAP=1` to each QA target so they do not update the shared
+Playwright dependency volume at the same time.
+
+The dedicated account-pool password is an operator secret stored in the local
+Secret Service keyring, never in the repository. Its canonical attributes are
+`service=codex-api`, `provider=qa`, `project=geoguessme`, and
+`name=QA_ACCOUNT_PASSWORD`. The runner looks it up directly when the environment
+does not supply it, so a fresh worktree does not need a copy of the ignored
+`.envrc`. That file remains an optional operator convenience. Verify only that
+the value is present, without printing it:
+
+```text
+test -n "$(secret-tool lookup service codex-api provider qa project geoguessme name QA_ACCOUNT_PASSWORD)"
+```
+
+The runner stops before starting an LLM or browser when this credential is
+missing. The three usernames are `qa_release_owner`, `qa_release_member`, and
+`qa_release_outsider`; they are persistent dev-only accounts. Rotate all three
+password hashes together and update the one keyring entry in the same operation.
+Do not substitute an interactive Cloudflare email login for this credential.
 
 ## Budget tiers
 
@@ -116,19 +163,19 @@ The default runner rejects HTTP and localhost targets so a release report cannot
 accidentally describe a local stack. `QA_ALLOW_LOCAL=1` is reserved for
 developing the browser adapter itself and is not release evidence.
 
-Full and nightly runs use the dedicated account pool for an owner, member, and
-outsider, plus a separate mailbox-backed account for authentication and
-recovery. They then use the opaque invite handoff to exercise invitation, group
-conversation, and authorization boundaries in separate browser sessions. When
-`QA_ACCOUNT_PASSWORD` is supplied, the role usernames default to
-`qa_release_owner`, `qa_release_member`, and `qa_release_outsider` and may be
-overridden with the corresponding `QA_ACCOUNT_*_USERNAME` variables. When the
-password is absent, `qa_account_login` provisions fresh email-free QA accounts
-through the visible signup flow and retains their generated credentials only in
-the browser provider. In both modes, credentials are never placed in the prompt,
-report, or CI. If account provisioning or the configured mailbox provider is
-unavailable, the affected journey is reported as blocked rather than silently
-treated as passed.
+All runs require the dedicated account pool. Full and nightly runs require three
+roles: an owner, member, and outsider. They then use the opaque invite handoff
+to exercise invitation, group conversation, and authorization boundaries in
+separate browser sessions. Pool usernames default to `qa_release_owner`,
+`qa_release_member`, and `qa_release_outsider` and may be overridden with the
+corresponding `QA_ACCOUNT_*_USERNAME` variables. Full and nightly runs call
+`qa_email_account_signup` once for the owner, then use pool accounts through
+`qa_account_login` for the member and outsider. Complete identity-provider email
+verification for the mailbox-backed owner before using it. In both modes,
+credentials are never placed in the prompt, report, or CI. If account
+provisioning, verification, or the configured mailbox provider is unavailable,
+the affected journey is reported as blocked rather than silently treated as
+passed.
 
 The report is written to `QA_REPORT_DIR/qa-report.json` with mode `0600` and
 contains the target origin/path, the supplied deployed revision, exercised
@@ -148,10 +195,11 @@ or `FINDINGS` status cannot override that gate.
 ## Release evidence
 
 Run the agent after the development deployment is healthy, with `QA_BUILD_SHA`
-set to the exact deployed `dev` revision (the Make target defaults it to
-`origin/dev`). Review the generated report and retain it with the release
-record. Reproducible `BUG` findings block promotion until the application is
-fixed and the agent is rerun against the new deployed revision.
+set to the exact deployed `dev` revision. The Make target rejects a missing SHA:
+`origin/dev` may be ahead when a deployment fails. Review the generated report
+and retain it with the release record. Reproducible `BUG` findings block
+promotion until the application is fixed and the agent is rerun against the new
+deployed revision.
 
 This is a local acceptance step, not a GitHub Actions workflow. CI does not
 receive LLM credentials and the release workflow does not pretend that a missing

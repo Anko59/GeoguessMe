@@ -7,7 +7,7 @@ the artwork is produced and maintained.
 
 ## Icon sets
 
-### Camera controls — `frontend/public/ui/`
+### Camera and utility controls — `frontend/public/ui/`
 
 The camera composer's utility buttons each use a dedicated brand icon on a dark
 glass pill or in the options menu:
@@ -28,6 +28,19 @@ The leaderboard medals keep the protected ranking colors: gold (`#FFD700`),
 silver (`#C0C0C0`), and bronze (`#CD7F32`) accents are preserved, and the
 first-place bar keeps the orange-yellow gradient, so the data visualization
 contract in `frontend/public/Identity.md` is unchanged.
+
+### Feature artwork — `frontend/public/`
+
+The group header uses two additional branded illustrations:
+
+| Asset                    | Control                          |
+| ------------------------ | -------------------------------- |
+| `globe_feature_icon.png` | Open the group's challenge globe |
+| `party_mode_icon.png`    | Start or show Party Time         |
+
+These feature icons use the same flat, rounded construction as the first two
+generations of artwork. They are kept separate from the compact utility icons
+and the chat reaction vocabulary, even when they share the same brand palette.
 
 ### Chat reactions — `frontend/public/reactions/`
 
@@ -50,29 +63,23 @@ are untouched — only the picker icons were replaced.
 
 ## Artwork generation
 
-All icons are generated with the `minimax/image-01` model on Replicate using a
-single style recipe so the set looks consistent, the same recipe used for the
-[rank badges](rank-badges.md):
+The committed artwork follows a shared style recipe inspired by the original
+brand illustrations and the flatter second-generation assets:
 
 - flat cartoon vector icon, centered, symmetric, clean edges
 - vibrant orange-to-yellow and blue-to-green brand gradients with deep navy
   (`#1A237E`) outlines
-- isolated on a pure white background
+- isolated with a transparent background
 - no text, no letters, no numbers, no watermark
 - no border, no frame, no drop shadow
 
-The Replicate token is read from `REPLICATE_API_TOKEN` in the developer's shell
-environment. Generation is a one-time manual step, not part of the build: the
-finished transparent PNGs are committed as 256×256 assets.
+Generation is a one-time manual step, not part of the build. Before committing,
+each replacement is trimmed to its solid content, padded with a uniform
+transparent margin, centered, resized to 256×256, and checked for preserved
+alpha.
 
-Because `image-01` outputs JPEG (no alpha channel), generated images are
-post-processed once before being committed: a two-pass border flood fill removes
-the white background and the JPEG compression ring around the artwork,
-near-white pixels adjacent to transparency are snapped to alpha 0, enclosed
-near-white regions above a size threshold are removed, and the result is trimmed
-to its solid content, padded with a uniform margin, centered, and resized to
-256×256. If a generation comes back with a gray vignette instead of a white
-background it must be regenerated with the same post-processing applied.
+If a generation contains a background halo or gray vignette, it must be
+regenerated or cleaned before review.
 
 ## Display rules
 
@@ -82,6 +89,9 @@ background it must be regenerated with the same post-processing applied.
 - Medals render at 1.6rem, with the gold medal slightly larger (1.9rem) to
   preserve the first-place emphasis.
 - The crown renders inline at 1.15rem in the profile progress text.
+- Feature artwork renders at the size required by its owning control; the
+  compact header controls use the same 44px hit area and accessible labels as
+  before.
 
 ## Maintenance
 

@@ -10,6 +10,12 @@ prompt_file="$root_dir/.agents/qa/AGENT.md"
 prompt=$(<"$prompt_file")
 prompt+=$'\n\nRun context:\n- Target deployed URL: '"$QA_BASE_URL"$'\n- Deployed revision evidence: '"$QA_BUILD_SHA"$'\n- Budget: '"$QA_BUDGET"$'\n\nUse only the qa-browser MCP tools. Start with session_create and finish with qa_finish. Do not use any built-in source, shell, filesystem, HTTP, or web tools even if they are offered by the runtime.'
 
+if [[ -n "${QA_AGENT_FOCUS:-}" ]]; then
+    prompt+=$'\n\nPriority focus for this run: '
+    prompt+="$QA_AGENT_FOCUS"
+    prompt+=$'\nTest this area first and record concrete issues with reproducible steps. Continue any other journeys that are practical within the budget.'
+fi
+
 # Codex does not inherit the caller's environment into a stdio MCP server.
 # Pass the short-lived values through a private, temporary env file instead of
 # putting credentials in Codex's process arguments.
@@ -41,8 +47,10 @@ trap mcp_cleanup_on_exit EXIT
 
 for env_name in \
     QA_BASE_URL QA_BUILD_SHA QA_REPORT_DIR QA_RUNTIME QA_BUDGET \
-    QA_ACCESS_CLIENT_ID QA_ACCESS_CLIENT_SECRET QA_MAILBOX_PROVIDER \
-    QA_MAILBOX_API_URL QA_MAILBOX_ADDRESS QA_MAILBOX_ZONE_ID QA_MAILBOX_ROUTING_RULE_ID \
+    QA_ACCESS_CLIENT_ID QA_ACCESS_CLIENT_SECRET QA_AGENT_FOCUS QA_MAILBOX_PROVIDER \
+    QA_MAILBOX_ACCESS_CLIENT_ID QA_MAILBOX_ACCESS_CLIENT_SECRET \
+    QA_MAILBOX_ALLOWED_LINK_ORIGINS \
+    QA_MAILBOX_API_URL QA_MAILBOX_ADDRESS \
     QA_FAKE_LATITUDE QA_FAKE_LONGITUDE QA_FAKE_LOCATION_ACCURACY \
     QA_ACCOUNT_PASSWORD QA_ACCOUNT_OWNER_USERNAME QA_ACCOUNT_MEMBER_USERNAME \
     QA_ACCOUNT_OUTSIDER_USERNAME; do

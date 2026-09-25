@@ -33,6 +33,30 @@ beforeEach(() => {
 });
 
 describe('Composer', () => {
+    it('grows for multiline drafts and shrinks when the draft gets shorter', () => {
+        render(
+            <Composer
+                wsRef={openSocket(vi.fn())}
+                groupID="group-1"
+                connectionStatus="connected"
+                replyingTo={null}
+                onCancelReply={vi.fn()}
+            />,
+        );
+        const textarea = screen.getByLabelText('Message') as HTMLTextAreaElement;
+        expect(textarea).toHaveAttribute('rows', '1');
+        Object.defineProperty(textarea, 'scrollHeight', {
+            configurable: true,
+            get: () => (textarea.value.includes('\n') ? 96 : 48),
+        });
+
+        fireEvent.change(textarea, { target: { value: 'first\nsecond' } });
+        expect(textarea.style.height).toBe('96px');
+
+        fireEvent.change(textarea, { target: { value: 'first' } });
+        expect(textarea.style.height).toBe('48px');
+    });
+
     it('sends the trimmed text over the socket', () => {
         const send = vi.fn();
         render(
@@ -48,6 +72,33 @@ describe('Composer', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
         expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'hi' }));
         expect(screen.getByLabelText('Message')).toHaveValue('');
+    });
+
+    it('keeps the keyboard return action available for line breaks and sends explicitly', () => {
+        const send = vi.fn();
+        render(
+            <Composer
+                wsRef={openSocket(send)}
+                groupID="group-1"
+                connectionStatus="connected"
+                replyingTo={null}
+                onCancelReply={vi.fn()}
+            />,
+        );
+        const textarea = screen.getByLabelText('Message');
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(send).not.toHaveBeenCalled();
+
+        // The browser owns inserting the newline into a textarea. The
+        // explicit send action must preserve that line break in the payload.
+        fireEvent.change(textarea, { target: { value: 'line one\nline two' } });
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
+        expect(send).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ content: 'line one\nline two' }));
     });
 
     it('attaches the reply target id when replying to a message', () => {

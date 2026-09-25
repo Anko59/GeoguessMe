@@ -6,9 +6,25 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/common.sh"
 
 environment=${1:-}
-validate_environment "$environment"
-require_secret_file "$environment"
-secret_file=$(environment_env_file "$environment")
+case "$environment" in
+    dev | production)
+        validate_environment "$environment"
+        require_secret_file "$environment"
+        secret_file=$(environment_env_file "$environment")
+        subject_environment=$environment
+        ;;
+    watch)
+        # Monitoring has no independent SMTP credential. Reuse the production
+        # alert transport, but keep the subject and body distinct so a failed
+        # watch check cannot be mistaken for an application check.
+        require_secret_file production
+        secret_file=$(environment_env_file production)
+        subject_environment='watch monitoring'
+        ;;
+    *)
+        die 'environment must be dev, production, or watch'
+        ;;
+esac
 
 value() {
     sed -n "s/^$1=//p" "$secret_file" | tail -1
@@ -29,9 +45,9 @@ trap 'rm -f "$message"' EXIT INT TERM
 {
     printf 'From: %s\r\n' "$sender"
     printf 'To: jeancollette138@gmail.com\r\n'
-    printf 'Subject: [GeoGuessMe] %s host check failed\r\n' "$environment"
+    printf 'Subject: [GeoGuessMe] %s host check failed\r\n' "$subject_environment"
     printf '\r\nThe %s host check failed at %s. Review the systemd journal and GitHub health workflow.\r\n' \
-        "$environment" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        "$subject_environment" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$message"
 
 curl --fail --silent --show-error --ssl-reqd \

@@ -1,11 +1,23 @@
 # GeoGuessMe privacy policy
 
-Last updated: 11 September 2026
+Last updated: 17 September 2026
 
 This policy applies to the GeoGuessMe website and Android app. The public
 version is available at <https://geoguessme.com/privacy>. It explains what we
-collect, why we use it, who can receive it, and how to request deletion. The app
-is GeoGuessMe, and privacy questions can be sent to `privacy@geoguessme.com`.
+collect, why we use it, who can receive it, how long we keep it, and how to
+exercise your rights. The app is GeoGuessMe, and privacy questions can be sent
+to `privacy@geoguessme.com`.
+
+## Who is responsible
+
+The data controller is the operator of GeoGuessMe, the service published at
+[geoguessme.com](https://geoguessme.com). The operator identity, publication
+details, and hosting providers are listed on the legal notice page at
+<https://geoguessme.com/legal>.
+
+For any privacy question or request — access, correction, deletion, restriction,
+objection, or portability — contact `privacy@geoguessme.com`. You can also
+delete your account yourself from **Settings** in the app.
 
 ## What we collect
 
@@ -35,10 +47,15 @@ limited technical information needed to secure and operate the service.
 
 When you choose to create a challenge, GeoGuessMe can use your camera,
 microphone for a recording, and device location. The operating system or browser
-asks for these permissions, and you can deny them. Camera frames and selected
-files stay on your device until you press **Send**. Visual effects are processed
-on the device. Uploaded images are normalized and EXIF metadata, including
-embedded GPS coordinates, is removed.
+asks for these permissions, and you can deny them.
+
+- Location is read once, at the moment you create a challenge, and attached to
+  that challenge only. The app does not track your position in the background.
+- Camera frames and selected files stay on your device until you press **Send**.
+- Visual effects, including optional face-tracking lenses, are processed on your
+  device. Face geometry is never uploaded or stored by GeoGuessMe.
+- Uploaded images are normalized and EXIF metadata, including embedded GPS
+  coordinates, is removed before storage.
 
 ### Technical and notification data
 
@@ -51,23 +68,28 @@ Our hosting and security systems may process an IP address, browser or device
 type, timestamps, and error information to deliver the service and prevent
 abuse. GeoGuessMe does not use this information to build advertising profiles.
 
-## How we use information
+## Why we use information, and on what legal basis
 
-We use information to:
+For people in the European Union, we rely on the following legal bases under the
+GDPR:
 
-- authenticate users, maintain sessions, verify email, and recover accounts;
-- create groups, deliver invitations, provide chat, and show the game to the
-  right members;
-- process challenges, protect uploaded media, calculate scores, and show maps
-  and results;
-- deliver a notification when a user has enabled notifications for a group;
-- detect abuse, rate-limit requests, troubleshoot failures, and secure the
-  service; and
-- respond to privacy, support, account-access, and deletion requests.
+| Purpose                                                                                                                                     | Legal basis                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Creating and operating your account, keeping you signed in, verifying your email, and recovering your account                               | Performance of the service (Art. 6(1)(b))               |
+| Providing the game: groups, chat, challenges, scoring, maps, and showing results to the right members                                       | Performance of the service (Art. 6(1)(b))               |
+| Camera, microphone, and location capture for a challenge you choose to create                                                               | Performance of the service (Art. 6(1)(b)), kept minimal |
+| Optional face-tracking lenses                                                                                                               | Your consent, on-device only (Art. 6(1)(a))             |
+| Delivering Web Push notifications you have enabled                                                                                          | Your consent (Art. 6(1)(a))                             |
+| Securing the service: rate limiting, abuse and fraud prevention, debugging, and keeping unauthorized people out of private groups and media | Legitimate interests (Art. 6(1)(f))                     |
+| Complying with legal requests and defending legal claims                                                                                    | Legal obligation or legitimate interests                |
 
-GeoGuessMe does not sell or rent personal data to data brokers, use it for
-targeted advertising, or use camera frames for facial-recognition
-identification.
+Where we rely on consent, you can withdraw it at any time: turn off
+notifications in the app or your device settings, and deny or revoke camera,
+microphone, or location permission in your device settings. Withdrawing consent
+does not affect processing that already happened.
+
+We do not sell or rent personal data to data brokers, use it for targeted
+advertising, or use camera frames for facial-recognition identification.
 
 ## Sharing and service providers
 
@@ -94,16 +116,43 @@ We may disclose information to comply with a valid legal request, enforce our
 terms, investigate fraud or abuse, or protect the rights and safety of users and
 the service. We do not sell personal information.
 
-## Retention
+## International transfers
 
-- Account and group data is kept until the account is deleted or the data is no
-  longer needed to provide the service.
-- Challenge media is kept for the configured media-retention period, currently
-  30 days by default, and then removed from active object storage.
-- Scores and limited challenge metadata may remain after the original media is
-  removed.
-- Expired sessions, verification tokens, password-reset tokens, and WebSocket
-  tickets are cleaned up automatically.
+The application and database servers run in the European Union (Hetzner Cloud).
+Some providers operate global networks that may involve transfers outside the
+European Economic Area:
+
+- Cloudflare delivers network protection and object storage through a global
+  network and is certified under the EU-U.S. Data Privacy Framework where that
+  framework applies; otherwise transfers rely on the European Commission's
+  Standard Contractual Clauses.
+- Brevo processes transactional email in the European Union.
+- If you enable Web Push, your browser's push service delivers encrypted
+  notification payloads; the notification content is end-to-end encrypted, so
+  the push service does not read it.
+
+Where a provider is established outside the EEA and is not covered by an
+adequacy decision, we rely on Standard Contractual Clauses or an equivalent
+safeguard with that provider. Contact us if you want details about the
+safeguards that apply to your data.
+
+## How long we keep information
+
+| Information                                                             | Retention                                                                                            |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Account and group data, messages, guesses, and scores                   | Until you delete your account, or until the data is no longer needed to provide the service          |
+| Challenge photos and videos                                             | The configured media-retention period, 30 days by default, then removed from active object storage   |
+| Scores and limited challenge metadata                                   | May remain after the original media is removed                                                       |
+| Encrypted database backups                                              | Restore points kept for 24 hours, 14 days, 8 weeks, and up to 6 months, then deleted on the rotation |
+| Refresh sessions                                                        | Deleted 30 days after expiry or revocation                                                           |
+| One-time tokens (email verification, password reset, WebSocket tickets) | Deleted 1 day after use, or at token expiry otherwise                                                |
+| Web Push subscriptions                                                  | Until you disable notifications or delete your account                                               |
+
+Deleting your account removes the account, sessions, authentication material,
+group memberships, messages, guesses, challenge views, and associated database
+records. Uploaded media is queued for deletion from object storage; that final
+storage step can complete shortly after the account record is removed. Backup
+copies age out on the rotation above.
 
 ## Security
 
@@ -113,29 +162,44 @@ stripping, rate limits, and controlled access to operational systems. No
 internet service can promise absolute security. Use a unique password and
 contact us promptly if you suspect unauthorized access.
 
-## Account deletion and data requests
+If a personal-data breach is likely to put your rights at risk, we will notify
+the French data-protection authority (CNIL) within 72 hours where required, and
+inform you directly when the risk is high.
 
-Users can delete their account from **Settings**. Account deletion removes the
-account, sessions, authentication material, group memberships, messages,
-guesses, challenge views, and associated database records. Uploaded media is
-queued for deletion from object storage; that final storage step can complete
-shortly after the account record is removed.
+## Your rights
 
-Users can update their username, recovery email, and avatar in Settings. To
-request access, correction, or deletion support, email `privacy@geoguessme.com`.
-Do not send passwords, authentication codes, or other sensitive credentials by
-email.
+If you are in the European Union, you have the right to:
+
+- **Access** the personal data we process about you;
+- **Rectify** inaccurate data — you can update your username, recovery email,
+  and avatar in Settings;
+- **Erase** your data — you can delete your account from Settings, or ask us to
+  do it;
+- **Restrict** processing while a dispute about the data is resolved;
+- **Object** to processing based on legitimate interests;
+- **Portability** — receive the data you provided in a structured,
+  machine-readable format;
+- **Withdraw consent** at any time for consent-based processing;
+- **Complain** to the CNIL (Commission Nationale de l'Informatique et des
+  Libertés, [cnil.fr](https://www.cnil.fr)) or your local data-protection
+  authority.
+
+To exercise a right, email `privacy@geoguessme.com` with enough information to
+locate the account safely. Do not send passwords, authentication codes, or other
+sensitive credentials by email. We answer within one month; complex or numerous
+requests can extend that by two further months, and we will tell you if so.
 
 ## Permissions and children
 
 Users can deny camera, microphone, location, or notification permission in
 device or browser settings. Features that need a denied permission may not work.
 
-GeoGuessMe is not directed to children under 13, and we do not knowingly collect
-personal information from children under 13. If a higher minimum age applies
-where you live, follow that requirement. Contact us if you believe a child has
-provided personal information so we can investigate and remove it where
-appropriate.
+GeoGuessMe is intended for people aged 15 and over. We do not knowingly collect
+personal information from children under 15, and signup requires confirming the
+minimum age. If a higher minimum age applies where you live, follow that
+requirement. If you are a parent or guardian and believe a child under 15 has
+provided personal information, contact us so we can investigate and remove it
+where appropriate.
 
 ## Changes
 

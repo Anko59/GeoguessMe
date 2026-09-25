@@ -5,6 +5,7 @@ PASS=0
 FAIL=0
 
 bash "$(cd "$(dirname "$0")/.." && pwd)/e2e/arguments_test.sh"
+bash "$(cd "$(dirname "$0")/.." && pwd)/e2e/cleanup_test.sh"
 
 # ── Stale-artifact regression ────────────────────────────────────────────────
 # The E2E runner must clear test-results and playwright-report before each

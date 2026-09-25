@@ -11,13 +11,17 @@ build-backend: ## Build the backend binary in Docker.
 build-frontend: ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
-build-images: ## Build production images with normal Docker layer caching.
+build-images: build-keycloak-image ## Build production images with normal Docker layer caching.
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+
+build-keycloak-image: ## Build Keycloak with the fixed FreeMarker dependency.
+	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 clean-build: ## Build production images from scratch without any layer cache.
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 # Final/runtime images audited by `make audit-images` (F-01). The defaults are
 # the digest-pinned third-party runtime/deployment images; override with
@@ -28,7 +32,12 @@ clean-build: ## Build production images from scratch without any layer cache.
 # container.
 AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
-	quay.io/keycloak/keycloak:26.7.3@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54 \
+	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
+	henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46 \
+	lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd \
+	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
+	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
+	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
 	cloudflare/cloudflared:2026.9.1@sha256:d68fa057087c359c79a255570e891215877ce48aa48ba6f28aac90d8077acbc3 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
@@ -36,7 +45,12 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
 	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
-audit-images: build-security-tool-images ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
+ifeq ($(strip $(KEYCLOAK_IMAGE)),)
+audit-images: build-security-tool-images build-keycloak-image
+else
+audit-images: build-security-tool-images
+endif
+audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
@@ -44,6 +58,13 @@ audit-images: build-security-tool-images ## Scan final/runtime images for FIXED 
 	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
 	trap cleanup_image_archive EXIT; \
 	images="$(AUDIT_IMAGES)"; \
+	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
+		images="$$images $${KEYCLOAK_IMAGE}"; \
+	elif docker image inspect geoguessme-keycloak:local >/dev/null 2>&1; then \
+		images="$$images geoguessme-keycloak:local"; \
+	else \
+		echo 'audit-images: error: Keycloak image missing (set KEYCLOAK_IMAGE or build it with `make build-keycloak-image`)' >&2; exit 1; \
+	fi; \
 	if [ -n "$${BACKEND_IMAGE:-}" ] && [ -n "$${WEB_IMAGE:-}" ]; then \
 		images="$$images $${BACKEND_IMAGE} $${WEB_IMAGE}"; \
 	elif docker image inspect geoguessme-backend:local >/dev/null 2>&1; then \
@@ -100,6 +121,7 @@ compose-validate: ## Validate every Compose file.
 	docker compose --profile social -f deployment/compose.dev.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.test.yaml --project-directory . config --quiet
 	GEOGUESSME_IDENTITY_ENV_FILE=deployment/env/identity.env.example docker compose -f deployment/compose.identity.yaml --project-directory . config --quiet
+	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=deployment/env/watch-agent.env.example GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory . config --quiet
 	BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml --project-directory . config --quiet
 	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.tools.yaml --project-directory . config --quiet
@@ -182,7 +204,17 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 GEOGUESSME_BACKEND_MEMORY=512M GEOGUESSME_DATABASE_MEMORY=768M BACKEND_IMAGE=example.invalid/geoguessme-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/keycloak-image-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-hash-contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/prune-releases.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-bundle.sh
+
+watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
+	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
+
+watch-rehearsal: watch-config build-images ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
+	deployment/scripts/watch/rehearsal.sh
 
 cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.
 	@test -n "$(HOST)" || { echo 'HOST is required' >&2; exit 2; }

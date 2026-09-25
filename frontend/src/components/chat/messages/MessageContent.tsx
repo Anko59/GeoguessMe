@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { Message } from '../../../types';
 import ChatAttachment from '../ChatAttachment';
 import ChallengeCard from '../ChallengeCard';
@@ -32,7 +33,16 @@ export default function MessageContent({
             {message.kind === 'media' && message.media_id && message.media_type && (
                 <ChatAttachment mediaID={message.media_id} mediaType={message.media_type} />
             )}
-            {message.content && <p className="message-caption">{message.content}</p>}
+            {message.content && (
+                <p className="message-caption">
+                    {message.content.split(/\r\n|\r|\n/).map((line, index) => (
+                        <Fragment key={`${message.id}-line-${index}`}>
+                            {index > 0 && <br />}
+                            {line}
+                        </Fragment>
+                    ))}
+                </p>
+            )}
         </div>
     );
 }

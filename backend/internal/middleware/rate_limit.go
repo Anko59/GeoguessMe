@@ -142,14 +142,25 @@ func extractIdentity(r *http.Request) string {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 	}
 	identity := ""
-	var fields map[string]string
+	var fields map[string]json.RawMessage
 	if json.Unmarshal(body, &fields) == nil {
-		identity = strings.ToLower(strings.TrimSpace(fields["username"]))
+		identity = lowerTrimmedJSONString(fields["username"])
 		if identity == "" {
-			identity = strings.ToLower(strings.TrimSpace(fields["email"]))
+			identity = lowerTrimmedJSONString(fields["email"])
 		}
 	}
 	return identity
+}
+
+// lowerTrimmedJSONString reads one JSON object field as a string. Bodies mix
+// types (the signup payload carries a boolean age flag), so absent or
+// non-string values count as empty instead of failing the whole extraction.
+func lowerTrimmedJSONString(raw json.RawMessage) string {
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 // PolicyOptions configures PolicyMiddleware's request-key extractors.
@@ -179,7 +190,17 @@ func PolicyMiddleware(p Policy, opts PolicyOptions) func(http.Handler) http.Hand
 	}
 	ex := keyExtractors{
 		route: func(r *http.Request) string {
-			return r.Method + " " + r.Pattern
+			route := r.Method + " " + r.Pattern
+			// Protected routes are isolated per authenticated actor. The
+			// trusted-IP bucket remains a separate aggregate guard, so one
+			// user's feed reads or writes cannot consume another user's route
+			// budget while a shared network is still bounded overall.
+			if opts.User != nil {
+				if user := strings.TrimSpace(opts.User(r)); user != "" {
+					return "user:" + user + "|" + route
+				}
+			}
+			return "ip:" + clientKey(r, opts.TrustedCIDRs) + "|" + route
 		},
 		trustedIP: func(r *http.Request) string { return clientKey(r, opts.TrustedCIDRs) },
 		identity:  identity,

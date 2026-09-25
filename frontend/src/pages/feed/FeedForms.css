@@ -1,0 +1,229 @@
+.feed-dialog {
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+    width: min(640px, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-lg);
+}
+.feed-dialog::backdrop {
+    background: rgba(10, 20, 45, 0.65);
+}
+.feed-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.feed-dialog-header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+}
+.feed-form,
+.feed-form fieldset {
+    display: grid;
+    gap: 1.2rem;
+}
+.feed-camera-form {
+    min-width: 0;
+}
+.feed-dialog.feed-camera-dialog {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+    background: #0b1020;
+}
+.feed-camera-dialog::backdrop {
+    background: #0b1020;
+}
+.feed-camera-dialog .feed-dialog-header {
+    position: absolute;
+    z-index: 5;
+    inset: 0 0 auto;
+    margin: 0;
+    padding: 0.8rem 1rem;
+    color: white;
+    background: linear-gradient(180deg, rgba(5, 10, 24, 0.8), transparent);
+    pointer-events: none;
+}
+.feed-camera-dialog .feed-dialog-header h2,
+.feed-camera-dialog .feed-dialog-header button {
+    pointer-events: auto;
+}
+.feed-camera-dialog .feed-dialog-header h2 {
+    font-size: 1rem;
+}
+.feed-camera-dialog .feed-dialog-header .feed-text-button {
+    color: white;
+}
+.feed-camera-dialog .feed-camera-form {
+    height: 100dvh;
+}
+.feed-camera-dialog .camera-container {
+    width: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+}
+.feed-camera-dialog .camera-video,
+.feed-camera-dialog .camera-view,
+.feed-camera-dialog .photo-preview {
+    min-height: 100dvh;
+}
+.feed-camera-dialog .feed-camera-note,
+.feed-camera-dialog .feed-camera-error {
+    position: absolute;
+    z-index: 4;
+    left: 1rem;
+    right: 1rem;
+    bottom: 0.8rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.86);
+    text-align: center;
+    pointer-events: none;
+}
+.feed-camera-dialog .feed-camera-error {
+    bottom: 3.4rem;
+    color: #ffd4d4;
+}
+.feed-form fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+}
+.feed-form label {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 650;
+}
+.feed-form input,
+.feed-form textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 0.7rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.65rem;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.feed-form textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+.feed-form h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+.feed-map {
+    height: 280px;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+}
+.feed-coordinates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+.feed-location-picker > p {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+}
+.feed-game-photo {
+    height: 260px;
+    border-radius: 0.8rem;
+    overflow: hidden;
+}
+.feed-game-photo .feed-photo {
+    object-fit: contain;
+    background: var(--surface-soft);
+}
+.feed-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+}
+.feed-result strong {
+    font-size: 1.8rem;
+    color: var(--success);
+}
+.feed-result p {
+    color: var(--ink-muted);
+    margin: 0;
+    font-size: 0.85rem;
+}
+.feed-dialog > .btn {
+    margin-top: 1rem;
+    width: 100%;
+}
+.feed-comments {
+    border-top: 1px solid var(--line);
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+}
+.feed-comments ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.feed-comments li {
+    display: flex;
+    justify-content: flex-start;
+    align-items: start;
+    gap: 0.8rem;
+    min-width: 0;
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+}
+.feed-comments li > div {
+    flex: 1;
+    min-width: 0;
+}
+.feed-comments li p {
+    margin: 0.2rem 0;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.feed-comments time {
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+}
+.feed-comment-form {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+.feed-comment-form label {
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+.feed-comment-form .feed-comment-input {
+    min-width: 0;
+    width: 100%;
+}
+.feed-comment-form .btn {
+    justify-self: end;
+}
+.feed-delete-confirm {
+    padding: 1rem 1.25rem;
+    background: var(--danger-soft);
+}
+.feed-delete-confirm .btn {
+    margin-right: 0.5rem;
+}

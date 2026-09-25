@@ -134,15 +134,15 @@ the merged revision, so they are never part of the local budget.
   and the dev gate runs the complete suite on the merged revision before
   deployment. Test-only changes run the same focused suites as the code they
   test. `make verify` is reserved for changes to `deployment/`, `infra/`, the CI
-  workflows, or the quality gates themselves. The seven harness self-test suites
+  workflows, or the quality gates themselves. The eight harness self-test suites
   in `preflight` (makefile fragments, structure, debt markers,
-  docs/agent-config, CI classifier, E2E, dev-workflow regressions) are
-  path-triggered: they run only when the harness itself changed (Makefile,
-  `tools/make/*`, `tools/quality/*`, `.github/workflows/*`, or the dev/tools
-  Compose files) and always run inside `make quality`. Override the local
-  decision with `PREFLIGHT_HARNESS=true|false`; unknown states fail safe to
-  running them. Install and verify hooks with `make hooks-install` and
-  `make hooks-check`.
+  docs/agent-config, CI classifier, E2E, dev-workflow, and load-profile
+  attestation regressions) are path-triggered: they run only when the harness
+  itself changed (Makefile, `tools/make/*`, `tools/quality/*`, `tools/load/*`,
+  `.github/workflows/*`, or the dev/tools Compose files) and always run inside
+  `make quality`. Override the local decision with
+  `PREFLIGHT_HARNESS=true|false`; unknown states fail safe to running them.
+  Install and verify hooks with `make hooks-install` and `make hooks-check`.
 - Architecture rules: `make archcheck` runs the durable backend architecture
   checker (no production package-level mutable application dependencies, no SQL
   in HTTP handlers, no environment reads outside `backend/internal/config`). It
@@ -310,6 +310,25 @@ documented in [deployment.md](deployment.md). No temporary application
 compatibility entries remain.
 
 ## Residual risks
+
+- The Cloudflared security-tool build
+  (`deployment/docker/cloudflared-tools.Dockerfile`) pins an AMD64 runtime and
+  copies x86 library paths, but its Debian package stage follows the host's
+  default platform. On ARM hosts, `make verify` fails at
+  `build-security-tool-images` because those paths are absent. Selecting AMD64
+  for the entire audit also rebuilds Restic under emulation; that attempt hit a
+  Go runtime failure on the local ARM Docker VM. Declare consistent tool build
+  architectures in a separate tooling change and validate on ARM and AMD64. The
+  group-globe CI repair leaves this existing build configuration unchanged; its
+  complete local image audit remains unverified.
+
+- The frontend `type-check` Make target invokes TypeScript without build mode
+  against `frontend/tsconfig.json`, whose root has no files and only project
+  references. It does not check the referenced app and tooling projects. Until a
+  dedicated quality-gate change corrects that target, use `make build-frontend`
+  for those checks; the production build already uses TypeScript build mode.
+  This was identified during the group globe change and is deferred because
+  changing a shared quality gate is a separate scope.
 
 - The frontend video-recording guard (`MAX_VIDEO_BYTES` in
   `frontend/src/components/camera/capture/useVideoRecording.ts`) mirrors the

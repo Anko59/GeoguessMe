@@ -5,8 +5,10 @@ export type IconName =
     | 'chevron-right'
     | 'close'
     | 'gear'
+    | 'globe'
     | 'image'
     | 'logout'
+    | 'refresh'
     | 'send'
     | 'user'
     | 'users';
@@ -30,6 +32,13 @@ const paths: Record<IconName, React.ReactNode> = {
         </>
     ),
     check: <path d="M20 6 9 17l-5-5" />,
+    globe: (
+        <>
+            <circle cx="12" cy="12" r="9" />
+            <ellipse cx="12" cy="12" rx="4" ry="9" />
+            <path d="M3 12h18" />
+        </>
+    ),
     'chevron-right': <path d="m9 18 6-6-6-6" />,
     close: (
         <>
@@ -55,6 +64,14 @@ const paths: Record<IconName, React.ReactNode> = {
             <path d="M10 17l5-5-5-5" />
             <path d="M15 12H3" />
             <path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
+        </>
+    ),
+    refresh: (
+        <>
+            <path d="M20 11a8 8 0 0 0-14.9-4L3 9" />
+            <path d="M3 4v5h5" />
+            <path d="M4 13a8 8 0 0 0 14.9 4L21 15" />
+            <path d="M21 20v-5h-5" />
         </>
     ),
     send: (

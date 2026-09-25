@@ -15,7 +15,7 @@ import (
 	"geoguessme/internal/models"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 // TestSignupDoesNotRevealVerifiedEmail proves an address already verified by
@@ -24,7 +24,7 @@ import (
 func TestSignupDoesNotRevealVerifiedEmail(t *testing.T) {
 	now := time.Now().UTC()
 	existing := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
-	signupBody := `{"username":"alice","email":"alice@example.test","password":"StrongPassword123"}`
+	signupBody := `{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`
 
 	// Duplicate username remains a conflict because usernames are public identity.
 	mock := newAuthMockPool(t)
@@ -48,7 +48,7 @@ func TestSignupDoesNotRevealVerifiedEmail(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	emailRecorder := httptest.NewRecorder()
-	api.Signup(emailRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"bob","email":"alice@example.test","password":"StrongPassword123"}`)))
+	api.Signup(emailRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"bob","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 	if emailRecorder.Code != http.StatusOK {
 		t.Fatalf("verified email claim status = %d (%s)", emailRecorder.Code, emailRecorder.Body.String())
 	}
@@ -66,7 +66,7 @@ func TestSignupAllowsNoRecoveryEmail(t *testing.T) {
 	// No verification token is issued without a contact claim.
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"emailfree","password":"StrongPassword123"}`)))
+	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"emailfree","password":"StrongPassword123","age_attested":true}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("email-free signup status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -90,7 +90,7 @@ func TestSignupMapsInsertFailures(t *testing.T) {
 				WithArgs(pgxmock.AnyArg(), "alice", "alice@example.test", "alice@example.test", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 				WillReturnError(test.insertErr)
 			recorder := httptest.NewRecorder()
-			api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123"}`)))
+			api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("signup status = %d (%s), want %d", recorder.Code, recorder.Body.String(), test.wantStatus)
 			}

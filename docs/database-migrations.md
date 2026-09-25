@@ -153,6 +153,15 @@ legacy emoji keys remain valid during the compatibility window. The migration
 swaps the database check constraint in one transaction; existing reaction rows
 are preserved.
 
+## Migration 026: Group challenge globe index
+
+Adds the idempotent `photos_group_created_id_idx` index over
+`(group_id, created_at DESC, id DESC)` for the globe's keyset pagination. No
+rows or existing columns change. The standard migration job creates the index in
+its transaction before the new application starts; index creation can
+temporarily block writes to `photos` on a large installation. Previous binaries
+remain compatible with the index, so application rollback can leave it in place.
+
 ## Deferred migration 014: Retire the legacy reaction column
 
 Migration 011 temporarily kept `message_reactions.emoji` synchronized with the
@@ -168,6 +177,13 @@ two compatibility constraints, and the `emoji` column. Reaction rows and the
 canonical `reaction` primary key remain intact. After this migration,
 application rollback must use the pre-migration database backup; re-adding
 compatibility columns is not a supported downgrade.
+
+## Migration 027: Public feed
+
+Adds public photo challenges, immutable guesses, reactions, and comments in
+separate tables. A delete trigger records media cleanup jobs atomically,
+including account cascades. Existing private challenge rows are unaffected. See
+[public feed rollout and rollback](public-feed.md#storage-deployment-and-rollback).
 
 ## Status command
 

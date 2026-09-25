@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext, type AuthContextValue } from '../../context/AuthContext';
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
+    groupsAPI: { markRead: vi.fn().mockResolvedValue(undefined) },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -50,6 +52,35 @@ vi.mock('../../components/leaderboard/Leaderboard', () => ({
 
 vi.mock('../../components/camera/Camera', () => ({
     default: () => <div data-testid="camera">Camera</div>,
+}));
+
+vi.mock('../../components/globe/GroupGlobe', () => ({
+    default: ({
+        groupID,
+        groupName,
+        groupPhotoURL,
+        headerActions,
+        onClose,
+        onChallenge,
+    }: {
+        groupID: string;
+        groupName: string;
+        groupPhotoURL: string;
+        headerActions?: ReactNode;
+        onClose: () => void;
+        onChallenge: (message: unknown) => void;
+    }) => (
+        <div data-testid="globe">
+            <span>{groupName}</span>
+            <img alt="" src={groupPhotoURL} />
+            {headerActions}
+            <span>{groupID}</span>
+            <button onClick={onClose}>Close globe</button>
+            <button onClick={() => onChallenge({ id: 'globe-challenge', group_id: groupID })}>
+                Open globe challenge
+            </button>
+        </div>
+    ),
 }));
 
 vi.mock('../../components/game/Game', () => ({
@@ -143,6 +174,24 @@ beforeEach(() => {
 });
 
 describe('GroupView', () => {
+    it('opens the current group globe from chat and launches its challenges', async () => {
+        renderGroupView('group-1');
+        const globeButton = await screen.findByRole('button', { name: 'Open group globe' });
+        expect(globeButton.querySelector('img')).toHaveAttribute('src', '/globe_feature_icon.png');
+        fireEvent.click(globeButton);
+        const globe = screen.getByTestId('globe');
+        expect(globe).toHaveTextContent('group-1');
+        expect(globe).toHaveTextContent('Test Group');
+        expect(globe.querySelector('img')).toHaveAttribute('src', '/logo.png');
+        expect(globe.querySelector('a[aria-label="Open your profile"]')).toHaveAttribute('href', '/profile');
+        expect(globe.querySelector('button[aria-label="Open group settings"]')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Close globe' }));
+        expect(screen.queryByTestId('globe')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open group globe' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open globe challenge' }));
+        expect(screen.queryByTestId('globe')).toBeNull();
+        expect(screen.getByTestId('game')).toBeInTheDocument();
+    });
     it('shows invalid group id message when id is missing', () => {
         render(
             <AuthContext.Provider value={authValue()}>

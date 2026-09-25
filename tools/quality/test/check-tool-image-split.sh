@@ -65,6 +65,15 @@ check_makefile_no_ref() {
     fi
 }
 
+check_file_ref() {
+    local file="$1" pattern="$2" desc="$3"
+    if grep -q "$pattern" "$file"; then
+        pass "$desc"
+    else
+        fail "$desc"
+    fi
+}
+
 # ── go-tools lightweight assertions ──────────────────────────────────────────
 echo "--- go-tools (lightweight) assertions ---"
 
@@ -100,6 +109,15 @@ check_makefile_ref "go-security.*go test -race" "test-race references go-securit
 check_makefile_ref "go-security.*govulncheck" "audit references go-security"
 check_makefile_ref "go-security.*backup-postgres" "db-backup references go-security"
 check_makefile_no_ref "go-tools.*govulncheck" "no go-tools targets reference govulncheck"
+
+# ── Node tool identity assertions ───────────────────────────────────────────
+echo "--- node-tools runtime identity ---"
+
+check_file_ref "deployment/compose.tools.yaml" "TOOLS_UID" "node-tools build receives the host UID"
+check_file_ref "deployment/compose.tools.yaml" "TOOLS_GID" "node-tools build receives the host GID"
+check_file_ref "deployment/docker/tools/node-tools.Dockerfile" "ARG TOOLS_UID" "node-tools declares a configurable UID"
+check_file_ref "deployment/docker/tools/node-tools.Dockerfile" "ARG TOOLS_GID" "node-tools declares a configurable GID"
+check_file_ref "deployment/docker/tools/node-tools.Dockerfile" "useradd --uid" "node-tools creates a passwd entry for unknown host UIDs"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 if [ "$failures" -gt 0 ]; then

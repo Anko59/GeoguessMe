@@ -22,14 +22,17 @@ read-only source mounts for checks. Formatter services use the host UID/GID.
 ## Hosted topology
 
 The hosted overlay runs `dev`, `production`, and the shared identity service on
-one Hetzner CX23 as three separate Compose projects. The two game projects each
-have an isolated PostgreSQL volume, environment file, R2 media bucket, loopback
-port, and resource limits. Keycloak owns a third PostgreSQL volume and is
-published only on loopback port 8083. Cloudflare Tunnel is the only ingress
-path: production uses port 8081, dev uses 8082, and `auth.geoguessme.com` uses
-8083; public inbound firewall rules are empty. Dev is protected by Cloudflare
-Access email OTP for the owner; CI has a separate service-token rule used only
-for health checks and deployment SSH.
+one Hetzner CX23 as three separate Compose projects. The independent
+`geoguessme-watch` project adds Beszel, VictoriaLogs, VictoriaMetrics, Vector,
+and a read-only Docker socket proxy only after the documented capacity gate. The
+two game projects each have an isolated PostgreSQL volume, environment file, R2
+media bucket, loopback port, and resource limits. Keycloak owns a third
+PostgreSQL volume and is published only on loopback port 8083. Cloudflare Tunnel
+is the only ingress path: production uses port 8081, dev uses 8082,
+`auth.geoguessme.com` uses 8083, and the Access-protected monitoring gateway
+uses loopback port 8084; public inbound firewall rules are empty. Dev is
+protected by Cloudflare Access email OTP for the owner; CI has a separate
+service-token rule used only for health checks and deployment SSH.
 
 Each game project runs its own OAuth2 Proxy beside the Caddy web gateway. Caddy
 routes `/oauth2/*` and the OIDC session exchange to that proxy; all other API
@@ -38,6 +41,13 @@ credential flow supplies ordinary email/password signup and login. Apple and
 GitHub remain disabled for this rollout. This Compose topology deliberately has
 no Traefik layer: Cloudflare Tunnel provides ingress and Caddy provides the one
 same-origin application gateway.
+
+The hosted release promotes Keycloak as a signed, scanned image digest alongside
+the application images. Its FreeMarker dependency is updated from the pinned
+Keycloak base image using a checksum-verified upstream jar. Development deploys
+reconcile realm configuration without restarting shared auth; production backs
+up the Keycloak database before switching the shared service and records the
+previous digest for image rollback.
 
 Local social-auth development also uses Caddy, but with a dedicated
 `Caddyfile.dev`: `mkcert` supplies a locally trusted certificate and Caddy maps
@@ -105,12 +115,17 @@ squash-history conflicts without rewriting either protected branch. Production
 compares the `main` and `dev` Git trees, verifies the development workflow
 signatures, promotes the exact manifests without rebuilding, verifies unchanged
 digests, adds the production workflow signature, and deploys those references.
+Before that promotion starts, the same workflow builds and verifies the signed
+Android App Bundle from the release commit, binds its provenance to the
+commit/tree, and retains the exact bundle and manifest. The GitHub release
+receives those verified files; later Play publication must consume that artifact
+rather than rebuild it.
 
 ## Generic first deploy
 
-Set immutable image references (`BACKEND_IMAGE` and `WEB_IMAGE` must include an
-`@sha256:...` digest) and create the ignored production environment file from
-deployment/env/production.env.example.
+Set immutable image references (`BACKEND_IMAGE`, `WEB_IMAGE`, and
+`KEYCLOAK_IMAGE` must include an `@sha256:...` digest) and create the ignored
+production environment file from deployment/env/production.env.example.
 
 ```text
 make compose-validate
@@ -138,6 +153,17 @@ For PostgreSQL version upgrades, run `make db-backup`, provision an empty target
 database, restore through `make db-restore FILE=...`, run `make migrate-status`,
 and exercise `make smoke` against the restored application. Keep database and S3
 backups together because the database stores media object keys.
+
+Hosted deployment source releases are stored under `/opt/geoguessme/releases`.
+Before staging a revision, the installed deploy runtime removes abandoned
+staging directories and releases that are not referenced by either environment's
+current/previous metadata or the host runtime revision. It keeps those active
+and rollback releases intact; database, media, and backup data live separately.
+When recovering a host that filled before this cleanup was installed, use the
+operator route and the
+[runtime hardening procedure](../docs/runbooks/runtime-hardening.md#applying-monitored-host-definitions)
+to install the complete reviewed runtime set, then run its release cleanup and
+verify both environments before retrying deployment.
 
 ## Rollback and restart
 
@@ -173,8 +199,10 @@ container. `geoguessme-health@*.timer` checks application/container health, disk
 pressure, tunnel state, and a maximum backup age of two hours every 15 minutes.
 
 For an outage, inspect `make prod-logs`, `/health/live`, `/health/ready`, and
-`/metrics`. Preserve request IDs and logs, check PostgreSQL and object storage
-health, and do not delete data or rotate secrets before preserving evidence.
+`/metrics`. When the monitoring stack is enabled, inspect
+`watch.geoguessme.com`, its systemd journal, and the VictoriaLogs query UI.
+Preserve request IDs and logs, check PostgreSQL and object storage health, and
+do not delete data or rotate secrets before preserving evidence.
 
 Use `make smoke`, `make backup-rehearsal`, and `make load-test` only against
 disposable local/test or explicitly selected staging environments — never

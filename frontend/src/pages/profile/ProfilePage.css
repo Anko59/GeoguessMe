@@ -15,42 +15,11 @@
     place-items: center;
 }
 
-.profile-topbar {
-    min-height: 3rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-}
-
-.profile-back-link,
-.profile-settings-link {
-    min-height: 44px;
-    padding: 0.5rem 0.75rem;
-    display: inline-flex;
-    align-items: center;
-    color: var(--brand-blue-accessible);
-    border-radius: var(--radius-sm);
-    font-weight: 800;
-    text-decoration: none;
-}
-
-.profile-back-icon {
-    width: 1.1rem;
-    height: 1.1rem;
-    margin-right: 0.35rem;
-}
-
 .profile-crown-icon {
     width: 1.15rem;
     height: 1.15rem;
     object-fit: contain;
     vertical-align: -0.2rem;
-}
-
-.profile-back-link:hover,
-.profile-settings-link:hover {
-    background: var(--surface-brand);
 }
 
 .profile-hero {

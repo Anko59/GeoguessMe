@@ -22,7 +22,9 @@ The target scans the following images (see `AUDIT_IMAGES` in
   time. Until the official image includes the `golang.org/x/net` v0.56.0 fix,
   the Dockerfile rebuilds the released Caddy binary from the pinned official
   builder with that dependency override; the resulting application image is
-  scanned directly.
+  scanned directly. The watch gateway deliberately reuses this exact released
+  web artifact through `WEB_IMAGE`, so it does not introduce a second unpatched
+  Caddy runtime.
 - **Deployment utilities** — the newest published `ghcr.io/getsops/sops` image
   (digest-pinned) and `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7`, a
   locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed
@@ -47,14 +49,22 @@ The target scans the following images (see `AUDIT_IMAGES` in
       `geoguessme-web:local` images when they exist (produced by
       `make build-images`);
     - otherwise a warning is printed and application images are skipped.
+- **Identity image** — the locally built `geoguessme-keycloak:local` image, or
+  the exact `KEYCLOAK_IMAGE` digest supplied by CI. It derives from the
+  digest-pinned Keycloak 26.7.4 image and replaces the bundled FreeMarker jar
+  with the checksum-verified 2.3.35 artifact already selected on Keycloak's
+  `release/26.7` branch. Publication and production promotion both scan the
+  exact signed digest; production rollback retains the previous identity image
+  reference in hosted deployment metadata.
 
 Override the image list with `AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`.
-Images are always referenced by pinned digest, never by a floating tag. Images
-already available in the host Docker daemon are exported with `docker save` and
-scanned from a tarball. This includes private application digests pulled by the
-authenticated publication and promotion workflows, so registry credentials never
-enter the Trivy container. Other registry images are scanned directly by their
-digest-pinned reference.
+Third-party and published images use pinned digests, never floating tags. Local
+images use explicit `:local` build names and are scanned by their Docker image
+ID. Images already available in the host Docker daemon are exported with
+`docker save` and scanned from a tarball. This includes private application and
+Keycloak digests pulled by authenticated publication and promotion workflows, so
+registry credentials never enter the Trivy container. Other registry images are
+scanned directly by their digest-pinned reference.
 
 ## Blocking semantics
 

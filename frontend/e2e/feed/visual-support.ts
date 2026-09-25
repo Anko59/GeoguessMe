@@ -1,0 +1,201 @@
+import { expect, type BrowserContext, type Locator, type Page, type TestInfo } from '@playwright/test';
+
+// Keep tile delivery deterministic while exercising real Leaflet rendering,
+// sizing, zooming, and markers. Application API and media requests stay live.
+export async function installMapTiles(context: BrowserContext): Promise<void> {
+    await context.route('https://tile.openstreetmap.org/**', (route) =>
+        route.fulfill({
+            contentType: 'image/svg+xml',
+            body: `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+            <rect width="256" height="256" fill="#e9e7df"/>
+            <path d="M0 180L256 125L256 160L0 215Z" fill="#b7d9e6"/>
+            <path d="M30 0V256M160 0V256M0 55H256M0 115H256M0 240H256" stroke="#fff" stroke-width="12"/>
+            <path d="M30 0V256M160 0V256M0 55H256M0 115H256M0 240H256" stroke="#d2caba" stroke-width="2"/>
+            <path d="M48 10H105V37H48ZM176 70H234V99H176ZM50 70H130V99H50Z" fill="#d7cec2"/>
+            <rect x="182" y="8" width="55" height="30" rx="8" fill="#bed5b2"/>
+        </svg>`,
+        }),
+    );
+}
+
+export async function expectPhotoDecoded(photo: Locator): Promise<void> {
+    await expect(photo).toBeVisible();
+    await expect
+        .poll(() => photo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0))
+        .toBe(true);
+}
+
+export async function expectFeedDiscussionReachableAtViewports(
+    page: Page,
+    dialog: Locator,
+    lastComment: string,
+): Promise<void> {
+    for (const viewport of [
+        { width: 1280, height: 720, scroller: '.result-footer' },
+        { width: 393, height: 727, scroller: '.result-content' },
+    ]) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        const scroller = dialog.locator(viewport.scroller);
+        await expect
+            .poll(() =>
+                scroller.evaluate((element) => element.clientHeight > 0 && element.scrollHeight > element.clientHeight),
+            )
+            .toBe(true);
+        const lastCommentRow = dialog.locator('.feed-comments li').filter({ hasText: lastComment });
+        const measureReachability = () =>
+            lastCommentRow.evaluate((row, scrollerSelector) => {
+                const element = row.closest<HTMLElement>(scrollerSelector);
+                if (!element) return { visibleRatio: 0, scrollTop: 0 };
+                const container = element.getBoundingClientRect();
+                const comment = row.getBoundingClientRect();
+                const visible = Math.max(
+                    0,
+                    Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                );
+                return {
+                    visibleRatio: comment.height > 0 ? visible / comment.height : 0,
+                    scrollTop: element.scrollTop,
+                };
+            }, viewport.scroller);
+        const initialReachability = await measureReachability();
+        await scroller.evaluate((element, commentText) => {
+            const row = Array.from(element.querySelectorAll('.feed-comments li')).find((candidate) =>
+                candidate.textContent?.includes(commentText),
+            );
+            if (!row) throw new Error(`Could not find the last feed comment: ${commentText}`);
+            const container = element.getBoundingClientRect();
+            const comment = row.getBoundingClientRect();
+            const delta =
+                comment.bottom > container.bottom
+                    ? comment.bottom - container.bottom
+                    : comment.top < container.top
+                      ? comment.top - container.top
+                      : 0;
+            element.scrollTop += delta;
+        }, lastComment);
+        const reachability = await measureReachability();
+        if (initialReachability.visibleRatio <= 0.5)
+            expect(reachability.scrollTop).not.toBe(initialReachability.scrollTop);
+        expect(reachability.visibleRatio).toBeGreaterThan(0.5);
+        if (viewport.width === 1280) {
+            const visibleCommentCount = await scroller.evaluate((element) => {
+                const container = element.getBoundingClientRect();
+                return Array.from(element.querySelectorAll('.feed-comments li')).filter((row) => {
+                    const comment = row.getBoundingClientRect();
+                    const visible = Math.max(
+                        0,
+                        Math.min(comment.bottom, container.bottom) - Math.max(comment.top, container.top),
+                    );
+                    return comment.height > 0 && visible / comment.height > 0.5;
+                }).length;
+            });
+            expect(visibleCommentCount).toBeGreaterThanOrEqual(3);
+        }
+        await expect(lastCommentRow).toBeVisible();
+        await expect(dialog.getByText(lastComment)).toBeInViewport();
+        const geometry = await lastCommentRow.evaluate((row) => {
+            const avatar = row.querySelector('.feed-comment-avatar')?.getBoundingClientRect();
+            const copy = row.querySelector('.feed-comment-copy')?.getBoundingClientRect();
+            const bounds = row.getBoundingClientRect();
+            return {
+                rowWidth: bounds.width,
+                avatarWidth: avatar?.width ?? 0,
+                copyWidth: copy?.width ?? 0,
+                copyStartsAfterAvatar: copy && avatar ? copy.left >= avatar.right : false,
+            };
+        });
+        expect(geometry.avatarWidth).toBeLessThanOrEqual(40);
+        expect(geometry.copyWidth / geometry.rowWidth).toBeGreaterThan(0.7);
+        expect(geometry.copyStartsAfterAvatar).toBe(true);
+    }
+}
+
+async function expectMapFilled(dialog: Locator): Promise<void> {
+    const map = dialog.locator('.leaflet-container');
+    await expect
+        .poll(() =>
+            map.evaluate((element) => {
+                const bounds = element.getBoundingClientRect();
+                const tiles = Array.from(element.querySelectorAll('.leaflet-tile-loaded'), (tile) =>
+                    tile.getBoundingClientRect(),
+                );
+                const corners = [
+                    [bounds.left + 1, bounds.top + 1],
+                    [bounds.right - 1, bounds.top + 1],
+                    [bounds.left + 1, bounds.bottom - 1],
+                    [bounds.right - 1, bounds.bottom - 1],
+                ];
+                return corners.every(([x, y]) =>
+                    tiles.some((tile) => tile.left <= x && tile.right >= x && tile.top <= y && tile.bottom >= y),
+                );
+            }),
+        )
+        .toBe(true);
+}
+
+export async function captureFeedState(page: Page, testInfo: TestInfo, name: string, dialog?: Locator): Promise<void> {
+    if (!dialog) {
+        const feedColumn = page.locator('.feed-column');
+        await expect(feedColumn).toBeVisible();
+        await expect(feedColumn.locator('.feed-card, .feed-empty h2, .feed-empty[role="alert"]').first()).toBeVisible();
+    }
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await page.evaluate(() => document.fonts.ready);
+    expect(page.viewportSize()).toEqual(testInfo.project.use.viewport);
+    // Layout assertions fail automatically; the attached image provides the
+    // corresponding visual evidence in the HTML report on every successful run.
+    expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+    ).toBe(true);
+    if (dialog) {
+        await expect(dialog).toBeVisible();
+        // Camera-backed dialogs do not render a Leaflet map; only assert tile
+        // coverage for dialogs that actually contain one.
+        if ((await dialog.locator('.leaflet-container').count()) > 0) {
+            await expectMapFilled(dialog);
+        }
+        await dialog.evaluate((element) => {
+            element.scrollTop = 0;
+        });
+        const bounds = await dialog.boundingBox();
+        const viewport = page.viewportSize();
+        expect(bounds).not.toBeNull();
+        expect(viewport).not.toBeNull();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.y).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport!.height);
+    }
+    const path = testInfo.outputPath(`${name}.png`);
+    await page.screenshot({ path, fullPage: !dialog, animations: 'disabled', caret: 'hide', scale: 'css' });
+    await testInfo.attach(name, { path, contentType: 'image/png' });
+    if (dialog && (await dialog.evaluate((element) => element.scrollHeight > element.clientHeight))) {
+        await dialog.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
+        const controls = testInfo.outputPath(`${name}-controls.png`);
+        await page.screenshot({ path: controls, animations: 'disabled', caret: 'hide', scale: 'css' });
+        await testInfo.attach(`${name}-controls`, { path: controls, contentType: 'image/png' });
+    }
+}
+
+export async function captureAudienceControls(page: Page, testInfo: TestInfo, composer: Locator): Promise<void> {
+    const audience = composer.getByRole('group', { name: 'Feed visibility' });
+    await audience.scrollIntoViewIfNeeded();
+    const radios = audience.getByRole('radio');
+    await expect(radios).toHaveCount(2);
+    for (const radio of await radios.all()) {
+        await expect(radio).toBeInViewport();
+        const bounds = await radio.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds!.width).toBeLessThanOrEqual(24);
+        expect(bounds!.height).toBeLessThanOrEqual(24);
+        const labelHeight = await radio.evaluate(
+            (control) => control.closest('label')?.getBoundingClientRect().height ?? 0,
+        );
+        expect(labelHeight).toBeGreaterThanOrEqual(44);
+    }
+    const path = testInfo.outputPath('01-audience.png');
+    await page.screenshot({ path, animations: 'disabled', caret: 'hide', scale: 'css' });
+    await testInfo.attach('01-audience', { path, contentType: 'image/png' });
+}

@@ -18,7 +18,7 @@ import (
 	"geoguessme/internal/repository"
 	"geoguessme/internal/storage"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +54,7 @@ func TestBuildRateLimitPolicies(t *testing.T) {
 	for _, p := range fallback {
 		names[p.Name] = true
 	}
-	for _, wanted := range []string{"login", "signup", "email", "reset", "push", "default"} {
+	for _, wanted := range []string{"login", "signup", "email", "reset", "push", "default", "write"} {
 		require.True(t, names[wanted], "fallback must include policy %q", wanted)
 	}
 
@@ -112,7 +112,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		"hub": appA.Hub == appB.Hub, "logger": appA.Logger == appB.Logger,
 		"metrics": appA.Metrics == appB.Metrics, "groups": appA.Groups == appB.Groups,
 		"chat": appA.Chat == appB.Chat, "auth": appA.Auth == appB.Auth,
-		"authapi": appA.AuthAPI == appB.AuthAPI,
+		"authapi": appA.AuthAPI == appB.AuthAPI, "feed": appA.Feed == appB.Feed,
 	} {
 		if shared {
 			t.Fatalf("composition instances share the %s dependency", name)
@@ -146,11 +146,96 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 
 	// Each App builds its own complete route table and serves a route without
 	// any package-global wiring.
-	for name, app := range map[string]*App{"A": appA, "B": appB} {
+	for name, instance := range map[string]struct {
+		app  *App
+		pool pgxmock.PgxPoolIface
+	}{"A": {appA, poolA}, "B": {appB, poolB}} {
+		app := instance.app
+		routes := app.routes()
 		rec := httptest.NewRecorder()
-		app.routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
 		if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
 			t.Fatalf("instance %s /health/live = %d %q", name, rec.Code, rec.Body.String())
 		}
+		// The group rail must receive the inbox-capable repository rather
+		// than the older facade that only implements UserGroups.
+		instance.pool.ExpectQuery("SELECT g.id, g.name,").WithArgs("user-1").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "name", "unread", "message_id", "kind", "username", "created_at"}))
+		inboxRequest := httptest.NewRequest(http.MethodGet, "/api/v1/user/groups/inbox", nil)
+		inboxRequest = inboxRequest.WithContext(handlers.WithUserID(inboxRequest.Context(), "user-1"))
+		inboxRecorder := httptest.NewRecorder()
+		app.Groups.GetUserGroupsInbox(inboxRecorder, inboxRequest)
+		require.Equal(t, http.StatusOK, inboxRecorder.Code, "instance %s: %s", name, inboxRecorder.Body.String())
+		require.JSONEq(t, "[]", inboxRecorder.Body.String())
+		// Every public-feed operation must reject anonymous requests before
+		// touching its repository or storage, including original-photo access.
+		for _, route := range []struct{ method, path string }{
+			{"GET", "/feed"}, {"POST", "/feed/challenges"},
+			{"GET", "/feed/challenges/post"}, {"DELETE", "/feed/challenges/post"},
+			{"GET", "/feed/challenges/post/media"}, {"GET", "/feed/challenges/post/play"},
+			{"GET", "/feed/challenges/post/guess"}, {"POST", "/feed/challenges/post/guess"},
+			{"PUT", "/feed/challenges/post/reaction"}, {"DELETE", "/feed/challenges/post/reaction"},
+			{"GET", "/feed/challenges/post/comments"}, {"POST", "/feed/challenges/post/comments"},
+			{"DELETE", "/feed/challenges/post/comments/comment"},
+		} {
+			rec := httptest.NewRecorder()
+			routes.ServeHTTP(rec, httptest.NewRequest(route.method, "/api/v1"+route.path, nil))
+			require.Equal(t, http.StatusUnauthorized, rec.Code, "%s %s", route.method, route.path)
+		}
+	}
+}
+
+func TestFeedReadsPreserveMutationRateLimit(t *testing.T) {
+	middleware.ResetRateLimiter()
+	t.Cleanup(middleware.ResetRateLimiter)
+	cfg := &config.Config{
+		Environment: config.EnvTest,
+		JWTSecret:   "feed-rate-test-secret-longer-than-32-bytes",
+		RateLimitPolicies: []config.RateLimitPolicy{{
+			Name: "write",
+			Buckets: []config.RateLimitBucket{{
+				Type: "route", Limit: 10, Window: time.Minute,
+			}},
+		}},
+	}
+	pool := newCompositionPool(t)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	app := NewApp(cfg, pool, repository.NewRepository(pool), newLocalStore(t), email.SMTP{},
+		push.NewService(push.Deps{Config: cfg, Logger: logger}), chat.NewHub(nil, nil), logger, time.Now)
+	routes := app.routes()
+	token, err := app.Auth.GenerateAccessToken("viewer", 0)
+	require.NoError(t, err)
+	request := func(method, path, bearer string) *httptest.ResponseRecorder {
+		t.Helper()
+		if bearer != "" {
+			pool.ExpectQuery("SELECT auth_version").WithArgs("viewer").
+				WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(0, false))
+		}
+		req := httptest.NewRequest(method, "/api/v1/feed"+path, nil)
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, req)
+		return rec
+	}
+	// Invalid IDs reach validation without requiring repository or media
+	// fixtures. Browsing more than the mutation quota must remain possible.
+	reads := []string{"/challenges/invalid", "/challenges/invalid/media", "/challenges/invalid/play", "/challenges/invalid/guess", "/challenges/invalid/comments"}
+	for range 3 {
+		for _, path := range reads {
+			require.Equal(t, http.StatusBadRequest, request(http.MethodGet, path, token).Code, path)
+		}
+	}
+	for range 10 {
+		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/challenges/invalid/comments", token).Code)
+	}
+	blocked := request(http.MethodPost, "/challenges/invalid/comments", token)
+	require.Equal(t, http.StatusTooManyRequests, blocked.Code)
+	require.NotEmpty(t, blocked.Header().Get("Retry-After"))
+	// An exhausted mutation quota must not hide photos or remove auth checks.
+	for _, path := range reads {
+		require.Equal(t, http.StatusBadRequest, request(http.MethodGet, path, token).Code, path)
+		require.Equal(t, http.StatusUnauthorized, request(http.MethodGet, path, "").Code, path)
 	}
 }

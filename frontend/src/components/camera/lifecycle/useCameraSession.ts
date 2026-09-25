@@ -7,6 +7,8 @@ interface CameraSessionOptions {
     /** Called once per camera attempt once the video can play. */
     onReady: (video: HTMLVideoElement, width: number, height: number) => void;
     setError: (message: string) => void;
+    /** Whether the camera error state may offer a local-file fallback. */
+    allowFileFallback?: boolean;
 }
 
 const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
@@ -23,7 +25,7 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
  *  device changes, readiness signalling, restarts, and track cleanup. Every
  *  getUserMedia call is generation-guarded so a stale request can never
  *  attach its stream after a restart or unmount. */
-export function useCameraSession({ onReset, onReady, setError }: CameraSessionOptions) {
+export function useCameraSession({ onReset, onReady, setError, allowFileFallback = true }: CameraSessionOptions) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const cameraAttemptRef = useRef(0);
@@ -44,7 +46,9 @@ export function useCameraSession({ onReset, onReady, setError }: CameraSessionOp
         onReset();
         if (!navigator.mediaDevices?.getUserMedia) {
             setError(
-                'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.',
+                allowFileFallback
+                    ? 'Camera access denied or unavailable. Enable camera permissions or upload a photo from your device.'
+                    : 'Camera access denied or unavailable. Enable camera permissions and try again.',
             );
             return null;
         }
@@ -88,13 +92,22 @@ export function useCameraSession({ onReset, onReady, setError }: CameraSessionOp
             if (name === 'NotAllowedError' || name === 'SecurityError')
                 setError('Camera access denied. Allow camera permissions and try again.');
             else if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
-                setError('No camera was found. Connect a camera or upload a photo from your device.');
+                setError(
+                    allowFileFallback
+                        ? 'No camera was found. Connect a camera or upload a photo from your device.'
+                        : 'No camera was found. Connect a camera and try again.',
+                );
             else if (name === 'NotReadableError' || name === 'TrackStartError')
                 setError('The camera is busy or unavailable. Close other camera apps and try again.');
-            else setError('The camera could not be started. Try again or upload a photo from your device.');
+            else
+                setError(
+                    allowFileFallback
+                        ? 'The camera could not be started. Try again or upload a photo from your device.'
+                        : 'The camera could not be started. Try again.',
+                );
             return null;
         }
-    }, [facingModeRef, onReady, onReset, refresh, setError, stopCamera]);
+    }, [allowFileFallback, facingModeRef, onReady, onReset, refresh, setError, stopCamera]);
 
     // Start on mount, register the restart hook used by camera switching, and
     // invalidate any in-flight attempt on unmount so stale streams are stopped.

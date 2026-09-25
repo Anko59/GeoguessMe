@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func TestMessageReactionValidation(t *testing.T) {

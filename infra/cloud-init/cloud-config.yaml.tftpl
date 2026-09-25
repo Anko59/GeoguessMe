@@ -33,7 +33,6 @@ write_files:
   - path: /etc/tmpfiles.d/geoguessme.conf
     permissions: "0644"
     content: |
-      # /run is cleared at boot; deployment and backup locks must survive it.
       d /run/lock/geoguessme 0750 deploy deploy -
   - path: /home/ops/.ssh/authorized_keys
     owner: ops:ops
@@ -74,130 +73,100 @@ write_files:
       PrivateTmp=true
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/geoguessme/bin/common.sh
-    permissions: "0755"
+  - path: /tmp/geoguessme-runtime-bundle
+    owner: root:root
+    permissions: "0600"
     encoding: gzip+base64
-    content: ${common_script}
-  - path: /opt/geoguessme/bin/deploy.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${deploy_script}
-  - path: /opt/geoguessme/bin/forced-command.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${forced_script}
-  - path: /opt/geoguessme/bin/verify-deployment-hashes.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${verify_script}
-  - path: /opt/geoguessme/bin/backup.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${backup_script}
-  - path: /opt/geoguessme/bin/restore-rehearsal.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${restore_script}
-  - path: /opt/geoguessme/bin/health-check.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${health_script}
-  - path: /opt/geoguessme/bin/alert.sh
-    permissions: "0755"
-    encoding: gzip+base64
-    content: ${alert_script}
-  - path: /opt/geoguessme/config/compose.production.yaml
-    permissions: "0444"
-    encoding: gzip+base64
-    content: ${production_compose}
-  - path: /opt/geoguessme/config/compose.hosted.yaml
-    permissions: "0444"
-    encoding: gzip+base64
-    content: ${hosted_compose}
+    content: ${runtime_bundle}
+  - path: /usr/local/sbin/geoguessme-install-runtime-bundle
+    owner: root:root
+    permissions: "0700"
+    content: |
+      #!/bin/sh
+      set -eu
+      bundle=$${1:?runtime bundle path is required}
+      manifest=$(mktemp /opt/geoguessme/config/runtime-hashes.XXXXXX)
+      trap 'rm -f "$manifest"' EXIT INT TERM
+      exec 3<"$bundle"
+      IFS= read -r magic <&3
+      [ "$magic" = GEOGUESSME_RUNTIME_BUNDLE_V1 ]
+      lengths=''
+      for _ in $(seq 1 31); do
+        IFS= read -r size <&3
+        case "$size" in *[!0-9]* | '') exit 1 ;; esac
+        lengths="$lengths $size"
+      done
+      set -- $lengths
+      while IFS=' ' read -r path mode; do
+        [ -n "$path" ] || continue
+        size=$1
+        shift
+        case "$path" in
+          /opt/geoguessme/bin/* | /opt/geoguessme/config/* | /etc/systemd/system/geoguessme-*) ;;
+          *) exit 1 ;;
+        esac
+        install -d -m 0755 "$(dirname "$path")"
+        temporary=$(mktemp "$path.XXXXXX")
+        dd if=/dev/fd/3 of="$temporary" bs=1 count="$size" 2>/dev/null
+        [ "$(wc -c <"$temporary")" -eq "$size" ]
+        chown root:root "$temporary"
+        chmod "$mode" "$temporary"
+        mv -f "$temporary" "$path"
+        relative=$${path#/opt/geoguessme/}
+        case "$path" in /etc/systemd/system/geoguessme-*) relative=units/$${path##*/} ;; esac
+        printf '%s  %s\n' "$(sha256sum "$path" | cut -d' ' -f1)" \
+          "$relative" >>"$manifest"
+      done <<'FILES'
+      /opt/geoguessme/bin/common.sh 0755
+      /opt/geoguessme/bin/deploy.sh 0755
+      /opt/geoguessme/bin/forced-command.sh 0755
+      /opt/geoguessme/bin/verify-deployment-hashes.sh 0755
+      /opt/geoguessme/bin/backup.sh 0755
+      /opt/geoguessme/bin/restore-rehearsal.sh 0755
+      /opt/geoguessme/bin/health-check.sh 0755
+      /opt/geoguessme/bin/alert.sh 0755
+      /opt/geoguessme/bin/watch-health.sh 0755
+      /opt/geoguessme/bin/watch-refresh-metrics-token.sh 0755
+      /opt/geoguessme/bin/watch-capacity.sh 0755
+      /opt/geoguessme/config/compose.production.yaml 0444
+      /opt/geoguessme/config/compose.hosted.yaml 0444
+      /opt/geoguessme/config/compose.watch.yaml 0444
+      /opt/geoguessme/config/watch/Caddyfile 0444
+      /opt/geoguessme/config/watch/vector.yaml 0444
+      /opt/geoguessme/config/watch/victoria-metrics.yaml 0444
+      /etc/systemd/system/geoguessme-backup@.service 0644
+      /etc/systemd/system/geoguessme-backup@.timer 0644
+      /etc/systemd/system/geoguessme-health@.service 0644
+      /etc/systemd/system/geoguessme-health@.timer 0644
+      /etc/systemd/system/geoguessme-restore-rehearsal@.service 0644
+      /etc/systemd/system/geoguessme-restore-rehearsal@.timer 0644
+      /etc/systemd/system/geoguessme-alert@.service 0644
+      /etc/systemd/system/geoguessme-watch.service 0644
+      /etc/systemd/system/geoguessme-watch-health.service 0644
+      /etc/systemd/system/geoguessme-watch-health.timer 0644
+      /etc/systemd/system/geoguessme-watch-refresh-metrics-token.service 0644
+      /etc/systemd/system/geoguessme-watch-refresh-metrics-token.timer 0644
+      /etc/systemd/system/geoguessme-watch-capacity.service 0644
+      /etc/systemd/system/geoguessme-watch-capacity.timer 0644
+      FILES
+      chown root:root "$manifest"
+      chmod 0444 "$manifest"
+      mv -f "$manifest" /opt/geoguessme/config/runtime-hashes
+      trap - EXIT INT TERM
   - path: /opt/geoguessme/config/runtime-revision
     owner: root:root
     permissions: "0444"
     content: |
       ${runtime_revision}
-  - path: /opt/geoguessme/config/runtime-hashes
-    owner: root:root
-    permissions: "0444"
-    content: |
-      ${runtime_hashes}
-  - path: /etc/systemd/system/geoguessme-backup@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i encrypted database backup
-      After=docker.service
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/backup.sh %i scheduled
-  - path: /etc/systemd/system/geoguessme-backup@.timer
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Hourly GeoGuessMe %i backup
-      [Timer]
-      OnCalendar=hourly
-      RandomizedDelaySec=5m
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-health@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i host health check
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/health-check.sh %i
-  - path: /etc/systemd/system/geoguessme-health@.timer
-    permissions: "0644"
-    content: |
-      [Timer]
-      OnCalendar=*:0/15
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=GeoGuessMe %i isolated restore rehearsal
-      After=docker.service
-      OnFailure=geoguessme-alert@%i.service
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/restore-rehearsal.sh %i
-  - path: /etc/systemd/system/geoguessme-restore-rehearsal@.timer
-    permissions: "0644"
-    content: |
-      [Timer]
-      OnCalendar=Sun *-*-* 03:30:00
-      Persistent=true
-      [Install]
-      WantedBy=timers.target
-  - path: /etc/systemd/system/geoguessme-alert@.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Email GeoGuessMe %i host failure alert
-      [Service]
-      Type=oneshot
-      User=deploy
-      ExecStart=/opt/geoguessme/bin/alert.sh %i
-
 runcmd:
-  - [mkdir, -p, /etc/geoguessme/age, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases]
+  - [mkdir, -p, /etc/geoguessme/age, /etc/geoguessme/watch-metrics, /opt/geoguessme/bin, /opt/geoguessme/config/watch, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases]
+  - [/usr/local/sbin/geoguessme-install-runtime-bundle, /tmp/geoguessme-runtime-bundle]
+  - [rm, -f, /usr/local/sbin/geoguessme-install-runtime-bundle, /tmp/geoguessme-runtime-bundle]
   - [chown, -R, deploy:deploy, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme]
   - [systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]
-  - [chmod, "0555", /opt/geoguessme/bin, /opt/geoguessme/config]
+  - [chmod, "0555", /opt/geoguessme/bin, /opt/geoguessme/config, /opt/geoguessme/config/watch]
+  - [chown, root:docker, /etc/geoguessme/watch-metrics]
+  - [chmod, "0750", /etc/geoguessme/watch-metrics]
   - [chown, deploy:deploy, /etc/geoguessme]
   - [sh, -c, "set -eu; umask 077; age-keygen -o /etc/geoguessme/age/dev.txt; age-keygen -y /etc/geoguessme/age/dev.txt > /etc/geoguessme/age/dev-recipient.txt; age-keygen -o /etc/geoguessme/age/production.txt; age-keygen -y /etc/geoguessme/age/production.txt > /etc/geoguessme/age/production-recipient.txt"]
   - [chmod, "0600", /etc/geoguessme/age/dev.txt, /etc/geoguessme/age/production.txt]
@@ -219,5 +188,8 @@ runcmd:
   - [systemctl, enable, --now, geoguessme-backup@dev.timer, geoguessme-backup@production.timer]
   - [systemctl, enable, --now, geoguessme-health@dev.timer, geoguessme-health@production.timer]
   - [systemctl, enable, --now, geoguessme-restore-rehearsal@production.timer]
+  # Monitoring is installed but deliberately not enabled until the operator
+  # has completed the capacity gate and created the Beszel/metrics secrets.
+  - [systemctl, daemon-reload]
 
 final_message: "GeoGuessMe host bootstrap complete"

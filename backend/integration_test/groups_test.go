@@ -7,9 +7,15 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"geoguessme/internal/repository/groups/atlas"
+
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,6 +81,7 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 		{"members", http.MethodGet, "/api/v1/group/members?id=" + groupID, nil},
 		{"messages", http.MethodGet, "/api/v1/group/messages?group_id=" + groupID, nil},
 		{"leaderboard", http.MethodGet, "/api/v1/group/leaderboard?group_id=" + groupID, nil},
+		{"globe", http.MethodGet, "/api/v1/group/challenges?group_id=" + groupID, nil},
 		{"group_photo", http.MethodGet, "/api/v1/group/photo?group_id=" + groupID, nil},
 		{"group_notifications", http.MethodGet, "/api/v1/group/notifications?group_id=" + groupID, nil},
 		{"ws_ticket", http.MethodPost, "/api/v1/ws/ticket?group_id=" + groupID, map[string]string{}},
@@ -90,6 +97,95 @@ func TestNonMemberForbiddenMatrix(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, attemptUpload(t, outsider.access, groupID), "upload")
 	photoResp, _ := uploadGroupPhoto(t, outsider.access, groupID)
 	require.Equal(t, http.StatusForbidden, photoResp.StatusCode, "group photo upload")
+}
+
+func TestGroupGlobeHistoryAndPrivacy(t *testing.T) {
+	alice := signup(t, unique("atlasalice"), unique("atlasalice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("atlasbob"), unique("atlasbob")+"@example.test", "StrongPassword123")
+	groupA, invite := createGroup(t, alice.access, "Globe A")
+	groupB, _ := createGroup(t, alice.access, "Globe B")
+	joinGroup(t, bob.access, invite)
+	photoA := uploadPhoto(t, alice.access, groupA)
+	uploadPhoto(t, alice.access, groupB)
+	read := func(bearer string) atlas.Page {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupA, nil, bearer, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+		require.Equal(t, "private, no-store", resp.Header.Get("Cache-Control"))
+		var page atlas.Page
+		require.NoError(t, jsonUnmarshal(data, &page))
+		return page
+	}
+	owner := read(alice.access)
+	require.Len(t, owner.Items, 1)
+	require.Equal(t, photoA, owner.Items[0].PhotoID)
+	require.Equal(t, groupA, owner.Items[0].GroupID)
+	require.NotNil(t, owner.Items[0].Lat)
+	unplayed := read(bob.access)
+	require.Len(t, unplayed.Items, 1)
+	require.Nil(t, unplayed.Items[0].Lat)
+	require.Nil(t, unplayed.Items[0].Long)
+	acc := deliverChallengeMedia(t, bob.access, acceptChallenge(t, bob.access, photoA))
+	waitUntilViewExpires(t, acc.ViewExpiresAt)
+	require.Equal(t, http.StatusCreated, guess(t, bob.access, photoA, 51.5, -0.1))
+	played := read(bob.access)
+	require.NotNil(t, played.Items[0].Lat)
+	require.Equal(t, "guessed", played.Items[0].Status)
+	resp, _ := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupA, nil, "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestGroupGlobePaginationAndRevocation(t *testing.T) {
+	alice := signup(t, unique("globeowner"), unique("globeowner")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("globemember"), unique("globemember")+"@example.test", "StrongPassword123")
+	groupID, invite := createGroup(t, alice.access, "Globe history")
+	joinGroup(t, bob.access, invite)
+	db := testDB(t)
+	ids := make([]string, 102)
+	for i := range ids {
+		ids[i] = uuid.NewString()
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
+	created := time.Date(2020, 1, 1, 12, 0, 0, 123000, time.UTC)
+	// Tie every timestamp and omit chat messages/media to exercise actual SQL
+	// ordering and retained history independently of the chat and storage paths.
+	_, err := db.Exec(t.Context(), `INSERT INTO photos
+		(id, group_id, user_id, lat, long, lifecycle_status, created_at, expires_at, retention_at)
+		SELECT id, $2, $3, 0, 0, 'removed', $4, $4, $4 FROM unnest($1::text[]) AS id`, ids, groupID, alice.userID, created)
+	require.NoError(t, err)
+	read := func(cursor string) atlas.Page {
+		t.Helper()
+		resp, body := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupID+"&cursor="+url.QueryEscape(cursor), nil, bob.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+		var page atlas.Page
+		require.NoError(t, jsonUnmarshal(body, &page))
+		return page
+	}
+	first := read("")
+	require.Len(t, first.Items, 100)
+	require.NotEmpty(t, first.NextCursor)
+	for i, item := range first.Items {
+		require.Equal(t, ids[i], item.PhotoID)
+		require.Equal(t, "expired", item.Status)
+		require.NotNil(t, item.Lat)
+		require.Zero(t, *item.Lat)
+	}
+	// Pagination is stable even if the anchor disappears and a newer challenge
+	// arrives before the next request.
+	_, err = db.Exec(t.Context(), `DELETE FROM photos WHERE id = $1`, ids[99])
+	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO photos
+		(id, group_id, user_id, lat, long, lifecycle_status, created_at, expires_at, retention_at)
+		VALUES ($1, $2, $3, 0, 0, 'removed', $4, $4, $4)`, uuid.NewString(), groupID, alice.userID, created.Add(time.Hour))
+	require.NoError(t, err)
+	last := read(first.NextCursor)
+	require.Len(t, last.Items, 2)
+	require.Empty(t, last.NextCursor)
+	require.Equal(t, ids[100], last.Items[0].PhotoID)
+	require.Equal(t, ids[101], last.Items[1].PhotoID)
+	_, err = db.Exec(t.Context(), `DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, bob.userID)
+	require.NoError(t, err)
+	resp, body := doJSON(t, http.MethodGet, "/api/v1/group/challenges?group_id="+groupID+"&cursor="+url.QueryEscape(first.NextCursor), nil, bob.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode, string(body))
 }
 
 func TestGroupPhotoAndNotificationSettings(t *testing.T) {

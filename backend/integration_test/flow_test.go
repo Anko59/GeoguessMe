@@ -1,11 +1,20 @@
 package integration_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"geoguessme/internal/models"
+	feedrepo "geoguessme/internal/repository/feed"
 
 	"github.com/stretchr/testify/require"
 )
@@ -178,3 +187,246 @@ func TestMediaIsRemovedAfterViewWindow(t *testing.T) {
 }
 
 func uniqueU(name string) string { return unique(name) }
+
+func uploadPublicPhoto(t *testing.T, bearer string) string {
+	t.Helper()
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	file, err := form.CreateFormFile("photo", "public.png")
+	require.NoError(t, err)
+	png, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	require.NoError(t, err)
+	_, err = file.Write(png)
+	require.NoError(t, err)
+	require.NoError(t, form.WriteField("lat", "48.8"))
+	require.NoError(t, form.WriteField("long", "2.3"))
+	require.NoError(t, form.WriteField("caption", "Find this public place"))
+	require.NoError(t, form.Close())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/feed/challenges", &body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equalf(t, 201, resp.StatusCode, "%s", data)
+	var result struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(data, &result))
+	return result.ID
+}
+
+// This fixture exercises migration 026 against the real database and HTTP
+// handlers, including viewer isolation, concurrent guesses and cascade cleanup.
+func TestPublicFeedJourney(t *testing.T) {
+	owner := signup(t, uniqueU("poster"), uniqueU("poster")+"@example.test", "StrongPassword123")
+	viewer := signup(t, uniqueU("viewer"), uniqueU("viewer")+"@example.test", "StrongPassword123")
+	other := signup(t, uniqueU("other"), uniqueU("other")+"@example.test", "StrongPassword123")
+	groupID, _ := createGroup(t, owner.access, "Private circle")
+	privateID := uploadPhoto(t, owner.access, groupID)
+	publicID := uploadPublicPhoto(t, owner.access)
+	path := "/api/v1/feed/challenges/" + publicID
+	resp, _ := doJSON(t, "GET", "/api/v1/feed", nil, "", nil)
+	require.Equal(t, 401, resp.StatusCode)
+	resp, data := doJSON(t, "GET", "/api/v1/feed", nil, viewer.access, nil)
+	require.Equal(t, 200, resp.StatusCode)
+	require.NotContains(t, string(data), privateID)
+	require.NotContains(t, string(data), "storage_key")
+	require.NotContains(t, string(data), "actual_lat")
+	var page models.PublicFeedPage
+	require.NoError(t, json.Unmarshal(data, &page))
+	require.Contains(t, string(data), publicID)
+	resp, _ = doJSON(t, "GET", path+"/guess", nil, viewer.access, nil)
+	require.Equal(t, 404, resp.StatusCode)
+	resp, preview := doJSON(t, "GET", path+"/media", nil, viewer.access, nil)
+	require.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, "private, no-store", resp.Header.Get("Cache-Control"))
+	// Reading a full page of photos must leave the write allowance available
+	// for the guesses, reactions, and comment below.
+	for range 20 {
+		resp, image := doJSON(t, "GET", path+"/media", nil, viewer.access, nil)
+		require.Equal(t, 200, resp.StatusCode)
+		require.Equal(t, preview, image)
+	}
+	resp, original := doJSON(t, "GET", path+"/play", nil, viewer.access, nil)
+	require.Equal(t, 200, resp.StatusCode)
+	require.NotEqual(t, preview, original)
+	resp, ownerMedia := doJSON(t, "GET", path+"/media", nil, owner.access, nil)
+	require.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, original, ownerMedia)
+	resp, _ = doJSON(t, "POST", path+"/guess", map[string]float64{"lat": 48.8, "long": 2.3}, owner.access, nil)
+	require.Equal(t, 403, resp.StatusCode)
+
+	// Both simultaneous submissions must observe the same immutable winner.
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	results := make([][]byte, 2)
+	statuses := make([]int, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			response, body := doJSON(t, "POST", path+"/guess", map[string]float64{"lat": 48.8 + float64(i), "long": 2.3}, viewer.access, nil)
+			results[i], statuses[i] = body, response.StatusCode
+		}()
+	}
+	close(start)
+	wg.Wait()
+	require.Equal(t, []int{200, 200}, statuses)
+	require.JSONEq(t, string(results[0]), string(results[1]))
+	resp, revealed := doJSON(t, "GET", path+"/media", nil, viewer.access, nil)
+	require.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, original, revealed)
+	_, stillBlurred := doJSON(t, "GET", path+"/media", nil, other.access, nil)
+	require.Equal(t, preview, stillBlurred)
+	for range 2 {
+		resp, _ = doJSON(t, "PUT", path+"/reaction", nil, viewer.access, nil)
+		require.Equal(t, 204, resp.StatusCode)
+	}
+	_, data = doJSON(t, "GET", path, nil, viewer.access, nil)
+	var post models.PublicChallenge
+	require.NoError(t, json.Unmarshal(data, &post))
+	require.True(t, post.Resolved)
+	require.True(t, post.Reacted)
+	require.Equal(t, 1, post.ReactionCount)
+	_, data = doJSON(t, "GET", path, nil, other.access, nil)
+	require.NoError(t, json.Unmarshal(data, &post))
+	require.False(t, post.Resolved)
+	require.False(t, post.Reacted)
+	// Another player's shared parent lock must not serialize this attempt.
+	// The deadline is a failure bound, not a synchronization delay.
+	db := testDB(t)
+	lock, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = lock.Rollback(t.Context()) }()
+	_, err = lock.Exec(t.Context(), `SELECT id FROM public_challenges WHERE id=$1 FOR KEY SHARE`, publicID)
+	require.NoError(t, err)
+	guessCtx, cancelGuess := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelGuess()
+	_, err = feedrepo.NewRepository(db).Guess(guessCtx, publicID, other.userID, 0, 0)
+	require.NoError(t, err, "different players must be able to guess while a shared parent lock is held")
+	require.NoError(t, lock.Rollback(t.Context()))
+	resp, otherRevealed := doJSON(t, http.MethodGet, path+"/media", nil, other.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, original, otherRevealed)
+	resp, data = doJSON(t, "POST", path+"/comments", map[string]string{"content": "  Beautiful!  "}, viewer.access, nil)
+	require.Equal(t, 201, resp.StatusCode)
+	var comment models.PublicComment
+	require.NoError(t, json.Unmarshal(data, &comment))
+	require.Equal(t, "Beautiful!", comment.Content)
+	resp, _ = doJSON(t, "DELETE", path+"/comments/"+comment.ID, nil, other.access, nil)
+	require.Equal(t, 404, resp.StatusCode)
+	resp, _ = doJSON(t, "DELETE", path+"/comments/"+comment.ID, nil, owner.access, nil)
+	require.Equal(t, 204, resp.StatusCode)
+	resp, _ = doJSON(t, "DELETE", path+"/reaction", nil, viewer.access, nil)
+	require.Equal(t, 204, resp.StatusCode)
+	resp, _ = doJSON(t, "DELETE", path, nil, viewer.access, nil)
+	require.Equal(t, 404, resp.StatusCode)
+
+	var key string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT storage_key FROM public_challenges WHERE id=$1`, publicID).Scan(&key))
+	resp, _ = doJSON(t, "DELETE", path, nil, owner.access, nil)
+	require.Equal(t, 204, resp.StatusCode)
+	var count int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM media_deletion_jobs WHERE storage_key=$1`, key).Scan(&count))
+	require.Equal(t, 1, count)
+	resp, _ = doJSON(t, "GET", path+"/play", nil, other.access, nil)
+	require.Equal(t, 404, resp.StatusCode)
+
+	// Account deletion must enqueue the public object even through a cascade.
+	second := uploadPublicPhoto(t, owner.access)
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT storage_key FROM public_challenges WHERE id=$1`, second).Scan(&key))
+	_, err = db.Exec(t.Context(), `DELETE FROM users WHERE id=$1`, owner.userID)
+	require.NoError(t, err)
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM public_challenges WHERE id=$1`, second).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM media_deletion_jobs WHERE storage_key=$1`, key).Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+// TestPublicTimedFeedJourney pins the additive group-style lifecycle: the
+// media-delivered acknowledgement starts server-owned deadlines, late guesses
+// persist an idempotent timeout, and map coordinates remain protected until a
+// viewer resolves or times out their session.
+func TestPublicTimedFeedJourney(t *testing.T) {
+	owner := signup(t, uniqueU("timed-owner"), uniqueU("timed-owner")+"@example.test", "StrongPassword123")
+	viewer := signup(t, uniqueU("timed-viewer"), uniqueU("timed-viewer")+"@example.test", "StrongPassword123")
+	other := signup(t, uniqueU("timed-other"), uniqueU("timed-other")+"@example.test", "StrongPassword123")
+	publicID := uploadPublicPhoto(t, owner.access)
+	path := "/api/v1/feed/challenges/" + publicID
+
+	resp, _ := doJSON(t, http.MethodPost, path+"/accept", nil, owner.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, data := doJSON(t, http.MethodPost, path+"/accept", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var accepted struct {
+		ViewExpiresAt  time.Time `json:"view_expires_at"`
+		GuessExpiresAt time.Time `json:"guess_expires_at"`
+	}
+	require.NoError(t, json.Unmarshal(data, &accepted))
+	require.False(t, accepted.ViewExpiresAt.IsZero())
+	require.True(t, accepted.GuessExpiresAt.After(accepted.ViewExpiresAt))
+	resp, _ = doJSON(t, http.MethodGet, path+"/timed-media", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp, data = doJSON(t, http.MethodPost, path+"/media-delivered", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var delivered struct {
+		ViewExpiresAt  time.Time `json:"view_expires_at"`
+		GuessExpiresAt time.Time `json:"guess_expires_at"`
+	}
+	require.NoError(t, json.Unmarshal(data, &delivered))
+	require.True(t, delivered.GuessExpiresAt.After(delivered.ViewExpiresAt))
+	resp, _ = doJSON(t, http.MethodPost, path+"/timed-guess", map[string]float64{"lat": 48.8, "long": 2.3}, viewer.access, nil)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	waitUntilViewExpires(t, delivered.ViewExpiresAt)
+	resp, _ = doJSON(t, http.MethodGet, path+"/timed-results", nil, other.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, data = doJSON(t, http.MethodPost, path+"/timed-guess", map[string]float64{"lat": 48.8, "long": 2.3}, viewer.access, nil)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var guess struct {
+		Distance float64 `json:"distance"`
+	}
+	require.NoError(t, json.Unmarshal(data, &guess))
+	require.Zero(t, guess.Distance)
+	resp, data = doJSON(t, http.MethodGet, path+"/timed-results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), `"actual_lat":48.8`)
+	require.Contains(t, string(data), `"lat":48.8`)
+
+	timeoutID := uploadPublicPhoto(t, owner.access)
+	timeoutPath := "/api/v1/feed/challenges/" + timeoutID
+	_, _ = doJSON(t, http.MethodPost, timeoutPath+"/accept", nil, viewer.access, nil)
+	resp, timeoutOriginal := doJSON(t, http.MethodGet, timeoutPath+"/timed-media", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_, _ = doJSON(t, http.MethodPost, timeoutPath+"/media-delivered", nil, viewer.access, nil)
+	db := testDB(t)
+	_, err := db.Exec(t.Context(), `UPDATE public_challenge_views SET view_expires_at=NOW()-interval '1 second', guess_expires_at=NOW()-interval '1 second' WHERE challenge_id=$1 AND user_id=$2`, timeoutID, viewer.userID)
+	require.NoError(t, err)
+	resp, data = doJSON(t, http.MethodGet, timeoutPath+"/timed-results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), `"guesses":[]`)
+	var guessCount int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM public_guesses WHERE challenge_id=$1 AND user_id=$2`, timeoutID, viewer.userID).Scan(&guessCount))
+	require.Zero(t, guessCount)
+	resp, completedMedia := doJSON(t, http.MethodGet, timeoutPath+"/media", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, timeoutOriginal, completedMedia)
+	var timeoutPreview []byte
+	err = db.QueryRow(t.Context(), `SELECT preview FROM public_challenges WHERE id=$1`, timeoutID).Scan(&timeoutPreview)
+	require.NoError(t, err)
+	resp, unresolvedMedia := doJSON(t, http.MethodGet, timeoutPath+"/media", nil, other.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, timeoutPreview, unresolvedMedia)
+	resp, data = doJSON(t, http.MethodPost, timeoutPath+"/timed-guess", map[string]float64{"lat": 0, "long": 0}, viewer.access, nil)
+	require.Equal(t, http.StatusGone, resp.StatusCode)
+	require.Contains(t, string(data), "guess_time_expired")
+	var timedOut bool
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT timed_out FROM public_guesses WHERE challenge_id=$1 AND user_id=$2`, timeoutID, viewer.userID).Scan(&timedOut))
+	require.True(t, timedOut)
+	resp, _ = doJSON(t, http.MethodPost, timeoutPath+"/timed-timeout", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}

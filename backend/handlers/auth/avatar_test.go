@@ -18,7 +18,7 @@ import (
 	"geoguessme/internal/models"
 	"geoguessme/internal/storage"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func newAvatarAPI(t *testing.T, mock pgxmock.PgxPoolIface, store storage.ObjectStore) *AuthAPI {

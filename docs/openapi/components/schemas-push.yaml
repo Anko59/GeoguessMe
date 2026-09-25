@@ -1,0 +1,14 @@
+# Web-push subscription schema, kept here so schemas.yaml stays under the
+# repository 500-line structure limit. Referenced directly by the API path
+# fragments and resolved as a component schema of docs/openapi.yaml.
+PushSubscriptionRequest:
+  type: object
+  required: [endpoint, keys]
+  properties:
+    endpoint: { type: string, format: uri }
+    keys:
+      type: object
+      required: [p256dh, auth]
+      properties:
+        p256dh: { type: string, description: "Base64url 65-byte uncompressed P-256 public key" }
+        auth: { type: string, description: "Base64url 16-byte authentication secret" }

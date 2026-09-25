@@ -8,6 +8,44 @@ servers:
   - url: /api/v1
     description: Same-origin API gateway prefix.
 paths:
+  /group/challenges:
+    $ref: ./openapi/paths/atlas.yaml#/groupChallenges
+  /feed:
+    $ref: ./openapi/paths/feed.yaml#/feed
+  /feed/leaderboard:
+    $ref: ./openapi/paths/feed.yaml#/leaderboard
+  /feed/leaderboard/{profileID}:
+    $ref: ./openapi/paths/feed.yaml#/profileLeaderboard
+  /feed/challenges:
+    $ref: ./openapi/paths/feed.yaml#/upload
+  /feed/challenges/{id}:
+    $ref: ./openapi/paths/feed.yaml#/post
+  /feed/challenges/{id}/media:
+    $ref: ./openapi/paths/feed.yaml#/media
+  /feed/challenges/{id}/play:
+    $ref: ./openapi/paths/feed.yaml#/play
+  /feed/challenges/{id}/accept:
+    $ref: ./openapi/paths/feed-timed.yaml#/accept
+  /feed/challenges/{id}/timed-media:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedMedia
+  /feed/challenges/{id}/media-delivered:
+    $ref: ./openapi/paths/feed-timed.yaml#/mediaDelivered
+  /feed/challenges/{id}/timed-guess:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedGuess
+  /feed/challenges/{id}/timed-timeout:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedTimeout
+  /feed/challenges/{id}/timed-results:
+    $ref: ./openapi/paths/feed-timed.yaml#/timedResults
+  /feed/challenges/{id}/guess:
+    $ref: ./openapi/paths/feed.yaml#/guess
+  /feed/challenges/{id}/results:
+    $ref: ./openapi/paths/feed.yaml#/results
+  /feed/challenges/{id}/reaction:
+    $ref: ./openapi/paths/feed.yaml#/reaction
+  /feed/challenges/{id}/comments:
+    $ref: ./openapi/paths/feed.yaml#/comments
+  /feed/challenges/{id}/comments/{commentID}:
+    $ref: ./openapi/paths/feed.yaml#/comment
   /auth/signup:
     $ref: ./openapi/paths/auth.yaml#/signup
   /auth/login:
@@ -40,6 +78,10 @@ paths:
     $ref: ./openapi/paths/auth.yaml#/deleteAccount
   /user/groups:
     $ref: ./openapi/paths/groups.yaml#/userGroups
+  /user/groups/inbox:
+    $ref: ./openapi/paths/groups.yaml#/userGroupsInbox
+  /user/groups/inbox/read:
+    $ref: ./openapi/paths/groups.yaml#/markUserGroupRead
   /user/profile/{userID}:
     $ref: ./openapi/paths/groups.yaml#/userProfile
   /group/create:

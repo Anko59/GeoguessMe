@@ -12,7 +12,7 @@ import (
 
 	"geoguessme/internal/config"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 type fakeStore struct {

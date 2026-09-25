@@ -13,13 +13,13 @@ services:
     ports: ["${GEOGUESSME_TEST_DB_PORT:-0}:5432"]
     volumes: ["geoguessme_test_db:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test -d geoguessme_test"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U test -d geoguessme_test"]
       interval: 3s
       timeout: 3s
       retries: 30
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # MinIO release
+    image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # Exact-digest mirror of the MinIO release
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -94,7 +94,8 @@ services:
       RATE_LIMIT_LOGIN: "identity:10/1m,trustedIP:50000/1m,global:300/1m"
       RATE_LIMIT_SIGNUP: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
       RATE_LIMIT_EMAIL: "identity:3/1h,trustedIP:50000/1h,global:1000/1m"
-      RATE_LIMIT_DEFAULT: "identity:10/1m,trustedIP:50000/1m"
+      RATE_LIMIT_DEFAULT: "route:120/1m,trustedIP:50000/1m"
+      RATE_LIMIT_WRITE: "route:60/1m,trustedIP:50000/1m"
       MEDIA_PROCESSING_WORKER: "true"
     depends_on:
       migration: { condition: service_completed_successfully }

@@ -1,0 +1,36 @@
+data_dir: /var/lib/vector
+
+sources:
+  production_docker_logs:
+    type: docker_logs
+    docker_host: http://socket-proxy:2375
+    include_labels:
+      - com.docker.compose.project=geoguessme-production
+    auto_partial_merge: true
+
+transforms:
+  production_log_fields:
+    type: remap
+    inputs: [production_docker_logs]
+    source: |
+      . = {
+        "message": .message,
+        "timestamp": .timestamp,
+        "container_name": .container_name,
+        "stream": .stream,
+        "image": .image,
+        "host": .host,
+      }
+
+sinks:
+  victoria_logs:
+    type: http
+    inputs: [production_log_fields]
+    uri: http://victoria-logs:9428/logs/insert/jsonline?_stream_fields=host,container_name,stream&_msg_field=message&_time_field=timestamp
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    healthcheck:
+      enabled: false

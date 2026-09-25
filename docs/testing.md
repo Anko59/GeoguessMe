@@ -8,7 +8,7 @@ tools from pinned images and named caches.
 
 | Target                                     | Scope                                                                                                                                                                                                                                                                                                                                 | Expected result                                                           |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests; the seven harness self-test suites are path-triggered on harness changes (`PREFLIGHT_HARNESS=true/false` overrides)                                                                                                                                 | Fast deterministic local/PR gate PASS                                     |
+| make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests; the eight harness self-test suites are path-triggered on harness changes (`PREFLIGHT_HARNESS=true/false` overrides)                                                                                                                                 | Fast deterministic local/PR gate PASS                                     |
 | make preflight-docs                        | Structure, formatting, documentation lint, and path-classifier regression                                                                                                                                                                                                                                                             | Documentation-only gate PASS                                              |
 | make test-unit                             | Backend unit tests and frontend Vitest                                                                                                                                                                                                                                                                                                | go test PASS; Vitest PASS                                                 |
 | make test-race                             | Backend race detector                                                                                                                                                                                                                                                                                                                 | go test -race PASS (no races)                                             |
@@ -17,6 +17,7 @@ tools from pinned images and named caches.
 | make test-debt-markers-regression          | Owned and unowned deferred-work marker fixtures                                                                                                                                                                                                                                                                                       | check-markers-test.sh PASS                                                |
 | make test-ci-retention-regression          | Verify CI bounded retention and cache scopes                                                                                                                                                                                                                                                                                          | check-ci-retention-regression.sh PASS                                     |
 | make test-e2e-regression                   | Verify E2E cleanup, safe arguments, browser selection, and volume safeguards                                                                                                                                                                                                                                                          | check-e2e-regression.sh PASS                                              |
+| make test-load-harness-regression          | Verify the k6 load profile attests age on every signup it creates                                                                                                                                                                                                                                                                     | check-load-attestation.sh PASS                                            |
 | make test-cache-status-regression          | Cache-status reporting regression tests                                                                                                                                                                                                                                                                                               | check-cache-status-regression.sh PASS                                     |
 | make test-restart-regression               | Restart-rehearsal script structure regression                                                                                                                                                                                                                                                                                         | check-restart-regression.sh PASS                                          |
 | make test-prune-regression                 | Prune script regression tests                                                                                                                                                                                                                                                                                                         | check-prune-regression.sh PASS                                            |
@@ -30,6 +31,7 @@ tools from pinned images and named caches.
 | make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                                                                                                                                                                    | All integration tests PASS                                                |
 | make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                                                                                                                                                                    | All Playwright projects PASS                                              |
 | make test-e2e-pr                           | Chromium desktop Playwright project; CI may set `GEOGUESSME_E2E_SHARD=N/M` for isolated shards                                                                                                                                                                                                                                        | PR browser checks PASS                                                    |
+| make test-mobile                           | Isolated backend fixture, Capacitor APK build, headless Android emulator, and Maestro gameplay journey                                                                                                                                                                                                                                | APK installs; auth, chat, guess, camera capture, and upload PASS          |
 | make qa-agent                              | Local LLM-driven source-blind exploratory QA against deployed `QA_BASE_URL` with the `fast` budget by default (`qa-agent-full` and `qa-agent-nightly` raise it); includes synthetic camera/location probes, disposable mailbox flows, and multi-account group checks; writes a revision-bound report and artifacts to `QA_REPORT_DIR` | `qa-report.json` with no blocking `BUG` findings                          |
 | make test-qa-mailbox-live                  | Verify disposable mailbox creation from the Dockerized browser container; creates and deletes one temporary provider account                                                                                                                                                                                                          | Live provider contract PASS                                               |
 | make quality                               | Structure, format, lint, type-check, audit, regression, verified unit pass (race + coverage), build, compose-validate                                                                                                                                                                                                                 | Zero violations; all gates PASS                                           |
@@ -50,27 +52,29 @@ inside containers.
 The harness self-test rows (`test-structure-regression`,
 `test-debt-markers-regression`, `test-e2e-regression`, plus
 `test-makefile-fragments-regression`, `test-docs-agent-config`,
-`test-ci-classifier`, and `test-dev-workflow-regression`) run inside
-`make preflight` only when the harness changed and always inside `make quality`.
+`test-ci-classifier`, `test-dev-workflow-regression`, and
+`test-load-harness-regression`) run inside `make preflight` only when the
+harness changed and always inside `make quality`.
 
 ## Gate frequency
 
 The gates intentionally become broader as a change approaches deployment:
 
-| Event                     | Gate                                                                                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Commit                    | Formatting, structure, and lint through `make pre-commit`                                                                                   |
-| Local push                | `make preflight`                                                                                                                            |
-| Documentation-only PR     | `make preflight-docs`                                                                                                                       |
-| Backend PR                | `make preflight` and `make pr-backend` in parallel                                                                                          |
-| Frontend PR               | `make preflight` and two isolated Chromium `make pr-frontend` shards in parallel                                                            |
-| Shared or deployment PR   | Fast, backend integration, and Chromium E2E jobs in parallel                                                                                |
-| Merge to `dev`            | Four parallel gate jobs (quality, backend integration, Chromium E2E, operational), then signed-image publication and development deployment |
-| Successful dev deployment | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                |
-| Before a release PR       | `make qa-agent-full` against deployed dev; retain the report with the release record                                                        |
-| Release PR to `main`      | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                    |
-| Merge to `main`           | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                   |
-| Nightly                   | Complete `make verify`                                                                                                                      |
+| Event                        | Gate                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commit                       | Formatting, structure, and lint through `make pre-commit`                                                                                                     |
+| Local push                   | `make preflight`                                                                                                                                              |
+| Documentation-only PR        | `make preflight-docs`                                                                                                                                         |
+| Backend PR                   | `make preflight`, `make pr-backend`, and the Android emulator journey in parallel                                                                             |
+| Frontend PR                  | `make preflight`, two isolated Chromium `make pr-frontend` shards, and the Android emulator journey in parallel                                               |
+| Android or mobile-tooling PR | `make preflight` and the Android emulator journey in parallel                                                                                                 |
+| Shared or deployment PR      | Fast, backend integration, Chromium E2E, and Android emulator jobs in parallel                                                                                |
+| Merge to `dev`               | Five parallel gate jobs (quality, backend integration, Chromium E2E, Android emulator, operational), then signed-image publication and development deployment |
+| Successful dev deployment    | Local LLM-driven source-blind QA (default `fast` budget) against the exact deployed revision                                                                  |
+| Before a release PR          | `make qa-agent-full QA_BUILD_SHA=<deployed dev SHA>` against deployed dev; retain the report with the release record                                          |
+| Release PR to `main`         | Repository `release/*` branch tree equality and exact-dev-deployment verification; no application retest                                                      |
+| Merge to `main`              | Verify and promote the exact signed dev digests, add the production signature, create release, and deploy                                                     |
+| Nightly                      | Complete `make verify`                                                                                                                                        |
 
 The aggregate required status remains `Dockerized verification gate`, so branch
 protection cannot be bypassed when path-selected jobs are skipped. Unknown paths
@@ -103,6 +107,17 @@ E2E style checks reject waitForTimeout, networkidle, positional selectors, and
 retry-based flake masking. Accessibility scenarios run real Axe scans and fail
 on serious or critical violations.
 
+The globe journey attaches viewport screenshots of its empty, populated,
+selected-challenge, and hidden-location states to the Playwright report on
+desktop and mobile. It waits for the Earth image response and fonts, checks
+horizontal overflow and visible controls, and captures the actual viewport so
+mobile scrolling remains visible. These are review artifacts, not pixel-diff
+baselines. PR CI retains `geoguessme-globe-<run-id>-<shard-id>` PNG artifacts
+for seven days even when tests pass; the full report and failure diagnostics
+retain their existing failure-only upload policy. PR runs capture desktop;
+mobile captures are produced when the mobile project runs. Local files are under
+`frontend/test-results/`; generated screenshots are not committed.
+
 `make test-e2e-pr` runs desktop Chromium for pull-request feedback. CI splits
 that project across two Playwright shards, each on its own runner and disposable
 Compose project; Playwright keeps one worker per shard. The complete desktop
@@ -117,18 +132,29 @@ locally. It does not install Go, Node, Python, Playwright, or linters directly
 on the runner. The complete `make verify` target is intentionally reserved for
 the exact dev deployment revision and nightly verification, and must not be run
 locally for application or test-only changes; those are covered by PR CI and the
-dev gate.
+dev gate. Android changes, shared frontend/backend changes, and mobile tooling
+changes additionally run `make test-mobile` on a clean headless emulator; the
+job uploads only the ignored `.local/mobile/artifacts/` diagnostics with the
+same seven-day retention bound as browser diagnostics. The post-merge
+development pipeline runs the same Android journey before publishing development
+images and deploying the hosted development stack.
 
 Exploratory LLM QA is a separate local acceptance step because CI does not
 receive provider credentials. Its browser implementation still runs through the
 pinned Docker tool image.
 
 The CI workflow uses shard-scoped Docker layer caching (bounded by branch and
-lockfile hash), explicit artifact retention of 7 days for failure diagnostics,
-and BuildKit GC limits to prevent unbounded cache growth. The aggregate job
-publishes per-job elapsed times to its Actions summary. No secrets or `.env`
-files are cached or uploaded. The `check-ci-retention-regression` target
-validates these properties deterministically.
+lockfile hash), explicit artifact retention of 7 days for browser reports and
+failure diagnostics, and BuildKit GC limits to prevent unbounded cache growth.
+The aggregate job publishes per-job elapsed times to its Actions summary. No
+secrets or `.env` files are cached or uploaded. The
+`check-ci-retention-regression` target validates these properties
+deterministically.
+
+The disposable database health check probes TCP so the temporary socket-only
+initialization server cannot release migrations early. On E2E startup or browser
+failure, the runner prints bounded stack logs, including migration diagnostics,
+before removing the stack and preserves the original failure status.
 
 ## Cache and artifact bounds
 

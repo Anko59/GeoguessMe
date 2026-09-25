@@ -7,9 +7,47 @@ import (
 	"time"
 
 	"geoguessme/internal/models"
+	feedrepo "geoguessme/internal/repository/feed"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/pashagolub/pgxmock/v5"
 )
+
+func TestFeedPublicationResolveTreatsLaterAttemptAsCanonicalWinner(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	commitErr := errors.New("commit outcome unknown")
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.HideLocation, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO public_challenge_groups").WithArgs(challenge.ID, challenge.GroupIDs).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO photos").WithArgs(photos[0].ID, photos[0].UserID, photos[0].GroupID, photos[0].URL, photos[0].StorageKey, photos[0].MIMEType, photos[0].ByteSize, photos[0].Lat, photos[0].Long, photos[0].LifecycleStatus, photos[0].HideLocation, photos[0].CreatedAt, photos[0].ExpiresAt, photos[0].RetentionAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit().WillReturnError(commitErr)
+	if err := reservation.Create(context.Background(), challenge, photos); !errors.Is(err, commitErr) {
+		t.Fatalf("create error = %v", err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "caption", "audience", "lat", "long", "hide_location", "mime_type", "byte_size", "content_digest", "publication_token"}).AddRow(challenge.UserID, challenge.Caption, challenge.Audience, challenge.Lat, challenge.Long, challenge.HideLocation, challenge.MIMEType, challenge.ByteSize, challenge.ContentDigest, "later-attempt-token"),
+	)
+	mock.ExpectQuery("SELECT group_id FROM public_challenge_groups").WithArgs(challenge.ID).WillReturnRows(pgxmock.NewRows([]string{"group_id"}).AddRow("group-1"))
+	mock.ExpectCommit()
+	resolution, err := reservation.Resolve(context.Background())
+	if err != nil || resolution != feedrepo.PublicationAlreadyCommitted {
+		t.Fatalf("resolution=%v err=%v", resolution, err)
+	}
+}
 
 // TestCompleteChallengeProcessing proves the atomic success path: the per-group
 // photo rows and the job-completion UPDATE commit in one transaction, and the
@@ -151,6 +189,135 @@ func TestCompleteProcessingJobTx(t *testing.T) {
 		t.Fatalf("CompleteProcessingJobTx: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testFeedChallenge() (feedrepo.NewChallenge, []*models.Photo) {
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	challenge := feedrepo.NewChallenge{
+		ID: "challenge-1", UserID: "user-1", Caption: "A place", Audience: "friends",
+		GroupIDs: []string{"group-1"}, StorageKey: "public-challenges/challenge-1", MIMEType: "image/png",
+		Preview: []byte("preview"), Lat: 48.8, Long: 2.3, ByteSize: 12, ContentDigest: "digest", PublicationToken: "token-1", CreatedAt: now,
+	}
+	photos := []*models.Photo{{
+		ID: "photo-1", UserID: "user-1", GroupID: "group-1", StorageKey: "photos/photo-1",
+		MIMEType: "image/png", ByteSize: 12, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready",
+		CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour),
+	}}
+	return challenge, photos
+}
+
+func TestReserveFeedChallengeCommitsFeedAndGroupRowsTogether(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.HideLocation, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(true))
+	mock.ExpectExec("INSERT INTO public_challenge_groups").WithArgs(challenge.ID, challenge.GroupIDs).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("INSERT INTO photos").WithArgs(photos[0].ID, photos[0].UserID, photos[0].GroupID, photos[0].URL, photos[0].StorageKey, photos[0].MIMEType, photos[0].ByteSize, photos[0].Lat, photos[0].Long, photos[0].LifecycleStatus, photos[0].HideLocation, photos[0].CreatedAt, photos[0].ExpiresAt, photos[0].RetentionAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectCommit()
+
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || reservation.Existing() {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
+	}
+	if err := reservation.Create(context.Background(), challenge, photos); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReserveFeedChallengeIsIdempotentForTheSameOwner(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "caption", "audience", "lat", "long", "hide_location", "mime_type", "byte_size", "content_digest", "publication_token"}).AddRow(challenge.UserID, challenge.Caption, challenge.Audience, challenge.Lat, challenge.Long, challenge.HideLocation, challenge.MIMEType, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken),
+	)
+	mock.ExpectQuery("SELECT group_id FROM public_challenge_groups").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"group_id"}).AddRow("group-1"),
+	)
+	mock.ExpectCommit()
+
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil || !reservation.Existing() || len(reservation.GroupIDs()) != 1 {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
+	}
+}
+
+func TestReserveFeedChallengeRejectsReplayMetadataMismatch(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	challenge.Caption = "different place"
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "caption", "audience", "lat", "long", "hide_location", "mime_type", "byte_size", "content_digest", "publication_token"}).AddRow("user-1", "A place", "friends", challenge.Lat, challenge.Long, challenge.HideLocation, challenge.MIMEType, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken),
+	)
+	mock.ExpectQuery("SELECT group_id FROM public_challenge_groups").WithArgs(challenge.ID).WillReturnRows(
+		pgxmock.NewRows([]string{"group_id"}).AddRow("group-1"),
+	)
+	mock.ExpectRollback()
+
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if reservation != nil || !errors.Is(err, feedrepo.ErrConflict) {
+		t.Fatalf("reservation=%+v err=%v", reservation, err)
+	}
+}
+
+func TestSamePublicationMetadataRequiresImmutableCaptureFields(t *testing.T) {
+	base := feedrepo.NewChallenge{
+		Caption: "A place", Audience: "friends", Lat: 48.8, Long: 2.3, HideLocation: true,
+		MIMEType: "image/png", ByteSize: 12, ContentDigest: "digest",
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*feedrepo.NewChallenge)
+	}{
+		{name: "location visibility", mutate: func(challenge *feedrepo.NewChallenge) { challenge.HideLocation = false }},
+		{name: "mime type", mutate: func(challenge *feedrepo.NewChallenge) { challenge.MIMEType = "image/jpeg" }},
+		{name: "byte size", mutate: func(challenge *feedrepo.NewChallenge) { challenge.ByteSize = 13 }},
+		{name: "content digest", mutate: func(challenge *feedrepo.NewChallenge) { challenge.ContentDigest = "other" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := base
+			tc.mutate(&candidate)
+			if samePublicationMetadata(base, candidate) {
+				t.Fatal("immutable metadata mismatch was accepted")
+			}
+		})
+	}
+}
+
+func TestReserveFeedChallengeRollsBackWhenGroupMembershipIsMissing(t *testing.T) {
+	mock := newMockPool(t)
+	repo := NewRepository(mock)
+	challenge, photos := testFeedChallenge()
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("photos/photo-1").WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(challenge.StorageKey).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery("SELECT user_id,caption,audience,lat,long,hide_location,mime_type,byte_size,content_digest,publication_token FROM public_challenges").WithArgs(challenge.ID).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectExec("INSERT INTO public_challenges").WithArgs(challenge.ID, challenge.UserID, challenge.Caption, challenge.Audience, challenge.StorageKey, challenge.MIMEType, challenge.Preview, challenge.Lat, challenge.Long, challenge.HideLocation, challenge.ByteSize, challenge.ContentDigest, challenge.PublicationToken, challenge.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT NOT EXISTS").WithArgs(challenge.UserID, challenge.GroupIDs).WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(false))
+	mock.ExpectRollback()
+
+	reservation, err := repo.ReserveFeedChallenge(context.Background(), challenge, photos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Create(context.Background(), challenge, photos); !errors.Is(err, feedrepo.ErrForbidden) {
+		t.Fatalf("membership error = %v", err)
+	}
+	if err := reservation.Rollback(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }

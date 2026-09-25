@@ -9,9 +9,10 @@ import (
 
 // SignupRequest is the wire payload for account creation.
 type SignupRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	AgeAttested bool   `json:"age_attested"`
 }
 
 // LoginRequest is the wire payload for password login.

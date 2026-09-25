@@ -48,6 +48,7 @@ async function signupWithToken(context: BrowserContext): Promise<{ page: Page; t
     await page.fill('#signup-username', username);
     await page.fill('#signup-email', email);
     await page.fill('#signup-password', password);
+    await page.check('#signup-age-attested');
     await page.click('button.btn-primary[type="submit"]');
 
     const signupResponse = await signupResponsePromise;
@@ -329,7 +330,9 @@ test.describe('Challenge result authorization', () => {
             expect((await acceptResponsePromise).status()).toBe(200);
             expect((await mediaResponsePromise).status()).toBe(200);
 
-            await expect(guesser.locator('.photo-view')).toBeVisible();
+            // This authorization scenario uses the one-second test viewing
+            // window. The media response can arrive after that transient phase;
+            // the challenge flow separately asserts the photo view itself.
             await expect(guesser.locator('.guessing-view')).toBeVisible();
             await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
             const guessResponsePromise = guesser.waitForResponse(

@@ -1,0 +1,116 @@
+"accept":
+  "post":
+    "operationId": "acceptPublicTimedChallenge"
+    "summary": "Accept a public feed challenge and create a timed session"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "responses":
+      "200":
+        "description": "Server-owned viewing and guessing deadlines."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicChallengeAccepted" } } }
+      "400": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "500": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+"timedMedia":
+  "get":
+    "operationId": "getPublicTimedChallengeMedia"
+    "summary": "Stream the original media for an accepted timed feed challenge"
+    "description": "The client must call media-delivered after the complete response is received; streaming bytes alone does not start the server-owned view window."
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "responses":
+      "200":
+        "description": "Private original image bytes."
+        "content":
+          "image/jpeg": { "schema": { "type": "string", "format": "binary" } }
+          "image/png": { "schema": { "type": "string", "format": "binary" } }
+          "image/webp": { "schema": { "type": "string", "format": "binary" } }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "410": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "503": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+"mediaDelivered":
+  "post":
+    "operationId": "confirmPublicTimedChallengeMediaDelivered"
+    "summary": "Confirm complete delivery and start the public timed view window"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "responses":
+      "200":
+        "description": "Authoritative viewing and guessing deadlines."
+        "content":
+          {
+            "application/json":
+              { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicChallengeMediaDelivered" } },
+          }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+"timedGuess":
+  "post":
+    "operationId": "submitPublicTimedChallengeGuess"
+    "summary": "Submit one server-timed feed challenge guess"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "requestBody":
+      "required": true
+      "content":
+        "application/json":
+          "schema":
+            "type": "object"
+            "required": ["lat", "long"]
+            "properties":
+              "lat": { "type": "number", "format": "double", "minimum": -90, "maximum": 90 }
+              "long": { "type": "number", "format": "double", "minimum": -180, "maximum": 180 }
+    "responses":
+      "201":
+        "description": "Guess recorded."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicTimedGuessResponse" } } }
+      "200":
+        "description": "Existing guess returned idempotently."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicTimedGuessResponse" } } }
+      "400": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "409": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "410": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+"timedTimeout":
+  "post":
+    "operationId": "timeoutPublicTimedChallengeGuess"
+    "summary": "Persist a timed-out public feed guess after the server deadline"
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "responses":
+      "201":
+        "description": "Timeout recorded with score zero."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicTimedGuessResponse" } } }
+      "200":
+        "description": "Existing guess or timeout returned idempotently."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicTimedGuessResponse" } } }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "409": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+"timedResults":
+  "get":
+    "operationId": "getPublicTimedChallengeResults"
+    "summary": "Read authorized public feed timed challenge map results"
+    "description": "The answer and guess coordinates are returned only to the owner, a viewer who resolved the challenge, or a viewer whose server-owned timed session has expired."
+    "tags": ["Feed"]
+    "security": [{ "bearerAuth": [] }]
+    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
+    "responses":
+      "200":
+        "description": "Map-ready challenge results."
+        "content":
+          { "application/json": { "schema": { "$ref": "../components/schemas-feed.yaml#/PublicTimedResults" } } }
+      "403": { "$ref": "../components/responses.yaml#/ErrorResponse" }
+      "404": { "$ref": "../components/responses.yaml#/ErrorResponse" }

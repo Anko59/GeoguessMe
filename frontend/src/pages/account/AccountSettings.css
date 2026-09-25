@@ -1,12 +1,37 @@
 .account-settings-container {
-    align-items: start;
-    padding-block: clamp(1rem, 4vw, 3rem);
+    width: min(100%, 64rem);
+    min-height: 0;
+    margin-inline: auto;
+    padding: clamp(1rem, 3vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: transparent;
+}
+
+.account-settings-shell {
+    background:
+        linear-gradient(rgba(246, 248, 252, 0.9), rgba(246, 248, 252, 0.94)),
+        url('/app_background.png') center / 640px;
+}
+
+.account-settings-shell .account-settings-container::before {
+    content: none;
 }
 
 .account-settings-card {
     width: min(100%, 46rem);
     padding: clamp(1.25rem, 4vw, 2.5rem);
     text-align: left;
+}
+
+.account-settings-container > .account-settings-card {
+    width: min(100%, 46rem);
+    margin-block: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
 }
 
 .account-header {
@@ -208,16 +233,8 @@
 }
 
 @media (max-width: 640px) {
-    .account-settings-container {
-        padding: 0;
-        background: var(--surface);
-    }
-
     .account-settings-card {
-        min-height: 100dvh;
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
+        min-height: 0;
     }
 
     .account-header > img {
@@ -239,5 +256,12 @@
     .account-danger .btn,
     .account-footer-actions .logout-btn {
         width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .account-settings-container {
+        align-items: center;
+        flex-direction: column;
     }
 }

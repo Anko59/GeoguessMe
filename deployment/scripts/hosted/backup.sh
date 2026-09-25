@@ -10,8 +10,17 @@ reason=${2:-scheduled}
 validate_environment "$environment"
 require_secret_file "$environment"
 
+# A scheduled backup must not queue behind another scheduled backup, but a
+# deployment must not fail merely because the hourly backup started first.
+# Keep the wait bounded so a genuinely stuck backup still fails closed.
+readonly PRE_DEPLOY_LOCK_WAIT_SECONDS=300
 exec 8>"$LOCK_ROOT/geoguessme-backup-$environment.lock"
-flock -n 8 || die "$environment backup is already running"
+if [ "$reason" = pre-deploy ]; then
+    flock -w "$PRE_DEPLOY_LOCK_WAIT_SECONDS" 8 ||
+        die "$environment backup did not finish within ${PRE_DEPLOY_LOCK_WAIT_SECONDS}s"
+else
+    flock -n 8 || die "$environment backup is already running"
+fi
 
 release_link="$APP_ROOT/$environment/current"
 [ -d "$release_link" ] || die "$environment has no active release"

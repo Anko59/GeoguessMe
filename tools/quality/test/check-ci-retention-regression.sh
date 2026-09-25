@@ -47,9 +47,10 @@ CI=.github/workflows/ci.yml
 DEPLOY=.github/workflows/deploy.yml
 RELEASE=.github/workflows/release.yml
 NIGHTLY=.github/workflows/nightly.yml
+PLAY_API=.github/workflows/play-api-access.yml
 
 echo "tiered CI regression tests:"
-for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY"; do
+for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY" "$PLAY_API"; do
     if [ -f "$workflow" ]; then
         ok "$workflow exists"
     else
@@ -77,6 +78,11 @@ contains "$CI" 'FULL_SCOPE.*needs\.classify\.outputs\.full' \
 contains "$CI" 'make tools-self-test' "full-scope PRs retain tool image self-tests"
 contains "$CI" 'make pr-backend' "backend changes select integration tests"
 contains "$CI" 'make pr-frontend' "frontend changes select Chromium E2E"
+contains "$CI" 'name: Android emulator' "Android changes select the emulator journey"
+contains "$CI" 'needs\.classify\.outputs\.mobile' "Android job follows mobile path classification"
+contains "$CI" 'make bootstrap-mobile' "mobile jobs prepare the pinned Android toolchain"
+contains "$CI" 'make test-mobile' "mobile jobs run the canonical Android journey"
+contains "$CI" 'path: \.local/mobile/artifacts/' "mobile failures retain bounded diagnostics"
 contains "$CI" 'fail-fast: false' "browser shards report every isolated result"
 contains "$CI" 'shard: 1/2' "first Chromium shard is declared"
 contains "$CI" 'shard: 2/2' "second Chromium shard is declared"
@@ -96,6 +102,11 @@ absent "$CI" 'make verify' "pull requests do not run the operational release gat
 contains "$CI" 'retention-days: 7' "failure artifacts have bounded retention"
 contains "$CI" 'actions/cache@' "live-stack jobs use persistent Docker caches"
 contains "$CI" 'BUILDX_BUILDER:' "Buildx v4 selects its named builder explicitly"
+if sed -n '/name: Upload browser report and screenshots/,/uses:/p' "$CI" | grep -q 'if: always()'; then
+    ok "successful browser runs retain visual-review screenshots"
+else
+    bad "browser screenshots must remain available after successful tests"
+fi
 contains "$CI" 'gckeepstorage = 12000000000' "PR BuildKit cache is bounded"
 
 secret_paths=false
@@ -116,8 +127,12 @@ absent "$DEPLOY" 'make verify' "dev gate jobs run focused suites, not the serial
 contains "$DEPLOY" 'make quality' "dev gate includes the quality job"
 contains "$DEPLOY" 'make pr-backend' "dev gate includes backend integration"
 contains "$DEPLOY" 'GEOGUESSME_E2E_PROJECTS=desktop make test-e2e' "dev gate runs Chromium E2E"
+contains "$DEPLOY" 'name: Android emulator gate' "dev gate includes the Android emulator"
+contains "$DEPLOY" 'make bootstrap-mobile' "dev Android gate prepares the pinned toolchain"
+contains "$DEPLOY" 'make test-mobile' "dev Android gate runs the canonical journey"
+contains "$DEPLOY" 'path: \.local/mobile/artifacts/' "dev Android failures retain bounded diagnostics"
 contains "$DEPLOY" 'make operational-gate' "dev gate includes operational rehearsals"
-contains "$DEPLOY" 'needs: \[quality, integration, e2e, operational\]' "dev publishing waits for every gate job"
+contains "$DEPLOY" 'needs: \[quality, integration, e2e, mobile, operational\]' "dev publishing waits for every gate job"
 
 absent "$RELEASE" 'make verify' "production does not repeat the dev gate"
 absent "$RELEASE" 'docker/build-push-action@' "production does not rebuild tested images"
@@ -132,6 +147,67 @@ contains "$RELEASE" 'release_version=.*\.release-version' \
     "release reads the committed version manifest"
 contains "$RELEASE" 'requested_major' \
     "release validates semantic version ordering"
+contains "$RELEASE" 'name: Build and verify Android release bundle' \
+    "production release builds the Android bundle"
+contains "$RELEASE" 'needs: android' \
+    "image promotion waits for the verified Android bundle"
+contains "$RELEASE" 'MOBILE_UPLOAD_KEYSTORE_BASE64' \
+    "Android release materializes the upload key from a secret"
+contains "$RELEASE" 'MOBILE_KEYSTORE_PASSWORD' \
+    "Android release receives the keystore password as a secret"
+contains "$RELEASE" 'MOBILE_KEY_PASSWORD' \
+    "Android release receives the key password as a secret"
+contains "$RELEASE" 'MOBILE_UPLOAD_CERT_SHA256' \
+    "Android release requires the configured upload certificate"
+contains "$RELEASE" 'make bootstrap-mobile' \
+    "Android release prepares the pinned mobile toolchain"
+contains "$RELEASE" 'make mobile-build-release' \
+    "Android release builds the signed AAB through Make"
+contains "$RELEASE" 'make mobile-release-manifest' \
+    "Android release creates the provenance manifest through Make"
+contains "$RELEASE" 'MOBILE_REQUIRE_EXPECTED_CERT: true' \
+    "Android release fails closed on an unconfigured certificate"
+contains "$RELEASE" 'aab_sha256' \
+    "Android release checks the immutable bundle digest"
+contains "$RELEASE" 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' \
+    "Android release retains the verified bundle"
+contains "$RELEASE" 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
+    "release promotion consumes the verified bundle"
+contains "$RELEASE" 'android-release/app-release.aab' \
+    "GitHub release carries the verified Android bundle"
+absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "Android release contains no long-lived Google credential"
+contains "$RELEASE" '^  play-access:' "production release has a Play access preflight"
+contains "$RELEASE" 'needs: \[android, play-access\]' \
+    "image promotion waits for Android and Play access"
+contains "$RELEASE" 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' \
+    "production Play jobs pin the Google OIDC action"
+contains "$RELEASE" 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER' \
+    "production Play jobs read the WIF provider"
+contains "$RELEASE" 'PLAY_GCP_SERVICE_ACCOUNT' \
+    "production Play jobs read the service account"
+contains "$RELEASE" '^  play-publish:' "production release has a Play publication job"
+contains "$RELEASE" 'needs: \[android, deploy\]' \
+    "Play publication waits for the deployed production release"
+contains "$RELEASE" 'make play-api-check' "Play access is checked before image promotion"
+contains "$RELEASE" 'make play-api-publish' "Play publication uses the Dockerized write target"
+absent "$RELEASE" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "production Play jobs contain no long-lived JSON credential path"
+
+contains "$PLAY_API" '^  workflow_dispatch:' "Play API access is an explicit manual operation"
+contains "$PLAY_API" 'id-token: write' "Play API access has narrowly scoped OIDC permission"
+contains "$PLAY_API" 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' \
+    "Play API access pins the Google OIDC action"
+contains "$PLAY_API" 'token_format: access_token' "Play API access requests a short-lived token"
+contains "$PLAY_API" 'https://www.googleapis.com/auth/androidpublisher' \
+    "Play API access requests only the Android Publisher scope"
+contains "$PLAY_API" 'vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER' \
+    "Play API access reads the provider from environment configuration"
+contains "$PLAY_API" 'vars.PLAY_GCP_SERVICE_ACCOUNT' \
+    "Play API access reads the service account from environment configuration"
+contains "$PLAY_API" 'make play-api-check' "Play API access uses the Dockerized client target"
+absent "$PLAY_API" 'credentials_json|GOOGLE_APPLICATION_CREDENTIALS|service-account-key' \
+    "Play API workflow contains no long-lived JSON credential path"
 
 contains "$NIGHTLY" 'make verify' "nightly runs the complete operational gate"
 contains "$NIGHTLY" 'retention-days: 7' "nightly failure artifacts are bounded"
