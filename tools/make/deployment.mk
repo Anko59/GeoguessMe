@@ -222,6 +222,15 @@ cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-t
 	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
 
+export OPS_SSH_COMMAND
+
+credentials-preflight: ## Safely report local keyring, SSH-agent, and operator tooling availability.
+	@bash tools/ops/credentials.sh preflight
+
+ops-ssh: ## Open the documented operator SSH route; set HOST=dev|production and optional OPS_SSH_COMMAND.
+	@case "$(HOST)" in dev|production) ;; *) echo 'HOST must be dev or production' >&2; exit 2 ;; esac
+	@bash tools/ops/credentials.sh ssh "$(HOST)"
+
 deployment-hash-check: ## Verify installed host runtime definitions match the deployed revision (via Access SSH).
 	@case "$(ENVIRONMENT)" in dev) ;; production) ;; *) echo 'ENVIRONMENT=dev|production is required' >&2; exit 2 ;; esac
 	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
