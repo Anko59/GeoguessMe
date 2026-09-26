@@ -47,6 +47,10 @@ classify() {
             browser_e2e=true
             mobile=true
             ;;
+        tools/mobile/play-publisher/*)
+            docs_candidate=false
+            static_checks=true
+            ;;
         deployment/docker/tools/mobile-tools.Dockerfile | tools/mobile/*)
             docs_candidate=false
             static_checks=true

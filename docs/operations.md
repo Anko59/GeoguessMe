@@ -145,13 +145,15 @@ revision-bound artifact. It builds and verifies the signed bundle before image
 promotion, stores the bundle and provenance manifest as one short-lived workflow
 artifact, and publishes the same files to Google Play only after the hosted
 deployment has succeeded. It authenticates with GitHub OIDC and a short-lived
-Android Publisher token; no service-account JSON key or credential file is used.
+Android Publisher token from the `play-publishing` environment; the `production`
+environment is reserved for hosted-service deployment. No service-account JSON
+key or credential file is used.
 
 The `play-access` job blocks image promotion when the Play configuration or
 app-scoped permission is invalid. The `play-publish` job blocks the Play write
-when the artifact provenance, version monotonicity, edit validation, or
-post-commit track readback is invalid. A Play publication failure therefore does
-not silently upload a different bundle; inspect the exact release run and the
+when the artifact provenance, version monotonicity, track update response, or
+edit validation is invalid. A Play publication failure therefore does not
+silently upload a different bundle; inspect the exact release run and the
 restricted manifest evidence before retrying. For the full state model,
 configuration, and Play-track recovery actions, use the
 [Google Play account runbook](runbooks/google-play-console.md).

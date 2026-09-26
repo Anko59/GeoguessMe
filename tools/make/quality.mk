@@ -126,7 +126,7 @@ endif
 HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
 
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract test-play-api hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
