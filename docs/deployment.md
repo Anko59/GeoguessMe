@@ -15,8 +15,10 @@ separate artifact from the hosted services. The production workflow builds and
 verifies the signed Android App Bundle before image promotion, retains its
 provenance manifest, and publishes that exact artifact to the configured Play
 track only after the production deployment succeeds. The Play publication job
-uses GitHub OIDC and fails closed on access, digest, version, edit-validation,
-or post-commit track checks. See the [mobile release guide](mobile.md) and
+uses GitHub OIDC and the separate `play-publishing` environment; only the host
+deployment uses GitHub's `production` environment. It fails closed on access,
+digest, version, and edit-validation checks. See the
+[mobile release guide](mobile.md) and
 [Google Play account runbook](runbooks/google-play-console.md) for the
 configuration and recovery procedure.
 

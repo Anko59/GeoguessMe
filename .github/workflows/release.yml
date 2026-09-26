@@ -100,7 +100,7 @@ jobs:
     needs: android
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
+    environment: play-publishing
     permissions:
       contents: read
       id-token: write
@@ -116,15 +116,15 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$PLAY_WIF_PROVIDER" || {
-            echo 'Missing production variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
             exit 1
           }
           test -n "$PLAY_SERVICE_ACCOUNT" || {
-            echo 'Missing production variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
             exit 1
           }
           test -n "$PLAY_TRACK" || {
-            echo 'Missing production variable PLAY_RELEASE_TRACK.' >&2
+            echo 'Missing play-publishing variable PLAY_RELEASE_TRACK.' >&2
             exit 1
           }
           [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
@@ -442,7 +442,7 @@ jobs:
     needs: [android, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
+    environment: play-publishing
     permissions:
       contents: read
       id-token: write
