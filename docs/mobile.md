@@ -214,14 +214,17 @@ changing the track. If an error occurs before commit, it deletes the temporary
 edit; it never deletes an edit after a commit attempt whose outcome is
 uncertain.
 
-Configure these values in the GitHub `production` environment before running a
-production release:
+Configure Android signing values in the GitHub `production` environment before
+running a production release:
 
 - `MOBILE_UPLOAD_KEYSTORE_BASE64` secret: the base64-encoded upload keystore;
 - `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD` secrets: signing
   passwords;
 - `MOBILE_UPLOAD_CERT_SHA256` variable: the expected upload certificate
-  fingerprint;
+  fingerprint.
+
+Configure the Play API values in the GitHub `play-publishing` environment:
+
 - `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` variable: the Google WIF provider
   resource;
 - `PLAY_GCP_SERVICE_ACCOUNT` variable: the Play-authorized service-account
@@ -232,15 +235,17 @@ production release:
 `PLAY_RELEASE_STATUS` is an optional variable and defaults to `completed`; use
 `inProgress` only when the release process explicitly requires a staged rollout.
 The Google service account must separately have the required app-scoped Play
-permissions. The workflow accepts no JSON key and does not create a credential
-file.
+permissions. Restrict the `play-publishing` GitHub environment to `main`, and
+ensure the Google WIF provider and service-account binding trust that
+environment's GitHub OIDC identity. The workflow accepts no JSON key and does
+not create a credential file.
 
 The repository also includes a read-only **Play API access check** workflow. Use
 it to validate OIDC and app identity without creating an edit or changing Play
 state. It is a diagnostic, not an alternative publication path.
 
 If the access preflight, artifact verification, production deployment, or
-post-commit track readback fails, the release stops and retains the failing
+pre-commit track verification fails, the release stops and retains the failing
 workflow evidence. A successful commit is reported with the package, edit ID,
 track, version, digest, and source provenance; tokens and signing material are
 never printed or stored.

@@ -35,6 +35,8 @@ assert_scope "android native only" $'frontend/android/app/build.gradle\n' \
     $'backend=false\nfrontend=false\nmobile=true\nfull=false\ndocs_only=false\nstatic_checks=true\nbackend_unit=false\nfrontend_unit=false\nbackend_integration=false\nbrowser_e2e=false\noperational=false\nharness=false'
 assert_scope "mobile tooling" $'tools/mobile/run-e2e.sh\n' \
     $'backend=false\nfrontend=false\nmobile=true\nfull=false\ndocs_only=false\nstatic_checks=true\nbackend_unit=false\nfrontend_unit=false\nbackend_integration=false\nbrowser_e2e=false\noperational=false\nharness=false'
+assert_scope "Play publisher tooling" $'tools/mobile/play-publisher/publish.go\n' \
+    $'backend=false\nfrontend=false\nmobile=false\nfull=false\ndocs_only=false\nstatic_checks=true\nbackend_unit=false\nfrontend_unit=false\nbackend_integration=false\nbrowser_e2e=false\noperational=false\nharness=false'
 assert_scope "makefile change" $'Makefile\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "make fragment change" $'tools/make/tests.mk\n' \

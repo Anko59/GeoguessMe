@@ -121,8 +121,12 @@ func publishBundle(ctx context.Context, client *Client, options PublishOptions) 
 			Status:       options.Status,
 		}},
 	}
-	if _, err := client.UpdateTrack(ctx, options.PackageName, edit.ID, options.Track, desired); err != nil {
+	updatedTrack, err := client.UpdateTrack(ctx, options.PackageName, edit.ID, options.Track, desired)
+	if err != nil {
 		return PublishResult{}, err
+	}
+	if !trackContainsRelease(updatedTrack, versionCode, options.Status) {
+		return PublishResult{}, fmt.Errorf("Play track %q did not report version code %s with status %s after update", options.Track, versionCode, options.Status)
 	}
 	if _, err := client.ValidateEdit(ctx, options.PackageName, edit.ID); err != nil {
 		return PublishResult{}, err
@@ -130,13 +134,6 @@ func publishBundle(ctx context.Context, client *Client, options PublishOptions) 
 	commitAttempted = true
 	if _, err := client.CommitEdit(ctx, options.PackageName, edit.ID, false); err != nil {
 		return PublishResult{}, err
-	}
-	current, err := client.GetTrack(ctx, options.PackageName, options.Track)
-	if err != nil {
-		return PublishResult{}, err
-	}
-	if !trackContainsRelease(current, versionCode, options.Status) {
-		return PublishResult{}, fmt.Errorf("Play track %q did not report version code %s with status %s after commit", options.Track, versionCode, options.Status)
 	}
 
 	return PublishResult{

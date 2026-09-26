@@ -90,23 +90,24 @@ outside ordinary shell history:
   use `direnv exec /home/anko/Work/projects/GeoguessMe <command>` for
   credentialed commands. It must not materialize a service-account key in the
   repository or pass a token as a command-line argument.
-- CI uses GitHub OIDC and workload identity. The production environment stores
-  no Google JSON key and creates no credential file. This keeps token issuance
-  scoped to the release workflow and lets Google and GitHub audit the trust
-  relationship independently.
+- CI uses GitHub OIDC and workload identity. The `play-publishing` environment
+  stores no Google JSON key and creates no credential file. This keeps token
+  issuance scoped to the release workflow and lets Google and GitHub audit the
+  trust relationship independently.
 - The repository's **Play API access check** workflow uses the preferred
-  federated path. Set these as non-secret variables on the GitHub `production`
-  environment: `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` (the full Google WIF
-  provider resource) and `PLAY_GCP_SERVICE_ACCOUNT` (the exact service-account
-  email invited in Play Console). The workflow exchanges GitHub's OIDC identity
-  for a short-lived access token and passes it to the Dockerized client through
-  `PLAY_ACCESS_TOKEN`.
-- The production environment also requires `PLAY_RELEASE_TRACK` as a variable;
-  `PLAY_RELEASE_STATUS` is optional and defaults to `completed`. Android signing
-  uses the separate `MOBILE_UPLOAD_KEYSTORE_BASE64`, `MOBILE_KEYSTORE_PASSWORD`,
-  and `MOBILE_KEY_PASSWORD` secrets plus the `MOBILE_UPLOAD_CERT_SHA256`
-  certificate variable. These values are consumed only by the production release
-  workflow.
+  federated path. Set these as non-secret variables on the GitHub
+  `play-publishing` environment: `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` (the full
+  Google WIF provider resource) and `PLAY_GCP_SERVICE_ACCOUNT` (the exact
+  service-account email invited in Play Console). The workflow exchanges
+  GitHub's OIDC identity for a short-lived access token and passes it to the
+  Dockerized client through `PLAY_ACCESS_TOKEN`.
+- Set `PLAY_RELEASE_TRACK` and optional `PLAY_RELEASE_STATUS` on
+  `play-publishing`; status defaults to `completed`. Restrict that GitHub
+  environment to the `main` branch and ensure Google's WIF provider and service
+  account trust its environment-scoped GitHub OIDC identity. Android signing
+  uses the separate `production` environment's `MOBILE_UPLOAD_KEYSTORE_BASE64`,
+  `MOBILE_KEYSTORE_PASSWORD`, and `MOBILE_KEY_PASSWORD` secrets plus the
+  `MOBILE_UPLOAD_CERT_SHA256` certificate variable.
 - Do not commit service-account JSON, `google-services.json`, release keystores,
   passwords, access tokens, or generated AAB/APK files. Do not print them,
   include them in diagnostic artifacts, or pass them as command-line arguments.
@@ -173,10 +174,9 @@ edit transaction:
 2. upload the exact AAB whose SHA-256 matches the manifest;
 3. update the configured track with the manifest version code and release
    status;
-4. validate the edit;
-5. commit the edit with changes sent for review; and
-6. read the committed track back and fail if the submitted version and status
-   are not present.
+4. verify the update response contains the requested version code and status;
+5. validate the edit; and
+6. commit the edit with changes sent for review.
 
 If a failure occurs before the commit request, the client deletes the temporary
 edit. It does not delete an edit after a commit attempt whose outcome is
