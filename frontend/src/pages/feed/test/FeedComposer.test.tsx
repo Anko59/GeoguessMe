@@ -50,6 +50,7 @@ describe('Public feed camera composer', () => {
         expect(screen.getByTestId('camera-surface')).toBeInTheDocument();
         expect(screen.queryByLabelText('Caption')).not.toBeInTheDocument();
         expect(screen.queryByText(/who can see this challenge/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/exact device location is attached automatically/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Latitude')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Longitude')).not.toBeInTheDocument();
         expect(mocks.cameraProps).toMatchObject({ variant: 'feed' });
