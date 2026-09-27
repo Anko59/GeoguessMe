@@ -45,12 +45,19 @@ bucket, Tunnel, identity-provider, and Access-application write permissions
 scoped to this account/zone. Terraform planning also requires read access for
 every managed resource. In particular, the account-scoped
 `Cloudflare Tunnel Read` and `Email Routing Addresses Read` permissions are
-needed to refresh the existing tunnel and destination address; applying
-corresponding changes also requires their write/edit permissions. The local QA
-runner also uses a Cloudflare API token for temporary dev service tokens and
-therefore needs Access service-token write permission. Terraform does not manage
-those short-lived QA objects. The Hetzner token should be scoped to the
-dedicated project. Do not reuse either token in application or deployment jobs.
+needed to refresh the existing tunnel and destination address. Tunnel token
+retrieval has a separate requirement: the Cloudflare API's
+`GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/token` endpoint requires
+`Cloudflare Tunnel Write`, despite being a GET request. Terraform reads this
+secret tunnel token while planning, so `Cloudflare Tunnel Write` must be present
+before a plan can complete. See Cloudflare's
+[Tunnel token API permissions](https://developers.cloudflare.com/api/resources/zero_trust/subresources/tunnels/subresources/cloudflared/subresources/token/methods/get/).
+Applying the other managed changes also requires their corresponding write/edit
+permissions. The local QA runner uses a Cloudflare API token for temporary dev
+service tokens and therefore needs Access service-token write permission.
+Terraform does not manage those short-lived QA objects. The Hetzner token should
+be scoped to the dedicated project. Do not reuse either token in application or
+deployment jobs.
 
 See Cloudflare's
 [API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
