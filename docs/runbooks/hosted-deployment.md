@@ -40,10 +40,11 @@ two minutes of planned deployment interruption.
     secret values and does not validate Cloudflare permissions. The separate
     `make credentials-preflight` target checks operator Access/SSH.
 
-The Terraform Cloudflare API token needs zone DNS/settings, Email Routing, R2
-bucket, Tunnel, identity-provider, and Access-application write permissions
-scoped to this account/zone. Terraform planning also requires read access for
-every managed resource. In particular, the account-scoped
+The Terraform Cloudflare API token needs zone-scoped `DNS Write` for DNS record
+creation, plus the DNS/settings, Email Routing, R2 bucket, Tunnel,
+identity-provider, and Access-application write permissions required by the
+managed resources, scoped to this account/zone. Terraform planning also requires
+read access for every managed resource. In particular, the account-scoped
 `Cloudflare Tunnel Read` and `Email Routing Addresses Read` permissions are
 needed to refresh the existing tunnel and destination address. Tunnel token
 retrieval has a separate requirement: the Cloudflare API's
@@ -58,6 +59,12 @@ service tokens and therefore needs Access service-token write permission.
 Terraform does not manage those short-lived QA objects. The Hetzner token should
 be scoped to the dedicated project. Do not reuse either token in application or
 deployment jobs.
+
+Review the complete Terraform plan before applying it. Creating
+`cloudflare_email_routing_settings` enables Cloudflare Email Routing, which can
+change mail-routing DNS behavior. Treat that resource as the separately staged
+mail rollout in [the DMARC runbook](dmarc-rollout.md), not as an incidental
+monitoring change.
 
 See Cloudflare's
 [API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
