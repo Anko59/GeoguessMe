@@ -60,8 +60,11 @@ export function useFeed(singleID?: string) {
             active = false;
         };
     }, [load]);
-    const update = (post: Partial<PublicChallenge> & { id: string }) =>
-        setItems((old) => old.map((p) => (p.id === post.id ? { ...p, ...post } : p)));
+    const update = useCallback(
+        (post: Partial<PublicChallenge> & { id: string }) =>
+            setItems((old) => old.map((p) => (p.id === post.id ? { ...p, ...post } : p))),
+        [],
+    );
     const remove = (id: string) => setItems((old) => old.filter((p) => p.id !== id));
     return { items, cursor, loaded, pending, error, load, update, remove };
 }
