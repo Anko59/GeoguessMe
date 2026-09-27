@@ -186,9 +186,25 @@ export function createGlobeScene(
         let previousItems: GroupChallenge[] | undefined;
         let selectedIndex: number | undefined;
         const pinIndexes = new Map<string, number>();
+        const pinTextures = new Map<string, THREE.Texture>();
+        const pinSprites = new Map<number, THREE.Sprite>();
+        const pinSpriteLoader = new THREE.TextureLoader();
+        const disposePinSprites = () => {
+            for (const sprite of pinSprites.values()) {
+                scene.remove(sprite);
+                sprite.material.dispose();
+            }
+            pinSprites.clear();
+        };
+        cleanup.push(() => {
+            disposePinSprites();
+            for (const texture of pinTextures.values()) texture.dispose();
+            pinTextures.clear();
+        });
         scene.add(pins);
         const cameraPosition = new THREE.Vector3();
         const screenScale = new THREE.Vector3();
+        const pinNormal = new THREE.Vector3();
         const pinMatrix = new THREE.Matrix4();
         syncPinScale = () => {
             if (host.clientHeight <= 0) return;
@@ -203,6 +219,13 @@ export function createGlobeScene(
                 screenScale.setScalar(radius);
                 pinMatrix.compose(positions[index], new THREE.Quaternion(), screenScale);
                 pins.setMatrixAt(index, pinMatrix);
+                const sprite = pinSprites.get(index);
+                if (sprite) {
+                    const spriteHeight = radius * (index === selectedIndex ? 8 : 7);
+                    pinNormal.copy(positions[index]).normalize();
+                    sprite.position.copy(positions[index]).addScaledVector(pinNormal, spriteHeight * 0.48);
+                    sprite.scale.set(spriteHeight * 0.78, spriteHeight, 1);
+                }
             }
             pins.instanceMatrix.needsUpdate = true;
         };
@@ -360,6 +383,7 @@ export function createGlobeScene(
                 if (disposed) return;
                 if (items !== previousItems) {
                     previousItems = items;
+                    disposePinSprites();
                     visible = items.filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.long));
                     if (visible.length > pins.instanceMatrix.count) {
                         scene.remove(pins);
@@ -383,6 +407,23 @@ export function createGlobeScene(
                         pins.setMatrixAt(index, matrix.makeTranslation(position.x, position.y, position.z));
                         pins.setColorAt(index, color);
                         pinIndexes.set(item.photo_id, index);
+                        if (item.map_pin) {
+                            let pinTexture = pinTextures.get(item.map_pin.image_url);
+                            if (!pinTexture) {
+                                pinTexture = pinSpriteLoader.load(item.map_pin.image_url, (loaded) => {
+                                    if (disposed) return;
+                                    loaded.colorSpace = THREE.SRGBColorSpace;
+                                    render();
+                                });
+                                pinTextures.set(item.map_pin.image_url, pinTexture);
+                            }
+                            const sprite = new THREE.Sprite(
+                                new THREE.SpriteMaterial({ map: pinTexture, transparent: true, depthWrite: false }),
+                            );
+                            sprite.renderOrder = 2;
+                            scene.add(sprite);
+                            pinSprites.set(index, sprite);
+                        }
                     });
                     pins.instanceMatrix.needsUpdate = true;
                     pins.computeBoundingSphere();

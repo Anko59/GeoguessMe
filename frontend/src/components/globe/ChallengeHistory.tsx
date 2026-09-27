@@ -61,10 +61,14 @@ export default function ChallengeHistory({ items, selectedID, onSelect }: Challe
                             aria-pressed={selectedID === item.photo_id}
                             onClick={() => onSelect(item.photo_id)}
                         >
-                            <span
-                                className={`globe-location-dot ${item.lat === undefined ? 'is-hidden' : ''}`}
-                                aria-hidden="true"
-                            />
+                            {item.map_pin && item.lat !== undefined ? (
+                                <img className="globe-location-pin" src={item.map_pin.image_url} alt="" />
+                            ) : (
+                                <span
+                                    className={`globe-location-dot ${item.lat === undefined ? 'is-hidden' : ''}`}
+                                    aria-hidden="true"
+                                />
+                            )}
                             <span>
                                 <strong>{item.username}</strong>
                                 <span className="globe-challenge-status">{challengeStatusLabel(item)}</span>

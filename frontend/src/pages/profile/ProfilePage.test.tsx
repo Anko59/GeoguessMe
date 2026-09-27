@@ -97,6 +97,34 @@ beforeEach(() => {
 });
 
 describe('ProfilePage', () => {
+    it('shows an equipped map pin and the challenge that unlocked it', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                map_pin: {
+                    key: 'north-star',
+                    name: 'North Star',
+                    description: 'A clear sky marker.',
+                    image_url: '/map-pins/north-star.svg',
+                    unlocked_by: {
+                        key: 'perfect-score',
+                        name: 'Perfect score',
+                        description: 'Get the maximum score once.',
+                    },
+                },
+            },
+        });
+        renderProfile();
+
+        expect(await screen.findByRole('heading', { name: 'North Star' })).toBeInTheDocument();
+        expect(screen.getByText('Perfect score')).toBeInTheDocument();
+        expect(screen.getByText('Get the maximum score once.')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: "alice's North Star map pin" })).toHaveAttribute(
+            'src',
+            '/map-pins/north-star.svg',
+        );
+    });
+
     it('loads the profile and renders progression trackers with the next rank', async () => {
         mocks.get.mockResolvedValueOnce({ data: profile });
         renderProfile();

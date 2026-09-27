@@ -36,7 +36,7 @@ func TestGroupChallengeFeed(t *testing.T) {
 				pool.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(tc.member))
 			}
 			if tc.status == 200 {
-				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}))
+				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed", "pin_key", "pin_name", "pin_image"}))
 			}
 			if tc.status == 500 {
 				pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnError(errors.New("private database details"))
@@ -58,7 +58,7 @@ func TestGroupChallengeFeed(t *testing.T) {
 	api := newGameAPI(t, pool)
 	requireStatus(t, api.GetGroupChallenges, requestWithUser(http.MethodPost, "/", "", "viewer"), 405)
 	pool.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}).AddRow("photo", groupID, "poster", "Alice", time.Now(), time.Now().Add(time.Hour), 48.0, 2.0, false, false))
+	pool.ExpectQuery("SELECT p.id").WithArgs(groupID, "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed", "pin_key", "pin_name", "pin_image"}).AddRow("photo", groupID, "poster", "Alice", time.Now(), time.Now().Add(time.Hour), 48.0, 2.0, false, false, "", "", ""))
 	recorder := httptest.NewRecorder()
 	api.GetGroupChallenges(recorder, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "viewer"))
 	if recorder.Code != 200 || strings.Contains(recorder.Body.String(), `"lat"`) || strings.Contains(recorder.Body.String(), `"long"`) {

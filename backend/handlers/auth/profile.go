@@ -10,6 +10,7 @@ import (
 	authsvc "geoguessme/internal/auth"
 	"geoguessme/internal/progression"
 	"geoguessme/internal/repository"
+	"geoguessme/internal/repository/pins"
 	"geoguessme/internal/validation"
 
 	"golang.org/x/crypto/bcrypt"
@@ -113,6 +114,11 @@ func (a *AuthAPI) GetProfile(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	mapPin, err := a.repos.Pins.EquippedMapPin(r.Context(), user.ID)
+	if err != nil {
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	handlers.WriteJSON(w, http.StatusOK, ProfileResponse{
 		AuthUser:          a.userResponse(user),
 		TotalPoints:       stats.TotalPoints,
@@ -123,6 +129,7 @@ func (a *AuthAPI) GetProfile(w http.ResponseWriter, r *http.Request) {
 		GlobalRank:        GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
 		GlobalAverageRank: GlobalRank{Rank: globalAverageRank.Rank, TotalPlayers: globalAverageRank.TotalPlayers},
 		GlobalEloRank:     GlobalRank{Rank: globalElo.Rank, TotalPlayers: globalElo.TotalPlayers},
+		MapPin:            mapPin,
 	})
 }
 
@@ -176,6 +183,11 @@ func (a *AuthAPI) GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
 		return
 	}
+	mapPin, err := a.repos.Pins.EquippedMapPin(r.Context(), user.ID)
+	if err != nil {
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
+		return
+	}
 	handlers.WriteJSON(w, http.StatusOK, PublicProfileResponse{
 		ID:                user.ID,
 		Username:          user.Username,
@@ -188,7 +200,74 @@ func (a *AuthAPI) GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 		GlobalRank:        GlobalRank{Rank: globalRank.Rank, TotalPlayers: globalRank.TotalPlayers},
 		GlobalAverageRank: GlobalRank{Rank: globalAverageRank.Rank, TotalPlayers: globalAverageRank.TotalPlayers},
 		GlobalEloRank:     GlobalRank{Rank: globalElo.Rank, TotalPlayers: globalElo.TotalPlayers},
+		MapPin:            mapPin,
 	})
+}
+
+type equipMapPinRequest struct {
+	PinKey string `json:"pin_key"`
+}
+
+// MapPins reads the authenticated player's pin catalog and owns selection.
+// Pin unlocks are written only by server-side progression flows.
+func (a *AuthAPI) MapPins(w http.ResponseWriter, r *http.Request) {
+	userID := handlers.GetUserIDFromContext(r)
+	switch r.Method {
+	case http.MethodGet:
+		catalog, err := a.repos.Pins.MapPinsForUser(r.Context(), userID)
+		if err != nil {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load map pins")
+			return
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		handlers.WriteJSON(w, http.StatusOK, catalog)
+	case http.MethodPut:
+		var req equipMapPinRequest
+		if !handlers.DecodeJSON(w, r, &req) {
+			return
+		}
+		req.PinKey = strings.TrimSpace(req.PinKey)
+		if !validMapPinKey(req.PinKey) {
+			handlers.WriteError(w, http.StatusBadRequest, "invalid_pin_key", "pin_key is invalid")
+			return
+		}
+		if err := a.repos.Pins.EquipMapPin(r.Context(), userID, req.PinKey); err != nil {
+			if errors.Is(err, pins.ErrMapPinUnavailable) {
+				handlers.WriteError(w, http.StatusConflict, "map_pin_unavailable", "You have not unlocked this map pin")
+				return
+			}
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to equip map pin")
+			return
+		}
+		catalog, err := a.repos.Pins.MapPinsForUser(r.Context(), userID)
+		if err != nil {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load map pins")
+			return
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		handlers.WriteJSON(w, http.StatusOK, catalog)
+	case http.MethodDelete:
+		if err := a.repos.Pins.ClearEquippedMapPin(r.Context(), userID); err != nil {
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to reset map pin")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		handlers.MethodNotAllowed(w)
+	}
+}
+
+func validMapPinKey(value string) bool {
+	if len(value) == 0 || len(value) > 64 {
+		return false
+	}
+	for index, char := range value {
+		valid := char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-'
+		if !valid || index == 0 && (char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // ChangePassword updates the password after confirming the current one and

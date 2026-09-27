@@ -77,6 +77,19 @@ share at least one group with the requester (viewing yourself always works);
 otherwise the endpoint returns 403. This is the data behind the player profile
 page reachable from chat and leaderboards.
 
+Profiles may include `map_pin` when the player has equipped an unlocked pin. It
+contains the pin artwork and the unlock challenge credited when that pin was
+equipped. Group challenge results, public feed results, and the group globe
+include each guesser's or challenge poster's pin artwork when selected; clients
+keep the standard marker for players without an equipped pin.
+
+`GET /api/v1/auth/pins` returns the active pin catalog, unlock-challenge
+progress, and the current selection. `PUT /api/v1/auth/pins` accepts
+`{"pin_key":"..."}` and only equips a pin already unlocked by the account.
+`DELETE /api/v1/auth/pins` restores the standard marker without removing unlock
+history. The catalog is database-backed so challenge definitions and artwork can
+be added independently; it starts empty until that content is defined.
+
 ## Endpoint overview
 
 ### Authentication
@@ -93,6 +106,9 @@ page reachable from chat and leaderboards.
 | POST   | `/api/v1/auth/password/reset`  | No     | Reset password `{token, password}`        | 200, 400           |
 | POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions     | 204, 400, 401      |
 | GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank   | 200, 401           |
+| GET    | `/api/v1/auth/pins`            | Bearer | Read map pin catalog and unlock progress  | 200, 401           |
+| PUT    | `/api/v1/auth/pins`            | Bearer | Equip an unlocked map pin `{pin_key}`     | 200, 400, 401, 409 |
+| DELETE | `/api/v1/auth/pins`            | Bearer | Restore the standard map marker           | 204, 401           |
 | GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression         | 200, 401, 403, 404 |
 | PATCH  | `/api/v1/auth/profile`         | Bearer | Update username, email, or avatar         | 200, 400, 401, 409 |
 | POST   | `/api/v1/auth/profile/avatar`  | Bearer | Upload profile photo (25 MiB max)         | 200, 400, 401      |

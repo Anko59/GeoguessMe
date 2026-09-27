@@ -75,3 +75,26 @@ func TestTimedResultsRequireResolutionForOtherViewers(t *testing.T) {
 		t.Fatalf("unresolved results error = %v", err)
 	}
 }
+
+func TestTimedResultsIncludeSelectedPinAndHideTimeoutCoordinates(t *testing.T) {
+	r, mock := mockRepository(t)
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs("owner", "post").WillReturnRows(
+		pgxmock.NewRows([]string{"user_id", "lat", "long"}).AddRow("owner", 48.8, 2.3),
+	)
+	mock.ExpectQuery("SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score").WithArgs("post").WillReturnRows(
+		pgxmock.NewRows([]string{"id", "user_id", "username", "avatar", "lat", "long", "score", "distance", "timed_out", "created_at", "pin_key", "pin_name", "pin_image"}).
+			AddRow("guess-1", "viewer", "Explorer", "avatar.png", 47.0, 3.0, 4000, 200000.0, false, now, "north-star", "North Star", "/map-pins/north-star.svg").
+			AddRow("guess-2", "other", "Cartographer", "avatar2.png", 0.0, 0.0, 0, 0.0, true, now, "", "", ""),
+	)
+	result, err := r.TimedResults(t.Context(), "post", "owner", now)
+	if err != nil || len(result.Guesses) != 2 {
+		t.Fatalf("TimedResults = %+v, %v", result, err)
+	}
+	if result.Guesses[0].MapPin == nil || result.Guesses[0].MapPin.Key != "north-star" || result.Guesses[0].Lat == nil {
+		t.Fatalf("custom pin guess = %+v", result.Guesses[0])
+	}
+	if !result.Guesses[1].TimedOut || result.Guesses[1].Lat != nil || result.Guesses[1].Long != nil || result.Guesses[1].Distance != nil {
+		t.Fatalf("timeout coordinates leaked: %+v", result.Guesses[1])
+	}
+}

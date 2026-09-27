@@ -1,0 +1,43 @@
+mapPins:
+  get:
+    operationId: getMapPins
+    summary: List map pins and the authenticated player's unlock progress.
+    tags: [Profile]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Active pin catalog, available unlock challenges, and current selection.
+        content: { application/json: { schema: { $ref: "../components/schemas-pins.yaml#/MapPinCatalog" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  put:
+    operationId: equipMapPin
+    summary: Equip a pin the authenticated player has unlocked.
+    tags: [Profile]
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [pin_key]
+            properties:
+              pin_key: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+    responses:
+      "200":
+        description: Updated catalog and selection.
+        content: { application/json: { schema: { $ref: "../components/schemas-pins.yaml#/MapPinCatalog" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "409": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  delete:
+    operationId: clearEquippedMapPin
+    summary: Restore the standard map marker.
+    tags: [Profile]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "204": { description: Standard marker selected. }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }

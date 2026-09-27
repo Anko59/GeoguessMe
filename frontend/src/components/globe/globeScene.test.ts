@@ -86,6 +86,39 @@ describe('Earth scene', () => {
         globe.dispose();
     });
 
+    it('loads selected pin artwork for globe markers and releases the scene cleanly', () => {
+        const requestedURLs: string[] = [];
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((url, onLoad) => {
+            requestedURLs.push(String(url));
+            const texture = new THREE.Texture<HTMLImageElement>();
+            onLoad?.(texture);
+            return texture;
+        });
+        const host = document.createElement('div');
+        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
+        const globe = createGlobeScene(host, vi.fn(), vi.fn());
+        globe.update(
+            [
+                {
+                    photo_id: 'photo-1',
+                    group_id: 'group-1',
+                    user_id: 'user-1',
+                    username: 'Alice',
+                    created_at: '2026-09-27T10:00:00Z',
+                    expires_at: '2026-09-28T10:00:00Z',
+                    status: 'results',
+                    lat: 48.8,
+                    long: 2.3,
+                    map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
+                },
+            ],
+            null,
+        );
+        expect(requestedURLs).toContain('/map-pins/north-star.svg');
+        globe.dispose();
+        expect(host.children).toHaveLength(0);
+    });
+
     it('keeps the bundled texture and conservative zoom on smaller WebGL limits', () => {
         mocks.maxTextureSize = 4096;
         const texture = new THREE.Texture<HTMLImageElement>();
