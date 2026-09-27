@@ -5,7 +5,7 @@ repo=/workspace
 sdk_root=${ANDROID_SDK_ROOT:?ANDROID_SDK_ROOT is required}
 artifact_dir="$repo/.local/mobile/artifacts"
 apk="$repo/frontend/android/app/build/outputs/apk/debug/app-debug.apk"
-avd_name=geoguessme_api_36
+source "$repo/tools/mobile/android-config.sh"
 app_id=com.geoguessme.app
 emulator_log="$artifact_dir/emulator.log"
 maestro_log="$artifact_dir/maestro.log"
@@ -44,7 +44,7 @@ if [[ -r /dev/kvm && -w /dev/kvm ]]; then
     acceleration=(-accel on)
 fi
 
-"$sdk_root/emulator/emulator" "@$avd_name" \
+"$sdk_root/emulator/emulator" "@$ANDROID_AVD_NAME" \
     -no-window -no-audio -no-boot-anim -no-snapshot -no-cache -wipe-data -qcow2-for-userdata \
     -datadir /emulator-data -data /emulator-data/userdata-qemu.img \
     -gpu swiftshader_indirect "${acceleration[@]}" \

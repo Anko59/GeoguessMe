@@ -53,6 +53,9 @@ test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection saf
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
 
+test-mobile-sdk-contract: ## Verify Android's build SDK and Maestro runtime SDK stay aligned.
+	bash tools/mobile/test-android-sdk-contract.sh
+
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 

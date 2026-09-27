@@ -38,7 +38,7 @@ emulator falls back to software acceleration otherwise.
 From the repository root:
 
 ```text
-make mobile-prepare  # pinned SDK packages and the API 36 AVD
+make mobile-prepare  # API 36 build tools and the Maestro-supported API 34 AVD
 make mobile-sync     # production web build and Capacitor sync
 make mobile-build    # debug APK
 make test-mobile     # isolated stack + seed + build + emulator + Maestro
@@ -49,7 +49,12 @@ make test-mobile     # isolated stack + seed + build + emulator + Maestro
 is unattended: it builds an APK with a test-only localhost server URL, boots a
 clean headless emulator, uses `adb reverse` to reach the isolated Compose
 gateway, grants declared test permissions, installs the APK, and runs Maestro.
-Its cleanup removes the disposable database and media volumes.
+The app still compiles and targets Android API 36; the emulator uses API 34
+because Maestro's
+[published Android support range](https://github.com/mobile-dev-inc/maestro-docs/blob/main/introduction/get-started/quickstart.md)
+currently ends at API 34. This keeps the app's compile target current while the
+UI automation runs on a supported runtime. Its cleanup removes the disposable
+database and media volumes.
 
 The local-server override exists only through `CAPACITOR_SERVER_URL` during the
 test build. Normal mobile builds leave it empty and embed production assets. To
