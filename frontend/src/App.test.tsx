@@ -260,7 +260,11 @@ describe('App shell — protected routes with authentication', () => {
     beforeEach(() => {
         // Succeed the auth refresh so the user is authenticated.
         apiMocks.post.mockReset();
-        apiMocks.post.mockResolvedValue({ data: authResponse });
+        apiMocks.post.mockImplementation((url: string) =>
+            Promise.resolve({
+                data: url === '/auth/pins' ? { selected_pin_key: null, pins: [] } : authResponse,
+            }),
+        );
         apiMocks.get.mockReset();
         apiMocks.get.mockImplementation((url: string) =>
             Promise.resolve({ data: url === '/auth/pins' ? { selected_pin_key: null, pins: [] } : [] }),
