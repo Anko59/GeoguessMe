@@ -12,7 +12,7 @@ export default function MapPinPicker() {
 
     const loadCatalog = useCallback(async () => {
         try {
-            const response = await api.get<MapPinCatalog>('/auth/pins');
+            const response = await api.post<MapPinCatalog>('/auth/pins');
             if (active.current) setCatalog(response.data);
         } catch (requestError: unknown) {
             if (active.current) setError(getAPIErrorMessage(requestError, 'Unable to load map pins.'));
@@ -25,7 +25,7 @@ export default function MapPinPicker() {
         let current = true;
         active.current = true;
         void api
-            .get<MapPinCatalog>('/auth/pins')
+            .post<MapPinCatalog>('/auth/pins')
             .then((response) => {
                 if (current) setCatalog(response.data);
             })

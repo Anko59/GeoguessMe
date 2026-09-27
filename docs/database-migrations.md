@@ -191,9 +191,21 @@ Adds the pin catalog, unlock-challenge definitions, per-player unlock evidence,
 and the equipped-pin selection. Unlock records are server-owned and idempotent;
 the equipped row references the exact unlock so profiles can name the challenge
 that earned the selected pin. Artwork paths are constrained to same-origin
-assets. The migration deliberately inserts no pins or challenge definitions;
-those catalog entries and their images will be added after their content is
-decided.
+assets. Migration 035 adds the 30 pins and their challenge descriptions.
+
+## Migration 035: Initial map pin catalog
+
+Seeds the 30 map pins and unlock challenge definitions. Image files are shipped
+with the frontend under `frontend/public/assets/map-pins/`; the database stores
+their same-origin paths. Challenge criteria are recorded as structured JSON for
+server-side progression evaluation.
+
+## Migration 036: Map pin progression indexes
+
+Adds indexes for a player's scored guesses, group participation, and ordered
+guess history. They support server-side unlock evaluation without scanning
+unrelated players' histories; the ordered indexes include timeout rows because
+timeouts break scoring streaks.
 
 ## Status command
 

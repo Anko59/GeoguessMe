@@ -73,6 +73,16 @@ func (r *Repository) MapPinsForUser(ctx context.Context, userID string) (models.
 	return catalog, nil
 }
 
+// EvaluateMapPinsForUser records eligible server-verified unlocks, then returns
+// the catalog. It is called by the explicit POST progression action so the
+// catalog GET remains a safe, read-only request.
+func (r *Repository) EvaluateMapPinsForUser(ctx context.Context, userID string) (models.MapPinCatalog, error) {
+	if err := r.unlockEligibleChallenges(ctx, userID, time.Now().UTC()); err != nil {
+		return models.MapPinCatalog{}, err
+	}
+	return r.MapPinsForUser(ctx, userID)
+}
+
 // EquippedMapPin returns the pin and exact challenge credited when the player
 // equipped it. It returns nil when the player uses the standard marker.
 func (r *Repository) EquippedMapPin(ctx context.Context, userID string) (*models.ProfileMapPin, error) {

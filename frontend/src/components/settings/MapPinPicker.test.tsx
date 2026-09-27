@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MapPinPicker from './MapPinPicker';
 import type { MapPinCatalog } from '../../types';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), delete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 vi.mock('../../api', () => ({
-    default: { get: mocks.get, put: mocks.put, delete: mocks.delete },
+    default: { get: mocks.get, post: mocks.post, put: mocks.put, delete: mocks.delete },
     getAPIErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
@@ -47,6 +47,7 @@ const catalog: MapPinCatalog = {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockResolvedValue({ data: catalog });
+    mocks.post.mockResolvedValue({ data: catalog });
     mocks.put.mockResolvedValue({ data: { ...catalog, selected_pin_key: 'north-star' } });
     mocks.delete.mockResolvedValue({ data: undefined });
 });
@@ -70,7 +71,7 @@ describe('MapPinPicker', () => {
     });
 
     it('restores the standard marker and handles an empty catalog', async () => {
-        mocks.get.mockResolvedValueOnce({ data: catalog });
+        mocks.post.mockResolvedValueOnce({ data: catalog });
         mocks.put.mockResolvedValueOnce({ data: { ...catalog, selected_pin_key: 'north-star' } });
         const view = render(<MapPinPicker />);
         await screen.findByText('North Star');
@@ -86,7 +87,7 @@ describe('MapPinPicker', () => {
         await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('/auth/pins'));
 
         view.unmount();
-        mocks.get.mockResolvedValueOnce({ data: { selected_pin_key: null, pins: [] } });
+        mocks.post.mockResolvedValueOnce({ data: { selected_pin_key: null, pins: [] } });
         render(<MapPinPicker />);
         expect(await screen.findByText('No map pins are available yet.')).toBeInTheDocument();
     });

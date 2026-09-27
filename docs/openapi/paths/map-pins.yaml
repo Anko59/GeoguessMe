@@ -10,6 +10,17 @@ mapPins:
         content: { application/json: { schema: { $ref: "../components/schemas-pins.yaml#/MapPinCatalog" } } }
       "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
       "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  post:
+    operationId: evaluateMapPinChallenges
+    summary: Evaluate completed challenges and return the authenticated player's pin catalog.
+    tags: [Profile]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Updated catalog with newly awarded challenge unlocks and current selection.
+        content: { application/json: { schema: { $ref: "../components/schemas-pins.yaml#/MapPinCatalog" } } }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
   put:
     operationId: equipMapPin
     summary: Equip a pin the authenticated player has unlocked.

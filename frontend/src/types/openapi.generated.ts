@@ -612,7 +612,8 @@ export interface paths {
         get: operations['getMapPins'];
         /** Equip a pin the authenticated player has unlocked. */
         put: operations['equipMapPin'];
-        post?: never;
+        /** Evaluate completed challenges and return the authenticated player's pin catalog. */
+        post: operations['evaluateMapPinChallenges'];
         /** Restore the standard map marker. */
         delete: operations['clearEquippedMapPin'];
         options?: never;
@@ -3094,6 +3095,28 @@ export interface operations {
             400: components['responses']['ErrorResponse'];
             401: components['responses']['ErrorResponse'];
             409: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    evaluateMapPinChallenges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated catalog with newly awarded challenge unlocks and current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['MapPinCatalog'];
+                };
+            };
+            401: components['responses']['ErrorResponse'];
             500: components['responses']['ErrorResponse'];
         };
     };

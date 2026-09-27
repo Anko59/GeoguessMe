@@ -87,8 +87,10 @@ keep the standard marker for players without an equipped pin.
 progress, and the current selection. `PUT /api/v1/auth/pins` accepts
 `{"pin_key":"..."}` and only equips a pin already unlocked by the account.
 `DELETE /api/v1/auth/pins` restores the standard marker without removing unlock
-history. The catalog is database-backed so challenge definitions and artwork can
-be added independently; it starts empty until that content is defined.
+history. `POST /api/v1/auth/pins` evaluates completed challenge history and
+records eligible unlocks idempotently, then returns the updated catalog. The
+settings pin picker runs this action when opened. The 30 launch pins and their
+rules are listed in [Personalized map pins](map-pins.md).
 
 ## Endpoint overview
 
@@ -107,6 +109,7 @@ be added independently; it starts empty until that content is defined.
 | POST   | `/api/v1/auth/password/change` | Bearer | Change password; revokes all sessions     | 204, 400, 401      |
 | GET    | `/api/v1/auth/profile`         | Bearer | Read profile, lifetime points, and rank   | 200, 401           |
 | GET    | `/api/v1/auth/pins`            | Bearer | Read map pin catalog and unlock progress  | 200, 401           |
+| POST   | `/api/v1/auth/pins`            | Bearer | Evaluate completed pin challenges         | 200, 401, 500      |
 | PUT    | `/api/v1/auth/pins`            | Bearer | Equip an unlocked map pin `{pin_key}`     | 200, 400, 401, 409 |
 | DELETE | `/api/v1/auth/pins`            | Bearer | Restore the standard map marker           | 204, 401           |
 | GET    | `/api/v1/user/profile/{id}`    | Bearer | Read another player's progression         | 200, 401, 403, 404 |

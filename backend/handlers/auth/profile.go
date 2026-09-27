@@ -208,8 +208,9 @@ type equipMapPinRequest struct {
 	PinKey string `json:"pin_key"`
 }
 
-// MapPins reads the authenticated player's pin catalog and owns selection.
-// Pin unlocks are written only by server-side progression flows.
+// MapPins serves the authenticated player's pin catalog and selection. The
+// explicit POST action runs server-side progression and records eligible
+// unlocks; GET remains read-only.
 func (a *AuthAPI) MapPins(w http.ResponseWriter, r *http.Request) {
 	userID := handlers.GetUserIDFromContext(r)
 	switch r.Method {
@@ -217,6 +218,15 @@ func (a *AuthAPI) MapPins(w http.ResponseWriter, r *http.Request) {
 		catalog, err := a.repos.Pins.MapPinsForUser(r.Context(), userID)
 		if err != nil {
 			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load map pins")
+			return
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		handlers.WriteJSON(w, http.StatusOK, catalog)
+	case http.MethodPost:
+		catalog, err := a.repos.Pins.EvaluateMapPinsForUser(r.Context(), userID)
+		if err != nil {
+			slog.Error("map pin challenge evaluation failed", "error", err, "user_id", userID)
+			handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to evaluate map pin challenges")
 			return
 		}
 		w.Header().Set("Cache-Control", "private, no-store")
