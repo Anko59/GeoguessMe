@@ -81,6 +81,34 @@ credentials_preflight() {
     return "$missing"
 }
 
+terraform_credentials_preflight() {
+    local missing=0
+    local name
+    local value
+
+    for name in HCLOUD_TOKEN CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+        case "$name" in
+            HCLOUD_TOKEN) value=${HCLOUD_TOKEN:-} ;;
+            CLOUDFLARE_API_TOKEN) value=${CLOUDFLARE_API_TOKEN:-} ;;
+            AWS_ACCESS_KEY_ID) value=${AWS_ACCESS_KEY_ID:-} ;;
+            AWS_SECRET_ACCESS_KEY) value=${AWS_SECRET_ACCESS_KEY:-} ;;
+        esac
+
+        if [[ -n "$value" ]]; then
+            printf 'Terraform %s: available in the current environment\n' "$name"
+        else
+            printf 'Terraform %s: unavailable in the current environment\n' "$name"
+            missing=1
+        fi
+        value=''
+    done
+
+    if ((missing != 0)); then
+        echo 'Load the repository keyring-backed environment with direnv, or export the documented Terraform inputs, then rerun this preflight.' >&2
+    fi
+    return "$missing"
+}
+
 api_request() {
     local method=$1
     local path=$2
@@ -311,6 +339,9 @@ case "${1:-}" in
     preflight)
         credentials_preflight
         ;;
+    terraform-preflight)
+        terraform_credentials_preflight
+        ;;
     ssh)
         [[ $# -ge 2 ]] || {
             echo 'Usage: credentials.sh ssh dev|production' >&2
@@ -320,7 +351,7 @@ case "${1:-}" in
         operator_ssh "$@"
         ;;
     *)
-        echo 'Usage: credentials.sh preflight | ssh dev|production' >&2
+        echo 'Usage: credentials.sh preflight | terraform-preflight | ssh dev|production' >&2
         exit 2
         ;;
 esac

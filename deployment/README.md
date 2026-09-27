@@ -76,8 +76,9 @@ The main operator targets are:
 
 ```text
 make terraform-validate
-make terraform-plan
-CONFIRM=apply make terraform-apply
+direnv exec "$PWD" make terraform-credentials-preflight
+direnv exec "$PWD" make terraform-plan
+direnv exec "$PWD" make terraform-apply CONFIRM=apply
 make secrets-generate ENV=dev RECIPIENT=age1...
 make identity-secrets-generate RECIPIENT=age1...,age1...
 make hosted-config

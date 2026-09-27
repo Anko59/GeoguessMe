@@ -24,17 +24,39 @@ two minutes of planned deployment interruption.
 4. Create one operator SSH key and separate CI keys for dev and production. Put
    only public keys in `terraform.tfvars`; private CI keys go into their
    matching GitHub environment.
-5. Copy `backend.hcl.example` to ignored `backend.hcl`, fill the R2 endpoint,
-   and export its S3 credentials plus rotated `HCLOUD_TOKEN` and
-   `CLOUDFLARE_API_TOKEN`.
+5. Copy `backend.hcl.example` to ignored `backend.hcl` and fill the R2 endpoint.
+   Terraform reads `HCLOUD_TOKEN`, `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`,
+   and `AWS_SECRET_ACCESS_KEY` from its process environment. The AWS-named
+   variables are S3-compatible credentials for Cloudflare R2; no AWS account is
+   used. On a machine with a keyring-backed local `.envrc`, check and run
+   Terraform in that same environment:
 
-The Cloudflare API token needs zone DNS/settings, Email Routing, R2 bucket,
-Tunnel, identity-provider, and Access-application write permissions scoped to
-this account/zone. The local QA runner also uses it for temporary dev service
-tokens and therefore needs Access service-token write permission. Terraform does
-not manage those short-lived QA objects. The Hetzner token should be scoped to
-the dedicated project. Do not reuse either token in application or deployment
-jobs.
+    ```text
+    direnv exec "$PWD" make terraform-credentials-preflight
+    direnv exec "$PWD" make terraform-plan
+    ```
+
+    `terraform-credentials-preflight` reports availability only and never prints
+    secret values and does not validate Cloudflare permissions. The separate
+    `make credentials-preflight` target checks operator Access/SSH.
+
+The Terraform Cloudflare API token needs zone DNS/settings, Email Routing, R2
+bucket, Tunnel, identity-provider, and Access-application write permissions
+scoped to this account/zone. Terraform planning also requires read access for
+every managed resource. In particular, the account-scoped
+`Cloudflare Tunnel Read` and `Email Routing Addresses Read` permissions are
+needed to refresh the existing tunnel and destination address; applying
+corresponding changes also requires their write/edit permissions. The local QA
+runner also uses a Cloudflare API token for temporary dev service tokens and
+therefore needs Access service-token write permission. Terraform does not manage
+those short-lived QA objects. The Hetzner token should be scoped to the
+dedicated project. Do not reuse either token in application or deployment jobs.
+
+See Cloudflare's
+[API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
+and the
+[Email Routing addresses API](https://developers.cloudflare.com/api/resources/email_routing/subresources/addresses/methods/list/)
+for the current permission labels.
 
 The local QA token does not need Email Routing Rules permission. The controlled
 relay uses a permanent seed rule and Cloudflare subaddressing for unique test
@@ -46,8 +68,9 @@ infrastructure management and must not be substituted for the QA token.
 
 ## Provision
 
-Run `make terraform-validate`, inspect `make terraform-plan`, and apply only the
-saved plan with `CONFIRM=apply make terraform-apply`. Terraform state locking
+Run `make terraform-validate`, inspect the plan created by
+`direnv exec "$PWD" make terraform-plan`, and apply only that saved plan with
+`direnv exec "$PWD" make terraform-apply CONFIRM=apply`. Terraform state locking
 uses R2's S3 lockfile. The server has Hetzner backups, delete/rebuild
 protection, unattended security updates, a 2 GB swap file, bounded Docker logs,
 and no public inbound firewall rule.

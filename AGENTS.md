@@ -60,6 +60,17 @@ secret into chat or print a credential to verify it. Ask only after the
 preflight and documented retrieval paths fail, and name the exact missing source
 and required scope.
 
+`make credentials-preflight` covers operator Access/SSH credentials and local
+tooling; it does not check Terraform credentials. For hosted infrastructure,
+inspect the local `.envrc` when present and run
+`direnv exec "$PWD" make terraform-credentials-preflight` so the check sees the
+same keyring-backed environment as Terraform. Run Terraform targets with the
+same `direnv exec "$PWD"` prefix. The Terraform preflight reports only
+availability for `HCLOUD_TOKEN`, `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`,
+and `AWS_SECRET_ACCESS_KEY`; it never prints their values. If the variables are
+not available in that execution context, complete the documented keyring or
+environment lookup before asking the user.
+
 ## Structure
 
 No human-authored tracked file may exceed 500 lines. No directory may directly

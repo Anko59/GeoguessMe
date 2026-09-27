@@ -48,6 +48,15 @@ local shell. For repository operations, use
 `gh auth status --hostname github.com` to check the local GitHub identity
 without displaying its token.
 
+This preflight covers local operator Access/SSH and tooling only. Terraform
+needs additional infrastructure inputs, and its Cloudflare API token may come
+from a different local keyring entry. For infrastructure work, inspect the local
+`.envrc` when present, then run
+`direnv exec "$PWD" make terraform-credentials-preflight`. The dedicated
+preflight reports whether Terraform's required variables are available without
+printing their values. Run Terraform with the same `direnv exec "$PWD"` prefix
+so it receives the credentials that were checked.
+
 For operator SSH, the local Secret Service keyring item `service=codex-api`,
 `provider=cloudflare`, `project=geoguessme`, `name=CLOUDFLARE_API_TOKEN` can
 administer Access. The helper also accepts an already-exported

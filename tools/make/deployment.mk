@@ -227,6 +227,9 @@ export OPS_SSH_COMMAND
 credentials-preflight: ## Safely report local keyring, SSH-agent, and operator tooling availability.
 	@bash tools/ops/credentials.sh preflight
 
+terraform-credentials-preflight: ## Report Terraform cloud credential availability without printing values.
+	@bash tools/ops/credentials.sh terraform-preflight
+
 ops-ssh: ## Open the documented operator SSH route; set HOST=dev|production and optional OPS_SSH_COMMAND.
 	@case "$(HOST)" in dev|production) ;; *) echo 'HOST must be dev or production' >&2; exit 2 ;; esac
 	@bash tools/ops/credentials.sh ssh "$(HOST)"

@@ -86,6 +86,36 @@ fi
     exit 1
 }
 
+terraform_output=$(env "${base_environment[@]}" \
+    HCLOUD_TOKEN=hetzner-fixture CLOUDFLARE_API_TOKEN=cloudflare-fixture \
+    AWS_ACCESS_KEY_ID=r2-access-fixture AWS_SECRET_ACCESS_KEY=r2-secret-fixture \
+    bash "$script" terraform-preflight)
+for credential_name in HCLOUD_TOKEN CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+    [[ "$terraform_output" == *"Terraform $credential_name: available in the current environment"* ]] || {
+        printf 'Terraform preflight did not report %s as available\n' "$credential_name" >&2
+        exit 1
+    }
+done
+for fixture in hetzner-fixture cloudflare-fixture r2-access-fixture r2-secret-fixture; do
+    [[ "$terraform_output" != *"$fixture"* ]] || {
+        echo 'Terraform preflight printed a credential value' >&2
+        exit 1
+    }
+done
+
+if terraform_missing_output=$(env "${base_environment[@]}" \
+    HCLOUD_TOKEN= CLOUDFLARE_API_TOKEN= AWS_ACCESS_KEY_ID= AWS_SECRET_ACCESS_KEY= \
+    bash "$script" terraform-preflight 2>&1); then
+    echo 'Terraform preflight accepted missing credentials' >&2
+    exit 1
+fi
+for credential_name in HCLOUD_TOKEN CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+    [[ "$terraform_missing_output" == *"Terraform $credential_name: unavailable in the current environment"* ]] || {
+        printf 'Terraform preflight did not identify missing %s\n' "$credential_name" >&2
+        exit 1
+    }
+done
+
 grep -Fq 'duration: "1h"' "$script"
 grep -Fq 'decision: "non_identity"' "$script"
 grep -Fq "HostKeyAlias=\$host_key_alias" "$script"
