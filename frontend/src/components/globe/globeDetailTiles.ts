@@ -23,13 +23,16 @@ interface TileRecord {
 }
 
 const TILE_SEGMENTS = 8;
-const MAX_DESKTOP_TILES = 64;
-const MAX_MOBILE_TILES = 32;
+const MAX_DESKTOP_OSM_TILES = 128;
+const MAX_MOBILE_OSM_TILES = 64;
+const MAX_DESKTOP_NASA_TILES = 64;
+const MAX_MOBILE_NASA_TILES = 32;
 const MAX_DESKTOP_CONCURRENT_LOADS = 6;
 const MAX_MOBILE_CONCURRENT_LOADS = 4;
 const MAX_OSM_FALLBACK_TILES = 8;
 const MAX_NASA_FALLBACK_TILES = 16;
 const MERCATOR_MAX_LATITUDE = 85.05112878;
+type OSMTileSelection = { tiles: GlobeDetailTile[]; overBudget: boolean };
 
 const radians = (degrees: number) => THREE.MathUtils.degToRad(degrees);
 const degrees = (radiansValue: number) => THREE.MathUtils.radToDeg(radiansValue);
@@ -115,7 +118,7 @@ function osmTileCenter(column: number, row: number, zoom: number): { latitude: n
     };
 }
 
-function osmVisibleTiles(camera: THREE.PerspectiveCamera, zoom: number, maxTiles: number): GlobeDetailTile[] {
+function osmVisibleTiles(camera: THREE.PerspectiveCamera, zoom: number, maxTiles: number): OSMTileSelection {
     const center = camera.position.clone().normalize();
     const centerLongitude = longitudeForPoint(center);
     const points: THREE.Vector3[] = [];
@@ -137,7 +140,7 @@ function osmVisibleTiles(camera: THREE.PerspectiveCamera, zoom: number, maxTiles
         raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
         const point = raycaster.ray.intersectSphere(sphere, new THREE.Vector3());
         // Keep NASA's imagery at the limb until every edge of the view lands on the surface.
-        if (!point) return [];
+        if (!point) return { tiles: [], overBudget: false };
         points.push(point.normalize());
     }
 
@@ -145,18 +148,18 @@ function osmVisibleTiles(camera: THREE.PerspectiveCamera, zoom: number, maxTiles
     const longitudes = points.map((point) => unwrapLongitude(longitudeForPoint(point), centerLongitude));
     const pad = 1;
     const count = 2 ** zoom;
-    let minColumn = osmColumn(Math.min(...longitudes), zoom) - pad;
-    let maxColumn = osmColumn(Math.max(...longitudes), zoom) + pad;
+    const minColumn = osmColumn(Math.min(...longitudes), zoom) - pad;
+    const maxColumn = osmColumn(Math.max(...longitudes), zoom) + pad;
     const minRow = THREE.MathUtils.clamp(osmRow(Math.max(...latitudes), zoom) - pad, 0, count - 1);
     const maxRow = THREE.MathUtils.clamp(osmRow(Math.min(...latitudes), zoom) + pad, 0, count - 1);
-    if (maxColumn - minColumn + 1 > maxTiles * 4) {
-        const middle = osmColumn(centerLongitude, zoom);
-        minColumn = middle - Math.ceil(Math.sqrt(maxTiles));
-        maxColumn = middle + Math.ceil(Math.sqrt(maxTiles));
-    }
+    const gridWidth = maxColumn - minColumn + 1;
+    const gridHeight = maxRow - minRow + 1;
+    // Oversized candidate grids lower source zoom before iteration.
+    if (gridWidth * gridHeight > maxTiles * 32) return { tiles: [], overBudget: true };
 
-    const candidates: { tile: GlobeDetailTile; dot: number }[] = [];
-    const radius = frustumSurfaceRadius(camera, camera.position.length());
+    const candidates = new Map<string, { tile: GlobeDetailTile; dot: number }>();
+    const viewProjection = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(viewProjection);
     for (let rawColumn = minColumn; rawColumn <= maxColumn; rawColumn += 1) {
         const column = ((rawColumn % count) + count) % count;
         for (let row = minRow; row <= maxRow; row += 1) {
@@ -170,16 +173,21 @@ function osmVisibleTiles(camera: THREE.PerspectiveCamera, zoom: number, maxTiles
                 ),
             );
             const tileRadius = radians(Math.hypot(tileWidth, tileHeight) / 2);
-            if (dot <= 0 || dot < Math.cos(Math.min(Math.PI / 2, radius + tileRadius))) continue;
-            candidates.push({ tile: { provider: 'osm', level: zoom, row, column }, dot });
+            if (dot <= 0) continue;
+            const tile = { provider: 'osm' as const, level: zoom, row, column };
+            const surfaceRadius = 1.003 + zoom * 0.00002;
+            const boundsRadius = 2 * surfaceRadius * Math.sin(tileRadius / 2);
+            const bounds = new THREE.Sphere(globePosition(latitude, longitude, surfaceRadius), boundsRadius + 0.001);
+            if (!frustum.intersectsSphere(bounds)) continue;
+            candidates.set(tileKey(tile), { tile, dot });
+            if (candidates.size > maxTiles) return { tiles: [], overBudget: true };
         }
     }
 
-    const unique = new Map(candidates.map(({ tile, dot }) => [tileKey(tile), { tile, dot }]));
-    return [...unique.values()]
-        .sort((left, right) => right.dot - left.dot)
-        .slice(0, maxTiles)
-        .map(({ tile }) => tile);
+    return {
+        overBudget: false,
+        tiles: [...candidates.values()].sort((left, right) => right.dot - left.dot).map(({ tile }) => tile),
+    };
 }
 
 export function visibleTiles(
@@ -190,7 +198,12 @@ export function visibleTiles(
 ): GlobeDetailTile[] {
     if (provider === 'osm') {
         if (level < 0 || level > OSM_TILE_MAX_ZOOM) throw new RangeError(`Unsupported OSM tile zoom: ${level}`);
-        return osmVisibleTiles(camera, level, maxTiles);
+        if (maxTiles < 1) return [];
+        for (let zoom = level; zoom >= 0; zoom -= 1) {
+            const selection = osmVisibleTiles(camera, zoom, maxTiles);
+            if (!selection.overBudget) return selection.tiles;
+        }
+        return [];
     }
     return nasaVisibleTiles(camera, level, maxTiles);
 }
@@ -295,7 +308,6 @@ export function createGlobeDetailLayer(
     const tiles = new Map<string, TileRecord>();
     const pending: TileRecord[] = [];
     const layer = new THREE.Group();
-    const maxTiles = mobile ? MAX_MOBILE_TILES : MAX_DESKTOP_TILES;
     const maxConcurrentLoads = mobile ? MAX_MOBILE_CONCURRENT_LOADS : MAX_DESKTOP_CONCURRENT_LOADS;
     scene.add(layer);
 
@@ -407,7 +419,9 @@ export function createGlobeDetailLayer(
             render();
             return;
         }
-        const wanted = visibleTiles(camera, source.provider, source.level, maxTiles);
+        let tileBudget = mobile ? MAX_MOBILE_NASA_TILES : MAX_DESKTOP_NASA_TILES;
+        if (source.provider === 'osm') tileBudget = mobile ? MAX_MOBILE_OSM_TILES : MAX_DESKTOP_OSM_TILES;
+        const wanted = visibleTiles(camera, source.provider, source.level, tileBudget);
         wantedKeys = new Set(wanted.map(tileKey));
         for (const [key, record] of tiles) {
             const canFallback = Boolean(record.mesh) && !wantedKeys.has(key);
