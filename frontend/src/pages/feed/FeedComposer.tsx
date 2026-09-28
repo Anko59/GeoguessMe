@@ -56,10 +56,6 @@ export default function FeedComposer({
                         if (postID) onPublished(postID);
                     }}
                 />
-                <p className="feed-note feed-camera-note">
-                    The exact device location is attached automatically. Feed posts are camera-only and do not support
-                    choosing an old photo or entering a location manually.
-                </p>
                 {error && (
                     <p role="alert" className="error-message feed-camera-error">
                         {error}

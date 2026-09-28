@@ -79,7 +79,6 @@
 .feed-camera-dialog .photo-preview {
     min-height: 100dvh;
 }
-.feed-camera-dialog .feed-camera-note,
 .feed-camera-dialog .feed-camera-error {
     position: absolute;
     z-index: 4;
@@ -87,13 +86,9 @@
     right: 1rem;
     bottom: 0.8rem;
     margin: 0;
-    color: rgba(255, 255, 255, 0.86);
+    color: #ffd4d4;
     text-align: center;
     pointer-events: none;
-}
-.feed-camera-dialog .feed-camera-error {
-    bottom: 3.4rem;
-    color: #ffd4d4;
 }
 .feed-form fieldset {
     border: 0;
