@@ -77,6 +77,36 @@ function cameraAt(latitude: number, longitude: number, aspect: number) {
     return camera;
 }
 
+function viewportTileKeys(camera: THREE.PerspectiveCamera, zoom: number): string[] {
+    const samples = [
+        [-1, -1],
+        [0, -1],
+        [1, -1],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [-1, 1],
+        [-1, 0],
+        [0, 0],
+    ];
+    const raycaster = new THREE.Raycaster();
+    const sphere = new THREE.Sphere(new THREE.Vector3(), 1);
+    const count = 2 ** zoom;
+    camera.updateMatrixWorld(true);
+
+    return samples.map(([x, y]) => {
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+        const point = raycaster.ray.intersectSphere(sphere, new THREE.Vector3());
+        expect(point).not.toBeNull();
+        const latitude = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(point!.y, -1, 1)));
+        const longitude = THREE.MathUtils.radToDeg(Math.atan2(-point!.z, point!.x));
+        const mercatorLatitude = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(latitude, -85.05112878, 85.05112878));
+        const column = ((Math.floor(((longitude + 180) / 360) * count) % count) + count) % count;
+        const row = Math.floor(((1 - Math.asinh(Math.tan(mercatorLatitude)) / Math.PI) / 2) * count);
+        return `${row}/${column}`;
+    });
+}
+
 describe('globe detail resolution', () => {
     it('matches the NASA tile host exactly', () => {
         expect(isGibsTileRequest('https://gibs.earthdata.nasa.gov/tiles/example')).toBe(true);
@@ -144,15 +174,39 @@ describe('globe detail resolution', () => {
         dateLine.zoom = maxUsefulGlobeZoom(dateLine, 1280, 2);
         dateLine.updateProjectionMatrix();
         const dateLineTiles = visibleTiles(dateLine, 'osm', 19, 64);
+        const dateLineZoom = dateLineTiles[0]?.level;
         expect(dateLineTiles.length).toBeGreaterThan(0);
         expect(dateLineTiles.some((tile) => tile.column === 0)).toBe(true);
-        expect(dateLineTiles.some((tile) => tile.column === 2 ** 19 - 1)).toBe(true);
+        expect(dateLineTiles.some((tile) => tile.column === 2 ** dateLineZoom! - 1)).toBe(true);
 
         const polar = cameraAt(88, 0, 1.6);
         polar.zoom = maxUsefulGlobeZoom(polar, 1280, 2);
         polar.updateProjectionMatrix();
         expect(visibleTiles(polar, 'osm', 19, 64)).toEqual([]);
     });
+
+    it.each([
+        { name: 'desktop', width: 1280, aspect: 1280 / 720, textureSize: 8192, tileBudget: 128 },
+        { name: 'mobile', width: 390, aspect: 390 / 844, textureSize: 2048, tileBudget: 64 },
+    ])(
+        'keeps the complete $name viewport covered within the OSM tile budget',
+        ({ width, aspect, textureSize, tileBudget }) => {
+            const camera = cameraAt(48.8566, 2.3522, aspect);
+            camera.zoom = 32;
+            camera.updateProjectionMatrix();
+            const source = detailSourceForCamera(camera, width, 2, textureSize);
+            expect(source?.provider).toBe('osm');
+
+            const tiles = visibleTiles(camera, 'osm', source!.level, tileBudget);
+            expect(tiles.length).toBeGreaterThan(0);
+            expect(tiles.length).toBeLessThanOrEqual(tileBudget);
+            expect(tiles[0].level).toBeLessThan(source!.level);
+            expect(new Set(tiles.map((tile) => tile.level))).toEqual(new Set([tiles[0].level]));
+
+            const loadedTiles = new Set(tiles.map((tile) => `${tile.row}/${tile.column}`));
+            expect(viewportTileKeys(camera, tiles[0].level).every((key) => loadedTiles.has(key))).toBe(true);
+        },
+    );
 
     it('loads viewport NASA textures as meshes and holds them until OSM coverage is complete', async () => {
         const camera = cameraAt(48.8566, 2.3522, 1280 / 720);
@@ -208,7 +262,7 @@ describe('globe detail resolution', () => {
         camera.updateProjectionMatrix();
         const osmSource = detailSourceForCamera(camera, 1280, 2, 8192)!;
         expect(osmSource.provider).toBe('osm');
-        const osmTiles = visibleTiles(camera, 'osm', osmSource.level, 64);
+        const osmTiles = visibleTiles(camera, 'osm', osmSource.level, 128);
         expect(osmTiles.length).toBeGreaterThan(1);
         const heldOsm = deferred<Response>();
         let osmRequests = 0;
@@ -295,7 +349,7 @@ describe('globe detail resolution', () => {
         layer.scheduleUpdate();
         await vi.advanceTimersByTimeAsync(120);
         expect(fetchMock).toHaveBeenCalledTimes(4);
-        expect(visibleTiles(camera, 'osm', 19, 32).length).toBeGreaterThanOrEqual(4);
+        expect(visibleTiles(camera, 'osm', 19, 64).length).toBeGreaterThanOrEqual(4);
 
         const firstRequest = requests[0];
         firstRequest.pending.resolve(tileResponse());

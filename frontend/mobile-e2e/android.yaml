@@ -19,10 +19,13 @@ name: GeoGuessMe Android core journey
 - extendedWaitUntil:
     visible: "Connected"
     timeout: 30000
-- tapOn: "Message"
+- tapOn:
+    id: chat-message
 - inputText: "Hello from Android"
 - tapOn: "Send message"
-- assertVisible: "Hello from Android"
+- extendedWaitUntil:
+    visible: "Hello from Android"
+    timeout: 15000
 - tapOn: "Accept challenge"
 - extendedWaitUntil:
     visible: "Where was this taken?"

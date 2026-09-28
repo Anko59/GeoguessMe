@@ -4,9 +4,7 @@ set -euo pipefail
 sdk_root=${ANDROID_SDK_ROOT:?ANDROID_SDK_ROOT is required}
 commandline_revision=13114758
 commandline_sha256=7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
-api_level=36
-avd_name=geoguessme_api_36
-system_image="system-images;android-${api_level};google_apis;x86_64"
+source /workspace/tools/mobile/android-config.sh
 
 if [[ ! -x "$sdk_root/cmdline-tools/latest/bin/sdkmanager" ]]; then
     archive=$(mktemp)
@@ -32,18 +30,18 @@ fi
 sdkmanager \
     "platform-tools" \
     "emulator" \
-    "platforms;android-${api_level}" \
+    "platforms;android-${ANDROID_COMPILE_API_LEVEL}" \
     "build-tools;36.0.0" \
-    "$system_image"
+    "$ANDROID_SYSTEM_IMAGE"
 
 mkdir -p /root/.android
-if ! avdmanager list avd | grep -Fq "Name: $avd_name"; then
-    echo no | avdmanager create avd --force --name "$avd_name" --package "$system_image" --device pixel_6
+if ! avdmanager list avd | grep -Fq "Name: $ANDROID_AVD_NAME"; then
+    echo no | avdmanager create avd --force --name "$ANDROID_AVD_NAME" --package "$ANDROID_SYSTEM_IMAGE" --device pixel_6
 fi
 
 # Keep the ephemeral test device sparse enough for constrained CI runners. The
 # app fixture needs neither a virtual SD card nor a preallocated data image.
-avd_config="/root/.android/avd/${avd_name}.avd/config.ini"
+avd_config="/root/.android/avd/${ANDROID_AVD_NAME}.avd/config.ini"
 sed -i \
     -E \
     -e 's/^disk\.cachePartition[[:space:]]*=.*/disk.cachePartition = no/' \
@@ -52,4 +50,4 @@ sed -i \
     -e 's/^userdata\.useQcow2[[:space:]]*=.*/userdata.useQcow2 = yes/' \
     "$avd_config"
 
-echo "Android SDK and $avd_name are ready."
+echo "Android SDK API ${ANDROID_COMPILE_API_LEVEL} and $ANDROID_AVD_NAME (API ${ANDROID_EMULATOR_API_LEVEL}) are ready."

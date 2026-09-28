@@ -49,6 +49,8 @@ describe('Public feed', () => {
         expect(await screen.findByText('4,900 points')).toBeInTheDocument();
         expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
         expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
+        expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
+        expect(mocks.timedResults).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
@@ -91,6 +93,7 @@ describe('Public feed', () => {
 
             await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
             expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
+            expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
             fireEvent.click(screen.getByRole('button', { name: 'Close' }));
             fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
             expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
