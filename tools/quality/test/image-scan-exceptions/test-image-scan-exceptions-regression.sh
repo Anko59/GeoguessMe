@@ -12,9 +12,11 @@
 #   7. Append mode preserves direct-image exceptions while adding base-image
 #      exceptions for a derived image.
 #   8. Multiple exception files are validated and emitted together.
+#   9. The nightly Buildx verification loads local images before image scanning.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
+REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 PASS=0
 FAIL=0
 TMP=""
@@ -269,6 +271,15 @@ if grep -qx 'CVE-2026-00001' "$multiple_ignore" && grep -qx 'CVE-2026-00007' "$m
     pass "emit includes records from every exception file"
 else
     fail "emit omitted a record from multiple exception files"
+fi
+
+# ── Test 9: nightly Buildx verification loads images for audit-images ────────
+echo "--- Test 9: nightly verification loads Buildx images before scanning ---"
+nightly_build_flags="$(grep -E '^[[:space:]]*DOCKER_BUILD_FLAGS=' "$REPO_ROOT/.github/workflows/nightly.yml" || true)"
+if [[ "$nightly_build_flags" == *"--load"* && "$nightly_build_flags" == *"--cache-from type=local"* && "$nightly_build_flags" == *"--cache-to type=local"* ]]; then
+    pass "nightly Buildx flags load locally audited images while retaining cache"
+else
+    fail "nightly Buildx flags must load local images before audit-images"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

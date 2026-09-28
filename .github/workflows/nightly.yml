@@ -44,8 +44,11 @@ jobs:
         env:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
+          # `make verify` scans the local images built by its prerequisites.
+          # The docker-container Buildx driver needs --load to put docker-build
+          # outputs in the runner's Docker image store before audit-images.
           make verify \
-            DOCKER_BUILD_FLAGS="--cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
+            DOCKER_BUILD_FLAGS="--load --cache-from type=local,src=/tmp/.buildx-cache --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max"
       - name: Save Docker cache
         if: always()
         run: |

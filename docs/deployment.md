@@ -4,6 +4,9 @@ The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
+Nightly `make verify` builds local application and Keycloak images with Buildx
+`--load` before `make audit-images` scans them, so the image gate inspects the
+artifacts produced by that verification run.
 
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
