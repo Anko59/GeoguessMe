@@ -93,6 +93,7 @@ describe('Public feed', () => {
 
             await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
             expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
+            await screen.findByAltText('Geo challenge photo');
             expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
             fireEvent.click(screen.getByRole('button', { name: 'Close' }));
             fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
