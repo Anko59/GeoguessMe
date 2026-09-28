@@ -29,6 +29,8 @@ and submit one server-timed guess.
 - [Configuration](configuration.md) — every environment variable, defaults,
   validation
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility
+- [Personalized map pins](map-pins.md) — unlock rules, selection, and offline
+  country boundaries
 - [Photo filters](photo-filters.md) — camera filters, capture behavior, and
   permissions
 - [Rank badges](rank-badges.md) — progression badge artwork and global rank

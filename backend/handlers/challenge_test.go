@@ -125,9 +125,9 @@ func TestChallengeResultsHideLocation(t *testing.T) {
 	groupID := "00000000-0000-0000-0000-000000000001"
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000002", UserID: "user-1", GroupID: groupID, StorageKey: "photos/media", MIMEType: "image/png", ByteSize: 4, LifecycleStatus: "ready", HideLocation: true, CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
 	guessesRows := func() *pgxmock.Rows {
-		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at"}).
-			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", now.Add(-72*time.Second)).
-			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, false, now, "carol", "c.png", now.Add(-45*time.Second))
+		return pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at", "pin_key", "pin_name", "pin_image"}).
+			AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", now.Add(-72*time.Second), "", "", "").
+			AddRow("guess-2", photo.ID, "user-3", groupID, 45.7, 4.8, 60, 120.0, false, now, "carol", "c.png", now.Add(-45*time.Second), "", "", "")
 	}
 	challengesRows := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}).
@@ -206,7 +206,7 @@ func TestChallengeResultsAndChatRejection(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	// A legacy guess without a recorded viewing window (NULL view_expires_at)
 	// still resolves, and its result omits time_to_guess_ms.
-	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", nil))
+	mock.ExpectQuery("SELECT g.id, g.photo_id").WithArgs(photo.ID).WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at", "pin_key", "pin_name", "pin_image"}).AddRow("guess-1", photo.ID, "user-2", groupID, 48.8, 2.3, 80, 10.0, false, now, "bob", "b.png", nil, "", "", ""))
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at.*WHERE TRUE AND NOT g\.timed_out.*AND p\.created_at >= \$1 ORDER BY`).WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
 	recorder := httptest.NewRecorder()
 	resultsRequest := requestWithUser(http.MethodGet, "/", "", "user-1")

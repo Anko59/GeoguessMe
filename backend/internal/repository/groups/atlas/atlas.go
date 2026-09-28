@@ -20,16 +20,17 @@ var ErrInvalidCursor = errors.New("invalid challenge cursor")
 
 // Challenge contains only information the viewer is allowed to see.
 type Challenge struct {
-	PhotoID           string     `json:"photo_id"`
-	GroupID           string     `json:"group_id"`
-	UserID            string     `json:"user_id"`
-	Username          string     `json:"username"`
-	CreatedAt         time.Time  `json:"created_at"`
-	ExpiresAt         time.Time  `json:"expires_at"`
-	Status            string     `json:"status"`
-	Lat               *float64   `json:"lat,omitempty"`
-	Long              *float64   `json:"long,omitempty"`
-	LocationRevealsAt *time.Time `json:"location_reveals_at,omitempty"`
+	PhotoID           string         `json:"photo_id"`
+	GroupID           string         `json:"group_id"`
+	UserID            string         `json:"user_id"`
+	Username          string         `json:"username"`
+	MapPin            *models.MapPin `json:"map_pin,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	ExpiresAt         time.Time      `json:"expires_at"`
+	Status            string         `json:"status"`
+	Lat               *float64       `json:"lat,omitempty"`
+	Long              *float64       `json:"long,omitempty"`
+	LocationRevealsAt *time.Time     `json:"location_reveals_at,omitempty"`
 }
 
 // Page is ordered newest first, including challenges whose media was removed.
@@ -74,8 +75,11 @@ func List(ctx context.Context, pool database.Pool, groupID, viewerID, cursor str
 	const pageSize = 100
 	query := `SELECT p.id, p.group_id, p.user_id, u.username, p.created_at, p.expires_at,
 		p.lat, p.long, p.hide_location,
-		EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id AND g.user_id = $2)
+		EXISTS (SELECT 1 FROM guesses g WHERE g.photo_id = p.id AND g.user_id = $2),
+		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM photos p JOIN users u ON u.id = p.user_id
+		LEFT JOIN user_equipped_map_pins ep ON ep.user_id = p.user_id
+		LEFT JOIN map_pins mp ON mp.pin_key = ep.pin_key
 		WHERE p.group_id = $1
 		AND EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = p.group_id AND m.user_id = $2)`
 	args := []any{groupID, viewerID}
@@ -92,9 +96,9 @@ func List(ctx context.Context, pool database.Pool, groupID, viewerID, cursor str
 	page := Page{Items: make([]Challenge, 0, pageSize), ServerTime: now}
 	for rows.Next() {
 		var photo models.Photo
-		var username string
+		var username, pinKey, pinName, pinImage string
 		var guessed bool
-		if err := rows.Scan(&photo.ID, &photo.GroupID, &photo.UserID, &username, &photo.CreatedAt, &photo.ExpiresAt, &photo.Lat, &photo.Long, &photo.HideLocation, &guessed); err != nil {
+		if err := rows.Scan(&photo.ID, &photo.GroupID, &photo.UserID, &username, &photo.CreatedAt, &photo.ExpiresAt, &photo.Lat, &photo.Long, &photo.HideLocation, &guessed, &pinKey, &pinName, &pinImage); err != nil {
 			return Page{}, err
 		}
 		if len(page.Items) == pageSize {
@@ -102,7 +106,11 @@ func List(ctx context.Context, pool database.Pool, groupID, viewerID, cursor str
 			page.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(groupID + "|" + last.CreatedAt.Format(time.RFC3339Nano) + "|" + last.PhotoID))
 			break
 		}
-		page.Items = append(page.Items, visibleChallenge(&photo, username, viewerID, guessed, now, hideDuration))
+		challenge := visibleChallenge(&photo, username, viewerID, guessed, now, hideDuration)
+		if pinKey != "" {
+			challenge.MapPin = &models.MapPin{Key: pinKey, Name: pinName, ImageURL: pinImage}
+		}
+		page.Items = append(page.Items, challenge)
 	}
 	if err := rows.Err(); err != nil {
 		return Page{}, err

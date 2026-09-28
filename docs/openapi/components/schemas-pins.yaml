@@ -1,0 +1,54 @@
+MapPin:
+  type: object
+  required: [key, name, image_url]
+  properties:
+    key: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+    name: { type: string, minLength: 1, maxLength: 80 }
+    image_url: { type: string, minLength: 1, description: Same-origin image path for the pin artwork. }
+
+MapPinUnlockChallenge:
+  type: object
+  required: [key, name, description]
+  properties:
+    key: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+    name: { type: string, minLength: 1, maxLength: 100 }
+    description: { type: string, minLength: 1, maxLength: 280 }
+
+ProfileMapPin:
+  allOf:
+    - $ref: "#/MapPin"
+    - type: object
+      required: [description, unlocked_by]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 280 }
+        unlocked_by: { $ref: "#/MapPinUnlockChallenge" }
+
+MapPinChallengeProgress:
+  allOf:
+    - $ref: "#/MapPinUnlockChallenge"
+    - type: object
+      properties:
+        unlocked_at: { type: string, format: date-time }
+
+MapPinChoice:
+  allOf:
+    - $ref: "#/MapPin"
+    - type: object
+      required: [description, unlocked, challenges]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 280 }
+        unlocked: { type: boolean }
+        challenges:
+          type: array
+          items: { $ref: "#/MapPinChallengeProgress" }
+
+MapPinCatalog:
+  type: object
+  required: [selected_pin_key, pins]
+  properties:
+    selected_pin_key:
+      type: [string, "null"]
+      description: Null when the standard marker is selected.
+    pins:
+      type: array
+      items: { $ref: "#/MapPinChoice" }

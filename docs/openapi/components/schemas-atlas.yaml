@@ -6,6 +6,7 @@ GroupChallenge:
     group_id: { type: string, format: uuid }
     user_id: { type: string, format: uuid }
     username: { type: string }
+    map_pin: { $ref: "./schemas-pins.yaml#/MapPin" }
     created_at: { type: string, format: date-time }
     expires_at: { type: string, format: date-time }
     status: { type: string, enum: [available, results, guessed, expired] }

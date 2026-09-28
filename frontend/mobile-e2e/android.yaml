@@ -3,6 +3,9 @@ name: GeoGuessMe Android core journey
 ---
 - launchApp:
     clearState: true
+# Keep the first tap outside the landing card's 600ms entrance animation.
+- waitForAnimationToEnd:
+    timeout: 5000
 - tapOn: "Already Playing? Login"
 - extendedWaitUntil:
     visible: "Welcome Back!"

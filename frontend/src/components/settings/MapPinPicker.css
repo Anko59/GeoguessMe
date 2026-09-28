@@ -1,0 +1,94 @@
+.map-pin-picker {
+    display: grid;
+    gap: 0.8rem;
+    margin-block: 1.5rem;
+}
+
+.map-pin-picker__heading h3,
+.map-pin-picker__heading p {
+    margin: 0;
+}
+
+.map-pin-picker__heading p,
+.map-pin-picker__empty {
+    margin-top: 0.3rem;
+    color: var(--ink-subtle);
+    font-size: 0.9rem;
+}
+
+.map-pin-picker__choices {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.map-pin-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+}
+
+.map-pin-choice.is-locked {
+    opacity: 0.72;
+}
+
+.map-pin-choice__image,
+.map-pin-choice__default {
+    width: 2.4rem;
+    height: 3rem;
+    flex: none;
+    object-fit: contain;
+}
+
+.map-pin-choice__default {
+    width: 1rem;
+    height: 1rem;
+    margin-inline: 0.7rem;
+    border: 2px solid white;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 1px 5px rgba(15, 23, 42, 0.35);
+}
+
+.map-pin-choice__copy {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.map-pin-choice__copy span,
+.map-pin-choice__locked {
+    color: var(--ink-subtle);
+    font-size: 0.82rem;
+}
+
+.map-pin-choice__challenge {
+    margin-top: 0.2rem;
+}
+
+.map-pin-picker__error {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--danger);
+}
+
+@media (max-width: 560px) {
+    .map-pin-choice {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .map-pin-choice__copy {
+        flex-basis: calc(100% - 4rem);
+    }
+
+    .map-pin-choice > button,
+    .map-pin-choice__locked {
+        margin-left: 3.3rem;
+    }
+}

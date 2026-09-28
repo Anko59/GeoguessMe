@@ -67,16 +67,24 @@ func TestPaginationAndGroupIsolation(t *testing.T) {
 	defer pool.Close()
 	groupID := uuid.NewString()
 	now := time.Date(2026, 9, 12, 12, 0, 0, 123000, time.UTC)
-	rows := pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"})
+	columns := []string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed", "pin_key", "pin_name", "pin_image"}
+	rows := pgxmock.NewRows(columns)
 	ids := make([]string, 101)
 	for i := range ids {
 		ids[i] = uuid.NewString()
-		rows.AddRow(ids[i], groupID, "poster", "Alice", now, now.Add(time.Hour), 48.0, 2.0, false, true)
+		pinKey, pinName, pinImage := "", "", ""
+		if i == 0 {
+			pinKey, pinName, pinImage = "north-star", "North Star", "/map-pins/north-star.svg"
+		}
+		rows.AddRow(ids[i], groupID, "poster", "Alice", now, now.Add(time.Hour), 48.0, 2.0, false, true, pinKey, pinName, pinImage)
 	}
 	pool.ExpectQuery(`WHERE p.group_id = \$1 AND EXISTS .*m.user_id = \$2.*ORDER BY p.created_at DESC, p.id DESC LIMIT 101`).WithArgs(groupID, "viewer").WillReturnRows(rows)
 	page, err := List(context.Background(), pool, groupID, "viewer", "", now, 48*time.Hour)
 	if err != nil || len(page.Items) != 100 || page.NextCursor == "" {
 		t.Fatalf("page: %+v, %v", page, err)
+	}
+	if page.Items[0].MapPin == nil || page.Items[0].MapPin.Key != "north-star" {
+		t.Fatalf("poster pin = %+v", page.Items[0].MapPin)
 	}
 	at, id, err := decodeCursor(page.NextCursor, groupID)
 	if err != nil || !at.Equal(now) || id != ids[99] {
@@ -85,7 +93,7 @@ func TestPaginationAndGroupIsolation(t *testing.T) {
 	if _, _, err := decodeCursor(page.NextCursor, uuid.NewString()); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatal("cross-group cursor accepted")
 	}
-	pool.ExpectQuery(`AND \(p.created_at, p.id\) < \(\$3, \$4\).*ORDER BY p.created_at DESC, p.id DESC LIMIT 101`).WithArgs(groupID, "viewer", now, ids[99]).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "created_at", "expires_at", "lat", "long", "hide_location", "guessed"}).AddRow(ids[100], groupID, "poster", "Alice", now, now, 48.0, 2.0, false, false))
+	pool.ExpectQuery(`AND \(p.created_at, p.id\) < \(\$3, \$4\).*ORDER BY p.created_at DESC, p.id DESC LIMIT 101`).WithArgs(groupID, "viewer", now, ids[99]).WillReturnRows(pgxmock.NewRows(columns).AddRow(ids[100], groupID, "poster", "Alice", now, now, 48.0, 2.0, false, false, "", "", ""))
 	last, err := List(context.Background(), pool, groupID, "viewer", page.NextCursor, now, 48*time.Hour)
 	if err != nil || len(last.Items) != 1 || last.NextCursor != "" {
 		t.Fatalf("last: %+v, %v", last, err)

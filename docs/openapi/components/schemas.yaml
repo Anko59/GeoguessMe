@@ -83,6 +83,19 @@ AuthResponse:
     expires_in: { type: integer }
     user: { $ref: "#/AuthUser" }
 
+MapPin:
+  $ref: ./schemas-pins.yaml#/MapPin
+MapPinUnlockChallenge:
+  $ref: ./schemas-pins.yaml#/MapPinUnlockChallenge
+ProfileMapPin:
+  $ref: ./schemas-pins.yaml#/ProfileMapPin
+MapPinChallengeProgress:
+  $ref: ./schemas-pins.yaml#/MapPinChallengeProgress
+MapPinChoice:
+  $ref: ./schemas-pins.yaml#/MapPinChoice
+MapPinCatalog:
+  $ref: ./schemas-pins.yaml#/MapPinCatalog
+
 ProgressionRank:
   type: object
   required: [level, name, min_points, points_in_rank, points_to_next, progress_percent, trophy_key]
@@ -129,6 +142,7 @@ Profile:
         global_rank: { $ref: "#/GlobalRank" }
         global_average_rank: { $ref: "#/GlobalRank" }
         global_elo_rank: { $ref: "#/GlobalRank" }
+        map_pin: { $ref: "#/ProfileMapPin" }
 
 PublicProfile:
   type: object
@@ -158,6 +172,7 @@ PublicProfile:
     global_rank: { $ref: "#/GlobalRank" }
     global_average_rank: { $ref: "#/GlobalRank" }
     global_elo_rank: { $ref: "#/GlobalRank" }
+    map_pin: { $ref: "#/ProfileMapPin" }
   description: >
     Another player's progression profile. Never contains email or account
     details; only visible when the player shares a group with the requester.

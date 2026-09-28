@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import type { ChallengeGuess } from '../../types';
 import './Map.css';
 
 // Fix for default marker icon
@@ -17,14 +18,7 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-interface Guess {
-    user_id: string;
-    lat?: number;
-    long?: number;
-    username: string;
-    avatar: string;
-    score: number;
-}
+type Guess = Pick<ChallengeGuess, 'user_id' | 'lat' | 'long' | 'username' | 'avatar' | 'score' | 'map_pin'>;
 
 function hasCoordinates(guess: Guess): guess is Guess & { lat: number; long: number } {
     return guess.lat !== undefined && guess.long !== undefined;
@@ -78,6 +72,16 @@ const GuessIcon = L.divIcon({
     iconSize: [16, 16],
     iconAnchor: [8, 8],
 });
+
+function guessIcon(guess: Guess): L.Icon | L.DivIcon {
+    if (!guess.map_pin) return GuessIcon;
+    return L.icon({
+        iconUrl: guess.map_pin.image_url,
+        iconSize: [32, 40],
+        iconAnchor: [16, 38],
+        popupAnchor: [0, -36],
+    });
+}
 
 /** Fits the map so every guess and the revealed spot stay visible with a
  *  little padding: close markers zoom in hard, far-apart markers zoom out.
@@ -142,7 +146,12 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                 {/* User Guesses (only guesses with returned coordinates render; a
                     hidden-location challenge sends just the viewer's own point) */}
                 {guesses?.filter(hasCoordinates).map((guess) => (
-                    <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
+                    <Marker
+                        key={guess.user_id}
+                        position={[guess.lat, guess.long]}
+                        icon={guessIcon(guess)}
+                        opacity={0.8}
+                    >
                         <Popup>
                             <strong>{guess.username}</strong>
                             <span className="guess-popup-score">{guess.score} pts</span>

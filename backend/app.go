@@ -219,6 +219,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/auth/password/reset", limit("reset")(http.HandlerFunc(a.AuthAPI.ResetPassword)))
 	mux.Handle("/api/v1/auth/password/change", protected(a.AuthAPI.ChangePassword))
 	mux.Handle("/api/v1/auth/profile", protected(a.AuthAPI.UpdateProfile))
+	mux.Handle("/api/v1/auth/pins", protected(a.AuthAPI.MapPins))
 	mux.Handle("/api/v1/auth/profile/avatar", protected(a.AuthAPI.UploadAvatar))
 	mux.Handle("/api/v1/auth/account", protected(a.AuthAPI.DeleteAccount))
 

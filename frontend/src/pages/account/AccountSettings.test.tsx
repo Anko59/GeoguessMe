@@ -16,6 +16,7 @@ vi.mock('../../api', () => ({
     default: { get: mocks.get, patch: mocks.patch, post: mocks.post, delete: mocks.delete },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
+vi.mock('../../components/settings/MapPinPicker', () => ({ default: () => null }));
 
 const user: User = {
     id: 'user-1',

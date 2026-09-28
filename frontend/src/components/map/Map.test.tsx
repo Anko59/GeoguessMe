@@ -3,6 +3,8 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Map from './Map';
 
+const leafletMocks = vi.hoisted(() => ({ icon: vi.fn(() => 'mock-icon') }));
+
 // react-leaflet renders a real map that needs a browser viewport; mock the
 // leaflet-heavy parts so we can still exercise the component's prop-driven
 // rendering and the LocationMarker logic.
@@ -23,12 +25,12 @@ vi.mock('react-leaflet', () => ({
 
 vi.mock('leaflet', () => ({
     default: {
-        icon: () => 'mock-icon',
+        icon: leafletMocks.icon,
         divIcon: () => 'mock-div-icon',
         latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
         Marker: { prototype: { options: { icon: null } } },
     },
-    icon: () => 'mock-icon',
+    icon: leafletMocks.icon,
     divIcon: () => 'mock-div-icon',
     latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
     Marker: { prototype: { options: { icon: null } } },
@@ -128,6 +130,29 @@ describe('Map component', () => {
         expect(firstPopup).toHaveTextContent('100 pts');
         expect(markers[1]).toHaveAttribute('position', '49,2.5');
         expect(markers[1].querySelector('[data-testid="Popup"]')).toHaveTextContent('bob');
+    });
+
+    it('uses each guesser’s selected pin artwork for their result marker', () => {
+        render(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                guesses={[
+                    {
+                        user_id: 'u1',
+                        lat: 48.8,
+                        long: 2.3,
+                        username: 'alice',
+                        avatar: 'a.png',
+                        score: 5000,
+                        map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
+                    },
+                ]}
+            />,
+        );
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({ iconUrl: '/map-pins/north-star.svg', iconSize: [32, 40] }),
+        );
     });
 
     it('skips guesses without coordinates (hidden-location challenges)', () => {

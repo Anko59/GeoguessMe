@@ -19,10 +19,13 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 	if !visible {
 		return nil, ErrNotFound
 	}
-	rows, err := r.pool.Query(ctx, `SELECT g.user_id,u.username,u.avatar,g.score,g.distance
+	rows, err := r.pool.Query(ctx, `SELECT g.user_id,u.username,u.avatar,g.score,g.distance,
+		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM public_guesses g
 		JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
 		JOIN public_challenges p ON p.id=g.challenge_id
+		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
+		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
 		WHERE g.challenge_id=$2 AND `+challengeVisibility+`
 		ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, viewer, id)
 	if err != nil {
@@ -38,8 +41,12 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 	results := make([]models.PublicFeedResult, 0)
 	for rows.Next() {
 		var result models.PublicFeedResult
-		if err := rows.Scan(&result.UserID, &result.Username, &result.Avatar, &result.Score, &result.Distance); err != nil {
+		var pinKey, pinName, pinImage string
+		if err := rows.Scan(&result.UserID, &result.Username, &result.Avatar, &result.Score, &result.Distance, &pinKey, &pinName, &pinImage); err != nil {
 			return nil, err
+		}
+		if pinKey != "" {
+			result.MapPin = &models.MapPin{Key: pinKey, Name: pinName, ImageURL: pinImage}
 		}
 		result.Rank = len(results) + 1
 		result.EloDelta = deltas[result.UserID]

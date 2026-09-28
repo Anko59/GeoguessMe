@@ -146,3 +146,4 @@ Guess:
     created_at: { type: string, format: date-time }
     username: { type: string }
     avatar: { type: string }
+    map_pin: { $ref: "./schemas-pins.yaml#/MapPin" }
