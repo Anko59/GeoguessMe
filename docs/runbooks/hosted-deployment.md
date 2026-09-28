@@ -24,17 +24,53 @@ two minutes of planned deployment interruption.
 4. Create one operator SSH key and separate CI keys for dev and production. Put
    only public keys in `terraform.tfvars`; private CI keys go into their
    matching GitHub environment.
-5. Copy `backend.hcl.example` to ignored `backend.hcl`, fill the R2 endpoint,
-   and export its S3 credentials plus rotated `HCLOUD_TOKEN` and
-   `CLOUDFLARE_API_TOKEN`.
+5. Copy `backend.hcl.example` to ignored `backend.hcl` and fill the R2 endpoint.
+   Terraform reads `HCLOUD_TOKEN`, `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`,
+   and `AWS_SECRET_ACCESS_KEY` from its process environment. The AWS-named
+   variables are S3-compatible credentials for Cloudflare R2; no AWS account is
+   used. On a machine with a keyring-backed local `.envrc`, check and run
+   Terraform in that same environment:
 
-The Cloudflare API token needs zone DNS/settings, Email Routing, R2 bucket,
-Tunnel, identity-provider, and Access-application write permissions scoped to
-this account/zone. The local QA runner also uses it for temporary dev service
-tokens and therefore needs Access service-token write permission. Terraform does
-not manage those short-lived QA objects. The Hetzner token should be scoped to
-the dedicated project. Do not reuse either token in application or deployment
-jobs.
+    ```text
+    direnv exec "$PWD" make terraform-credentials-preflight
+    direnv exec "$PWD" make terraform-plan
+    ```
+
+    `terraform-credentials-preflight` reports availability only and never prints
+    secret values and does not validate Cloudflare permissions. The separate
+    `make credentials-preflight` target checks operator Access/SSH.
+
+The Terraform Cloudflare API token needs zone-scoped `DNS Write` for DNS record
+creation, plus the DNS/settings, Email Routing, R2 bucket, Tunnel,
+identity-provider, and Access-application write permissions required by the
+managed resources, scoped to this account/zone. Terraform planning also requires
+read access for every managed resource. In particular, the account-scoped
+`Cloudflare Tunnel Read` and `Email Routing Addresses Read` permissions are
+needed to refresh the existing tunnel and destination address. Tunnel token
+retrieval has a separate requirement: the Cloudflare API's
+`GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/token` endpoint requires
+`Cloudflare Tunnel Write`, despite being a GET request. Terraform reads this
+secret tunnel token while planning, so `Cloudflare Tunnel Write` must be present
+before a plan can complete. See Cloudflare's
+[Tunnel token API permissions](https://developers.cloudflare.com/api/resources/zero_trust/subresources/tunnels/subresources/cloudflared/subresources/token/methods/get/).
+Applying the other managed changes also requires their corresponding write/edit
+permissions. The local QA runner uses a Cloudflare API token for temporary dev
+service tokens and therefore needs Access service-token write permission.
+Terraform does not manage those short-lived QA objects. The Hetzner token should
+be scoped to the dedicated project. Do not reuse either token in application or
+deployment jobs.
+
+Review the complete Terraform plan before applying it. Creating
+`cloudflare_email_routing_settings` enables Cloudflare Email Routing, which can
+change mail-routing DNS behavior. Treat that resource as the separately staged
+mail rollout in [the DMARC runbook](dmarc-rollout.md), not as an incidental
+monitoring change.
+
+See Cloudflare's
+[API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
+and the
+[Email Routing addresses API](https://developers.cloudflare.com/api/resources/email_routing/subresources/addresses/methods/list/)
+for the current permission labels.
 
 The local QA token does not need Email Routing Rules permission. The controlled
 relay uses a permanent seed rule and Cloudflare subaddressing for unique test
@@ -46,8 +82,9 @@ infrastructure management and must not be substituted for the QA token.
 
 ## Provision
 
-Run `make terraform-validate`, inspect `make terraform-plan`, and apply only the
-saved plan with `CONFIRM=apply make terraform-apply`. Terraform state locking
+Run `make terraform-validate`, inspect the plan created by
+`direnv exec "$PWD" make terraform-plan`, and apply only that saved plan with
+`direnv exec "$PWD" make terraform-apply CONFIRM=apply`. Terraform state locking
 uses R2's S3 lockfile. The server has Hetzner backups, delete/rebuild
 protection, unattended security updates, a 2 GB swap file, bounded Docker logs,
 and no public inbound firewall rule.
@@ -82,27 +119,24 @@ lock remains held. Do not remove the lock file manually: `flock` releases the
 lock when its owning process exits.
 
 Use the Access-protected operator SSH route. Store the corresponding private
-operator key in the team's password manager (not this repository) and retain a
-documented recovery copy. The server-only age identity is deliberately not an
-operator credential and must never be copied off-host:
+operator key in the team's password manager (not this repository), load it in
+`ssh-agent`, and retain a documented recovery copy. Run
+`make credentials-preflight` before asking for access; `make ops-ssh` resolves
+the local Cloudflare API token from Secret Service and creates a temporary token
+scoped to the selected SSH application. The server-only age identity is
+deliberately not an operator credential and must never be copied off-host:
 
 ```text
-ssh -i /path/to/operator-key \
-  -o ProxyCommand='make -s cloudflared-access-ssh HOST=%h' \
-  ops@deploy.geoguessme.com
+make ops-ssh HOST=dev
 ```
 
-Export a Cloudflare Access service-token client ID and client secret as
-`TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` before using this
-non-interactive operator route. Create that token outside Terraform (see
-[docs/runbooks/access-tokens.md](access-tokens.md)); Terraform never holds
-service-token secrets and exposes no service-token outputs. Do not place either
-value on the command line. Read the two generated public age recipients from
-`/etc/geoguessme/age/*-recipient.txt`, fill each environment example with unique
-database/JWT/metrics/Restic credentials and its dedicated R2/Brevo values. Web
-Push is optional: leave all three VAPID variables absent to disable it, or mint
-one stable keypair per environment and export all three alongside the other
-credentials:
+For a one-off command, use `OPS_SSH_COMMAND` as documented in
+[docs/runbooks/access-tokens.md](access-tokens.md). Read the two generated
+public age recipients from `/etc/geoguessme/age/*-recipient.txt`, fill each
+environment example with unique database/JWT/metrics/Restic credentials and its
+dedicated R2/Brevo values. Web Push is optional: leave all three VAPID variables
+absent to disable it, or mint one stable keypair per environment and export all
+three alongside the other credentials:
 
 ```text
 make vapid-keys
