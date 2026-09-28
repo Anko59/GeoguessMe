@@ -17,7 +17,7 @@ jobs:
     name: Inspect Play app identity
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
+    environment: play-publishing
     permissions:
       contents: read
       id-token: write
@@ -33,11 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$PLAY_WIF_PROVIDER" || {
-            echo 'Missing production variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
             exit 1
           }
           test -n "$PLAY_SERVICE_ACCOUNT" || {
-            echo 'Missing production variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
             exit 1
           }
           [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {

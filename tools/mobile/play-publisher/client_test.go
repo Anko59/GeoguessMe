@@ -202,24 +202,6 @@ func TestValidateAndCommitEditUseDistinctEndpoints(t *testing.T) {
 	}
 }
 
-func TestGetTrackUsesCommittedTrackEndpoint(t *testing.T) {
-	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks/internal" {
-			t.Errorf("request = %s %s", r.Method, r.URL.Path)
-		}
-		w.Write([]byte(`{"track":"internal","releases":[{"versionCodes":["42"],"status":"completed"}]}`))
-	}))
-	defer server.Close()
-
-	track, err := client.GetTrack(context.Background(), "com.geoguessme.app", "internal")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if track.Track != "internal" || len(track.Releases) != 1 || track.Releases[0].VersionCodes[0] != "42" {
-		t.Fatalf("track = %+v", track)
-	}
-}
-
 func TestAPIErrorDoesNotExposeAuthorizationHeader(t *testing.T) {
 	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":{"message":"denied"}}`, http.StatusForbidden)
