@@ -6,7 +6,9 @@ migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
 Nightly `make verify` builds local application and Keycloak images with Buildx
 `--load` before `make audit-images` scans them, so the image gate inspects the
-artifacts produced by that verification run.
+artifacts produced by that verification run. The Keycloak base-image pin and its
+narrowly scoped audit exceptions are maintained in the
+[security scanning guide](security-scanning.md).
 
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
