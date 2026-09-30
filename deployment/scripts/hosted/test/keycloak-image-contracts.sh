@@ -24,8 +24,10 @@ assert_contains "$ROOT/.github/workflows/release.yml" 'KEYCLOAK_SOURCE: ${{ step
 assert_contains "$ROOT/.github/workflows/release.yml" '[[ "$actual_keycloak" == "$KEYCLOAK_DIGEST" ]]'
 assert_contains "$ROOT/.github/workflows/release.yml" '"deploy $BACKEND $WEB $KEYCLOAK $GITHUB_SHA"'
 assert_contains "$ROOT/tools/make/deployment.mk" 'images="$$images $${KEYCLOAK_IMAGE}"'
-assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" '2.3.35'
-assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" '0fac87dddd78f1223139e8ef88e819c7f483c0a3835cdf5982ad5e4576d1d896'
+assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'FROM quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
+assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'org.opencontainers.image.base.digest="sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"'
+assert_contains "$ROOT/deployment/compose.identity.yaml" 'quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
+assert_contains "$ROOT/tools/quality/image-scan-exceptions-keycloak.yaml" 'image: quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
 
 assert_forced_command_arity() {
     workflow=$1 expected_count=$2

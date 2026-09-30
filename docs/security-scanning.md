@@ -53,11 +53,12 @@ The target scans the following images (see `AUDIT_IMAGES` in
     - otherwise a warning is printed and application images are skipped.
 - **Identity image** — the locally built `geoguessme-keycloak:local` image, or
   the exact `KEYCLOAK_IMAGE` digest supplied by CI. It derives from the
-  digest-pinned Keycloak 26.7.4 image and replaces the bundled FreeMarker jar
-  with the checksum-verified 2.3.35 artifact already selected on Keycloak's
-  `release/26.7` branch. Publication and production promotion both scan the
-  exact signed digest; production rollback retains the previous identity image
-  reference in hosted deployment metadata.
+  digest-pinned
+  [Keycloak 26.7.5 release](https://www.keycloak.org/2026/09/keycloak-2675-released),
+  which includes FreeMarker 2.3.35 and Quarkus 3.33.4 (managing Jackson Databind
+  2.21.7). Publication and production promotion scan the exact signed digest;
+  production rollback retains the previous identity image reference in hosted
+  deployment metadata.
 
 Override the image list with `AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`.
 Third-party and published images use pinned digests, never floating tags. Local

@@ -15,7 +15,7 @@ build-images: build-keycloak-image ## Build production images with normal Docker
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
 
-build-keycloak-image: ## Build Keycloak with the fixed FreeMarker dependency.
+build-keycloak-image: ## Build the digest-pinned Keycloak image.
 	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 clean-build: ## Build production images from scratch without any layer cache.
