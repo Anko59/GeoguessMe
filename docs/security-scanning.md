@@ -30,7 +30,9 @@ The target scans the following images (see `AUDIT_IMAGES` in
   locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed
   Debian release; the upstream distroless-based image cannot run package tools,
   so only the two OpenSSL libraries and their dpkg metadata are layered on top.
-  The pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
+  Its unpatched upstream digest is only a build input, so the audit scans the
+  patched final image rather than failing on the vulnerable intermediate. The
+  pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
   refreshed in the same way plus the fixed `golang.org/x/net` module, and the
   remediation images are scanned by their exact image-ID digest — refreshing a
   remediation layer changes that ID and requires the committed exceptions to be

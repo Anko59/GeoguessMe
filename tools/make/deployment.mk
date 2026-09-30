@@ -27,6 +27,8 @@ clean-build: ## Build production images from scratch without any layer cache.
 # the digest-pinned third-party runtime/deployment images; override with
 # AUDIT_IMAGES=... The backend/web application images and locally rebuilt
 # security-patched tool images are appended automatically when they exist.
+# The unpatched cloudflared base is only a build input; audit its patched final
+# image above, not the vulnerable intermediate.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
@@ -39,7 +41,6 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
 	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
-	cloudflare/cloudflared:2026.9.1@sha256:d68fa057087c359c79a255570e891215877ce48aa48ba6f28aac90d8077acbc3 \
 	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 
 build-security-tool-images: ## Build locally patched security-tool images used by the image audit.

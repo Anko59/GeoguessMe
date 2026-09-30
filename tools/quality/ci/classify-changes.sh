@@ -117,12 +117,16 @@ classify() {
 }
 
 if [ "$null_input" = true ]; then
-    while IFS= read -r -d '' path; do
+    path=''
+    while IFS= read -r -d '' path || [ -n "$path" ]; do
         classify "$path"
+        path=''
     done
 else
-    while IFS= read -r path; do
+    path=''
+    while IFS= read -r path || [ -n "$path" ]; do
         classify "$path"
+        path=''
     done
 fi
 

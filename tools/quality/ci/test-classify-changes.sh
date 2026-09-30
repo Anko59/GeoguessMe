@@ -41,6 +41,8 @@ assert_scope "makefile change" $'Makefile\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "make fragment change" $'tools/make/tests.mk\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
+assert_scope "unterminated final path" 'tools/make/deployment.mk' \
+    $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "dev compose change" $'deployment/compose.dev.yaml\n' \
     $'backend=true\nfrontend=true\nmobile=true\nfull=true\ndocs_only=false\nstatic_checks=true\nbackend_unit=true\nfrontend_unit=true\nbackend_integration=true\nbrowser_e2e=true\noperational=true\nharness=true'
 assert_scope "qa tooling stays non-harness" $'tools/qa/run-local.sh\n' \
