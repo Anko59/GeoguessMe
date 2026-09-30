@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { GroupChallenge } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import { createGlobeDetailLayer } from './globeDetailTiles';
 import { isGlobeMobile, maxUsefulGlobeZoom } from './globeZoom';
 
@@ -407,23 +408,22 @@ export function createGlobeScene(
                         pins.setMatrixAt(index, matrix.makeTranslation(position.x, position.y, position.z));
                         pins.setColorAt(index, color);
                         pinIndexes.set(item.photo_id, index);
-                        if (item.map_pin) {
-                            let pinTexture = pinTextures.get(item.map_pin.image_url);
-                            if (!pinTexture) {
-                                pinTexture = pinSpriteLoader.load(item.map_pin.image_url, (loaded) => {
-                                    if (disposed) return;
-                                    loaded.colorSpace = THREE.SRGBColorSpace;
-                                    render();
-                                });
-                                pinTextures.set(item.map_pin.image_url, pinTexture);
-                            }
-                            const sprite = new THREE.Sprite(
-                                new THREE.SpriteMaterial({ map: pinTexture, transparent: true, depthWrite: false }),
-                            );
-                            sprite.renderOrder = 2;
-                            scene.add(sprite);
-                            pinSprites.set(index, sprite);
+                        const pinImageURL = item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL;
+                        let pinTexture = pinTextures.get(pinImageURL);
+                        if (!pinTexture) {
+                            pinTexture = pinSpriteLoader.load(pinImageURL, (loaded) => {
+                                if (disposed) return;
+                                loaded.colorSpace = THREE.SRGBColorSpace;
+                                render();
+                            });
+                            pinTextures.set(pinImageURL, pinTexture);
                         }
+                        const sprite = new THREE.Sprite(
+                            new THREE.SpriteMaterial({ map: pinTexture, transparent: true, depthWrite: false }),
+                        );
+                        sprite.renderOrder = 2;
+                        scene.add(sprite);
+                        pinSprites.set(index, sprite);
                     });
                     pins.instanceMatrix.needsUpdate = true;
                     pins.computeBoundingSphere();

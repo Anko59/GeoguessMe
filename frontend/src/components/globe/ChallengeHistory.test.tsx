@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GroupChallenge } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import ChallengeHistory from './ChallengeHistory';
 
 const items: GroupChallenge[] = Array.from({ length: 123 }, (_, index) => ({
@@ -15,6 +16,21 @@ const items: GroupChallenge[] = Array.from({ length: 123 }, (_, index) => ({
 }));
 
 describe('Challenge history', () => {
+    it('shows the standard marker for located challenges and hides artwork for hidden locations', () => {
+        render(
+            <ChallengeHistory
+                items={[
+                    { ...items[0], lat: 48.8, long: 2.3 },
+                    { ...items[1], lat: undefined, long: undefined },
+                ]}
+                selectedID={null}
+                onSelect={vi.fn()}
+            />,
+        );
+        expect(document.querySelector('.globe-location-pin')).toHaveAttribute('src', DEFAULT_MAP_PIN_IMAGE_URL);
+        expect(document.querySelector('.globe-location-dot.is-hidden')).toBeInTheDocument();
+    });
+
     it('bounds the rendered list and keeps every challenge reachable', () => {
         const select = vi.fn();
         render(<ChallengeHistory items={items} selectedID={null} onSelect={select} />);

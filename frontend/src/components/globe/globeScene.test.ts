@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import {
     createGlobeScene,
     earthMinDistance,
@@ -111,10 +112,24 @@ describe('Earth scene', () => {
                     long: 2.3,
                     map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
                 },
+                {
+                    photo_id: 'photo-2',
+                    group_id: 'group-1',
+                    user_id: 'user-2',
+                    username: 'Bob',
+                    created_at: '2026-09-27T10:00:00Z',
+                    expires_at: '2026-09-28T10:00:00Z',
+                    status: 'results',
+                    lat: 40.7,
+                    long: -74,
+                },
             ],
             null,
         );
         expect(requestedURLs).toContain('/map-pins/north-star.svg');
+        expect(requestedURLs).toContain(DEFAULT_MAP_PIN_IMAGE_URL);
+        const scene = mocks.render.mock.lastCall?.[0] as THREE.Scene;
+        expect(scene.children.filter((child) => child instanceof THREE.Sprite)).toHaveLength(2);
         globe.dispose();
         expect(host.children).toHaveLength(0);
     });
@@ -301,9 +316,14 @@ describe('Earth scene', () => {
     });
 
     it('draws only visible coordinates, keeps navigation bounded and releases resources', () => {
-        const texture = new THREE.Texture<HTMLImageElement>();
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(texture);
-        const disposeTexture = vi.spyOn(texture, 'dispose');
+        const textures: THREE.Texture[] = [];
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            const texture = new THREE.Texture<HTMLImageElement>();
+            textures.push(texture);
+            vi.spyOn(texture, 'dispose');
+            onLoad?.(texture);
+            return texture;
+        });
         const disposeGeometry = vi.spyOn(THREE.SphereGeometry.prototype, 'dispose');
         const host = document.createElement('div');
         Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
@@ -365,7 +385,8 @@ describe('Earth scene', () => {
         host.querySelector('canvas')?.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
         expect(onError).toHaveBeenCalledWith(expect.stringContaining('3D rendering is unavailable'));
         globe.dispose();
-        expect(disposeTexture).toHaveBeenCalledOnce();
+        expect(textures.length).toBeGreaterThanOrEqual(2);
+        textures.forEach((texture) => expect(texture.dispose).toHaveBeenCalledOnce());
         expect(disposeGeometry).toHaveBeenCalledTimes(2);
         expect(mocks.disconnect).toHaveBeenCalledOnce();
         expect(mocks.dispose).toHaveBeenCalledOnce();

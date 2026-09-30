@@ -1,4 +1,5 @@
 import type { ProfileMapPin } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import './MapPinProfileCard.css';
 
 interface MapPinProfileCardProps {
@@ -11,11 +12,11 @@ export default function MapPinProfileCard({ username, pin, ownProfile }: MapPinP
     return (
         <section className="profile-map-pin" aria-labelledby="profile-map-pin-title">
             <div className="profile-map-pin__artwork">
-                {pin ? (
-                    <img src={pin.image_url} alt={`${username}'s ${pin.name} map pin`} />
-                ) : (
-                    <span aria-hidden="true" />
-                )}
+                <img
+                    src={pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL}
+                    alt={pin ? `${username}'s ${pin.name} map pin` : ''}
+                    aria-hidden={pin ? undefined : true}
+                />
             </div>
             <div className="profile-map-pin__details">
                 <p className="profile-eyebrow">Map pin</p>

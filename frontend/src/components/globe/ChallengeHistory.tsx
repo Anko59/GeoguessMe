@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { GroupChallenge } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import { challengeStatusLabel, locationLabel } from './challengeLabels';
 
 interface ChallengeHistoryProps {
@@ -61,13 +62,14 @@ export default function ChallengeHistory({ items, selectedID, onSelect }: Challe
                             aria-pressed={selectedID === item.photo_id}
                             onClick={() => onSelect(item.photo_id)}
                         >
-                            {item.map_pin && item.lat !== undefined ? (
-                                <img className="globe-location-pin" src={item.map_pin.image_url} alt="" />
-                            ) : (
-                                <span
-                                    className={`globe-location-dot ${item.lat === undefined ? 'is-hidden' : ''}`}
-                                    aria-hidden="true"
+                            {item.lat !== undefined ? (
+                                <img
+                                    className="globe-location-pin"
+                                    src={item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL}
+                                    alt=""
                                 />
+                            ) : (
+                                <span className="globe-location-dot is-hidden" aria-hidden="true" />
                             )}
                             <span>
                                 <strong>{item.username}</strong>
