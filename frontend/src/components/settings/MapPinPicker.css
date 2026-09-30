@@ -41,7 +41,8 @@
     background: var(--surface-soft);
 }
 
-.map-pin-choice.is-locked {
+/* Keep dimming on the decorative image; card opacity lowers text contrast. */
+.map-pin-choice.is-locked .map-pin-choice__image {
     opacity: 0.72;
 }
 
