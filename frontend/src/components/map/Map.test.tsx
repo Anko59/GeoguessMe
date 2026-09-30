@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Map from './Map';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 
 const leafletMocks = vi.hoisted(() => ({ icon: vi.fn(() => 'mock-icon') }));
 
@@ -130,6 +131,19 @@ describe('Map component', () => {
         expect(firstPopup).toHaveTextContent('100 pts');
         expect(markers[1]).toHaveAttribute('position', '49,2.5');
         expect(markers[1].querySelector('[data-testid="Popup"]')).toHaveTextContent('bob');
+    });
+
+    it('uses the standard pin artwork for guessers without an equipped pin', () => {
+        render(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                guesses={[{ user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 5000 }]}
+            />,
+        );
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({ iconUrl: DEFAULT_MAP_PIN_IMAGE_URL, iconSize: [32, 40] }),
+        );
     });
 
     it('uses each guesser’s selected pin artwork for their result marker', () => {

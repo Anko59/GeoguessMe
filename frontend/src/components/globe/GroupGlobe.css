@@ -206,17 +206,14 @@
     color: var(--ink-subtle);
     font-size: 0.75rem;
 }
-.globe-location-dot {
+.globe-location-dot.is-hidden {
     width: 10px;
     height: 10px;
     margin-top: 0.4rem;
     flex: none;
-    background: #cc7d00;
-    border-radius: 50%;
-}
-.globe-location-dot.is-hidden {
     background: transparent;
     border: 1px solid var(--ink-subtle);
+    border-radius: 50%;
 }
 .globe-location-pin {
     width: 26px;

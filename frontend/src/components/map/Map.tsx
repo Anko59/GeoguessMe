@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 're
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import type { ChallengeGuess } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import './Map.css';
 
 // Fix for default marker icon
@@ -66,17 +67,9 @@ function LocationMarker({
     return position ? <Marker position={[position.lat, position.long]} /> : null;
 }
 
-const GuessIcon = L.divIcon({
-    className: 'guess-marker',
-    html: `<div style="background-color: #f59e0b; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-});
-
-function guessIcon(guess: Guess): L.Icon | L.DivIcon {
-    if (!guess.map_pin) return GuessIcon;
+function guessIcon(guess: Guess): L.Icon {
     return L.icon({
-        iconUrl: guess.map_pin.image_url,
+        iconUrl: guess.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL,
         iconSize: [32, 40],
         iconAnchor: [16, 38],
         popupAnchor: [0, -36],

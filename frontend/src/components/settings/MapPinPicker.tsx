@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api, { getAPIErrorMessage } from '../../api';
 import type { MapPinCatalog } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import './MapPinPicker.css';
 
 export default function MapPinPicker() {
@@ -10,36 +11,26 @@ export default function MapPinPicker() {
     const [error, setError] = useState('');
     const active = useRef(true);
 
-    const loadCatalog = useCallback(async () => {
+    const loadCatalog = useCallback(async (isActive: () => boolean = () => active.current) => {
         try {
             const response = await api.post<MapPinCatalog>('/auth/pins');
-            if (active.current) setCatalog(response.data);
+            if (isActive()) setCatalog(response.data);
         } catch (requestError: unknown) {
-            if (active.current) setError(getAPIErrorMessage(requestError, 'Unable to load map pins.'));
+            if (isActive()) setError(getAPIErrorMessage(requestError, 'Unable to load map pins.'));
         } finally {
-            if (active.current) setLoading(false);
+            if (isActive()) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         let current = true;
         active.current = true;
-        void api
-            .post<MapPinCatalog>('/auth/pins')
-            .then((response) => {
-                if (current) setCatalog(response.data);
-            })
-            .catch((requestError: unknown) => {
-                if (current) setError(getAPIErrorMessage(requestError, 'Unable to load map pins.'));
-            })
-            .finally(() => {
-                if (current) setLoading(false);
-            });
+        void Promise.resolve().then(() => loadCatalog(() => current));
         return () => {
             current = false;
             active.current = false;
         };
-    }, []);
+    }, [loadCatalog]);
 
     const selectPin = async (pinKey: string | null): Promise<void> => {
         setSaving(true);
@@ -91,9 +82,9 @@ export default function MapPinPicker() {
                             {error}
                         </p>
                     )}
-                    <div className="map-pin-picker__choices" role="group" aria-label="Available map pins">
+                    <div className="map-pin-picker__choices" role="group" aria-label="Available map pins" tabIndex={0}>
                         <article className="map-pin-choice">
-                            <span className="map-pin-choice__default" aria-hidden="true" />
+                            <img className="map-pin-choice__default" src={DEFAULT_MAP_PIN_IMAGE_URL} alt="" />
                             <div className="map-pin-choice__copy">
                                 <strong>Standard marker</strong>
                                 <span>Use the default marker.</span>

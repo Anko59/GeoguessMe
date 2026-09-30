@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MapPinPicker from './MapPinPicker';
 import type { MapPinCatalog } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 vi.mock('../../api', () => ({
@@ -56,6 +57,11 @@ describe('MapPinPicker', () => {
     it('lists unlock progress and equips only unlocked pins', async () => {
         render(<MapPinPicker />);
         expect(await screen.findByText('North Star')).toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Available map pins' })).toHaveAttribute('tabindex', '0');
+        expect(screen.getByText('Standard marker').closest('article')?.querySelector('img')).toHaveAttribute(
+            'src',
+            DEFAULT_MAP_PIN_IMAGE_URL,
+        );
         const unlocked = screen.getByText('North Star').closest('article');
         const locked = screen.getByText('Deep Blue').closest('article');
         expect(unlocked).not.toBeNull();

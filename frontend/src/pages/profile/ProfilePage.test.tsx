@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
 import type { User } from '../../types';
 import ProfilePage from './ProfilePage';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), profileLeaderboard: vi.fn() }));
 
@@ -130,6 +131,10 @@ describe('ProfilePage', () => {
         renderProfile();
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
+        expect(document.querySelector('.profile-map-pin__artwork img')).toHaveAttribute(
+            'src',
+            DEFAULT_MAP_PIN_IMAGE_URL,
+        );
         expect(screen.getByText('6,000')).toBeInTheDocument();
         expect(screen.getByText('#3 of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('1500.0')).toBeInTheDocument();
