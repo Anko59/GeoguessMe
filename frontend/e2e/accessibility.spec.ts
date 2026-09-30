@@ -338,6 +338,8 @@ test.describe('Authenticated page Axe checks', () => {
             const { page } = ctx;
             await page.goto('/settings');
             await expect(page.locator('#delete-password')).toBeVisible({ timeout: 10000 });
+            await expect(page.getByRole('group', { name: 'Available map pins' })).toBeVisible();
+            await expect(page.getByText('Locked', { exact: true }).first()).toBeVisible();
             await expectAccessible(page);
         } finally {
             await ctx.context.close();
