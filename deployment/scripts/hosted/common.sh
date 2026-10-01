@@ -19,8 +19,12 @@ readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
 readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
+# Temporary compatibility for the first staged host cutover only. New workflows
+# pass the signed SOPS digest explicitly; remove this bootstrap pin once both
+# host environments and workflows use that protocol.
 # shellcheck disable=SC2034
-readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
+readonly SOPS_BOOTSTRAP_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
+readonly SOPS_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-sops'
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -42,6 +46,17 @@ valid_image_reference() {
     esac
     case "$candidate_digest" in *[!0-9a-f]* | '') return 1 ;; esac
     [ "${#candidate_digest}" -eq 64 ]
+}
+
+validate_sops_image_reference() {
+    sops_candidate=$1
+    sops_expected_tag=$2
+    case "$sops_candidate" in
+        "${SOPS_IMAGE_REPOSITORY}:${sops_expected_tag}"@sha256:*) ;;
+        *) die 'SOPS image must be the expected development/release tag with an immutable digest' ;;
+    esac
+    valid_image_reference "$sops_candidate" ||
+        die 'SOPS image reference must end with a valid immutable sha256 digest'
 }
 
 valid_release_revision() {

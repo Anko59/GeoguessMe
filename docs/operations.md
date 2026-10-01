@@ -127,6 +127,18 @@ Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
 
+Each hosted deployment records the selected `SOPS_IMAGE` reference in its
+release metadata. When the project SOPS digest is supplied, the host verifies
+its signature before pulling it; the first monitored runtime cutover temporarily
+retains a digest-pinned upstream bootstrap for legacy command arities. Because
+SOPS must decrypt the environment before GHCR login, the project SOPS package is
+public-pullable and CI checks anonymous access to the exact digest. GHCR creates
+new packages as private, so the package owner must change visibility to public
+after the first push; the image contains only the SOPS utility, not secrets. The
+final runtime bundle removes the bootstrap and requires the signed digest, as
+described in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
+
 The host also stores an immutable source directory for each deployed revision.
 The deploy runtime retains the current and previous revision for dev and
 production, plus the root-owned runtime-definition revision. It removes other

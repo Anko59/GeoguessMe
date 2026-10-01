@@ -155,9 +155,14 @@ assert_contains "$ROOT/.github/workflows/release.yml" 'main_tree=$(git rev-parse
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign verify'
 assert_contains "$ROOT/.github/workflows/release.yml" 'imagetools create'
 assert_contains "$ROOT/.github/workflows/release.yml" 'actual_backend'
+assert_contains "$COMMON" 'SOPS_IMAGE_REPOSITORY='
+assert_contains "$DEPLOY" 'validate_sops_image_reference "$sops_image"'
+assert_contains "$DEPLOY" 'SOPS_IMAGE=%s\n'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'Verify SOPS package is anonymously pullable'
+assert_contains "$ROOT/.github/workflows/release.yml" 'SOPS_IMAGE=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}'
 
-# Signature verification and backup happen before pull and migration.
-verify_line=$(line_of "$DEPLOY" 'COSIGN_IMAGE.*verify')
+# Application signatures precede backup/pull; a supplied project SOPS digest is verified before its pull.
+verify_line=$(line_of "$DEPLOY" '^ *verify_image_signature "\$backend_image"$')
 backup_line=$(line_of "$DEPLOY" 'backup.sh.*pre-deploy')
 secret_line=$(line_of "$DEPLOY" 'mv.*temporary_secret.*secret_file')
 normalize_secret_line=$(line_of "$DEPLOY" 'normalize_oauth2_proxy_cookie_secret.*temporary_secret')
@@ -170,6 +175,11 @@ migrate_line=$(line_of "$DEPLOY" 'migration migrate up')
 [ "$normalize_secret_line" -lt "$secret_line" ] || fail 'legacy cookie secret must be normalized before candidate activation'
 [ "$secret_line" -lt "$pull_line" ] || fail 'candidate secret activation must precede pull'
 [ "$pull_line" -lt "$migrate_line" ] || fail 'pull must precede migration'
+sops_verify_line=$(line_of "$DEPLOY" 'verify_image_signature.*sops_image')
+sops_pull_line=$(line_of "$DEPLOY" 'docker pull.*sops_image')
+sops_decrypt_line=$(line_of "$DEPLOY" 'sops_image.*decrypt')
+[ "$sops_verify_line" -lt "$sops_pull_line" ] || fail 'SOPS signature must be verified before its image is pulled'
+[ "$sops_pull_line" -lt "$sops_decrypt_line" ] || fail 'SOPS image must be pulled before decrypting secrets'
 
 # One host-wide deployment lock, image rollback only, and no automatic restore.
 assert_contains "$DEPLOY" 'geoguessme-deploy.lock'

@@ -89,14 +89,22 @@ Two complementary checks verify the deployed host matches the revision:
 
 ## Staging a deploy-protocol change
 
-Keep the dev workflow on the existing four-field deploy command while the first
-revision adds a backward-compatible host command and deploy script. Merge and
-deploy that revision to dev, then install its complete root-owned runtime bundle
-and verify both host environments. Only after that live cutover may the dev
-workflow switch to the five-field command carrying the Keycloak digest;
-production promotion must wait for the same host verification. This prevents
-GitHub from sending a command that the currently installed forced command
-rejects.
+Keep the dev workflow on its existing four-field command and production on its
+five-field command while the first revision adds a backward-compatible host
+command and deploy script. That revision builds, signs, scans, and promotes the
+patched SOPS image, but its legacy commands still select the pinned upstream
+bootstrap, which is not verified with this project's workflow signature. Merge
+and deploy that revision to dev, then install its complete root-owned runtime
+bundle and verify both host environments. Only after that live cutover may the
+dev workflow send the signed SOPS digest in its five-field command. A later
+production release workflow may send the Keycloak and SOPS digests in its
+six-field command only after the compatible host bundle is confirmed installed.
+After the SOPS-digest dev protocol is deployed, install the complete runtime
+bundle again in both environments to remove the bootstrap and reject legacy
+arities. Verify both hosts before promoting the release workflow that sends six
+fields to production. This prevents GitHub from sending a command the installed
+forced command rejects and ensures the transitional upstream image cannot remain
+the hosted runtime.
 
 ## Applying monitored host definitions
 

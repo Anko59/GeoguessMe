@@ -242,9 +242,15 @@ services:
     volumes:
       - *workspace
 
+  # SOPS v3.13.3 with Debian libexpat pinned to the fixed deb12u4 release.
+  # The upstream image remains only the digest-pinned build input; scan and use
+  # this patched final image instead.
   sops:
     <<: *host-tools
-    image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+    build:
+      context: .
+      dockerfile: deployment/docker/sops-tools/Dockerfile
+    image: geoguessme/sops-tools:3.13.3-expat-deb12u4
     entrypoint: []
     volumes:
       - ./:/workspace
