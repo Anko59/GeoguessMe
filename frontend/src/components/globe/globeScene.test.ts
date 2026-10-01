@@ -315,7 +315,7 @@ describe('Earth scene', () => {
         expect(globePosition(48.8566, 2.3522, 2).length()).toBeCloseTo(2);
     });
 
-    it('draws only visible coordinates, keeps navigation bounded and releases resources', () => {
+    it('keeps hit targets invisible, selection visible, navigation bounded and resources released', () => {
         const textures: THREE.Texture[] = [];
         vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
             const texture = new THREE.Texture<HTMLImageElement>();
@@ -346,7 +346,11 @@ describe('Earth scene', () => {
         const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
         const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
         expect(pins.count).toBe(1);
-        expect((pins.material as THREE.MeshBasicMaterial).vertexColors).toBe(true);
+        expect((pins.material as THREE.MeshBasicMaterial).colorWrite).toBe(false);
+        expect((pins.material as THREE.MeshBasicMaterial).depthWrite).toBe(false);
+        const markerSprite = scene.children.find((child) => child instanceof THREE.Sprite);
+        expect(markerSprite).toBeInstanceOf(THREE.Sprite);
+        const selectedSpriteWidth = (markerSprite as THREE.Sprite).scale.x;
         const selectedMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, selectedMatrix);
         const selectedScale = new THREE.Vector3();
@@ -354,15 +358,13 @@ describe('Earth scene', () => {
         const matrixVersion = pins.instanceMatrix.version;
         globe.update(items, null);
         expect(scene.children).toContain(pins);
+        expect((markerSprite as THREE.Sprite).scale.x).toBeLessThan(selectedSpriteWidth);
         expect(pins.instanceMatrix.version).toBeGreaterThan(matrixVersion);
         const regularMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, regularMatrix);
         const regularScale = new THREE.Vector3();
         regularMatrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), regularScale);
         expect(regularScale.x).toBeLessThan(selectedScale.x);
-        const pinColor = new THREE.Color();
-        pins.getColorAt(0, pinColor);
-        expect(pinColor.getHexString()).toBe('ffb638');
         globe.focus(item);
         expect(camera.position.x).toBeCloseTo(camera.position.length());
         const distance = camera.position.length();

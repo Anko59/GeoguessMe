@@ -126,7 +126,11 @@ test('explores group challenges on Earth without revealing an unplayed location'
         await uploader.getByRole('button', { name: /Send/ }).click();
         expect((await upload).status()).toBe(201);
         const globeButton = uploader.getByRole('button', { name: 'Open group globe' });
+        const defaultPinResponse = uploader.waitForResponse((response) =>
+            response.url().endsWith('/assets/map-pins/standard-marker-v1.svg'),
+        );
         const globe = await openGlobe(uploader, testInfo);
+        expect((await defaultPinResponse).status(), 'the globe should load its default pin artwork').toBe(200);
         await expect(globe).toContainText('1 challenge · 1 on the globe');
         const refresh = globe.getByRole('button', { name: 'Refresh geochallenges' });
         const refreshed = uploader.waitForResponse(

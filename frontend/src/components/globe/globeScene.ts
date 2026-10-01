@@ -175,10 +175,10 @@ export function createGlobeScene(
         cleanup.push(() => texture.dispose());
         const pinGeometry = new THREE.SphereGeometry(1, 10, 8);
         cleanup.push(() => pinGeometry.dispose());
-        // Instanced colors are only consumed by Three.js materials with
-        // vertex colors enabled. Without this flag, the CPU-side colors set
-        // below never reach the shader and selected pins cannot be highlighted.
-        const pinMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+        // The instanced spheres are raycast-only hit targets. Sprites provide
+        // all visible marker pixels; never draw a second dot or let the hit
+        // targets write depth that can occlude the pin artwork.
+        const pinMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
         cleanup.push(() => pinMaterial.dispose());
         let pins = new THREE.InstancedMesh(pinGeometry, pinMaterial, 0);
         cleanup.push(() => pins.dispose());
@@ -401,12 +401,10 @@ export function createGlobeScene(
                     pinIndexes.clear();
                     selectedIndex = undefined;
                     const matrix = new THREE.Matrix4();
-                    const color = new THREE.Color('#ffb638');
                     positions = visible.map((item) => globePosition(item.lat!, item.long!, 1.016));
                     visible.forEach((item, index) => {
                         const position = positions[index];
                         pins.setMatrixAt(index, matrix.makeTranslation(position.x, position.y, position.z));
-                        pins.setColorAt(index, color);
                         pinIndexes.set(item.photo_id, index);
                         const pinImageURL = item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL;
                         let pinTexture = pinTextures.get(pinImageURL);
@@ -428,10 +426,7 @@ export function createGlobeScene(
                     pins.instanceMatrix.needsUpdate = true;
                     pins.computeBoundingSphere();
                 }
-                if (selectedIndex !== undefined) pins.setColorAt(selectedIndex, new THREE.Color('#ffb638'));
                 selectedIndex = selectedID === null ? undefined : pinIndexes.get(selectedID);
-                if (selectedIndex !== undefined) pins.setColorAt(selectedIndex, new THREE.Color('#ffffff'));
-                if (pins.instanceColor) pins.instanceColor.needsUpdate = true;
                 syncPinScale();
                 render();
             },
