@@ -27,20 +27,19 @@ clean-build: ## Build production images from scratch without any layer cache.
 # digest-pinned third-party runtime/deployment images; override with
 # AUDIT_IMAGES=... The backend/web application images and locally rebuilt
 # security-patched tool images are appended automatically when they exist.
-# SOPS is a locally patched derivative of its pinned upstream release; CI may
-# override SOPS_IMAGE with the exact published digest for deployment scanning.
-# The unpatched cloudflared and SOPS bases are build inputs only; audit their
-# patched final images, not vulnerable intermediates.
+# SOPS and socket-proxy are locally patched derivatives of digest-pinned
+# upstream releases; CI overrides these with exact published digests for
+# deployment scanning. Their unpatched upstream bases are build inputs only.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
 SOPS_IMAGE ?= geoguessme/sops-tools:3.13.3-expat-deb12u4
-export SOPS_IMAGE
+SOCKET_PROXY_IMAGE ?= geoguessme/socket-proxy-tools:local
+export SOPS_IMAGE SOCKET_PROXY_IMAGE
 AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
 	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
 	henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46 \
-	lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd \
 	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
 	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
 	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
@@ -49,7 +48,10 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
 	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build sops
 
-build-security-tool-images: build-sops-image ## Build locally patched security-tool images used by the image audit.
+build-socket-proxy-image: ## Build the PCRE2-patched socket-proxy derivative.
+	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build socket-proxy-tools
+
+build-security-tool-images: build-sops-image build-socket-proxy-image ## Build locally patched security-tool images used by the image audit.
 	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
 ifeq ($(strip $(KEYCLOAK_IMAGE)),)
@@ -68,6 +70,8 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 	images="$(AUDIT_IMAGES)"; \
 	[ -n "$${SOPS_IMAGE:-}" ] || { echo 'audit-images: error: SOPS_IMAGE is required' >&2; exit 1; }; \
 	images="$$images $${SOPS_IMAGE}"; \
+	[ -n "$${SOCKET_PROXY_IMAGE:-}" ] || { echo 'audit-images: error: SOCKET_PROXY_IMAGE is required' >&2; exit 1; }; \
+	images="$$images $${SOCKET_PROXY_IMAGE}"; \
 	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
 		images="$$images $${KEYCLOAK_IMAGE}"; \
 	elif docker image inspect geoguessme-keycloak:local >/dev/null 2>&1; then \
@@ -215,6 +219,7 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/keycloak-image-contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/watch-deploy-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-hash-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/prune-releases.sh
@@ -223,7 +228,7 @@ hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollbac
 watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
 	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
 
-watch-rehearsal: watch-config build-images ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
+watch-rehearsal: watch-config build-images build-socket-proxy-image ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
 	deployment/scripts/watch/rehearsal.sh
 
 cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.

@@ -108,7 +108,7 @@ before testing the provider. Keep the Keycloak database, realm, and application
 client secrets stable. Follow the ordered migration and provider checks in
 [`docs/runbooks/social-auth-rollout.md`](../docs/runbooks/social-auth-rollout.md).
 
-The host deployment command accepts only an environment fixed in
+The app-deployment command accepts only an environment fixed in
 `authorized_keys`, digest-qualified backend and web references, an optional
 signed SOPS image reference, an optional production Keycloak reference, and a
 40-character commit. When supplied, the host verifies the SOPS image's GitHub
@@ -116,14 +116,27 @@ Actions keyless signature and source revision before pulling it or decrypting
 secrets. During the first compatible-runtime cutover, legacy dev and production
 command arities temporarily use a digest-pinned upstream SOPS bootstrap that is
 not verified with this project's workflow signature. The dev workflow remains on
-its four-field command and production remains on its five-field command until
-the first runtime bundle is installed and verified in both environments. The
-next workflow update requires the signed SOPS digest; the final runtime update
-removes the bootstrap and legacy arities. The host serializes both stacks with
-one lock, creates a pre-deploy backup, migrates, waits for health, and records
-the active release. Application failure restores previous application images
-only; it never automatically restores PostgreSQL. See the
+its four-field app command and production remains on its five-field app command
+until the first runtime bundle is installed and verified in both SSH contexts.
+The next workflow update requires the signed SOPS digest; the final runtime
+update removes the bootstrap and legacy app-command arities. The host serializes
+both app stacks with one lock, creates a pre-deploy backup, migrates, waits for
+health, and records the active release. Application failure restores previous
+application images only; it never automatically restores PostgreSQL. See the
 [runtime hardening runbook](../docs/runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
+
+The shared `geoguessme-watch` project uses a separate forced
+`watch SOCKET_PROXY_IMAGE REVISION` command. It verifies the image's GitHub
+Actions signature before pulling, writes the dedicated mode-0600
+`/var/lib/geoguessme/watch/current.env`, updates only the socket proxy, checks
+full watch health, and rolls back only that proxy on failure. Never pass the
+socket-proxy reference to the app command. The first compatible root bundle
+retains a pinned upstream Compose fallback for staged migration. After both SSH
+contexts verify the new forced-command parser, only a separate production
+operator command—or a later release-only workflow step—may update the shared
+monitor with the exact signed proxy digest that passed the complete dev gate.
+Dev CI does not invoke `watch`, because dev and production share this one
+monitor.
 
 The `ghcr.io/anko59/geoguessme-sops` package must be public because host-side
 SOPS runs before GHCR credentials can be decrypted. The image contains only the
@@ -132,19 +145,19 @@ after the first image push, set package visibility to public in GitHub Packages
 and rerun the dev workflow. CI verifies anonymous access to the exact digest
 before deployment.
 
-Development merges run the complete operational gate exactly once, then build,
-attest, and sign immutable images before deployment. A release PR may come only
-from a repository `release/*` branch whose tree exactly equals the successfully
-deployed `dev` tree. Basing that short-lived branch on `main` avoids recurring
-squash-history conflicts without rewriting either protected branch. Production
-compares the `main` and `dev` Git trees, verifies the development workflow
-signatures, promotes the exact manifests without rebuilding, verifies unchanged
-digests, adds the production workflow signature, and deploys those references.
-Before that promotion starts, the same workflow builds and verifies the signed
-Android App Bundle from the release commit, binds its provenance to the
-commit/tree, and retains the exact bundle and manifest. The GitHub release
-receives those verified files; later Play publication must consume that artifact
-rather than rebuild it.
+Development merges run the complete operational gate exactly once, then build
+and scan the exact app, SOPS, and socket-proxy image digests before signing and
+deployment. A release PR may come only from a repository `release/*` branch
+whose tree exactly equals the successfully deployed `dev` tree. Basing that
+short-lived branch on `main` avoids recurring squash-history conflicts without
+rewriting either protected branch. Production compares the `main` and `dev` Git
+trees, verifies the development workflow signatures, promotes the exact
+manifests without rebuilding, verifies unchanged digests, adds the production
+workflow signature, and deploys those references. Before that promotion starts,
+the same workflow builds and verifies the signed Android App Bundle from the
+release commit, binds its provenance to the commit/tree, and retains the exact
+bundle and manifest. The GitHub release receives those verified files; later
+Play publication must consume that artifact rather than rebuild it.
 
 ## Generic first deploy
 

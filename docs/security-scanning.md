@@ -41,21 +41,27 @@ The target scans the following images (see `AUDIT_IMAGES` in
   exceptions were removed after the package fix; remaining SOPS exceptions are
   time-boxed and limited to unrelated upstream base/runtime findings.
 
-    `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7` is a locally rebuilt
-    cloudflared with the OpenSSL libraries refreshed to the fixed Debian
-    release; the upstream distroless-based image cannot run package tools, so
-    only the two OpenSSL libraries and their dpkg metadata are layered on top.
-    Its unpatched upstream digest is only a build input, so the audit scans the
-    patched final image rather than failing on the vulnerable intermediate. The
-    pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
-    refreshed in the same way plus the fixed `golang.org/x/net` module, and the
-    remediation images are scanned by their exact image-ID digest — refreshing a
-    remediation layer changes that ID and requires the committed exceptions to
-    be reviewed and repointed, failing closed otherwise. The Restic image is
-    published and signed with the exact development revision because hosted
-    backup and restore operations run it on deployment hosts. Terraform is
-    rebuilt with the same dependency fix and covered by `make terraform-test`;
-    it is a local planning tool, not a shipped runtime.
+- **Monitoring socket proxy** — the project-owned
+  `ghcr.io/anko59/geoguessme-socket-proxy` derivative uses the digest-pinned
+  LinuxServer socket-proxy base and upgrades Alpine `pcre2` to exactly
+  `10.49-r0`, fixing `CVE-2026-103111` without an exception. CI scans the exact
+  published digest before signing; production promotes that same digest. The
+  watch stack receives the image through dedicated host state and the forced
+  `watch IMAGE REVISION` command verifies its workflow signature before pulling,
+  reconciles only `socket-proxy`, and rolls back only that service on health
+  failure. The pinned upstream bootstrap remains only during the staged host
+  cutover; it is not a substitute for scanning the derivative. The package can
+  remain private because deployment hosts authenticate before pulling it.
+
+- **Cloudflared and backup tools** — `geoguessme/cloudflared-tools` refreshes
+  the OpenSSL libraries and dpkg metadata in the digest-pinned distroless base;
+  the audit scans the patched final image rather than its vulnerable build
+  input. The pinned Restic release is rebuilt on an Alpine runtime with fixed
+  OpenSSL and PCRE2 packages plus the fixed `golang.org/x/net` module. The
+  Restic image is published and signed with the exact development revision
+  because hosted backup and restore operations use it. Terraform is rebuilt with
+  the same dependency fix and covered by `make terraform-test`; it is a local
+  planning tool, not a shipped runtime.
 
 - **Application images** — appended automatically:
     - from the `BACKEND_IMAGE` / `WEB_IMAGE` environment variables when set (CI
@@ -63,7 +69,9 @@ The target scans the following images (see `AUDIT_IMAGES` in
     - otherwise the locally built `geoguessme-backend:local` /
       `geoguessme-web:local` images when they exist (produced by
       `make build-images`);
-    - otherwise a warning is printed and application images are skipped.
+    - otherwise a warning is printed and application images are skipped. The
+      backend and Caddy runtime Dockerfiles also pin and assert Alpine
+      `pcre2-10.49-r0` so the final images do not retain `CVE-2026-103111`.
 - **Identity image** — the locally built `geoguessme-keycloak:local` image, or
   the exact `KEYCLOAK_IMAGE` digest supplied by CI. It derives from the
   digest-pinned
@@ -74,16 +82,16 @@ The target scans the following images (see `AUDIT_IMAGES` in
   deployment metadata.
 
 Override the third-party image list with
-`AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`. `SOPS_IMAGE` is always
-appended separately; local audits use the patched local tag and CI/release jobs
-override it with the exact published digest. Third-party and published images
-use pinned digests, never floating tags. Local images use explicit `:local`
-build names and are scanned by their Docker image ID. Images already available
-in the host Docker daemon are exported with `docker save` and scanned from a
-tarball. This includes private application and Keycloak digests pulled by
-authenticated publication and promotion workflows, so registry credentials never
-enter the Trivy container. Other registry images are scanned directly by their
-digest-pinned reference.
+`AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`. `SOPS_IMAGE` and
+`SOCKET_PROXY_IMAGE` are always appended separately; local audits use the
+patched local tags and CI/release jobs override them with exact published
+digests. Third-party and published images use pinned digests, never floating
+tags. Local images use explicit `:local` build names and are scanned by their
+Docker image ID. Images already available in the host Docker daemon are exported
+with `docker save` and scanned from a tarball. This includes private application
+and Keycloak digests pulled by authenticated publication and promotion
+workflows, so registry credentials never enter the Trivy container. Other
+registry images are scanned directly by their digest-pinned reference.
 
 ## Blocking semantics
 
@@ -136,8 +144,13 @@ labels and appends exceptions belonging to that exact digest-pinned base image.
 This lets a reviewed upstream exception follow unchanged base layers into the
 backend or web image without creating impossible pre-build exceptions for a
 publication digest that does not exist yet. A missing half, malformed digest, or
-digest embedded in `base.name` fails closed. Application layers must not install
-or replace operating-system packages after the labelled base stage.
+digest embedded in `base.name` fails closed. Ordinary application layers must
+not install or replace operating-system packages as a side effect. A reviewed
+security remediation may refresh an OS package only with an explicit fixed
+version pin and an installed-version assertion; it must retain accurate upstream
+base provenance and pass the final-image scan. Base-image exceptions never
+replace scanning the final filesystem or suppress a finding in a package that
+the image has upgraded.
 
 Rules:
 

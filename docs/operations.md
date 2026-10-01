@@ -73,7 +73,10 @@ exposing the application's bearer token or Docker socket publicly.
 
 The capacity gate, installation, token rotation, alert behavior, backup, and
 rollback procedure are canonical in the
-[monitoring runbook](runbooks/monitoring.md).
+[monitoring runbook](runbooks/monitoring.md). The Docker socket proxy is a
+separately signed image; update it only with the forced `watch` protocol after
+the exact artifact passes the dev gate. Never pass its image through the app
+`deploy` command or update the shared production monitor from dev CI.
 
 ## Logging
 

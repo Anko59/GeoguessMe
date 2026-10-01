@@ -99,7 +99,7 @@ echo "runtime hash check: environment=$environment app_revision=$app_revision ru
 echo "  comparing installed host definitions against $manifest"
 
 # Operator scripts installed by provisioning (cloud-init) into /opt/geoguessme/bin.
-for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
+for script in common deploy forced-command watch-deploy verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
     compare \
         "bin/$script.sh" \
         "$APP_ROOT/bin/$script.sh" \

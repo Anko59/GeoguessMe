@@ -93,6 +93,28 @@ immutable digest for the already patched and scanned production Caddy runtime;
 the watch project mounts its own Caddyfile and does not mount the production
 dotenv. A production release does not recreate the watch project.
 
+### Socket-proxy image updates
+
+The socket proxy is updated only through the separate forced `watch` command
+with `IMAGE REVISION` arguments—not as an app-deploy parameter. The host
+verifies the exact development or release workflow signature before pulling,
+stores the selected reference atomically in
+`/var/lib/geoguessme/watch/current.env` (mode `0600`), reconciles only
+`socket-proxy`, and runs the complete watch health check. On failure it restores
+the prior proxy image and state. If monitoring is stopped, the command stages
+the verified image but does not start the project.
+
+This VM has one `geoguessme-watch` project shared by dev and production, so the
+dev application workflow must never update it. Production updates only after the
+release workflow promotes the exact socket-proxy digest that passed the complete
+dev gate and adds the release signature. After a cutover, compare the state file
+with the configured image of the running proxy and verify the watch health unit
+before closing the change. Image publication or promotion alone does not change
+the running proxy; confirm the state file and container image reference before
+claiming cutover. Keep only the existing exact-digest OpenSSL exception for the
+prior bootstrap until the running container moves off it; never add an exception
+for the PCRE2 CVE.
+
 Open the loopback gateway through the Access route only after the private checks
 pass. Create the first Beszel administrator through the Hub UI. Keep Beszel
 password authentication enabled; Cloudflare Access is an outer authorization

@@ -48,6 +48,7 @@ DEPLOY=.github/workflows/deploy.yml
 RELEASE=.github/workflows/release.yml
 NIGHTLY=.github/workflows/nightly.yml
 PLAY_API=.github/workflows/play-api-access.yml
+APP_PROMOTION=tools/quality/ci/promote-application-images.sh
 
 echo "tiered CI regression tests:"
 for workflow in "$CI" "$DEPLOY" "$RELEASE" "$NIGHTLY" "$PLAY_API"; do
@@ -139,10 +140,13 @@ absent "$RELEASE" 'docker/build-push-action@' "production does not rebuild teste
 contains "$RELEASE" 'main_tree=\$\(git rev-parse' "release resolves the main tree"
 contains "$RELEASE" 'dev_tree=\$\(git rev-parse' "release resolves the tested dev tree"
 contains "$RELEASE" 'cosign verify' "release verifies development signatures"
-contains "$RELEASE" 'imagetools create' "release promotes immutable manifests"
+contains "$RELEASE" 'tools/quality/ci/promote-application-images.sh' \
+    "release uses the exact-manifest promotion helper"
+contains "$APP_PROMOTION" 'docker buildx imagetools create' \
+    "release promotes immutable manifests"
+contains "$APP_PROMOTION" 'actual_digest.*expected_digest' \
+    "promotion verifies source digests did not change"
 contains "$RELEASE" 'cosign sign' "release adds the production workflow signature"
-contains "$RELEASE" 'actual_backend.*BACKEND_DIGEST' \
-    "promotion verifies the backend digest did not change"
 contains "$RELEASE" 'release_version=.*\.release-version' \
     "release reads the committed version manifest"
 contains "$RELEASE" 'requested_major' \

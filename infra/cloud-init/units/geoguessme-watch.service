@@ -6,6 +6,7 @@ Type=oneshot
 User=deploy
 WorkingDirectory=/opt/geoguessme/config
 EnvironmentFile=-/var/lib/geoguessme/releases/production/current.env
+EnvironmentFile=-/var/lib/geoguessme/watch/current.env
 ExecStart=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml up -d
 ExecStop=/usr/bin/docker compose -p geoguessme-watch --project-directory /opt/geoguessme/config -f /opt/geoguessme/config/compose.watch.yaml down
 RemainAfterExit=true
