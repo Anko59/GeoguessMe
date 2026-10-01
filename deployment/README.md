@@ -109,11 +109,28 @@ client secrets stable. Follow the ordered migration and provider checks in
 [`docs/runbooks/social-auth-rollout.md`](../docs/runbooks/social-auth-rollout.md).
 
 The host deployment command accepts only an environment fixed in
-`authorized_keys`, two digest-qualified image references, and a 40-character
-commit. It verifies GitHub Actions keyless signatures before pull, serializes
-both stacks with one lock, creates a pre-deploy backup, migrates, waits for
-health, and records the active release. Application failure restores previous
-images only; it never automatically restores PostgreSQL.
+`authorized_keys`, digest-qualified backend and web references, an optional
+signed SOPS image reference, an optional production Keycloak reference, and a
+40-character commit. When supplied, the host verifies the SOPS image's GitHub
+Actions keyless signature and source revision before pulling it or decrypting
+secrets. During the first compatible-runtime cutover, legacy dev and production
+command arities temporarily use a digest-pinned upstream SOPS bootstrap that is
+not verified with this project's workflow signature. The dev workflow remains on
+its four-field command and production remains on its five-field command until
+the first runtime bundle is installed and verified in both environments. The
+next workflow update requires the signed SOPS digest; the final runtime update
+removes the bootstrap and legacy arities. The host serializes both stacks with
+one lock, creates a pre-deploy backup, migrates, waits for health, and records
+the active release. Application failure restores previous application images
+only; it never automatically restores PostgreSQL. See the
+[runtime hardening runbook](../docs/runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
+
+The `ghcr.io/anko59/geoguessme-sops` package must be public because host-side
+SOPS runs before GHCR credentials can be decrypted. The image contains only the
+SOPS utility, not application secrets. GHCR creates new packages as private;
+after the first image push, set package visibility to public in GitHub Packages
+and rerun the dev workflow. CI verifies anonymous access to the exact digest
+before deployment.
 
 Development merges run the complete operational gate exactly once, then build,
 attest, and sign immutable images before deployment. A release PR may come only

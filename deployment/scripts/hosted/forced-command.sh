@@ -13,11 +13,13 @@ set -- ${SSH_ORIGINAL_COMMAND:-}
 case "${1:-}" in
     deploy)
         [ "$1" = deploy ] || exit 126
-        case "$#" in
-            4) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" ;;
-            5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
+        case "$allowed_environment:$#" in
+            dev:4) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" ;;
+            dev:5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
+            production:5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
+            production:6) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" "$6" ;;
             *)
-                printf 'expected: deploy BACKEND_IMAGE WEB_IMAGE [KEYCLOAK_IMAGE] REVISION\n' >&2
+                printf 'expected: dev deploy BACKEND_IMAGE WEB_IMAGE [SOPS_IMAGE] REVISION; production deploy BACKEND_IMAGE WEB_IMAGE KEYCLOAK_IMAGE [SOPS_IMAGE] REVISION\n' >&2
                 exit 126
                 ;;
         esac

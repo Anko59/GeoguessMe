@@ -24,14 +24,18 @@ clean-build: ## Build production images from scratch without any layer cache.
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 # Final/runtime images audited by `make audit-images` (F-01). The defaults are
-# the digest-pinned third-party runtime/deployment images; override with
+# digest-pinned third-party runtime/deployment images; override with
 # AUDIT_IMAGES=... The backend/web application images and locally rebuilt
 # security-patched tool images are appended automatically when they exist.
-# The unpatched cloudflared base is only a build input; audit its patched final
-# image above, not the vulnerable intermediate.
+# SOPS is a locally patched derivative of its pinned upstream release; CI may
+# override SOPS_IMAGE with the exact published digest for deployment scanning.
+# The unpatched cloudflared and SOPS bases are build inputs only; audit their
+# patched final images, not vulnerable intermediates.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
+SOPS_IMAGE ?= geoguessme/sops-tools:3.13.3-expat-deb12u4
+export SOPS_IMAGE
 AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
 	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
@@ -40,10 +44,12 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
 	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
 	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
-	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
-	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
 
-build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
+build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
+	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build sops
+
+build-security-tool-images: build-sops-image ## Build locally patched security-tool images used by the image audit.
 	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
 ifeq ($(strip $(KEYCLOAK_IMAGE)),)
@@ -53,12 +59,15 @@ audit-images: build-security-tool-images
 endif
 audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
+	@$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
 	image_archive=''; \
 	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
 	trap cleanup_image_archive EXIT; \
 	images="$(AUDIT_IMAGES)"; \
+	[ -n "$${SOPS_IMAGE:-}" ] || { echo 'audit-images: error: SOPS_IMAGE is required' >&2; exit 1; }; \
+	images="$$images $${SOPS_IMAGE}"; \
 	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
 		images="$$images $${KEYCLOAK_IMAGE}"; \
 	elif docker image inspect geoguessme-keycloak:local >/dev/null 2>&1; then \
@@ -283,13 +292,13 @@ terraform-apply: ## Apply the exact reviewed plan; requires CONFIRM=apply.
 vapid-keys: ## Print a fresh Web Push keypair for VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go run . vapid-keys'
 
-secrets-encrypt: ## Encrypt ENV=dev|production from its example using RECIPIENT.
+secrets-encrypt: build-sops-image ## Encrypt ENV=dev|production from its example using RECIPIENT.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	cp deployment/env/$(ENV).env.example deployment/secrets/$(ENV).env.enc
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
 
-secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
+secrets-generate: build-sops-image ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	@mkdir -p deployment/secrets
@@ -310,7 +319,7 @@ secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plai
 	mv "$$temporary" deployment/secrets/$(ENV).env.enc; \
 	trap - EXIT INT TERM
 
-identity-secrets-generate: ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
+identity-secrets-generate: build-sops-image ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT must contain both host age recipients'; exit 2; }
 	@mkdir -p deployment/secrets
 	@temporary=$$(mktemp deployment/secrets/.identity.env.enc.XXXXXX); \

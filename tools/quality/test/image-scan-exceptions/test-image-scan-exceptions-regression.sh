@@ -13,6 +13,7 @@
 #      exceptions for a derived image.
 #   8. Multiple exception files are validated and emitted together.
 #   9. The nightly Buildx verification loads local images before image scanning.
+#  10. Fixed SOPS libexpat findings are removed by the patched image, never excepted.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
@@ -280,6 +281,27 @@ if [[ "$nightly_build_flags" == *"--load"* && "$nightly_build_flags" == *"--cach
     pass "nightly Buildx flags load locally audited images while retaining cache"
 else
     fail "nightly Buildx flags must load local images before audit-images"
+fi
+
+# ── Test 10: SOPS libexpat findings are fixed, not excepted ──────────────────
+echo "--- Test 10: SOPS libexpat CVEs are not allowlisted ---"
+sops_exceptions="$REPO_ROOT/tools/quality/image-scan-exceptions-sops.yaml"
+sops_dockerfile="$REPO_ROOT/deployment/docker/sops-tools/Dockerfile"
+libexpat_cves=(
+    CVE-2024-28757 CVE-2025-59375 CVE-2026-25210 CVE-2026-45186
+    CVE-2026-66046 CVE-2026-93990 CVE-2026-56408 CVE-2026-76957
+)
+for cve in "${libexpat_cves[@]}"; do
+    if grep -Fq "$cve" "$sops_exceptions"; then
+        fail "$cve must be remediated, not excepted"
+    else
+        pass "$cve is absent from the SOPS exception list"
+    fi
+done
+if grep -Fq 'libexpat1=2.5.0-1+deb12u4' "$sops_dockerfile"; then
+    pass "SOPS derivative pins the fixed Debian libexpat package"
+else
+    fail "SOPS derivative does not pin the scanner-reported libexpat fix"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

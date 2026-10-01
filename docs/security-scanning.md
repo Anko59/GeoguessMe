@@ -25,25 +25,38 @@ The target scans the following images (see `AUDIT_IMAGES` in
   scanned directly. The watch gateway deliberately reuses this exact released
   web artifact through `WEB_IMAGE`, so it does not introduce a second unpatched
   Caddy runtime.
-- **Deployment utilities** — the newest published `ghcr.io/getsops/sops` image
-  (digest-pinned) and `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7`, a
-  locally rebuilt cloudflared with the OpenSSL libraries refreshed to the fixed
-  Debian release; the upstream distroless-based image cannot run package tools,
-  so only the two OpenSSL libraries and their dpkg metadata are layered on top.
-  Its unpatched upstream digest is only a build input, so the audit scans the
-  patched final image rather than failing on the vulnerable intermediate. The
-  pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
-  refreshed in the same way plus the fixed `golang.org/x/net` module, and the
-  remediation images are scanned by their exact image-ID digest — refreshing a
-  remediation layer changes that ID and requires the committed exceptions to be
-  reviewed and repointed, failing closed otherwise. The SOPS base image
-  currently has two time-boxed exceptions for unused `libssh2` findings because
-  no newer SOPS image is published; the hosted deployment uses age keys and does
-  not invoke that package. The Restic image is published and signed with the
-  exact development revision because hosted backup and restore operations run it
-  on deployment hosts. Terraform is rebuilt with the same dependency fix and
-  covered by `make terraform-test`; it is a local planning tool, not a shipped
-  runtime.
+- **Deployment utilities** — the project-owned `geoguessme-sops` image derives
+  from the digest-pinned upstream SOPS v3.13.3 image and refreshes `libexpat1`
+  to Debian's fixed `2.5.0-1+deb12u4`. The upstream SOPS image is only a build
+  input; CI scans and signs the exact published derivative, verifies anonymous
+  access to its digest, and production promotes that same development digest
+  without rebuilding. When a project SOPS digest is supplied, the host verifies
+  its workflow identity and source revision before pulling or invoking it. The
+  first monitored runtime cutover temporarily retains a digest-pinned upstream
+  bootstrap for legacy command arities; it is not verified with this project's
+  workflow signature and is removed by the final runtime update. The package is
+  public because host-side decryption precedes GHCR login; it contains only the
+  SOPS utility, not application secrets. GHCR's initial private-package default
+  requires a one-time visibility change after first push. All libexpat
+  exceptions were removed after the package fix; remaining SOPS exceptions are
+  time-boxed and limited to unrelated upstream base/runtime findings.
+
+    `geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7` is a locally rebuilt
+    cloudflared with the OpenSSL libraries refreshed to the fixed Debian
+    release; the upstream distroless-based image cannot run package tools, so
+    only the two OpenSSL libraries and their dpkg metadata are layered on top.
+    Its unpatched upstream digest is only a build input, so the audit scans the
+    patched final image rather than failing on the vulnerable intermediate. The
+    pinned Restic release is rebuilt on an alpine runtime whose OpenSSL is
+    refreshed in the same way plus the fixed `golang.org/x/net` module, and the
+    remediation images are scanned by their exact image-ID digest — refreshing a
+    remediation layer changes that ID and requires the committed exceptions to
+    be reviewed and repointed, failing closed otherwise. The Restic image is
+    published and signed with the exact development revision because hosted
+    backup and restore operations run it on deployment hosts. Terraform is
+    rebuilt with the same dependency fix and covered by `make terraform-test`;
+    it is a local planning tool, not a shipped runtime.
+
 - **Application images** — appended automatically:
     - from the `BACKEND_IMAGE` / `WEB_IMAGE` environment variables when set (CI
       publishes and release promotion scan the exact `name@sha256` digests);
@@ -60,14 +73,17 @@ The target scans the following images (see `AUDIT_IMAGES` in
   production rollback retains the previous identity image reference in hosted
   deployment metadata.
 
-Override the image list with `AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`.
-Third-party and published images use pinned digests, never floating tags. Local
-images use explicit `:local` build names and are scanned by their Docker image
-ID. Images already available in the host Docker daemon are exported with
-`docker save` and scanned from a tarball. This includes private application and
-Keycloak digests pulled by authenticated publication and promotion workflows, so
-registry credentials never enter the Trivy container. Other registry images are
-scanned directly by their digest-pinned reference.
+Override the third-party image list with
+`AUDIT_IMAGES="img1@sha256:... img2@sha256:..."`. `SOPS_IMAGE` is always
+appended separately; local audits use the patched local tag and CI/release jobs
+override it with the exact published digest. Third-party and published images
+use pinned digests, never floating tags. Local images use explicit `:local`
+build names and are scanned by their Docker image ID. Images already available
+in the host Docker daemon are exported with `docker save` and scanned from a
+tarball. This includes private application and Keycloak digests pulled by
+authenticated publication and promotion workflows, so registry credentials never
+enter the Trivy container. Other registry images are scanned directly by their
+digest-pinned reference.
 
 ## Blocking semantics
 

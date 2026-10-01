@@ -15,6 +15,12 @@ assert_contains() {
 
 assert_contains "$FORCED" '4) exec /opt/geoguessme/bin/deploy.sh'
 assert_contains "$FORCED" '5) exec /opt/geoguessme/bin/deploy.sh'
+assert_contains "$FORCED" 'production:6) exec /opt/geoguessme/bin/deploy.sh'
+assert_contains "$FORCED" 'dev:5) exec /opt/geoguessme/bin/deploy.sh'
+assert_contains "$DEPLOY" 'dev:4)'
+assert_contains "$DEPLOY" 'production:5)'
+assert_contains "$DEPLOY" 'sops_image=$SOPS_BOOTSTRAP_IMAGE'
+assert_contains "$DEPLOY" 'if [ "$sops_image" != "$SOPS_BOOTSTRAP_IMAGE" ]; then'
 assert_contains "$DEPLOY" 'validate_image_reference "$keycloak_image" keycloak'
 assert_contains "$DEPLOY" 'verify_image_signature "$keycloak_image"'
 assert_contains "$DEPLOY" 'GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image'
@@ -23,7 +29,40 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$KEYCLOAK_IMA
 assert_contains "$ROOT/.github/workflows/release.yml" 'KEYCLOAK_SOURCE: ${{ steps.names.outputs.keycloak_source }}@${{ steps.digests.outputs.keycloak }}'
 assert_contains "$ROOT/.github/workflows/release.yml" '[[ "$actual_keycloak" == "$KEYCLOAK_DIGEST" ]]'
 assert_contains "$ROOT/.github/workflows/release.yml" '"deploy $BACKEND $WEB $KEYCLOAK $GITHUB_SHA"'
-assert_contains "$ROOT/tools/make/deployment.mk" 'images="$$images $${KEYCLOAK_IMAGE}"'
+assert_contains "$ROOT/tools/make/deployment.mk" 'images="$$images $${SOPS_IMAGE}"'
+assert_contains "$ROOT/tools/make/deployment.mk" 'build-sops-image'
+assert_contains "$ROOT/tools/make/deployment.mk" 'geoguessme/sops-tools:3.13.3-expat-deb12u4'
+assert_contains "$ROOT/deployment/compose.tools.yaml" 'deployment/docker/sops-tools/Dockerfile'
+assert_contains "$ROOT/deployment/compose.tools.yaml" 'image: geoguessme/sops-tools:3.13.3-expat-deb12u4'
+assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'libexpat1=2.5.0-1+deb12u4'
+assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'org.opencontainers.image.source="https://github.com/Anko59/GeoguessMe"'
+assert_contains "$DEPLOY" 'validate_sops_image_reference "$sops_image"'
+assert_contains "$DEPLOY" 'verify_image_signature "$sops_image"'
+assert_contains "$DEPLOY" 'docker pull "$sops_image"'
+assert_contains "$DEPLOY" 'SOPS_IMAGE=%s'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'SOPS: ${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'Verify SOPS package is anonymously pullable'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'tagged_image=${ref%@*}'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'repository=${tagged_image%:*}'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'digest=${ref#*@}'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'manifests/$digest'
+sops_ref='ghcr.io/anko59/geoguessme-sops:dev-1111111111111111111111111111111111111111@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+ref=${sops_ref#ghcr.io/}
+tagged_image=${ref%@*}
+repository=${tagged_image%:*}
+digest=${ref#*@}
+[ "$repository" = 'anko59/geoguessme-sops' ] || exit 1
+[ "$digest" = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ] || exit 1
+assert_contains "$ROOT/.github/workflows/release.yml" 'tools/quality/ci/promote-sops-image.sh "$DEV_SHA"'
+if [ ! -x "$ROOT/tools/quality/ci/promote-sops-image.sh" ]; then
+    printf 'Image deployment contract failed: SOPS promotion helper must be executable\n' >&2
+    exit 1
+fi
+assert_contains "$ROOT/.github/workflows/release.yml" 'SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}'
+assert_contains "$ROOT/tools/quality/ci/promote-sops-image.sh" 'cosign verify'
+assert_contains "$ROOT/tools/quality/ci/promote-sops-image.sh" 'docker buildx imagetools create --tag "$release_tag" "$source_image"'
+assert_contains "$ROOT/tools/quality/ci/promote-sops-image.sh" '[[ "$promoted_digest" == "$digest" ]]'
+assert_contains "$ROOT/.github/workflows/release.yml" 'echo "sops=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}"'
 assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'FROM quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
 assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'org.opencontainers.image.base.digest="sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"'
 assert_contains "$ROOT/deployment/compose.identity.yaml" 'quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
@@ -33,7 +72,7 @@ assert_forced_command_arity() {
     workflow=$1 expected_count=$2
     command_string=$(sed -n 's/.*"\(deploy \$BACKEND \$WEB.*\$GITHUB_SHA\)".*/\1/p' "$workflow")
     [ -n "$command_string" ] || {
-        printf 'Keycloak image contract failed: %s must send the five-field deploy command\n' "$workflow" >&2
+        printf 'Image deployment contract failed: %s must send a supported deploy command\n' "$workflow" >&2
         exit 1
     }
     # shellcheck disable=SC2086
@@ -47,4 +86,72 @@ assert_forced_command_arity() {
 
 assert_forced_command_arity "$ROOT/.github/workflows/deploy.yml" 4
 assert_forced_command_arity "$ROOT/.github/workflows/release.yml" 5
-printf 'Keycloak image contracts passed\n'
+sops_verify_line=$(grep -nF 'verify_image_signature "$sops_image"' "$DEPLOY" | cut -d: -f1)
+sops_pull_line=$(grep -nF 'docker pull "$sops_image"' "$DEPLOY" | cut -d: -f1)
+sops_decrypt_line=$(grep -nF '"$sops_image" decrypt' "$DEPLOY" | head -1 | cut -d: -f1)
+[ "$sops_verify_line" -lt "$sops_pull_line" ] || {
+    printf 'Image deployment contract failed: verify SOPS signature before pulling it\n' >&2
+    exit 1
+}
+[ "$sops_pull_line" -lt "$sops_decrypt_line" ] || {
+    printf 'Image deployment contract failed: pull SOPS before decrypting secrets\n' >&2
+    exit 1
+}
+promotion_test_dir=$(mktemp -d /tmp/sops-promotion.XXXXXX)
+cleanup_promotion_test() {
+    case "$promotion_test_dir" in
+        /tmp/sops-promotion.*) rm -rf -- "$promotion_test_dir" ;;
+        *)
+            printf 'Refusing to remove unexpected test path: %s\n' "$promotion_test_dir" >&2
+            exit 1
+            ;;
+    esac
+}
+trap cleanup_promotion_test EXIT
+mkdir "$promotion_test_dir/bin"
+cat >"$promotion_test_dir/bin/docker" <<'DOCKER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker %s\n' "$*" >>"$TRACE"
+if [[ "$3" == inspect ]]; then
+    case "$4" in
+        *:dev-*) printf '"%s"\n' "$SOURCE_DIGEST" ;;
+        *:release-*) printf '"%s"\n' "$PROMOTED_DIGEST" ;;
+        *) exit 2 ;;
+    esac
+fi
+DOCKER
+cat >"$promotion_test_dir/bin/cosign" <<'COSIGN'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'cosign %s\n' "$*" >>"$TRACE"
+COSIGN
+chmod +x "$promotion_test_dir/bin/docker" "$promotion_test_dir/bin/cosign"
+dev_sha=1111111111111111111111111111111111111111
+release_sha=2222222222222222222222222222222222222222
+valid_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+PATH="$promotion_test_dir/bin:$PATH" TRACE="$promotion_test_dir/trace" \
+    SOURCE_DIGEST="$valid_digest" PROMOTED_DIGEST="$valid_digest" \
+    GITHUB_SHA="$release_sha" GITHUB_REPOSITORY_OWNER=Anko59 GITHUB_OUTPUT="$promotion_test_dir/success-output" \
+    bash "$ROOT/tools/quality/ci/promote-sops-image.sh" "$dev_sha"
+grep -Fq "image=ghcr.io/anko59/geoguessme-sops:release-$release_sha" "$promotion_test_dir/success-output"
+grep -Fq "digest=$valid_digest" "$promotion_test_dir/success-output"
+cosign_line=$(grep -n '^cosign verify' "$promotion_test_dir/trace" | cut -d: -f1)
+promote_line=$(grep -n 'docker buildx imagetools create' "$promotion_test_dir/trace" | cut -d: -f1)
+[ "$cosign_line" -lt "$promote_line" ] || {
+    printf 'SOPS promotion contract failed: signature verification must precede promotion\n' >&2
+    exit 1
+}
+if PATH="$promotion_test_dir/bin:$PATH" TRACE="$promotion_test_dir/mismatch-trace" \
+    SOURCE_DIGEST="$valid_digest" \
+    PROMOTED_DIGEST=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    GITHUB_SHA="$release_sha" GITHUB_REPOSITORY_OWNER=Anko59 GITHUB_OUTPUT="$promotion_test_dir/mismatch-output" \
+    bash "$ROOT/tools/quality/ci/promote-sops-image.sh" "$dev_sha" 2>/dev/null; then
+    printf 'SOPS promotion contract failed: digest mismatch must reject promotion\n' >&2
+    exit 1
+fi
+[ ! -s "$promotion_test_dir/mismatch-output" ] || {
+    printf 'SOPS promotion contract failed: mismatched digest was exported\n' >&2
+    exit 1
+}
+printf 'SOPS and hosted image contracts passed\n'

@@ -8,7 +8,10 @@ Nightly `make verify` builds local application and Keycloak images with Buildx
 `--load` before `make audit-images` scans them, so the image gate inspects the
 artifacts produced by that verification run. The Keycloak base-image pin and its
 narrowly scoped audit exceptions are maintained in the
-[security scanning guide](security-scanning.md).
+[security scanning guide](security-scanning.md). Hosted SOPS runs a
+project-owned image with a fixed libexpat package; CI signs/scans its immutable
+digest and host runtime changes follow the staged procedure in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
