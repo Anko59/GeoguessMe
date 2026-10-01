@@ -22,12 +22,14 @@ RUN git clone --depth 1 --branch v0.19.1 https://github.com/restic/restic.git /s
 # still ships libcrypto3 3.5.7-r0 with CVE-2026-14456; the fixed 3.5.8-r0
 # exists only in the alpine package repositories. Per
 # docs/security-scanning.md ("apply the fix in the shipped image"), the
-# runtime is therefore pinned alpine with the OpenSSL packages refreshed to at
-# least the fixed release; restic itself is a static binary, and the base
-# already carries the CA trust store it needs for TLS against object storage.
+# runtime is therefore pinned alpine with OpenSSL refreshed to at least the
+# fixed release and pcre2 pinned to 10.49-r0; restic itself is a static binary,
+# and the base already carries the CA trust store it needs for TLS.
 FROM alpine:3.24@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 
-RUN apk add --no-cache 'openssl>=3.5.8-r0'
+RUN apk add --no-cache 'openssl>=3.5.8-r0' 'pcre2=10.49-r0' \
+    && apk info -v | grep -Fxq 'pcre2-10.49-r0'
 COPY --from=restic-build /out/restic /usr/bin/restic
 
 LABEL org.opencontainers.image.base.name="alpine:3.24" \

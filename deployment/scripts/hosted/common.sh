@@ -25,6 +25,12 @@ readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c
 # shellcheck disable=SC2034
 readonly SOPS_BOOTSTRAP_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
 readonly SOPS_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-sops'
+readonly SOCKET_PROXY_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-socket-proxy'
+# Temporary bootstrap references for the staged root-bundle cutover. The first
+# is used by the new Compose definition; the second may still be running on an
+# already-provisioned host before the first signed watch update.
+readonly SOCKET_PROXY_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d'
+readonly SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd'
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -57,6 +63,43 @@ validate_sops_image_reference() {
     esac
     valid_image_reference "$sops_candidate" ||
         die 'SOPS image reference must end with a valid immutable sha256 digest'
+}
+
+validate_socket_proxy_image_reference() {
+    socket_candidate=$1
+    socket_expected_tag=$2
+    case "$socket_candidate" in
+        "${SOCKET_PROXY_IMAGE_REPOSITORY}:${socket_expected_tag}"@sha256:*) ;;
+        *) die 'socket-proxy image must use the expected development/release tag with an immutable digest' ;;
+    esac
+    valid_image_reference "$socket_candidate" ||
+        die 'socket-proxy image reference must end with a valid immutable sha256 digest'
+}
+
+validate_socket_proxy_bootstrap_image() {
+    case "$1" in
+        "$SOCKET_PROXY_BOOTSTRAP_IMAGE" | "$SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+validate_socket_proxy_state_image() {
+    socket_candidate=$1
+    if validate_socket_proxy_bootstrap_image "$socket_candidate"; then
+        return 0
+    fi
+    case "$socket_candidate" in
+        "${SOCKET_PROXY_IMAGE_REPOSITORY}:dev-"*@sha256:* | \
+            "${SOCKET_PROXY_IMAGE_REPOSITORY}:release-"*@sha256:*) ;;
+        *) die 'watch state must contain a signed development or release socket-proxy image' ;;
+    esac
+    socket_tag=${socket_candidate#"${SOCKET_PROXY_IMAGE_REPOSITORY}:"}
+    socket_revision=${socket_tag#*-}
+    socket_revision=${socket_revision%%@*}
+    valid_release_revision "$socket_revision" ||
+        die 'watch state image tag must contain a lowercase 40-character revision'
+    valid_image_reference "$socket_candidate" ||
+        die 'watch state image must end with a valid immutable sha256 digest'
 }
 
 valid_release_revision() {

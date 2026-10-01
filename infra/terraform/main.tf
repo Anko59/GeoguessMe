@@ -27,6 +27,7 @@ locals {
     file("${path.module}/../../deployment/scripts/hosted/common.sh"),
     file("${path.module}/../../deployment/scripts/hosted/deploy.sh"),
     file("${path.module}/../../deployment/scripts/hosted/forced-command.sh"),
+    file("${path.module}/../../deployment/scripts/hosted/watch-deploy.sh"),
     file("${path.module}/../../deployment/scripts/hosted/verify-deployment-hashes.sh"),
     file("${path.module}/../../deployment/scripts/hosted/backup.sh"),
     file("${path.module}/../../deployment/scripts/hosted/restore-rehearsal.sh"),
@@ -62,6 +63,7 @@ locals {
     [for content in local.runtime_bundle_files : "${length(content)}\n"],
     local.runtime_bundle_files,
   )))
+  runtime_installer = base64gzip(file("${path.module}/../cloud-init/install-runtime-bundle.sh"))
 }
 
 resource "random_bytes" "tunnel_secret" {
@@ -338,12 +340,13 @@ resource "hcloud_server" "app" {
   rebuild_protection = true
   firewall_ids       = [hcloud_firewall.deny_inbound.id]
   user_data = templatefile("${path.module}/../cloud-init/cloud-config.yaml.tftpl", {
-    admin_key        = var.admin_ssh_public_key
-    dev_ci_key       = var.dev_ci_ssh_public_key
-    production_key   = var.production_ci_ssh_public_key
-    runtime_revision = var.runtime_revision
-    tunnel_token     = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
-    runtime_bundle   = local.runtime_bundle
+    admin_key         = var.admin_ssh_public_key
+    dev_ci_key        = var.dev_ci_ssh_public_key
+    production_key    = var.production_ci_ssh_public_key
+    runtime_revision  = var.runtime_revision
+    tunnel_token      = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
+    runtime_bundle    = local.runtime_bundle
+    runtime_installer = local.runtime_installer
   })
 
   public_net {

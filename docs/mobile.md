@@ -38,7 +38,7 @@ emulator falls back to software acceleration otherwise.
 From the repository root:
 
 ```text
-make mobile-prepare  # API 36 build tools and the Maestro-supported API 34 AVD
+make mobile-prepare  # API 36 tools and the Maestro-supported API 34 AOSP AVD
 make mobile-sync     # production web build and Capacitor sync
 make mobile-build    # debug APK
 make test-mobile     # isolated stack + seed + build + emulator + Maestro
@@ -52,8 +52,13 @@ gateway, grants declared test permissions, installs the APK, and runs Maestro.
 The app still compiles and targets Android API 36; the emulator uses API 34
 because Maestro's
 [published Android support range](https://github.com/mobile-dev-inc/maestro-docs/blob/main/introduction/get-started/quickstart.md)
-currently ends at API 34. This keeps the app's compile target current while the
-UI automation runs on a supported runtime. Its cleanup removes the disposable
+currently ends at API 34. The test AVD uses the AOSP `default` image and a
+separate `_aosp` name so a cached Google APIs AVD cannot be silently reused.
+Play Services can restart its RCS module and kill apps bound to its
+FontsProvider; the mobile journey uses the platform location fallback with
+emulator-fed GPS and WebView camera capture, so it does not require Play
+Services. This keeps the journey isolated from GMS module updates while
+preserving the app's supported runtime. Its cleanup removes the disposable
 database and media volumes.
 
 The local-server override exists only through `CAPACITOR_SERVER_URL` during the

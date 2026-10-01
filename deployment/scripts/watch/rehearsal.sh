@@ -48,6 +48,8 @@ for spec in \
 done
 
 export WEB_IMAGE=geoguessme-web:local
+SOCKET_PROXY_IMAGE=${SOCKET_PROXY_IMAGE:-geoguessme/socket-proxy-tools:local}
+export SOCKET_PROXY_IMAGE
 export GEOGUESSME_WATCH_METRICS_DIR="$TMP"
 export GEOGUESSME_WATCH_AGENT_ENV="$TMP/agent.env"
 export GEOGUESSME_PRODUCTION_FRONTEND_NETWORK="$NETWORK"

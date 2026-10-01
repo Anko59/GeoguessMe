@@ -14,6 +14,7 @@
 #   8. Multiple exception files are validated and emitted together.
 #   9. The nightly Buildx verification loads local images before image scanning.
 #  10. Fixed SOPS libexpat findings are removed by the patched image, never excepted.
+#  11. Fixed Alpine PCRE2 findings are removed from shipped images, never excepted.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/image-scan-exceptions-check.sh"
@@ -302,6 +303,44 @@ if grep -Fq 'libexpat1=2.5.0-1+deb12u4' "$sops_dockerfile"; then
     pass "SOPS derivative pins the fixed Debian libexpat package"
 else
     fail "SOPS derivative does not pin the scanner-reported libexpat fix"
+fi
+
+# ── Test 11: Alpine PCRE2 findings are fixed, not excepted ───────────────────
+echo "--- Test 11: Alpine PCRE2 CVE is not allowlisted ---"
+pcre2_cve=CVE-2026-103111
+exception_files=(
+    "$REPO_ROOT/tools/quality/image-scan-exceptions.yaml"
+    "$REPO_ROOT/tools/quality/image-scan-exceptions-keycloak.yaml"
+    "$REPO_ROOT/tools/quality/image-scan-exceptions-oauth2-proxy.yaml"
+    "$REPO_ROOT/tools/quality/image-scan-exceptions-cloudflared.yaml"
+    "$REPO_ROOT/tools/quality/image-scan-exceptions-sops.yaml"
+)
+for exception_file in "${exception_files[@]}"; do
+    if grep -Fq "$pcre2_cve" "$exception_file"; then
+        fail "$pcre2_cve must be remediated, not excepted"
+    else
+        pass "$pcre2_cve is absent from $(basename "$exception_file")"
+    fi
+done
+for dockerfile in \
+    "$REPO_ROOT/deployment/docker/backend.Dockerfile" \
+    "$REPO_ROOT/deployment/docker/frontend.Dockerfile" \
+    "$REPO_ROOT/deployment/docker/restic-tools.Dockerfile" \
+    "$REPO_ROOT/deployment/docker/socket-proxy-tools/Dockerfile"; do
+    if grep -Fq "pcre2=10.49-r0" "$dockerfile" &&
+        grep -Fq "apk info -v | grep -Fxq 'pcre2-10.49-r0'" "$dockerfile"; then
+        pass "$(basename "$dockerfile") pins and asserts fixed PCRE2"
+    else
+        fail "$(basename "$dockerfile") must pin and assert fixed PCRE2"
+    fi
+done
+# The Makefile uses doubled dollars to pass the variable through to its shell.
+# shellcheck disable=SC2016
+if grep -Fq 'images="$$images $${SOCKET_PROXY_IMAGE}"' "$REPO_ROOT/tools/make/deployment.mk" &&
+    grep -Fq 'build-socket-proxy-image' "$REPO_ROOT/tools/make/deployment.mk"; then
+    pass 'the exact socket-proxy derivative is built and included in the image audit'
+else
+    fail 'the socket-proxy derivative is not built and scanned by the Make gate'
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

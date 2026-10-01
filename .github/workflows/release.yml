@@ -166,6 +166,7 @@ jobs:
       web: ${{ steps.refs.outputs.web }}
       keycloak: ${{ steps.refs.outputs.keycloak }}
       sops: ${{ steps.refs.outputs.sops }}
+      socket_proxy: ${{ steps.refs.outputs.socket_proxy }}
       tag: ${{ steps.source.outputs.tag }}
     steps:
       - name: Check out release commit
@@ -270,7 +271,7 @@ jobs:
             echo "web=$web"
             echo "keycloak=$keycloak"
           } >> "$GITHUB_OUTPUT"
-      - name: Verify application signatures and promote SOPS
+      - name: Verify development signatures and promote deployment images
         id: sops-promotion
         env:
           DEV_SHA: ${{ steps.source.outputs.dev_sha }}
@@ -285,7 +286,8 @@ jobs:
               --annotations "revision=$DEV_SHA" "$image" >/dev/null
           done
           tools/quality/ci/promote-sops-image.sh "$DEV_SHA"
-      - name: Promote immutable manifests without rebuilding
+          tools/quality/ci/promote-socket-proxy-image.sh "$DEV_SHA"
+      - name: Promote verified application manifests without rebuilding
         env:
           BACKEND_SOURCE: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
           WEB_SOURCE: ${{ steps.names.outputs.web_source }}@${{ steps.digests.outputs.web }}
@@ -293,35 +295,17 @@ jobs:
           BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
           WEB_RELEASE: ${{ steps.names.outputs.web_release }}
           KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
-        run: |
-          docker buildx imagetools create --tag "$BACKEND_RELEASE" "$BACKEND_SOURCE"
-          docker buildx imagetools create --tag "$WEB_RELEASE" "$WEB_SOURCE"
-          docker buildx imagetools create --tag "$KEYCLOAK_RELEASE" "$KEYCLOAK_SOURCE"
-      - name: Verify promoted digests
-        env:
-          BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
-          WEB_RELEASE: ${{ steps.names.outputs.web_release }}
-          KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
           WEB_DIGEST: ${{ steps.digests.outputs.web }}
           KEYCLOAK_DIGEST: ${{ steps.digests.outputs.keycloak }}
-        run: |
-          set -euo pipefail
-          actual_backend=$(docker buildx imagetools inspect "$BACKEND_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          actual_web=$(docker buildx imagetools inspect "$WEB_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          actual_keycloak=$(docker buildx imagetools inspect "$KEYCLOAK_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          [[ "$actual_backend" == "$BACKEND_DIGEST" ]]
-          [[ "$actual_web" == "$WEB_DIGEST" ]]
-          [[ "$actual_keycloak" == "$KEYCLOAK_DIGEST" ]]
+        run: tools/quality/ci/promote-application-images.sh
       - name: Scan exact promoted digest (fixed High/Critical gate)
         env:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
           KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
           SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+          SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -333,10 +317,12 @@ jobs:
           docker pull "$KEYCLOAK"
           docker pull "$SOPS"
           docker pull "$RESTIC_IMAGE"
+          docker pull "$SOCKET_PROXY"
           docker tag "$BACKEND" geoguessme-backend:local
           docker tag "$WEB" geoguessme-web:local
           export KEYCLOAK_IMAGE="$KEYCLOAK"
           export SOPS_IMAGE="$SOPS"
+          export SOCKET_PROXY_IMAGE="$SOCKET_PROXY"
           make audit-images AUDIT_IMAGES=
           test -s security/image-reports/geoguessme-backend_local/report.json
           test -s security/image-reports/geoguessme-web_local/report.json
@@ -346,6 +332,8 @@ jobs:
           test -s "security/image-reports/$restic_safe/report.json"
           sops_safe=$(printf '%s' "$SOPS" | tr '/:@' '___')
           test -s "security/image-reports/$sops_safe/report.json"
+          socket_proxy_safe=$(printf '%s' "$SOCKET_PROXY" | tr '/:@' '___')
+          test -s "security/image-reports/$socket_proxy_safe/report.json"
       - name: Upload image-scan reports and SBOMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -361,8 +349,9 @@ jobs:
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
           KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
           SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+          SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
         run: |
-          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$SOPS"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$SOPS" "$SOCKET_PROXY"; do
             cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
           done
       - name: Export immutable references
@@ -373,6 +362,7 @@ jobs:
             echo "web=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}"
             echo "keycloak=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}"
             echo "sops=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}"
+            echo "socket_proxy=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}"
           } >> "$GITHUB_OUTPUT"
       - name: Download verified Android release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -397,6 +387,7 @@ jobs:
             WEB_IMAGE=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
             KEYCLOAK_IMAGE=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
             SOPS_IMAGE=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+            SOCKET_PROXY_IMAGE=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
             ```
 
             Hosted backup and restore use the digest-pinned Restic reference

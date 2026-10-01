@@ -89,22 +89,35 @@ Two complementary checks verify the deployed host matches the revision:
 
 ## Staging a deploy-protocol change
 
-Keep the dev workflow on its existing four-field command and production on its
-five-field command while the first revision adds a backward-compatible host
-command and deploy script. That revision builds, signs, scans, and promotes the
-patched SOPS image, but its legacy commands still select the pinned upstream
-bootstrap, which is not verified with this project's workflow signature. Merge
-and deploy that revision to dev, then install its complete root-owned runtime
-bundle and verify both host environments. Only after that live cutover may the
-dev workflow send the signed SOPS digest in its five-field command. A later
-production release workflow may send the Keycloak and SOPS digests in its
-six-field command only after the compatible host bundle is confirmed installed.
-After the SOPS-digest dev protocol is deployed, install the complete runtime
-bundle again in both environments to remove the bootstrap and reject legacy
-arities. Verify both hosts before promoting the release workflow that sends six
-fields to production. This prevents GitHub from sending a command the installed
-forced command rejects and ensures the transitional upstream image cannot remain
-the hosted runtime.
+Keep the dev workflow on its existing four-field app command and production on
+its five-field app command until the compatible root-owned bundle is installed.
+The first image revision builds, signs, and scans the patched SOPS and socket-
+proxy derivatives, but app deployment still uses the pinned upstream SOPS
+bootstrap. The watch image has its own forced
+`watch SOCKET_PROXY_IMAGE REVISION` command; never add it as an app-deploy
+positional argument. That command verifies the environment-specific GitHub
+Actions signature before pulling, atomically records the image at
+`/var/lib/geoguessme/watch/current.env`, reconciles only the `socket-proxy`
+service, and checks full watch health with proxy-only rollback.
+
+After the first green dev deployment, install the complete root-owned runtime
+bundle and verify the `dev` and `production` SSH contexts. The monitoring
+Compose project and state are shared on this one host, so **do not call `watch`
+from the dev workflow**: a dev deploy must not change production monitoring.
+Only after a release promotes the exact signed socket-proxy digest from the
+complete dev gate may the production release workflow call `watch` with the
+release-tagged digest. The watch command stages (but does not start) a verified
+image if monitoring is inactive. The first release cutover should be observed
+and its running container digest verified before retiring the temporary upstream
+Compose fallback or its narrowly scoped exception.
+
+After both operator paths confirm the compatible bundle, the dev workflow may
+send the signed SOPS digest in its five-field app command. A later production
+release may send Keycloak and SOPS digests in its six-field app command, and
+then invoke the separate `watch` command for the promoted proxy. Once SOPS state
+is signed and the proxy cutover is verified, install and hash-check the final
+bundle to remove only the retired bootstrap pins and legacy app-command arities.
+Never send a new command form before its forced-command parser is installed.
 
 ## Applying monitored host definitions
 
@@ -120,14 +133,20 @@ configuration. From the chosen release directory, install the complete monitored
 set—not only the files changed most recently:
 
 - scripts (root:root, mode 0755): `common.sh`, `deploy.sh`, `forced-command.sh`,
-  `verify-deployment-hashes.sh`, `backup.sh`, `restore-rehearsal.sh`,
-  `health-check.sh`, `alert.sh`, `watch-health.sh`,
+  `watch-deploy.sh`, `verify-deployment-hashes.sh`, `backup.sh`,
+  `restore-rehearsal.sh`, `health-check.sh`, `alert.sh`, `watch-health.sh`,
   `watch-refresh-metrics-token.sh`, and `watch-capacity.sh`;
 - configuration (root:root, mode 0444): `compose.production.yaml` and
   `compose.hosted.yaml`, `compose.watch.yaml`, `watch/Caddyfile`,
   `watch/vector.yaml`, and `watch/victoria-metrics.yaml`.
 - systemd units (root:root, mode 0644): all 14 `geoguessme-*` service and timer
   files in `infra/cloud-init/units/`.
+
+`/var/lib/geoguessme/watch/current.env` is mutable deployment state, not part of
+the root-owned bundle or hash manifest. The forced `watch` command creates it
+atomically as `deploy:deploy` mode `0600`; the watch systemd units load that
+single image reference. Do not hand-edit it during a deployment or mix it with
+the root-owned runtime revision.
 
 Stop both `geoguessme-health@*.timer` units for the short copy window and use
 `install --owner=root --group=root --mode=...` for each file. After every file
@@ -158,6 +177,11 @@ The following remain live operator steps after this configuration merges:
 - [ ] Apply the complete, single-revision script/config set above with the
       documented ownership and modes, then verify `verify dev` and
       `verify production` through their respective Access SSH applications.
+- [ ] After a release promotes the signed proxy digest, use the separate
+      production `watch IMAGE REVISION` command, verify the running
+      `socket-proxy` digest and full watch health, and confirm no other service
+      was recreated. Do not perform this cutover from the dev workflow because
+      the watch project is shared with production.
 - [ ] Confirm both `geoguessme-health@*.timer` units run the integrity check and
       that an intentional rehearsal mismatch triggers the existing alert path.
 - [ ] Run the rehearsal sequence above and, once green, apply the hardened
