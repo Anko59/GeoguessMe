@@ -8,6 +8,7 @@ import (
 	"geoguessme/handlers"
 	authhandlers "geoguessme/handlers/auth"
 	feedhandlers "geoguessme/handlers/feed"
+	moderationhandlers "geoguessme/handlers/moderation"
 	partyhandlers "geoguessme/handlers/party"
 	"geoguessme/internal/auth"
 	"geoguessme/internal/chat"
@@ -18,6 +19,7 @@ import (
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
 	feedrepo "geoguessme/internal/repository/feed"
+	moderationrepo "geoguessme/internal/repository/moderation"
 	"geoguessme/internal/storage"
 )
 
@@ -71,8 +73,9 @@ type App struct {
 	AuthAPI *authhandlers.AuthAPI
 	// Party is the Party Time handler slice (group party windows and the
 	// double-points announcement), served from injected dependencies.
-	Party *partyhandlers.API
-	Feed  *feedhandlers.API
+	Party   *partyhandlers.API
+	Feed    *feedhandlers.API
+	Reports *moderationhandlers.ContentReportAPI
 }
 
 // NewApp constructs an application instance from explicit dependencies. Each
@@ -109,6 +112,10 @@ func NewApp(
 		AuthAPI: authhandlers.NewAuthAPI(repos, cfg, store, mailer, authService, hub, identityVerifiers...),
 		Party:   partyhandlers.NewAPI(repos.Groups, repos.Party, repos.Chat, repos, pushSvc, hub, cfg, clock),
 		Feed:    feedhandlers.NewAPI(feedrepo.NewRepository(db), store, repos, cfg, clock, repos, pushSvc, hub),
+		// The existing privacy contact is documented in docs/data-protection.md;
+		// TODO(#302): confirm the dedicated abuse mailbox before changing routing.
+		// Notifications contain only a receipt ID, never notice or target data.
+		Reports: &moderationhandlers.ContentReportAPI{Store: moderationrepo.NewRepository(db), Mailer: mailer, Logger: logger, Contact: "privacy@geoguessme.com"},
 	}
 }
 
@@ -227,6 +234,8 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/user/groups/inbox", protected(a.Groups.GetUserGroupsInbox))
 	mux.Handle("/api/v1/user/groups/inbox/read", protected(a.Groups.MarkUserGroupRead))
 	mux.Handle("/api/v1/user/profile/{userID}", protected(a.AuthAPI.GetPublicProfile))
+	mux.Handle("POST /api/v1/messages/{id}/report", protected(a.Reports.ReportMessage))
+	mux.Handle("POST /api/v1/users/{id}/report", protected(a.Reports.ReportUser))
 	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
 	mux.Handle("POST /api/v1/group/invites", protected(a.Game.CreateInvite))

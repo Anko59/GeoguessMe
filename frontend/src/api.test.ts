@@ -6,11 +6,25 @@ import api, {
     getAPIErrorMessage,
     getAccessToken,
     publicFeedAPI,
+    moderationAPI,
     refreshAuthSession,
     setAccessToken,
 } from './api';
 
 describe('api client', () => {
+    it('sends typed content reports on the authenticated client', async () => {
+        const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'notice-1' } });
+        const controller = new AbortController();
+        await expect(
+            moderationAPI.report('messages', 'id/with slash', { reason: 'other', details: '' }, controller.signal),
+        ).resolves.toEqual({ id: 'notice-1' });
+        expect(post).toHaveBeenCalledWith(
+            '/messages/id%2Fwith%20slash/report',
+            { reason: 'other', details: '' },
+            { signal: controller.signal },
+        );
+        post.mockRestore();
+    });
     it('stores tokens and exposes secure defaults', () => {
         setAccessToken('token');
         expect(getAccessToken()).toBe('token');

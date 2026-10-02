@@ -5,6 +5,46 @@
  */
 
 export interface paths {
+    '/messages/{id}/report': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a group message to the moderation team.
+         * @description The reporter must currently belong to the message's group; duplicate notices return the original ID.
+         */
+        post: operations['reportMessage'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/users/{id}/report': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a player to the moderation team.
+         * @description The reporter must currently share a group with the player; duplicate notices return the original ID.
+         */
+        post: operations['reportUser'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/challenges': {
         parameters: {
             query?: never;
@@ -1251,6 +1291,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ReportRequest: {
+            /** @enum {string} */
+            reason: 'illegal_content' | 'harassment' | 'sexual_content' | 'other';
+            /** @description Required when reason is illegal_content; explain why the content may be illegal. Do not include sensitive personal data unless necessary. */
+            details?: string;
+        };
+        ReportReceipt: {
+            /** Format: uuid */
+            id: string;
+        };
+        APIError: {
+            error: {
+                code: string;
+                message: string;
+            };
+        };
         MapPin: {
             key: string;
             name: string;
@@ -1285,12 +1341,6 @@ export interface components {
             next_cursor?: string;
             /** Format: date-time */
             server_time: string;
-        };
-        APIError: {
-            error: {
-                code: string;
-                message: string;
-            };
         };
         PublicChallenge: {
             /** Format: uuid */
@@ -1972,6 +2022,68 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    reportMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['ReportRequest'];
+            };
+        };
+        responses: {
+            /** @description Notice accepted (or previously accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReportReceipt'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    reportUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['ReportRequest'];
+            };
+        };
+        responses: {
+            /** @description Notice accepted (or previously accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReportReceipt'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
     listGroupChallenges: {
         parameters: {
             query: {

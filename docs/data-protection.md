@@ -82,6 +82,48 @@ The application and database run in the EU. Transfers outside the EEA rely on:
 5. **Closure.** Record the outcome; for refusals, state the reason and the right
    to complain to the CNIL.
 
+## Content report review
+
+The operator is responsible for reviewing incoming notices. The authenticated
+in-app report form accepts a reason and optional context, persists the notice in
+`content_reports`, and sends a metadata-only notification (receipt ID, no report
+text or target details) to the existing privacy mailbox listed in the
+[accountability snapshot](#accountability-snapshot). This privacy contact is
+established; the dedicated abuse mailbox is not yet confirmed. The alert is a
+convenience, not the source of truth: mail delivery failures are logged, and
+operators must inspect the durable queue daily. Confirmation of a dedicated
+abuse mailbox and its routing remains tracked in
+[issue #302](https://github.com/Anko59/GeoguessMe/issues/302).
+
+1. Check the `content_reports` rows with `status = 'open'`, ordered by
+   `created_at, id`, at least once each day. Treat imminent danger and clearly
+   illegal content as urgent; acknowledge notices within 24 hours and aim to
+   decide ordinary notices within 7 days. Record delayed cases and the reason.
+2. Review the reported target using the stored `target_kind`, `target_id`, and
+   `reported_user_id` with access restricted to authorized moderators. If the
+   source was deleted, do not assume its content can still be retrieved; use the
+   reporter's context and other lawful evidence. Avoid copying private group
+   messages into email or third-party systems. Log the evidence considered and
+   decision in the restricted moderation case record.
+3. Mark `status` as `reviewed`, then `actioned` or `dismissed` with
+   `reviewed_at`. Apply any removals through the existing authorized content
+   lifecycle. Notify the reporter and affected player of the decision and
+   reasons through their verified contact channels when available, with
+   redactions needed for safety. Provide the appeal path through the privacy
+   contact; independently review appeals and record the result. Do not treat an
+   automatic report as a determination of illegality.
+4. Restrict database and case-record access to the operator's moderation role.
+   Account deletion cascades reporter-linked rows; deleted messages clear their
+   foreign key while preserving the target ID. Retain cases only for the lawful
+   period needed to handle the notice, appeal or legal hold; purge on expiry,
+   documenting the deletion in the case log. Review this retention against the
+   privacy policy before launch.
+
+The current implementation provides notice intake, not a moderator dashboard or
+user blocking; those remaining capabilities are tracked in
+[issue #307](https://github.com/Anko59/GeoguessMe/issues/307) and must not be
+advertised as available until implemented.
+
 ## Breach response
 
 Follow [runbooks/data-breach-response](runbooks/data-breach-response.md). In

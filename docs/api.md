@@ -160,6 +160,22 @@ passing that time alone does not grant access to an unplayed active challenge.
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
 | GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                           |
 
+### Content reports
+
+Authenticated members can submit a notice about a message visible in their
+current group (`POST /api/v1/messages/{id}/report`) or another player sharing a
+group (`POST /api/v1/users/{id}/report`). JSON requires `reason` (one of
+`illegal_content`, `harassment`, `sexual_content`, `other`) and accepts optional
+`details` of up to 2,000 Unicode characters. A notice alleging illegal content
+must explain the allegation in `details`. A successful response is
+`{"id":"<report UUID>"}` (200); retries by the same reporter for the same target
+return the same reference without changing the original notice. Targets outside
+the member's groups, missing targets and self-reports return 404. Invalid input
+returns 400; authentication failures return 401. The normal write-rate policy
+applies, including 429 and `Retry-After`. Report text is not returned through
+the public API; see
+[moderation operations](data-protection.md#content-report-review).
+
 ### Challenges
 
 | Method | Path                                           | Auth   | Description                                                                                     |

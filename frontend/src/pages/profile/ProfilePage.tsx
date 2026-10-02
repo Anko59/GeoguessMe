@@ -7,6 +7,7 @@ import RankBadge from '../../components/progression/RankBadge';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
+import ReportAction from '../../components/ui/ReportAction';
 import { useAuth } from '../../context/AuthContext';
 import type { Profile, PublicProfile } from '../../types';
 import FeedLeaderboard from './FeedLeaderboard';
@@ -127,6 +128,7 @@ export default function ProfilePage() {
                 <RankBadge rank={rank} size="large" alt={`${rank.name} badge`} className="profile-badge" />
             </section>
 
+            {!isSelf && <ReportAction key={profile.id} kind="users" targetID={profile.id} />}
             <MapPinProfileCard username={profile.username} pin={profile.map_pin} ownProfile={isSelf} />
 
             <section className="profile-trackers" aria-label="Score trackers">

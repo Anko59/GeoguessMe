@@ -80,7 +80,10 @@ illustrations below are part of GeoGuessMe’s own visual language.
 - **Personalize your map pins** by completing any of 30 challenges, then choose
   an unlocked marker in Settings for your globe locations and challenge results.
 - **Keep the conversation moving** with messenger-style hidden message actions,
-  emoji reactions, and replies.
+  emoji reactions, and replies. Report a harmful group message from its actions
+  or report another player from their profile;
+  [moderation operations](docs/data-protection.md#content-report-review)
+  describe how notices are reviewed.
 - **Make groups feel like yours** with a group photo and independent
   notification settings for every group.
 - **Have fun with the camera** using on-device face tracking, playful lenses,

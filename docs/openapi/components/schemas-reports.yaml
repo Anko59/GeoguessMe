@@ -1,0 +1,17 @@
+ReportRequest:
+  type: object
+  additionalProperties: false
+  required: [reason]
+  properties:
+    reason:
+      type: string
+      enum: [illegal_content, harassment, sexual_content, other]
+    details:
+      type: string
+      maxLength: 2000
+      description: Required when reason is illegal_content; explain why the content may be illegal. Do not include sensitive personal data unless necessary.
+ReportReceipt:
+  type: object
+  required: [id]
+  properties:
+    id: { type: string, format: uuid }

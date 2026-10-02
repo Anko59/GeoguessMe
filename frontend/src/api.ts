@@ -17,6 +17,7 @@ import type {
     ChallengePublication,
 } from './types';
 import { apiBaseURL } from './platform/endpoints';
+import type { components } from './types/openapi.generated';
 
 let accessToken: string | null = null;
 let tokenVersion = 0;
@@ -220,6 +221,19 @@ export const groupsAPI = {
     markRead: async (groupID: string, signal?: AbortSignal) => {
         await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
     },
+};
+
+type ReportRequest = components['schemas']['ReportRequest'];
+type ReportReceipt = components['schemas']['ReportReceipt'];
+
+export const moderationAPI = {
+    report: async (
+        kind: 'messages' | 'users',
+        targetID: string,
+        notice: ReportRequest,
+        signal?: AbortSignal,
+    ): Promise<ReportReceipt> =>
+        (await api.post<ReportReceipt>(`/${kind}/${encodeURIComponent(targetID)}/report`, notice, { signal })).data,
 };
 
 export default api;

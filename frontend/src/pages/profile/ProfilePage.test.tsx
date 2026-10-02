@@ -219,13 +219,14 @@ describe('ProfilePage', () => {
     });
 
     it('loads another player public profile without account details', async () => {
-        mocks.get.mockResolvedValueOnce({ data: { ...profile, email: undefined } });
+        mocks.get.mockResolvedValueOnce({ data: { ...profile, id: 'user-2', email: undefined } });
         renderProfile('/profile/user-2');
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2');
         expect(screen.queryByText('alice@example.test')).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Report player' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
@@ -258,6 +259,7 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
         expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+        expect(screen.queryByRole('button', { name: 'Report player' })).not.toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 

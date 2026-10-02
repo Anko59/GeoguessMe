@@ -259,3 +259,57 @@ func TestChallengeMessageStatusIsViewerSpecific(t *testing.T) {
 	require.Equal(t, photoID, update.PhotoID)
 	require.True(t, update.ChallengeResolved, "open conversations receive the resolved state immediately")
 }
+
+func TestContentReportsMembershipAndIdempotency(t *testing.T) {
+	alice := signup(t, unique("reporter"), unique("reporter")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("target"), unique("target")+"@example.test", "StrongPassword123")
+	outsider := signup(t, unique("outsider"), unique("outsider")+"@example.test", "StrongPassword123")
+	groupID, invite := createGroup(t, alice.access, "Report membership")
+	joinGroup(t, bob.access, invite)
+	body := map[string]string{"reason": "harassment", "details": "context"}
+	path := "/api/v1/users/" + bob.userID + "/report"
+	resp, _ := doJSON(t, http.MethodPost, path, body, outsider.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodPost, "/api/v1/users/"+alice.userID+"/report", body, alice.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp, data := doJSON(t, http.MethodPost, path, body, alice.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "%s", data)
+	var receipt struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(data, &receipt))
+	require.NotEmpty(t, receipt.ID)
+	resp, data = doJSON(t, http.MethodPost, path, map[string]string{"reason": "other"}, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var duplicate struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(data, &duplicate))
+	require.Equal(t, receipt.ID, duplicate.ID)
+	db := testDB(t)
+	var reportCount int
+	var recordedReason, recordedDetails, recordedTarget string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM content_reports WHERE reporter_id = $1 AND target_kind = 'user' AND target_id = $2`, alice.userID, bob.userID).Scan(&reportCount))
+	require.Equal(t, 1, reportCount)
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT reason, details, reported_user_id FROM content_reports WHERE id = $1`, receipt.ID).Scan(&recordedReason, &recordedDetails, &recordedTarget))
+	require.Equal(t, "harassment", recordedReason)
+	require.Equal(t, "context", recordedDetails)
+	require.Equal(t, bob.userID, recordedTarget)
+
+	conn := mustDialWS(t, groupID, wsTicket(t, bob.access, groupID), baseURL)
+	defer conn.Close()
+	require.NoError(t, conn.WriteJSON(map[string]string{"content": "report target"}))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	var message struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, conn.ReadJSON(&message))
+	require.NotEmpty(t, message.ID)
+	messagePath := "/api/v1/messages/" + message.ID + "/report"
+	resp, _ = doJSON(t, http.MethodPost, messagePath, body, outsider.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp, data = doJSON(t, http.MethodPost, messagePath, body, alice.access, nil)
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "%s", data)
+	resp, _ = doJSON(t, http.MethodPost, messagePath, body, bob.access, nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}

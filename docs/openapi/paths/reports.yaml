@@ -1,0 +1,46 @@
+messageReport:
+  post:
+    operationId: reportMessage
+    summary: Report a group message to the moderation team.
+    description: The reporter must currently belong to the message's group; duplicate notices return the original ID.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas-reports.yaml#/ReportRequest" }
+    responses:
+      "200":
+        description: Notice accepted (or previously accepted).
+        content: { application/json: { schema: { $ref: "../components/schemas-reports.yaml#/ReportReceipt" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+userReport:
+  post:
+    operationId: reportUser
+    summary: Report a player to the moderation team.
+    description: The reporter must currently share a group with the player; duplicate notices return the original ID.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas-reports.yaml#/ReportRequest" }
+    responses:
+      "200":
+        description: Notice accepted (or previously accepted).
+        content: { application/json: { schema: { $ref: "../components/schemas-reports.yaml#/ReportReceipt" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
