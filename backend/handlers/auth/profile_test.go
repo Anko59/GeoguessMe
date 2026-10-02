@@ -26,7 +26,7 @@ func profileUser(id, username string) *models.User {
 // average global rank, global Elo, and equipped map pin.
 func expectProfileQueries(t *testing.T, mock pgxmock.PgxPoolIface, userID string, totalPoints, guessCount int64, average float64, pointsRank, pointsPlayers, averageRank, averagePlayers int64) {
 	t.Helper()
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").WithArgs(userID).
+	mock.ExpectQuery("COUNT\\(\\*\\) FROM public_guesses WHERE user_id = \\$1").WithArgs(userID).
 		WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(totalPoints, guessCount, average))
 	mock.ExpectQuery("WITH totals AS").WithArgs(userID).
 		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(pointsRank, pointsPlayers))
@@ -229,7 +229,7 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	now := time.Now().UTC()
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Avatar: "avatar.png", CreatedAt: now, UpdatedAt: now}
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(user.ID).WillReturnRows(handlerUserRows(user))
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(int64(7600), int64(3), 2533.33))
+	mock.ExpectQuery("COUNT\\(\\*\\) FROM public_guesses WHERE user_id = \\$1").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"total_points", "guess_count", "average_score"}).AddRow(int64(7600), int64(3), 2533.33))
 	mock.ExpectQuery("WITH totals AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(3), int64(1943)))
 	mock.ExpectQuery("WITH scores AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(7), int64(1943)))
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).

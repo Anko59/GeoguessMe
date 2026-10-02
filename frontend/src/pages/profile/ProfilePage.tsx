@@ -138,7 +138,7 @@ export default function ProfilePage() {
                             #{profile.global_rank.rank} of {profile.global_rank.total_players.toLocaleString()} players
                         </span>
                     ) : (
-                        <span>Guess a location to enter the ranking</span>
+                        <span>Guess a group challenge to enter the ranking</span>
                     )}
                 </article>
                 <article className="profile-stat-card profile-stat-guesses">
@@ -155,7 +155,7 @@ export default function ProfilePage() {
                             {profile.global_average_rank.total_players.toLocaleString()} players
                         </span>
                     ) : (
-                        <span>Guess a location to enter the ranking</span>
+                        <span>Guess a group challenge to enter the ranking</span>
                     )}
                 </article>
                 <article className="profile-stat-card profile-stat-elo">

@@ -45,22 +45,26 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
 with lifetime guess points, guess count, average score, global Elo rating, the
-server-calculated rank progression, and three global rankings. Lifetime points
-are the sum of all accepted guess scores; rank thresholds and the geography
+server-calculated rank progression, and three global rankings. `guess_count`
+counts persisted group and public feed challenge guesses, including zero-point
+submissions. Lifetime points and average score remain based on group challenge
+guesses (including zero-point group guesses); public feed submissions do not
+change progression or global group rankings. Rank thresholds and the geography
 themed rank names are server-owned. `global_rank.rank` is the player's position
-among every player who has guessed at least once, ordered by lifetime points
-with standard competition ranking (equal totals share a rank), and
-`global_rank.total_players` is the size of that population; a player who has
-never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
-average guess score, and `global_elo_rank` ranks the player among everyone who
-has been compared against another guesser on a shared challenge, ordered by Elo
-rating (`elo` is 0 and the rank is 0 for a player with no such challenge). The
-global rating is an all-time ladder and moves with a small update factor, so it
-tracks long-run skill rather than the most recent challenges. Each rank object
-carries a `next_rank` with the following rank's name and badge key (omitted at
-the highest rank). Group leaderboard entries include the same rank object
-beneath each player's name while their `score` remains the selected period's
-sum; entries also carry `average_score` and `elo` for the same period.
+among every player who has made a group challenge guess, ordered by lifetime
+points with standard competition ranking (equal totals share a rank), and
+`global_rank.total_players` is the size of that population; a player with no
+group challenge guesses has `rank` 0. `global_average_rank` is the same ranking
+ordered by average guess score, and `global_elo_rank` ranks the player among
+everyone who has been compared against another guesser on a shared challenge,
+ordered by Elo rating (`elo` is 0 and the rank is 0 for a player with no such
+challenge). The global rating is an all-time ladder and moves with a small
+update factor, so it tracks long-run skill rather than the most recent
+challenges. Each rank object carries a `next_rank` with the following rank's
+name and badge key (omitted at the highest rank). Group leaderboard entries
+include the same rank object beneath each player's name while their `score`
+remains the selected period's sum; entries also carry `average_score` and `elo`
+for the same period.
 
 The group leaderboard is ranked by one of three metrics — `total` (period score
 sum, the default), `average` (period average score), or `elo` (Elo rating

@@ -54,6 +54,10 @@
     gap: var(--space-5);
 }
 
+.profile-identity > div:last-child {
+    min-width: 0;
+}
+
 .profile-avatar-ring {
     width: clamp(5.5rem, 17vw, 8.5rem);
     height: clamp(5.5rem, 17vw, 8.5rem);
@@ -89,16 +93,16 @@
 
 .profile-hero h1 {
     margin: 0;
-    overflow: hidden;
     color: var(--brand-navy);
     font-size: clamp(1.8rem, 5vw, 3rem);
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
 }
 
 .profile-email,
 .profile-next-rank-progress {
     margin: var(--space-1) 0 0;
     color: var(--ink-muted);
+    overflow-wrap: anywhere;
 }
 
 .profile-rank-name {
@@ -289,14 +293,12 @@
         flex-direction: column;
     }
 
-    .profile-hero {
-        position: relative;
+    .profile-identity {
+        width: 100%;
     }
 
     .profile-badge {
-        position: absolute;
-        right: 1rem;
-        bottom: 1rem;
+        align-self: flex-end;
         width: 5rem;
     }
 

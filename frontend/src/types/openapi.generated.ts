@@ -1510,9 +1510,9 @@ export interface components {
             next_rank?: components['schemas']['ProgressionRank'];
         };
         GlobalRank: {
-            /** @description Position among every player who has guessed at least once, ordered by lifetime points using standard competition ranking. Zero while the player has no guesses of their own. */
+            /** @description Position among every player with a group challenge guess, ordered by group challenge lifetime points using standard competition ranking. Zero while the player has no group challenge guesses. */
             rank: number;
-            /** @description Number of players who have guessed at least once. */
+            /** @description Number of players with at least one group challenge guess. */
             total_players: number;
         };
         MapPinUnlockChallenge: {
@@ -1526,6 +1526,7 @@ export interface components {
         };
         Profile: components['schemas']['AuthUser'] & {
             total_points: number;
+            /** @description Persisted group and public challenge guesses, including zero-point guesses. */
             guess_count: number;
             average_score: number;
             /** @description Global all-time Elo; 0 while never compared. */
@@ -1579,6 +1580,7 @@ export interface components {
             username: string;
             avatar: string;
             total_points: number;
+            /** @description Persisted group and public challenge guesses, including zero-point guesses. */
             guess_count: number;
             average_score: number;
             elo: number;

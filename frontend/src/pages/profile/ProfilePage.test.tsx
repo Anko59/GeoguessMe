@@ -192,7 +192,29 @@ describe('ProfilePage', () => {
         });
         renderProfile();
 
-        expect((await screen.findAllByText('Guess a location to enter the ranking')).length).toBeGreaterThan(0);
+        expect((await screen.findAllByText('Guess a group challenge to enter the ranking')).length).toBeGreaterThan(0);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+    });
+
+    it('shows persisted zero-point guesses without changing points or average', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                total_points: 0,
+                guess_count: 2,
+                average_score: 0,
+                global_rank: { rank: 0, total_players: 0 },
+                global_average_rank: { rank: 0, total_players: 0 },
+            },
+        });
+        renderProfile();
+
+        const guesses = (await screen.findByText('Guesses made')).closest('.profile-stat-card');
+        expect(guesses).toHaveTextContent('2');
+        const points = screen.getByText('Total points').closest('.profile-stat-card');
+        expect(points).toHaveTextContent('0');
+        expect(screen.getByText('Average score').closest('.profile-stat-card')).toHaveTextContent('0.0');
+        expect(screen.getAllByText('Guess a group challenge to enter the ranking')).toHaveLength(2);
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
