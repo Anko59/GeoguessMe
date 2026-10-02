@@ -55,6 +55,67 @@ describe('Public feed', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it.each(['/feed', '/feed/post-1'])(
+        'refreshes the public comment count after guessing from %s while a new comment arrives',
+        async (route) => {
+            const initial = post({ comment_count: 3 });
+            const updated = post({ comment_count: 4, resolved: true });
+            mocks.list.mockResolvedValue({ items: [initial], next_cursor: '' });
+            mocks.get.mockResolvedValueOnce(route === '/feed' ? updated : initial).mockResolvedValueOnce(updated);
+            mocks.comments.mockResolvedValue({
+                items: [
+                    {
+                        id: 'new-comment',
+                        user_id: 'author',
+                        username: 'Explorer',
+                        content: 'New comment',
+                        created_at: initial.created_at,
+                    },
+                ],
+                next_cursor: 'older',
+            });
+            const expired = new Date(Date.now() - 1000).toISOString();
+            mocks.acceptTimed.mockResolvedValueOnce({
+                challenge_id: 'post-1',
+                media_url: '/api/v1/feed/challenges/post-1/timed-media',
+                media_type: 'image/jpeg',
+                accepted_at: expired,
+                view_expires_at: expired,
+                guess_after: expired,
+                guess_expires_at: new Date(Date.now() + 120000).toISOString(),
+                score_grace_seconds: 30,
+                server_time: new Date().toISOString(),
+            });
+            mocks.timedMediaDelivered.mockResolvedValueOnce({
+                view_expires_at: expired,
+                guess_after: expired,
+                guess_expires_at: new Date(Date.now() + 120000).toISOString(),
+                score_grace_seconds: 30,
+                server_time: new Date().toISOString(),
+            });
+            mocks.timedGuess.mockResolvedValueOnce({
+                score: 4900,
+                distance: 150,
+                timed_out: false,
+                duplicate: false,
+                guess_id: 'guess-1',
+                challenge_id: 'post-1',
+                created_at: new Date().toISOString(),
+                server_time: new Date().toISOString(),
+            });
+            renderFeed(route);
+            if (route === '/feed') fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
+            const dialog = await screen.findByRole('dialog', { name: 'Challenge guessing' });
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Submit guess' }));
+            await screen.findByText('4,900 points');
+            const results = await screen.findByRole('dialog', { name: 'Challenge results' });
+            await within(results).findByText('New comment');
+            await waitFor(() => expect(within(results).getByText('4 comments')).toBeInTheDocument());
+            expect(mocks.get).toHaveBeenCalledTimes(route === '/feed' ? 1 : 2);
+        },
+    );
+
     it('reveals an unsolved card after its timed-out guess is persisted', async () => {
         vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
         const startedAt = Date.now();

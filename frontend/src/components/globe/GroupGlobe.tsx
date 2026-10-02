@@ -65,8 +65,12 @@ export default function GroupGlobe({
         dragStartY.current = event.clientY;
         dragPointerID.current = event.pointerId;
         suppressGrabberClick.current = false;
+        // Capturing on the sheet retargets the synthesized click away from the
+        // grabber button. Capture on the button itself so taps still click it
+        // and swipes continue receiving pointer events after leaving the handle.
+        const grabber = event.target instanceof Element ? event.target.closest('.globe-sheet-grabber') : null;
         try {
-            event.currentTarget.setPointerCapture?.(event.pointerId);
+            (grabber ?? event.currentTarget).setPointerCapture?.(event.pointerId);
         } catch {
             // Synthetic pointer events and browsers without pointer capture can
             // still complete a swipe from the events delivered to the sheet.
@@ -81,9 +85,11 @@ export default function GroupGlobe({
         const delta = event.clientY - dragStartY.current;
         dragStartY.current = null;
         dragPointerID.current = null;
+        const grabber = event.target instanceof Element ? event.target.closest('.globe-sheet-grabber') : null;
+        const captureOwner = grabber ?? event.currentTarget;
         try {
-            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-                event.currentTarget.releasePointerCapture?.(event.pointerId);
+            if (captureOwner.hasPointerCapture?.(event.pointerId)) {
+                captureOwner.releasePointerCapture?.(event.pointerId);
             }
         } catch {
             // Pointer capture is an enhancement; releasing it is not required
