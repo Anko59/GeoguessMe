@@ -101,7 +101,9 @@ services:
 
   socket-proxy:
     <<: *defaults
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd
+    # Transitional upstream fallback for hosts before their first signed watch
+    # image is staged; the runtime update removes this fallback after cutover.
+    image: ${SOCKET_PROXY_IMAGE:-lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d}
     ports:
       - "127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375"
     environment:

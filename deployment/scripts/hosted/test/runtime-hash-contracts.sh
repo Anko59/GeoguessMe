@@ -28,7 +28,7 @@ mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
     "$hash_root/state/releases/dev"
 printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
 printf '%s\n' "$runtime_revision" >"$hash_root/app/config/runtime-revision"
-for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
+for script in common deploy forced-command watch-deploy verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
     cp "$ROOT/deployment/scripts/hosted/$script.sh" \
         "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted/$script.sh"
     cp "$ROOT/deployment/scripts/hosted/$script.sh" "$hash_root/app/bin/$script.sh"
@@ -58,7 +58,7 @@ for unit in \
     cp "$ROOT/infra/cloud-init/units/$unit" "$hash_root/systemd/$unit"
 done
 {
-    for script in common deploy forced-command verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
+    for script in common deploy forced-command watch-deploy verify-deployment-hashes backup restore-rehearsal health-check alert watch-health watch-refresh-metrics-token watch-capacity; do
         sha256sum "$hash_root/app/bin/$script.sh" |
             awk -v path="bin/$script.sh" '{print $1 "  " path}'
     done

@@ -60,7 +60,14 @@ beforeEach(() => {
     // By default, fail auth refresh so the shell is in an unauthenticated state.
     apiMocks.post.mockRejectedValue(new Error('no session'));
     // Public route tests exercise the intentionally supported OIDC-off mode.
-    apiMocks.get.mockResolvedValue({ data: { enabled: false, login_path: '/oauth2/start', social_providers: [] } });
+    apiMocks.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/auth/pins'
+                    ? { selected_pin_key: null, pins: [] }
+                    : { enabled: false, login_path: '/oauth2/start', social_providers: [] },
+        }),
+    );
     apiMocks.inbox.mockResolvedValue([]);
 });
 
@@ -253,9 +260,15 @@ describe('App shell — protected routes with authentication', () => {
     beforeEach(() => {
         // Succeed the auth refresh so the user is authenticated.
         apiMocks.post.mockReset();
-        apiMocks.post.mockResolvedValue({ data: authResponse });
+        apiMocks.post.mockImplementation((url: string) =>
+            Promise.resolve({
+                data: url === '/auth/pins' ? { selected_pin_key: null, pins: [] } : authResponse,
+            }),
+        );
         apiMocks.get.mockReset();
-        apiMocks.get.mockResolvedValue({ data: [] });
+        apiMocks.get.mockImplementation((url: string) =>
+            Promise.resolve({ data: url === '/auth/pins' ? { selected_pin_key: null, pins: [] } : [] }),
+        );
     });
 
     it('renders groups list at /groups', async () => {
@@ -284,7 +297,9 @@ describe('App shell — protected routes with authentication', () => {
             }
             return Promise.reject(new Error('unexpected POST ' + url));
         });
-        apiMocks.get.mockResolvedValue({ data: [] });
+        apiMocks.get.mockImplementation((url: string) =>
+            Promise.resolve({ data: url === '/auth/pins' ? { selected_pin_key: null, pins: [] } : [] }),
+        );
         const inviteToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
         routeRef.current = `/group/join#invite=${inviteToken}`;
         window.history.pushState({}, '', routeRef.current);

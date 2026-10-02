@@ -109,7 +109,7 @@ hooks-check: ## Verify tracked hooks, Docker prerequisites, and canonical target
 	@grep -q 'make pre-push' .githooks/pre-push
 	@echo "hooks-check PASSED"
 
-tools-self-test: ## Run a short self-test inside each tool image.
+tools-self-test: build-sops-image ## Run a short self-test inside each tool image.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'go version && govulncheck -version && psql --version && gcc --version'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'node --version && npm --version && prettier --version && eslint --version && tsc --version'

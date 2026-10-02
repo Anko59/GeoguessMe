@@ -94,13 +94,12 @@ jobs:
         if: always()
         shell: bash
         run: rm -f -- .local/mobile/upload-keystore.jks
-
   play-access:
     name: Verify Play publication access
     needs: android
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
+    environment: play-publishing
     permissions:
       contents: read
       id-token: write
@@ -116,15 +115,15 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$PLAY_WIF_PROVIDER" || {
-            echo 'Missing production variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER.' >&2
             exit 1
           }
           test -n "$PLAY_SERVICE_ACCOUNT" || {
-            echo 'Missing production variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
+            echo 'Missing play-publishing variable PLAY_GCP_SERVICE_ACCOUNT.' >&2
             exit 1
           }
           test -n "$PLAY_TRACK" || {
-            echo 'Missing production variable PLAY_RELEASE_TRACK.' >&2
+            echo 'Missing play-publishing variable PLAY_RELEASE_TRACK.' >&2
             exit 1
           }
           [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
@@ -153,7 +152,6 @@ jobs:
           PLAY_API_PACKAGE_NAME: com.geoguessme.app
           PLAY_RELEASE_TRACK: ${{ vars.PLAY_RELEASE_TRACK }}
         run: make play-api-check
-
   promote:
     name: Promote verified development images
     needs: [android, play-access]
@@ -167,6 +165,8 @@ jobs:
       backend: ${{ steps.refs.outputs.backend }}
       web: ${{ steps.refs.outputs.web }}
       keycloak: ${{ steps.refs.outputs.keycloak }}
+      sops: ${{ steps.refs.outputs.sops }}
+      socket_proxy: ${{ steps.refs.outputs.socket_proxy }}
       tag: ${{ steps.source.outputs.tag }}
     steps:
       - name: Check out release commit
@@ -271,7 +271,8 @@ jobs:
             echo "web=$web"
             echo "keycloak=$keycloak"
           } >> "$GITHUB_OUTPUT"
-      - name: Verify development workflow signatures
+      - name: Verify development signatures and promote deployment images
+        id: sops-promotion
         env:
           DEV_SHA: ${{ steps.source.outputs.dev_sha }}
           BACKEND: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
@@ -284,7 +285,9 @@ jobs:
               --certificate-identity-regexp '^https://github.com/Anko59/GeoguessMe/.github/workflows/deploy\.yml@refs/heads/dev$' \
               --annotations "revision=$DEV_SHA" "$image" >/dev/null
           done
-      - name: Promote immutable manifests without rebuilding
+          tools/quality/ci/promote-sops-image.sh "$DEV_SHA"
+          tools/quality/ci/promote-socket-proxy-image.sh "$DEV_SHA"
+      - name: Promote verified application manifests without rebuilding
         env:
           BACKEND_SOURCE: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
           WEB_SOURCE: ${{ steps.names.outputs.web_source }}@${{ steps.digests.outputs.web }}
@@ -292,40 +295,17 @@ jobs:
           BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
           WEB_RELEASE: ${{ steps.names.outputs.web_release }}
           KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
-        run: |
-          docker buildx imagetools create --tag "$BACKEND_RELEASE" "$BACKEND_SOURCE"
-          docker buildx imagetools create --tag "$WEB_RELEASE" "$WEB_SOURCE"
-          docker buildx imagetools create --tag "$KEYCLOAK_RELEASE" "$KEYCLOAK_SOURCE"
-      - name: Verify promoted digests
-        env:
-          BACKEND_RELEASE: ${{ steps.names.outputs.backend_release }}
-          WEB_RELEASE: ${{ steps.names.outputs.web_release }}
-          KEYCLOAK_RELEASE: ${{ steps.names.outputs.keycloak_release }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
           WEB_DIGEST: ${{ steps.digests.outputs.web }}
           KEYCLOAK_DIGEST: ${{ steps.digests.outputs.keycloak }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual_backend=$(docker buildx imagetools inspect "$BACKEND_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          actual_web=$(docker buildx imagetools inspect "$WEB_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          actual_keycloak=$(docker buildx imagetools inspect "$KEYCLOAK_RELEASE" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          [[ "$actual_backend" == "$BACKEND_DIGEST" ]]
-          [[ "$actual_web" == "$WEB_DIGEST" ]]
-          [[ "$actual_keycloak" == "$KEYCLOAK_DIGEST" ]]
+        run: tools/quality/ci/promote-application-images.sh
       - name: Scan exact promoted digest (fixed High/Critical gate)
-        # Pull exact promoted digests with GHCR credentials. Backend/web are
-        # tagged :local; Keycloak is passed as KEYCLOAK_IMAGE. `make audit-images`
-        # exports them for credential-less Trivy scanning and fails on fixed
-        # High/Critical findings. AUDIT_IMAGES= limits scope to this release;
-        # verify and the weekly workflow scan the full runtime set.
         env:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
           KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
+          SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+          SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -335,22 +315,26 @@ jobs:
           docker pull "$BACKEND"
           docker pull "$WEB"
           docker pull "$KEYCLOAK"
+          docker pull "$SOPS"
           docker pull "$RESTIC_IMAGE"
+          docker pull "$SOCKET_PROXY"
           docker tag "$BACKEND" geoguessme-backend:local
           docker tag "$WEB" geoguessme-web:local
           export KEYCLOAK_IMAGE="$KEYCLOAK"
+          export SOPS_IMAGE="$SOPS"
+          export SOCKET_PROXY_IMAGE="$SOCKET_PROXY"
           make audit-images AUDIT_IMAGES=
-          # Fail closed: the gate must prove it scanned every promoted digest.
           test -s security/image-reports/geoguessme-backend_local/report.json
           test -s security/image-reports/geoguessme-web_local/report.json
           keycloak_safe=$(printf '%s' "$KEYCLOAK" | tr '/:@' '___')
           test -s "security/image-reports/$keycloak_safe/report.json"
           restic_safe=$(printf '%s' "$RESTIC_IMAGE" | tr '/:@' '___')
           test -s "security/image-reports/$restic_safe/report.json"
+          sops_safe=$(printf '%s' "$SOPS" | tr '/:@' '___')
+          test -s "security/image-reports/$sops_safe/report.json"
+          socket_proxy_safe=$(printf '%s' "$SOCKET_PROXY" | tr '/:@' '___')
+          test -s "security/image-reports/$socket_proxy_safe/report.json"
       - name: Upload image-scan reports and SBOMs
-        # Reports/SBOM contain no secrets; retained 7 days. Globbing only the
-        # report and SBOM files keeps the trivy DB cache
-        # (security/image-reports/.trivy-cache) out of the artifact.
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: image-scan-promote-${{ github.sha }}
@@ -364,8 +348,10 @@ jobs:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
           WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
           KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
+          SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+          SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
         run: |
-          for image in "$BACKEND" "$WEB" "$KEYCLOAK"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$SOPS" "$SOCKET_PROXY"; do
             cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
           done
       - name: Export immutable references
@@ -375,6 +361,8 @@ jobs:
             echo "backend=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}"
             echo "web=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}"
             echo "keycloak=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}"
+            echo "sops=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}"
+            echo "socket_proxy=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}"
           } >> "$GITHUB_OUTPUT"
       - name: Download verified Android release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -398,6 +386,8 @@ jobs:
             BACKEND_IMAGE=${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
             WEB_IMAGE=${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
             KEYCLOAK_IMAGE=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
+            SOPS_IMAGE=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+            SOCKET_PROXY_IMAGE=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
             ```
 
             Hosted backup and restore use the digest-pinned Restic reference
@@ -419,6 +409,7 @@ jobs:
           echo '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb' | sha256sum -c -
           sudo dpkg -i cloudflared.deb
       - name: Deploy through Cloudflare Access
+        # Keep five-field until both hosts are compatible; Phase 2 adds SOPS.
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
@@ -442,7 +433,7 @@ jobs:
     needs: [android, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
+    environment: play-publishing
     permissions:
       contents: read
       id-token: write

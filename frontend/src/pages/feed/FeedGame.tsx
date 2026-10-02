@@ -1,4 +1,4 @@
-import { useCallback, useContext, type ReactNode } from 'react';
+import { useCallback, useContext, useState, type ReactNode } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import GameView from '../../components/game/GameViews';
 import GuessScoreFeedback from '../../components/game/GuessScoreFeedback';
@@ -26,6 +26,11 @@ export default function FeedGame({
 }) {
     const auth = useContext(AuthContext);
     const user = auth?.user;
+    // This flag describes how the game should start. A successful guess marks
+    // the parent feed item as resolved while the game stays mounted; reading
+    // that updated prop as a new start mode would restart the timed-game effect
+    // and clear the score feedback before results finish loading.
+    const [initialOpenResultsDirectly] = useState(openResultsDirectly);
     const handleClose = useCallback(() => {
         onClose();
         restoreFocus();
@@ -41,7 +46,7 @@ export default function FeedGame({
         currentUserId: user?.id,
         requiresCurrentUser: false,
         isOwner,
-        openResultsDirectly,
+        openResultsDirectly: initialOpenResultsDirectly,
         checkResultsBeforeAccept: false,
         adapter: feedTimedGameAdapter,
         onStatusChange,

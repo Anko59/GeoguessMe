@@ -103,11 +103,6 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 				t.Errorf("commit request = %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
 			}
 			io.WriteString(w, `{"id":"edit-123"}`)
-		case 7:
-			if r.Method != http.MethodGet || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/tracks/internal" {
-				t.Errorf("track readback request = %s %s", r.Method, r.URL.Path)
-			}
-			io.WriteString(w, `{"track":"internal","releases":[{"versionCodes":["3006000"],"status":"completed"}]}`)
 		default:
 			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
@@ -118,11 +113,44 @@ func TestPublishBundleRunsAndVerifiesTheCompleteEditLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requestNumber != 7 {
-		t.Fatalf("request count = %d, want 7", requestNumber)
+	if requestNumber != 6 {
+		t.Fatalf("request count = %d, want 6", requestNumber)
 	}
 	if result.EditID != "edit-123" || result.VersionCode != 3006000 || result.Track != "internal" {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestPublishBundleDoesNotCommitWhenTrackUpdateOmitsRelease(t *testing.T) {
+	bundlePath, manifestPath := writePublishFixtures(t, []byte("signed release bundle"))
+	requests := 0
+	client, server := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			io.WriteString(w, `{"id":"edit-123"}`)
+		case 2:
+			io.WriteString(w, `{"tracks":[]}`)
+		case 3:
+			io.WriteString(w, `{"versionCode":3006000}`)
+		case 4:
+			io.WriteString(w, `{"track":"internal","releases":[{"versionCodes":["2999999"],"status":"completed"}]}`)
+		case 5:
+			if r.Method != http.MethodDelete || r.URL.Path != "/androidpublisher/v3/applications/com.geoguessme.app/edits/edit-123" {
+				t.Errorf("cleanup request = %s %s", r.Method, r.URL.Path)
+			}
+			io.WriteString(w, `{}`)
+		default:
+			t.Errorf("unexpected request %d: %s %s", requests, r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if _, err := publishBundle(context.Background(), client, publishOptions(bundlePath, manifestPath)); err == nil || !strings.Contains(err.Error(), "after update") {
+		t.Fatalf("err = %v", err)
+	}
+	if requests != 5 {
+		t.Fatalf("requests = %d, want 5 including edit cleanup", requests)
 	}
 }
 

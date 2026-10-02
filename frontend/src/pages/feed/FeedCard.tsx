@@ -135,6 +135,7 @@ export default function FeedCard({
     async function remove() {
         if (await actions.remove()) onRemove(post.id);
     }
+    const markResolved = useCallback(() => onUpdate({ id: post.id, resolved: true }), [onUpdate, post.id]);
     function openChallenge() {
         setPlaying(true);
     }
@@ -257,7 +258,7 @@ export default function FeedCard({
                     openResultsDirectly={revealed}
                     restoreFocus={restorePlayFocus}
                     onClose={() => setPlaying(false)}
-                    onResolved={() => onUpdate({ id: post.id, resolved: true })}
+                    onResolved={markResolved}
                     resultsFooter={resultsFooter}
                 />
             )}

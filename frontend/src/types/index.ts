@@ -54,6 +54,10 @@ export type MediaProcessingJob = components['schemas']['MediaProcessingJob'];
 export type PartyStatus = components['schemas']['PartyStatus'];
 export type GroupChallenge = components['schemas']['GroupChallenge'];
 export type GroupChallengesPage = components['schemas']['GroupChallengesPage'];
+export type MapPin = components['schemas']['MapPin'];
+export type ProfileMapPin = components['schemas']['ProfileMapPin'];
+export type MapPinCatalog = components['schemas']['MapPinCatalog'];
+export type MapPinChoice = components['schemas']['MapPinChoice'];
 
 // --- Narrow view-model aliases (wire shape plus client invariants) ---
 

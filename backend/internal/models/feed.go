@@ -100,6 +100,7 @@ type PublicTimedResultGuess struct {
 	UserID    string    `json:"user_id"`
 	Username  string    `json:"username"`
 	Avatar    string    `json:"avatar"`
+	MapPin    *MapPin   `json:"map_pin,omitempty"`
 	Lat       *float64  `json:"lat,omitempty"`
 	Long      *float64  `json:"long,omitempty"`
 	Score     int       `json:"score"`
@@ -121,6 +122,7 @@ type PublicFeedResult struct {
 	UserID   string  `json:"user_id"`
 	Username string  `json:"username"`
 	Avatar   string  `json:"avatar"`
+	MapPin   *MapPin `json:"map_pin,omitempty"`
 	Score    int     `json:"score"`
 	Distance float64 `json:"distance"`
 	EloDelta int     `json:"elo_delta"`

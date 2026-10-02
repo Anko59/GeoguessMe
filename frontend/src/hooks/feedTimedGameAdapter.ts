@@ -75,6 +75,7 @@ function normalizeResults(
             user_id: guess.user_id,
             username: guess.username,
             avatar: guess.avatar,
+            ...(guess.map_pin ? { map_pin: guess.map_pin } : {}),
             ...(guess.lat === undefined || guess.long === undefined ? {} : { lat: guess.lat, long: guess.long }),
             score: guess.score,
             ...(guess.distance === undefined ? {} : { distance: guess.distance }),

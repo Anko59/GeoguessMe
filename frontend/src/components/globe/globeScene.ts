@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { GroupChallenge } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import { createGlobeDetailLayer } from './globeDetailTiles';
 import { isGlobeMobile, maxUsefulGlobeZoom } from './globeZoom';
 
@@ -63,6 +64,11 @@ export function createGlobeScene(
         renderer.setPixelRatio(pixelRatio);
         renderer.domElement.setAttribute('aria-hidden', 'true');
         host.appendChild(renderer.domElement);
+        const pinOverlay = document.createElement('div');
+        pinOverlay.className = 'globe-pin-overlay';
+        pinOverlay.setAttribute('aria-hidden', 'true');
+        host.appendChild(pinOverlay);
+        cleanup.push(() => pinOverlay.remove());
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
         camera.position.copy(globePosition(22, 12, 3.5));
@@ -174,10 +180,9 @@ export function createGlobeScene(
         cleanup.push(() => texture.dispose());
         const pinGeometry = new THREE.SphereGeometry(1, 10, 8);
         cleanup.push(() => pinGeometry.dispose());
-        // Instanced colors are only consumed by Three.js materials with
-        // vertex colors enabled. Without this flag, the CPU-side colors set
-        // below never reach the shader and selected pins cannot be highlighted.
-        const pinMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+        // Instanced spheres are raycast-only hit targets; designed pin images
+        // are projected as DOM overlays so visibility does not depend on GPU texture upload.
+        const pinMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
         cleanup.push(() => pinMaterial.dispose());
         let pins = new THREE.InstancedMesh(pinGeometry, pinMaterial, 0);
         cleanup.push(() => pins.dispose());
@@ -186,23 +191,52 @@ export function createGlobeScene(
         let previousItems: GroupChallenge[] | undefined;
         let selectedIndex: number | undefined;
         const pinIndexes = new Map<string, number>();
+        const pinMarkers = new Map<number, HTMLImageElement>();
+        const disposePinMarkers = () => {
+            for (const marker of pinMarkers.values()) marker.remove();
+            pinMarkers.clear();
+        };
+        cleanup.push(disposePinMarkers);
         scene.add(pins);
         const cameraPosition = new THREE.Vector3();
         const screenScale = new THREE.Vector3();
+        const pinNormal = new THREE.Vector3();
+        const projectedMarker = new THREE.Vector3();
         const pinMatrix = new THREE.Matrix4();
         syncPinScale = () => {
             if (host.clientHeight <= 0) return;
             camera.updateMatrixWorld();
+            const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2));
             for (let index = 0; index < positions.length; index += 1) {
                 cameraPosition.copy(positions[index]).applyMatrix4(camera.matrixWorldInverse);
                 const depth = Math.max(-cameraPosition.z, 0.1);
                 const diameter = index === selectedIndex ? 8 : 6;
-                const radius =
-                    (diameter * depth * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2))) /
-                    host.clientHeight;
+                const radius = (diameter * depth * tanHalfFov) / host.clientHeight;
                 screenScale.setScalar(radius);
                 pinMatrix.compose(positions[index], new THREE.Quaternion(), screenScale);
                 pins.setMatrixAt(index, pinMatrix);
+
+                const marker = pinMarkers.get(index);
+                if (!marker) continue;
+                const markerHeight = radius * (index === selectedIndex ? 8 : 7);
+                pinNormal.copy(positions[index]).normalize();
+                projectedMarker
+                    .copy(positions[index])
+                    .addScaledVector(pinNormal, markerHeight * 0.48)
+                    .project(camera);
+                const frontFacing = positions[index].dot(camera.position) > positions[index].lengthSq();
+                const inView =
+                    Math.abs(projectedMarker.x) <= 1 &&
+                    Math.abs(projectedMarker.y) <= 1 &&
+                    projectedMarker.z >= -1 &&
+                    projectedMarker.z <= 1;
+                marker.hidden = !frontFacing || !inView;
+                if (marker.hidden) continue;
+                const height = (markerHeight * host.clientHeight) / (2 * depth * tanHalfFov);
+                marker.style.left = `${((projectedMarker.x + 1) * host.clientWidth) / 2}px`;
+                marker.style.top = `${((1 - projectedMarker.y) * host.clientHeight) / 2}px`;
+                marker.style.width = `${height * 0.78}px`;
+                marker.style.height = `${height}px`;
             }
             pins.instanceMatrix.needsUpdate = true;
         };
@@ -360,6 +394,7 @@ export function createGlobeScene(
                 if (disposed) return;
                 if (items !== previousItems) {
                     previousItems = items;
+                    disposePinMarkers();
                     visible = items.filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.long));
                     if (visible.length > pins.instanceMatrix.count) {
                         scene.remove(pins);
@@ -376,21 +411,35 @@ export function createGlobeScene(
                     pinIndexes.clear();
                     selectedIndex = undefined;
                     const matrix = new THREE.Matrix4();
-                    const color = new THREE.Color('#ffb638');
                     positions = visible.map((item) => globePosition(item.lat!, item.long!, 1.016));
                     visible.forEach((item, index) => {
                         const position = positions[index];
                         pins.setMatrixAt(index, matrix.makeTranslation(position.x, position.y, position.z));
-                        pins.setColorAt(index, color);
                         pinIndexes.set(item.photo_id, index);
+                        const marker = document.createElement('img');
+                        marker.className = 'globe-pin-marker';
+                        marker.alt = '';
+                        marker.draggable = false;
+                        marker.hidden = true;
+                        marker.src = item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL;
+                        marker.onerror = () => {
+                            if (marker.getAttribute('src') !== DEFAULT_MAP_PIN_IMAGE_URL) {
+                                marker.src = DEFAULT_MAP_PIN_IMAGE_URL;
+                                return;
+                            }
+                            if (!disposed)
+                                onError(
+                                    'Challenge pin artwork could not load. Your challenge list is still available.',
+                                );
+                        };
+                        marker.dataset.photoId = item.photo_id;
+                        pinOverlay.appendChild(marker);
+                        pinMarkers.set(index, marker);
                     });
                     pins.instanceMatrix.needsUpdate = true;
                     pins.computeBoundingSphere();
                 }
-                if (selectedIndex !== undefined) pins.setColorAt(selectedIndex, new THREE.Color('#ffb638'));
                 selectedIndex = selectedID === null ? undefined : pinIndexes.get(selectedID);
-                if (selectedIndex !== undefined) pins.setColorAt(selectedIndex, new THREE.Color('#ffffff'));
-                if (pins.instanceColor) pins.instanceColor.needsUpdate = true;
                 syncPinScale();
                 render();
             },

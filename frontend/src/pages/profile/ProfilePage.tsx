@@ -10,6 +10,7 @@ import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import type { Profile, PublicProfile } from '../../types';
 import FeedLeaderboard from './FeedLeaderboard';
+import MapPinProfileCard from '../../components/profile/MapPinProfileCard';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
@@ -125,6 +126,8 @@ export default function ProfilePage() {
                 </div>
                 <RankBadge rank={rank} size="large" alt={`${rank.name} badge`} className="profile-badge" />
             </section>
+
+            <MapPinProfileCard username={profile.username} pin={profile.map_pin} ownProfile={isSelf} />
 
             <section className="profile-trackers" aria-label="Score trackers">
                 <article className="profile-stat-card profile-stat-points">

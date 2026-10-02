@@ -2,6 +2,9 @@ import { createElement } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Map from './Map';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
+
+const leafletMocks = vi.hoisted(() => ({ icon: vi.fn(() => 'mock-icon') }));
 
 // react-leaflet renders a real map that needs a browser viewport; mock the
 // leaflet-heavy parts so we can still exercise the component's prop-driven
@@ -23,12 +26,12 @@ vi.mock('react-leaflet', () => ({
 
 vi.mock('leaflet', () => ({
     default: {
-        icon: () => 'mock-icon',
+        icon: leafletMocks.icon,
         divIcon: () => 'mock-div-icon',
         latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
         Marker: { prototype: { options: { icon: null } } },
     },
-    icon: () => 'mock-icon',
+    icon: leafletMocks.icon,
     divIcon: () => 'mock-div-icon',
     latLngBounds: (points: unknown) => ({ points, _leafletBounds: true }),
     Marker: { prototype: { options: { icon: null } } },
@@ -111,6 +114,9 @@ describe('Map component', () => {
         const markers = screen.getAllByTestId('Marker');
         expect(markers).toHaveLength(1);
         expect(markers[0]).toHaveAttribute('position', '40.7,-74');
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({ iconUrl: 'marker-icon.png', iconSize: [25, 41] }),
+        );
     });
 
     it('renders guess markers with a popup naming the guesser', () => {
@@ -128,6 +134,52 @@ describe('Map component', () => {
         expect(firstPopup).toHaveTextContent('100 pts');
         expect(markers[1]).toHaveAttribute('position', '49,2.5');
         expect(markers[1].querySelector('[data-testid="Popup"]')).toHaveTextContent('bob');
+    });
+
+    it('uses the standard pin artwork for guessers without an equipped pin', () => {
+        render(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                guesses={[{ user_id: 'u1', lat: 48.8, long: 2.3, username: 'alice', avatar: 'a.png', score: 5000 }]}
+            />,
+        );
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({
+                iconUrl: DEFAULT_MAP_PIN_IMAGE_URL,
+                iconSize: [22, 36],
+                iconAnchor: [11, 34],
+                popupAnchor: [0, -31],
+            }),
+        );
+    });
+
+    it('uses each guesser’s selected pin artwork for their result marker', () => {
+        render(
+            <Map
+                onLocationSelect={vi.fn()}
+                selectedLocation={null}
+                guesses={[
+                    {
+                        user_id: 'u1',
+                        lat: 48.8,
+                        long: 2.3,
+                        username: 'alice',
+                        avatar: 'a.png',
+                        score: 5000,
+                        map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
+                    },
+                ]}
+            />,
+        );
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({
+                iconUrl: '/map-pins/north-star.svg',
+                iconSize: [22, 36],
+                iconAnchor: [11, 34],
+                popupAnchor: [0, -31],
+            }),
+        );
     });
 
     it('skips guesses without coordinates (hidden-location challenges)', () => {

@@ -54,6 +54,8 @@ assert_contains "$HOSTED" '${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
 
 assert_contains "$WATCH_COMPOSE" 'name: geoguessme-watch'
 assert_contains "$WATCH_COMPOSE" 'image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}'
+assert_contains "$WATCH_COMPOSE" 'image: ${SOCKET_PROXY_IMAGE:-lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d}'
+assert_contains "$ROOT/infra/cloud-init/units/geoguessme-watch.service" 'EnvironmentFile=-/var/lib/geoguessme/watch/current.env'
 assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80'
 assert_contains "$WATCH_COMPOSE" '127.0.0.1:${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-2375}:2375'
 assert_contains "$WATCH_COMPOSE" '/var/run/docker.sock:/var/run/docker.sock:ro'
@@ -119,6 +121,8 @@ assert_contains "$BACKEND_DOCKERFILE" 'GOOS=${TARGETOS:-linux} GOARCH=${TARGETAR
 assert_contains "$FORCED" '[ "$1" = deploy ]'
 assert_contains "$FORCED" 'deploy.sh "$allowed_environment"'
 assert_contains "$FORCED" '[ "$2" = "$allowed_environment" ]'
+assert_contains "$FORCED" 'watch-deploy.sh'
+assert_contains "$FORCED" 'expected: watch SOCKET_PROXY_IMAGE REVISION'
 assert_contains "$FORCED" 'bin/verify-deployment-hashes.sh'
 
 # sshd never interprets an environment-variable prefix in a forced command and
@@ -153,21 +157,34 @@ assert_contains "$ROOT/.github/workflows/release.yml" 'tag="v$release_version"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tag_name: ${{ steps.source.outputs.tag }}'
 assert_contains "$ROOT/.github/workflows/release.yml" 'main_tree=$(git rev-parse "$GITHUB_SHA^{tree}")'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign verify'
-assert_contains "$ROOT/.github/workflows/release.yml" 'imagetools create'
-assert_contains "$ROOT/.github/workflows/release.yml" 'actual_backend'
+assert_contains "$ROOT/.github/workflows/release.yml" 'run: tools/quality/ci/promote-application-images.sh'
+assert_contains "$ROOT/tools/quality/ci/promote-application-images.sh" 'docker buildx imagetools create --tag "$release" "$source"'
+assert_contains "$ROOT/tools/quality/ci/promote-application-images.sh" 'promote_image backend'
+assert_contains "$COMMON" 'SOPS_IMAGE_REPOSITORY='
+assert_contains "$DEPLOY" 'validate_sops_image_reference "$sops_image"'
+assert_contains "$DEPLOY" 'SOPS_IMAGE=%s\n'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'Verify SOPS package is anonymously pullable'
+assert_contains "$ROOT/.github/workflows/release.yml" 'SOPS_IMAGE=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}'
 
-# Signature verification and backup happen before pull and migration.
-verify_line=$(line_of "$DEPLOY" 'COSIGN_IMAGE.*verify')
+# Application signatures precede backup/pull; a supplied project SOPS digest is verified before its pull.
+verify_line=$(line_of "$DEPLOY" '^ *verify_image_signature "\$backend_image"$')
 backup_line=$(line_of "$DEPLOY" 'backup.sh.*pre-deploy')
 secret_line=$(line_of "$DEPLOY" 'mv.*temporary_secret.*secret_file')
+normalize_secret_line=$(line_of "$DEPLOY" 'normalize_oauth2_proxy_cookie_secret.*temporary_secret')
 pull_line=$(line_of "$DEPLOY" 'pull backend web postgres')
 migrate_line=$(line_of "$DEPLOY" 'migration migrate up')
 [ "$verify_line" -lt "$backup_line" ] || fail 'signature verification must precede backup'
 [ "$verify_line" -lt "$pull_line" ] || fail 'signature verification must precede pull'
 [ "$backup_line" -lt "$pull_line" ] || fail 'pre-deploy backup must precede pull'
 [ "$backup_line" -lt "$secret_line" ] || fail 'backup must precede candidate secret activation'
+[ "$normalize_secret_line" -lt "$secret_line" ] || fail 'legacy cookie secret must be normalized before candidate activation'
 [ "$secret_line" -lt "$pull_line" ] || fail 'candidate secret activation must precede pull'
 [ "$pull_line" -lt "$migrate_line" ] || fail 'pull must precede migration'
+sops_verify_line=$(line_of "$DEPLOY" 'verify_image_signature.*sops_image')
+sops_pull_line=$(line_of "$DEPLOY" 'docker pull.*sops_image')
+sops_decrypt_line=$(line_of "$DEPLOY" 'sops_image.*decrypt')
+[ "$sops_verify_line" -lt "$sops_pull_line" ] || fail 'SOPS signature must be verified before its image is pulled'
+[ "$sops_pull_line" -lt "$sops_decrypt_line" ] || fail 'SOPS image must be pulled before decrypting secrets'
 
 # One host-wide deployment lock, image rollback only, and no automatic restore.
 assert_contains "$DEPLOY" 'geoguessme-deploy.lock'
@@ -235,8 +252,27 @@ printf '%s\n' "$generated" | grep -Fq 'VAPID_PRIVATE_KEY=vapid-private' ||
     fail 'generated secret payload omitted the supplied Web Push keypair'
 printf '%s\n' "$generated" | grep -Fq 'OIDC_CLIENT_SECRET=keycloak-client-secret' ||
     fail 'generated secret payload omitted the selected Keycloak client secret'
-printf '%s\n' "$generated" | grep -Eq '^OAUTH2_PROXY_COOKIE_SECRET=.{40,}$$' ||
-    fail 'generated secret payload omitted a random OAuth2 Proxy cookie secret'
+generated_cookie_secret=$(printf '%s\n' "$generated" | sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p')
+case "$generated_cookie_secret" in *[+/]* | '') fail 'generated OAuth2 Proxy cookie secret is not URL-safe Base64' ;; esac
+generated_cookie_secret_bytes=$(printf '%s' "$generated_cookie_secret" | tr -- '-_' '+/' | base64 -d | wc -c | tr -d '[:space:]')
+[ "$generated_cookie_secret_bytes" -eq 32 ] || fail 'generated OAuth2 Proxy cookie secret must decode to 32 bytes'
+
+# Legacy standard Base64 is normalized without changing the decoded AES key.
+cookie_secret_fixture=$(mktemp)
+standard_cookie_secret=$(head -c 32 /dev/zero | tr '\000' '\377' | base64 | tr -d '\n')
+expected_cookie_secret=$(printf '%s' "$standard_cookie_secret" | tr '+/' '-_')
+printf 'OAUTH2_PROXY_COOKIE_SECRET=%s\n' "$standard_cookie_secret" >"$cookie_secret_fixture"
+sh -c '. "$1"; normalize_oauth2_proxy_cookie_secret "$2"' _ "$COMMON" "$cookie_secret_fixture"
+normalized_cookie_secret=$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$cookie_secret_fixture")
+[ "$normalized_cookie_secret" = "$expected_cookie_secret" ] ||
+    fail 'legacy standard Base64 cookie secret was not normalized to URL-safe Base64'
+normalized_cookie_secret_bytes=$(printf '%s' "$normalized_cookie_secret" | tr -- '-_' '+/' | base64 -d | wc -c | tr -d '[:space:]')
+[ "$normalized_cookie_secret_bytes" -eq 32 ] || fail 'cookie secret normalization changed the decoded AES key size'
+printf 'OAUTH2_PROXY_COOKIE_SECRET=0123456789abcdef\n' >"$cookie_secret_fixture"
+sh -c '. "$1"; normalize_oauth2_proxy_cookie_secret "$2"' _ "$COMMON" "$cookie_secret_fixture"
+[ "$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$cookie_secret_fixture")" = '0123456789abcdef' ] ||
+    fail 'raw AES cookie secret was modified'
+rm -f "$cookie_secret_fixture"
 
 identity_generated=$(GOOGLE_OAUTH_CLIENT_ID=google-id \
     GOOGLE_OAUTH_CLIENT_SECRET=google-secret \

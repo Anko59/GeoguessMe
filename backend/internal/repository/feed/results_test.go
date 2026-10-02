@@ -12,9 +12,9 @@ func TestResultsRanksGuessesAndReturnsSignedAllTimeDeltas(t *testing.T) {
 	created := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT g.user_id,u.username,u.avatar,g.score,g.distance").WithArgs("viewer", "post").WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance"}).
-			AddRow("winner", "Navigator", "avatar-a.png", 4800, 100.0).
-			AddRow("viewer", "Explorer", "avatar-b.png", 4200, 300.0),
+		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance", "pin_key", "pin_name", "pin_image"}).
+			AddRow("winner", "Navigator", "avatar-a.png", 4800, 100.0, "north-star", "North Star", "/map-pins/north-star.svg").
+			AddRow("viewer", "Explorer", "avatar-b.png", 4200, 300.0, "", "", ""),
 	)
 	mock.ExpectQuery("SELECT challenge_id,created_at,user_id,score FROM").WillReturnRows(
 		pgxmock.NewRows([]string{"challenge_id", "created_at", "user_id", "score"}).
@@ -25,7 +25,7 @@ func TestResultsRanksGuessesAndReturnsSignedAllTimeDeltas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Results = %v", err)
 	}
-	if len(results) != 2 || results[0].Rank != 1 || results[0].UserID != "winner" || results[0].EloDelta != 4 {
+	if len(results) != 2 || results[0].Rank != 1 || results[0].UserID != "winner" || results[0].EloDelta != 4 || results[0].MapPin == nil || results[0].MapPin.Key != "north-star" {
 		t.Fatalf("winner result = %+v", results)
 	}
 	if results[1].Rank != 2 || !results[1].IsViewer || results[1].EloDelta != -4 {

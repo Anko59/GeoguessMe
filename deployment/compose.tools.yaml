@@ -242,12 +242,32 @@ services:
     volumes:
       - *workspace
 
+  # SOPS v3.13.3 with Debian libexpat pinned to the fixed deb12u4 release.
+  # The upstream image remains only the digest-pinned build input; scan and use
+  # this patched final image instead.
   sops:
     <<: *host-tools
-    image: ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+    build:
+      context: .
+      dockerfile: deployment/docker/sops-tools/Dockerfile
+    image: geoguessme/sops-tools:3.13.3-expat-deb12u4
     entrypoint: []
     volumes:
       - ./:/workspace
+
+  # Local equivalent of the signed runtime socket-proxy derivative. CI replaces
+  # the default audit reference with the exact published digest.
+  socket-proxy-tools:
+    <<: *host-tools
+    build:
+      context: .
+      dockerfile: deployment/docker/socket-proxy-tools/Dockerfile
+      args:
+        GEOGUESSME_REVISION: ${GEOGUESSME_REVISION:-local}
+    image: geoguessme/socket-proxy-tools:local
+    entrypoint: []
+    volumes:
+      - *workspace
 
   # k6 0.55.0 (linux/amd64 digest: b24f418fc99a26dd57904c952c03bfaf79462be18508acc45aafa07ff68e7df2)
   loadtest:

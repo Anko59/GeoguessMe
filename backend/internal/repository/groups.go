@@ -11,6 +11,7 @@ import (
 	feedrepo "geoguessme/internal/repository/feed"
 	"geoguessme/internal/repository/groups"
 	"geoguessme/internal/repository/party"
+	"geoguessme/internal/repository/pins"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,12 +44,14 @@ type Repository struct {
 	// the double-points multiplier lookup). The application composition root
 	// hands it to the party handler slice through App.Repos.Party.
 	Party *party.Repository
+	// Pins is the persistence slice for map-pin catalog, unlock, and selection state.
+	Pins *pins.Repository
 }
 
-// NewRepository returns a Repository bound to the given pool, including the
-// chat, gameplay, and party persistence slices.
+// NewRepository returns a Repository bound to the given pool and all of its
+// persistence slices.
 func NewRepository(pool database.Pool) *Repository {
-	return &Repository{pool: pool, Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool), Party: party.NewRepository(pool)}
+	return &Repository{pool: pool, Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool), Party: party.NewRepository(pool), Pins: pins.NewRepository(pool)}
 }
 
 // UserGroups returns the groups a user belongs to, newest first. It is the

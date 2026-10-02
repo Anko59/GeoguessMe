@@ -77,6 +77,8 @@ illustrations below are part of GeoGuessMe’s own visual language.
 - **Challenge your people** with private, short-lived photo and video prompts.
 - **Explore your group's world** on a rotatable 3D Earth, opened from the globe
   icon in group chat. Browse all challenges while hidden locations stay private.
+- **Personalize your map pins** by completing any of 30 challenges, then choose
+  an unlocked marker in Settings for your globe locations and challenge results.
 - **Keep the conversation moving** with messenger-style hidden message actions,
   emoji reactions, and replies.
 - **Make groups feel like yours** with a group photo and independent
