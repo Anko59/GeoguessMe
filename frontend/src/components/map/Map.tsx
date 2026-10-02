@@ -10,10 +10,13 @@ import './Map.css';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
+const LOCATION_ICON_SIZE: [number, number] = [25, 41];
+// Keep custom guess pins slightly smaller than the blue target-location marker.
+const GUESS_ICON_SIZE: [number, number] = [22, 36];
 const DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
-    iconSize: [25, 41],
+    iconSize: LOCATION_ICON_SIZE,
     iconAnchor: [12, 41],
 });
 
@@ -70,9 +73,9 @@ function LocationMarker({
 function guessIcon(guess: Guess): L.Icon {
     return L.icon({
         iconUrl: guess.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL,
-        iconSize: [32, 40],
-        iconAnchor: [16, 38],
-        popupAnchor: [0, -36],
+        iconSize: GUESS_ICON_SIZE,
+        iconAnchor: [11, 34],
+        popupAnchor: [0, -31],
     });
 }
 
@@ -128,7 +131,7 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                         icon={L.icon({
                             iconUrl: icon,
                             shadowUrl: iconShadow,
-                            iconSize: [25, 41],
+                            iconSize: LOCATION_ICON_SIZE,
                             iconAnchor: [12, 41],
                             popupAnchor: [1, -34],
                             shadowSize: [41, 41],

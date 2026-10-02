@@ -114,6 +114,9 @@ describe('Map component', () => {
         const markers = screen.getAllByTestId('Marker');
         expect(markers).toHaveLength(1);
         expect(markers[0]).toHaveAttribute('position', '40.7,-74');
+        expect(leafletMocks.icon).toHaveBeenCalledWith(
+            expect.objectContaining({ iconUrl: 'marker-icon.png', iconSize: [25, 41] }),
+        );
     });
 
     it('renders guess markers with a popup naming the guesser', () => {
@@ -142,7 +145,12 @@ describe('Map component', () => {
             />,
         );
         expect(leafletMocks.icon).toHaveBeenCalledWith(
-            expect.objectContaining({ iconUrl: DEFAULT_MAP_PIN_IMAGE_URL, iconSize: [32, 40] }),
+            expect.objectContaining({
+                iconUrl: DEFAULT_MAP_PIN_IMAGE_URL,
+                iconSize: [22, 36],
+                iconAnchor: [11, 34],
+                popupAnchor: [0, -31],
+            }),
         );
     });
 
@@ -165,7 +173,12 @@ describe('Map component', () => {
             />,
         );
         expect(leafletMocks.icon).toHaveBeenCalledWith(
-            expect.objectContaining({ iconUrl: '/map-pins/north-star.svg', iconSize: [32, 40] }),
+            expect.objectContaining({
+                iconUrl: '/map-pins/north-star.svg',
+                iconSize: [22, 36],
+                iconAnchor: [11, 34],
+                popupAnchor: [0, -31],
+            }),
         );
     });
 

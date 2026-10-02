@@ -31,8 +31,23 @@
     display: block;
     touch-action: none;
 }
+.globe-pin-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;
+}
+.globe-pin-marker {
+    position: absolute;
+    display: block;
+    pointer-events: none;
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+}
 .globe-controls {
     position: absolute;
+    z-index: 2;
     bottom: 2.5rem;
     left: 50%;
     display: flex;
@@ -53,6 +68,7 @@
 }
 .globe-credit {
     position: absolute;
+    z-index: 2;
     bottom: 0.8rem;
     left: 1rem;
     color: #afc1d2;
@@ -102,6 +118,7 @@
 }
 .globe-notice {
     position: absolute;
+    z-index: 2;
     top: 1rem;
     left: 1rem;
     right: 1rem;
