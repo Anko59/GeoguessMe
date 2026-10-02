@@ -80,6 +80,13 @@ the exact artifact passes the dev gate. Never pass its image through the app
 
 ## Logging
 
+For an Android white screen, preserve the failure screenshot and device logcat
+before rerunning the emulator; see the
+[Android troubleshooting procedure](troubleshooting.md#android-white-screen-or-missing-sign-in-options).
+The mobile debug APK used by the localhost Maestro journey is not the bundled
+release artifact. Do not publish full logcat because it may contain private
+account or device data.
+
 The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
 `load group challenge map` with the group ID and database error; coordinates are
 not logged. If the challenge list works but the Earth does not render, check

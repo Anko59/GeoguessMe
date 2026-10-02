@@ -61,7 +61,7 @@ mobile-sync: mobile-init ## Build shared web assets and sync them into the Andro
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e VITE_API_ORIGIN=$(MOBILE_API_ORIGIN) -e VITE_WEB_ORIGIN=$(MOBILE_WEB_ORIGIN) \
 		-e CAPACITOR_SERVER_URL=$(CAPACITOR_SERVER_URL) node-tools-write \
-		sh -ec 'npm --prefix frontend run build && cd frontend && npx cap sync android'
+		sh -ec 'mkdir -p frontend/node_modules/.vite-temp && npm --prefix frontend run build && cd frontend && npx cap sync android'
 
 mobile-build: mobile-prepare mobile-sync ## Build a debug APK entirely through Docker.
 	$(MOBILE_TOOLS_RUN) tools/mobile/build-android.sh
@@ -98,6 +98,12 @@ play-api-publish: ## Upload, validate, and commit the verified Android bundle to
 		--manifest "/workspace/$(PLAY_API_MANIFEST)" \
 		--track "$$PLAY_RELEASE_TRACK" \
 		--status "$$PLAY_RELEASE_STATUS"'
+
+mobile-smoke: mobile-build ## Boot the bundled production-like APK against the live API without adb reverse.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
+		-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) \
+		-e MOBILE_BUNDLED_SMOKE=true \
+		$(MOBILE_TOOLS_SERVICE) tools/mobile/run-maestro.sh
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \

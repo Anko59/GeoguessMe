@@ -1,5 +1,30 @@
 # Troubleshooting
 
+## Android white screen or missing sign-in options
+
+First distinguish a locally built test APK from a Play-delivered release. Run
+`make mobile-smoke` to rebuild and launch a **bundled** debug APK without a
+localhost server or `adb reverse`. `make test-mobile` uses a different APK
+pointing to an ephemeral test server and cannot prove that a Play build works.
+If the smoke fails, inspect `.local/mobile/artifacts/failure-screen.png`,
+`window.xml`, `maestro.log`, `logcat.txt`, and `activity.txt` before rerunning:
+each test can overwrite diagnostics. Never upload raw logcat publicly; it can
+contain account and device data. Keep a private, revision-labeled copy and
+redact tokens, email addresses, and URLs with credentials before sharing.
+
+If the landing appears but Google sign-in does not, verify that the **packaged**
+Capacitor config uses the virtual asset origin `https://app.geoguessme.com`, not
+`https://geoguessme.com` (which intercepts API GETs as local HTML), and has no
+`server.url`. Check the deployed backend `ALLOWED_ORIGINS` includes the virtual
+origin as well as the web origin; a CORS preflight failure blocks credentialed
+API calls. Run `make mobile-verify-release` on a signed AAB before publishing.
+For a Play-only failure, record the installed app version/code, device model,
+Android/WebView versions, exact cold-start steps, and a screenshot or Android
+Developer Options bug report from the affected device. Keep the bug report
+private. The debug APK and an emulator result cannot identify the cause of an
+unexamined Play-installed white screen; compare the exact retained signed AAB
+and its provenance with the version installed through Play.
+
 ## PostgreSQL volume version mismatch
 
 **Symptom**: Containers fail to start after switching PostgreSQL images.

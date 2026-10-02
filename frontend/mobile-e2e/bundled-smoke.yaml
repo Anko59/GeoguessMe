@@ -1,0 +1,22 @@
+appId: com.geoguessme.app
+name: Bundled Android startup and live API smoke
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Already Playing? Login"
+- tapOn: "Already Playing? Login"
+- extendedWaitUntil:
+    visible: "Welcome Back!"
+    timeout: 30000
+# Production enables OIDC. Its options come from GET /api/v1/auth/oidc/config:
+# if the asset origin intercepts API GETs, this never appears.
+- extendedWaitUntil:
+    visible: "Continue with Google"
+    timeout: 30000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Already Playing? Login"
+    timeout: 30000

@@ -14,13 +14,19 @@ adapters provide runtime detection, API and public URL construction,
 geolocation, sharing, haptics, app/deep-link lifecycle, and the Web Push
 transport boundary.
 
-The production native build uses bundled assets with the WebView origin
-`https://geoguessme.com` and talks to the normal production origin. Native HTTP,
-WebSocket, refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`;
-invite links are derived from `VITE_WEB_ORIGIN`. Both default to
-`https://geoguessme.com` in the Make workflow. Keeping the native WebView and
-API on the same origin avoids a separate CORS and cookie trust boundary. Do not
-weaken cookie flags or use a development server URL in a distributable build.
+The production native build serves bundled assets from the virtual WebView
+origin `https://app.geoguessme.com` and talks to the normal production API at
+`https://geoguessme.com`. Capacitor intercepts GET requests on its virtual asset
+hostname: using the API hostname for assets makes API GETs return bundled
+`index.html` instead of reaching the backend. Native HTTP, WebSocket,
+refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`; invite links
+are derived from `VITE_WEB_ORIGIN`. Both default to `https://geoguessme.com` in
+the Make workflow. The API must explicitly permit the virtual origin in
+`ALLOWED_ORIGINS` for credentialed CORS and WebSocket origin checks. These hosts
+are same-site, so existing SameSite cookies still apply; do not relax cookie
+flags or use a development server URL in a distributable build. OIDC's full
+browser-navigation return path still needs physical-device acceptance; the
+read-only bundled smoke checks only that its API configuration loads.
 
 Android uses native geolocation, share sheets, haptics, status-bar styling, deep
 links, and system-back handling. Camera capture deliberately retains the WebView
@@ -40,17 +46,24 @@ From the repository root:
 ```text
 make mobile-prepare  # API 36 tools and the Maestro-supported API 34 AOSP AVD
 make mobile-sync     # production web build and Capacitor sync
-make mobile-build    # debug APK
-make test-mobile     # isolated stack + seed + build + emulator + Maestro
+make mobile-build    # debug APK with bundled production assets
+make mobile-smoke    # fresh emulator, bundled assets, live production API (read-only)
+make test-mobile     # isolated stack + seed + test-server APK + emulator + Maestro
 ```
 
 `make mobile-build` writes
-`frontend/android/app/build/outputs/apk/debug/app-debug.apk`. `make test-mobile`
-is unattended: it builds an APK with a test-only localhost server URL, boots a
-clean headless emulator, uses `adb reverse` to reach the isolated Compose
-gateway, grants declared test permissions, installs the APK, and runs Maestro.
-The app still compiles and targets Android API 36; the emulator uses API 34
-because Maestro's
+`frontend/android/app/build/outputs/apk/debug/app-debug.apk`.
+`make mobile-smoke` rebuilds that APK without a server override, wipes and boots
+an emulator without `adb reverse`, checks that the landing and login screens
+survive startup and resume, and verifies the Google sign-in option arrives from
+the live production API. This is a read-only network smoke, not permission to
+use a production user for automated authentication. It requires the deployed API
+to allow `https://app.geoguessme.com` in `ALLOWED_ORIGINS` first.
+`make test-mobile` is unattended: it builds an APK with a test-only localhost
+server URL, boots a clean headless emulator, uses `adb reverse` to reach the
+isolated Compose gateway, grants declared test permissions, installs the APK,
+and runs Maestro. The app still compiles and targets Android API 36; the
+emulator uses API 34 because Maestro's
 [published Android support range](https://github.com/mobile-dev-inc/maestro-docs/blob/main/introduction/get-started/quickstart.md)
 currently ends at API 34. The test AVD uses the AOSP `default` image and a
 separate `_aosp` name so a cached Google APIs AVD cannot be silently reused.
@@ -62,9 +75,14 @@ preserving the app's supported runtime. Its cleanup removes the disposable
 database and media volumes.
 
 The local-server override exists only through `CAPACITOR_SERVER_URL` during the
-test build. Normal mobile builds leave it empty and embed production assets. To
-point a bundled development build at a different API without changing source,
-pass HTTPS origins explicitly:
+test build. Normal mobile builds leave it empty and embed production assets.
+`make test-mobile` leaves ignored generated Android assets and the debug APK
+pointing at its temporary localhost test server; **never install that APK on a
+physical device**. Rebuild with `make mobile-build` or `make mobile-smoke`
+before installing an APK outside the isolated test loop. The release-bundle
+verifier rejects a test server URL, a missing packaged entry point, or a
+collision with the production API host. To point a bundled development build at
+a different API without changing source, pass HTTPS origins explicitly:
 
 ```text
 make mobile-build \
@@ -72,9 +90,15 @@ make mobile-build \
   MOBILE_WEB_ORIGIN=https://dev.geoguessme.com
 ```
 
-The corresponding backend origin allowlist must include
-`https://dev.geoguessme.com`. Cleartext traffic is enabled only for the Android
-debug build type; release builds prohibit it.
+The corresponding dev backend `ALLOWED_ORIGINS` must include
+`https://app.geoguessme.com` alongside `https://dev.geoguessme.com`. After
+building, install the debug APK on a test device through the Dockerized Android
+tools or distribute a verified bundle to the Play internal testing track. Use a
+test account, check cold start, login, a protected API screen,
+background/resume, and a reinstall/update without clearing app data. Do not
+confuse a green localhost Maestro run with validation of a bundled or signed
+release. Cleartext traffic is enabled only for the Android debug build type;
+release builds prohibit it.
 
 ## Automated journey and diagnostics
 
@@ -167,6 +191,18 @@ and upload-certificate SHA-256 values. The manifest additionally binds those
 values to the source commit and Git tree supplied by Make. It contains no
 passwords or private-key material.
 
+**Release prerequisite:** update the encrypted hosted dev and production backend
+configuration to include `https://app.geoguessme.com` in `ALLOWED_ORIGINS`,
+redeploy the backend, and verify its preflight OPTIONS response from that origin
+before uploading a native bundle. Editing the committed `.env.example` files
+alone does not change deployed configuration. Stage the bundled smoke and a
+physical-device install on Play's internal track before enabling any production
+track rollout; retain a screenshot and the exact version code/AAB digest. If
+login or cold start fails, stop the Play rollout rather than promoting the same
+artifact. For an already-installed failing version, hold publication and use
+Play's track rollback/replacement procedure in the
+[Play runbook](runbooks/google-play-console.md).
+
 The production release workflow now performs this build before image promotion.
 It materializes the keystore only on the ephemeral runner from the
 `MOBILE_UPLOAD_KEYSTORE_BASE64` production secret, passes the two signing
@@ -239,8 +275,10 @@ Configure the Play API values in the GitHub `play-publishing` environment:
   resource;
 - `PLAY_GCP_SERVICE_ACCOUNT` variable: the Play-authorized service-account
   email; and
-- `PLAY_RELEASE_TRACK` variable: the target Play track, normally `internal`, a
-  closed-test track, or `production` after the account is eligible.
+- `PLAY_RELEASE_TRACK` variable: an `internal` or closed-test track. The release
+  workflow refuses `production`: a tester must install this exact artifact,
+  complete cold-start/authenticated acceptance, and explicitly promote that
+  version in Play Console after review.
 
 `PLAY_RELEASE_STATUS` is an optional variable and defaults to `completed`; use
 `inProgress` only when the release process explicitly requires a staged rollout.

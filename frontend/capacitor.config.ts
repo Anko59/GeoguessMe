@@ -1,5 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
-import { productionHostname } from './src/platform/production';
+// Capacitor intercepts every GET on its asset host, including /api/v1 paths.
+// The virtual origin must never be the backend or public web origin.
+const nativeAssetHostname = 'app.geoguessme.com';
 
 const serverURL = process.env.CAPACITOR_SERVER_URL?.trim();
 
@@ -18,11 +20,9 @@ const config: CapacitorConfig = {
               cleartext: serverURL.startsWith('http://'),
           }
         : {
-              // Keep the native WebView origin on the same production host as
-              // the bundled API and public web URLs. This origin is used for
-              // cookie and CORS decisions even though the web assets are
-              // packaged inside the APK.
-              hostname: productionHostname,
+              // Only packaged assets live here. Network API/OIDC requests go
+              // to the configured backend host, which must allow this origin.
+              hostname: nativeAssetHostname,
               androidScheme: 'https',
           },
     plugins: {
