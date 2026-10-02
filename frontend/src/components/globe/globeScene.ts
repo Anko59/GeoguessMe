@@ -64,6 +64,11 @@ export function createGlobeScene(
         renderer.setPixelRatio(pixelRatio);
         renderer.domElement.setAttribute('aria-hidden', 'true');
         host.appendChild(renderer.domElement);
+        const pinOverlay = document.createElement('div');
+        pinOverlay.className = 'globe-pin-overlay';
+        pinOverlay.setAttribute('aria-hidden', 'true');
+        host.appendChild(pinOverlay);
+        cleanup.push(() => pinOverlay.remove());
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
         camera.position.copy(globePosition(22, 12, 3.5));
@@ -175,9 +180,8 @@ export function createGlobeScene(
         cleanup.push(() => texture.dispose());
         const pinGeometry = new THREE.SphereGeometry(1, 10, 8);
         cleanup.push(() => pinGeometry.dispose());
-        // The instanced spheres are raycast-only hit targets. Sprites provide
-        // all visible marker pixels; never draw a second dot or let the hit
-        // targets write depth that can occlude the pin artwork.
+        // Instanced spheres are raycast-only hit targets; designed pin images
+        // are projected as DOM overlays so visibility does not depend on GPU texture upload.
         const pinMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
         cleanup.push(() => pinMaterial.dispose());
         let pins = new THREE.InstancedMesh(pinGeometry, pinMaterial, 0);
@@ -187,46 +191,52 @@ export function createGlobeScene(
         let previousItems: GroupChallenge[] | undefined;
         let selectedIndex: number | undefined;
         const pinIndexes = new Map<string, number>();
-        const pinTextures = new Map<string, THREE.Texture>();
-        const pinSprites = new Map<number, THREE.Sprite>();
-        const pinSpriteLoader = new THREE.TextureLoader();
-        const disposePinSprites = () => {
-            for (const sprite of pinSprites.values()) {
-                scene.remove(sprite);
-                sprite.material.dispose();
-            }
-            pinSprites.clear();
+        const pinMarkers = new Map<number, HTMLImageElement>();
+        const disposePinMarkers = () => {
+            for (const marker of pinMarkers.values()) marker.remove();
+            pinMarkers.clear();
         };
-        cleanup.push(() => {
-            disposePinSprites();
-            for (const texture of pinTextures.values()) texture.dispose();
-            pinTextures.clear();
-        });
+        cleanup.push(disposePinMarkers);
         scene.add(pins);
         const cameraPosition = new THREE.Vector3();
         const screenScale = new THREE.Vector3();
         const pinNormal = new THREE.Vector3();
+        const projectedMarker = new THREE.Vector3();
         const pinMatrix = new THREE.Matrix4();
         syncPinScale = () => {
             if (host.clientHeight <= 0) return;
             camera.updateMatrixWorld();
+            const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2));
             for (let index = 0; index < positions.length; index += 1) {
                 cameraPosition.copy(positions[index]).applyMatrix4(camera.matrixWorldInverse);
                 const depth = Math.max(-cameraPosition.z, 0.1);
                 const diameter = index === selectedIndex ? 8 : 6;
-                const radius =
-                    (diameter * depth * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2))) /
-                    host.clientHeight;
+                const radius = (diameter * depth * tanHalfFov) / host.clientHeight;
                 screenScale.setScalar(radius);
                 pinMatrix.compose(positions[index], new THREE.Quaternion(), screenScale);
                 pins.setMatrixAt(index, pinMatrix);
-                const sprite = pinSprites.get(index);
-                if (sprite) {
-                    const spriteHeight = radius * (index === selectedIndex ? 8 : 7);
-                    pinNormal.copy(positions[index]).normalize();
-                    sprite.position.copy(positions[index]).addScaledVector(pinNormal, spriteHeight * 0.48);
-                    sprite.scale.set(spriteHeight * 0.78, spriteHeight, 1);
-                }
+
+                const marker = pinMarkers.get(index);
+                if (!marker) continue;
+                const markerHeight = radius * (index === selectedIndex ? 8 : 7);
+                pinNormal.copy(positions[index]).normalize();
+                projectedMarker
+                    .copy(positions[index])
+                    .addScaledVector(pinNormal, markerHeight * 0.48)
+                    .project(camera);
+                const frontFacing = positions[index].dot(camera.position) > positions[index].lengthSq();
+                const inView =
+                    Math.abs(projectedMarker.x) <= 1 &&
+                    Math.abs(projectedMarker.y) <= 1 &&
+                    projectedMarker.z >= -1 &&
+                    projectedMarker.z <= 1;
+                marker.hidden = !frontFacing || !inView;
+                if (marker.hidden) continue;
+                const height = (markerHeight * host.clientHeight) / (2 * depth * tanHalfFov);
+                marker.style.left = `${((projectedMarker.x + 1) * host.clientWidth) / 2}px`;
+                marker.style.top = `${((1 - projectedMarker.y) * host.clientHeight) / 2}px`;
+                marker.style.width = `${height * 0.78}px`;
+                marker.style.height = `${height}px`;
             }
             pins.instanceMatrix.needsUpdate = true;
         };
@@ -384,7 +394,7 @@ export function createGlobeScene(
                 if (disposed) return;
                 if (items !== previousItems) {
                     previousItems = items;
-                    disposePinSprites();
+                    disposePinMarkers();
                     visible = items.filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.long));
                     if (visible.length > pins.instanceMatrix.count) {
                         scene.remove(pins);
@@ -406,22 +416,25 @@ export function createGlobeScene(
                         const position = positions[index];
                         pins.setMatrixAt(index, matrix.makeTranslation(position.x, position.y, position.z));
                         pinIndexes.set(item.photo_id, index);
-                        const pinImageURL = item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL;
-                        let pinTexture = pinTextures.get(pinImageURL);
-                        if (!pinTexture) {
-                            pinTexture = pinSpriteLoader.load(pinImageURL, (loaded) => {
-                                if (disposed) return;
-                                loaded.colorSpace = THREE.SRGBColorSpace;
-                                render();
-                            });
-                            pinTextures.set(pinImageURL, pinTexture);
-                        }
-                        const sprite = new THREE.Sprite(
-                            new THREE.SpriteMaterial({ map: pinTexture, transparent: true, depthWrite: false }),
-                        );
-                        sprite.renderOrder = 2;
-                        scene.add(sprite);
-                        pinSprites.set(index, sprite);
+                        const marker = document.createElement('img');
+                        marker.className = 'globe-pin-marker';
+                        marker.alt = '';
+                        marker.draggable = false;
+                        marker.hidden = true;
+                        marker.src = item.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL;
+                        marker.onerror = () => {
+                            if (marker.getAttribute('src') !== DEFAULT_MAP_PIN_IMAGE_URL) {
+                                marker.src = DEFAULT_MAP_PIN_IMAGE_URL;
+                                return;
+                            }
+                            if (!disposed)
+                                onError(
+                                    'Challenge pin artwork could not load. Your challenge list is still available.',
+                                );
+                        };
+                        marker.dataset.photoId = item.photo_id;
+                        pinOverlay.appendChild(marker);
+                        pinMarkers.set(index, marker);
                     });
                     pins.instanceMatrix.needsUpdate = true;
                     pins.computeBoundingSphere();

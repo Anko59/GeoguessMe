@@ -87,10 +87,8 @@ describe('Earth scene', () => {
         globe.dispose();
     });
 
-    it('loads selected pin artwork for globe markers and releases the scene cleanly', () => {
-        const requestedURLs: string[] = [];
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((url, onLoad) => {
-            requestedURLs.push(String(url));
+    it('projects each designed pin over the globe and releases the scene cleanly', () => {
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
             const texture = new THREE.Texture<HTMLImageElement>();
             onLoad?.(texture);
             return texture;
@@ -98,38 +96,39 @@ describe('Earth scene', () => {
         const host = document.createElement('div');
         Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
         const globe = createGlobeScene(host, vi.fn(), vi.fn());
-        globe.update(
-            [
-                {
-                    photo_id: 'photo-1',
-                    group_id: 'group-1',
-                    user_id: 'user-1',
-                    username: 'Alice',
-                    created_at: '2026-09-27T10:00:00Z',
-                    expires_at: '2026-09-28T10:00:00Z',
-                    status: 'results',
-                    lat: 48.8,
-                    long: 2.3,
-                    map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
-                },
-                {
-                    photo_id: 'photo-2',
-                    group_id: 'group-1',
-                    user_id: 'user-2',
-                    username: 'Bob',
-                    created_at: '2026-09-27T10:00:00Z',
-                    expires_at: '2026-09-28T10:00:00Z',
-                    status: 'results',
-                    lat: 40.7,
-                    long: -74,
-                },
-            ],
-            null,
-        );
-        expect(requestedURLs).toContain('/map-pins/north-star.svg');
-        expect(requestedURLs).toContain(DEFAULT_MAP_PIN_IMAGE_URL);
-        const scene = mocks.render.mock.lastCall?.[0] as THREE.Scene;
-        expect(scene.children.filter((child) => child instanceof THREE.Sprite)).toHaveLength(2);
+        const items = [
+            {
+                photo_id: 'photo-1',
+                group_id: 'group-1',
+                user_id: 'user-1',
+                username: 'Alice',
+                created_at: '2026-09-27T10:00:00Z',
+                expires_at: '2026-09-28T10:00:00Z',
+                status: 'results' as const,
+                lat: 48.8,
+                long: 2.3,
+                map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
+            },
+            {
+                photo_id: 'photo-2',
+                group_id: 'group-1',
+                user_id: 'user-2',
+                username: 'Bob',
+                created_at: '2026-09-27T10:00:00Z',
+                expires_at: '2026-09-28T10:00:00Z',
+                status: 'results' as const,
+                lat: 51.5,
+                long: -0.1,
+            },
+        ];
+        globe.update(items, null);
+        const markers = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
+        expect(markers).toHaveLength(2);
+        expect(markers[0].getAttribute('src')).toBe('/map-pins/north-star.svg');
+        expect(markers[1].getAttribute('src')).toBe(DEFAULT_MAP_PIN_IMAGE_URL);
+        expect(markers[0].hidden).toBe(false);
+        expect(Number.parseFloat(markers[0].style.width)).toBeGreaterThan(0);
+        expect(Number.parseFloat(markers[0].style.height)).toBeGreaterThan(0);
         globe.dispose();
         expect(host.children).toHaveLength(0);
     });
@@ -341,16 +340,23 @@ describe('Earth scene', () => {
             lat: 0,
             long: 0,
         };
-        const items = [item, { ...item, photo_id: 'hidden', lat: undefined, long: undefined }];
+        const items = [
+            item,
+            { ...item, photo_id: 'hidden', lat: undefined, long: undefined },
+            { ...item, photo_id: 'far', lat: -22, long: -168 },
+        ];
         globe.update(items, 'p');
         const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
         const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
-        expect(pins.count).toBe(1);
+        expect(pins.count).toBe(2);
         expect((pins.material as THREE.MeshBasicMaterial).colorWrite).toBe(false);
         expect((pins.material as THREE.MeshBasicMaterial).depthWrite).toBe(false);
-        const markerSprite = scene.children.find((child) => child instanceof THREE.Sprite);
-        expect(markerSprite).toBeInstanceOf(THREE.Sprite);
-        const selectedSpriteWidth = (markerSprite as THREE.Sprite).scale.x;
+        const markerImages = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
+        expect(markerImages).toHaveLength(2);
+        expect(markerImages[0].hidden).toBe(false);
+        expect(markerImages[1].hidden).toBe(true);
+        const marker = markerImages[0];
+        const selectedMarkerHeight = Number.parseFloat(marker.style.height);
         const selectedMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, selectedMatrix);
         const selectedScale = new THREE.Vector3();
@@ -358,7 +364,7 @@ describe('Earth scene', () => {
         const matrixVersion = pins.instanceMatrix.version;
         globe.update(items, null);
         expect(scene.children).toContain(pins);
-        expect((markerSprite as THREE.Sprite).scale.x).toBeLessThan(selectedSpriteWidth);
+        expect(Number.parseFloat(marker.style.height)).toBeLessThan(selectedMarkerHeight);
         expect(pins.instanceMatrix.version).toBeGreaterThan(matrixVersion);
         const regularMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, regularMatrix);
@@ -387,7 +393,7 @@ describe('Earth scene', () => {
         host.querySelector('canvas')?.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
         expect(onError).toHaveBeenCalledWith(expect.stringContaining('3D rendering is unavailable'));
         globe.dispose();
-        expect(textures.length).toBeGreaterThanOrEqual(2);
+        expect(textures).toHaveLength(1);
         textures.forEach((texture) => expect(texture.dispose).toHaveBeenCalledOnce());
         expect(disposeGeometry).toHaveBeenCalledTimes(2);
         expect(mocks.disconnect).toHaveBeenCalledOnce();
