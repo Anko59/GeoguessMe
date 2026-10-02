@@ -6,6 +6,7 @@ import api, {
     getAPIErrorMessage,
     getAccessToken,
     publicFeedAPI,
+    refreshAuthSession,
     setAccessToken,
 } from './api';
 
@@ -73,6 +74,20 @@ describe('api client', () => {
 
         expect(request.headers.Authorization).toBe('Bearer fresh');
         expect(post).toHaveBeenCalledWith('/api/v1/auth/refresh', undefined, { withCredentials: true });
+        post.mockRestore();
+    });
+
+    it('does not restore a token from a refresh completed after logout', async () => {
+        let finishRefresh!: (response: { data: { access_token: string } }) => void;
+        const post = vi
+            .spyOn(axios, 'post')
+            .mockReturnValue(new Promise((resolve) => (finishRefresh = resolve)) as never);
+        setAccessToken(null);
+        const refresh = refreshAuthSession();
+        setAccessToken(null);
+        finishRefresh({ data: { access_token: 'stale' } });
+        await expect(refresh).resolves.toBeNull();
+        expect(getAccessToken()).toBeNull();
         post.mockRestore();
     });
 

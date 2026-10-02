@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import ProtectedRoute from '../components/navigation/ProtectedRoute';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from './AuthContext';
 import AuthProvider from './AuthProvider';
@@ -95,6 +96,64 @@ describe('AuthProvider', () => {
         );
         expect(await screen.findByText('no')).toBeInTheDocument();
         expect(() => render(<Consumer />)).toThrow('useAuth must be used inside AuthProvider');
+    });
+
+    it('removes an open protected page on another tab logout and ignores an in-flight refresh', async () => {
+        localStorage.setItem('geoguessme:pwa-session:v1', JSON.stringify(authResponse.user));
+        let finishRefresh!: (response: AuthResponse | null) => void;
+        mocks.refreshAuthSession.mockReturnValue(new Promise((resolve) => (finishRefresh = resolve)));
+        render(
+            <MemoryRouter initialEntries={['/settings']}>
+                <AuthProvider>
+                    <Routes>
+                        <Route
+                            path="/settings"
+                            element={
+                                <ProtectedRoute>
+                                    <div>Private settings</div>
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route path="/login" element={<div>Sign in</div>} />
+                    </Routes>
+                </AuthProvider>
+            </MemoryRouter>,
+        );
+        expect(screen.getByText('Private settings')).toBeInTheDocument();
+        await waitFor(() => expect(mocks.refreshAuthSession).toHaveBeenCalledTimes(1));
+        window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated', newValue: 'changed' }));
+        expect(screen.getByText('Private settings')).toBeInTheDocument();
+        act(() => {
+            window.dispatchEvent(
+                new StorageEvent('storage', {
+                    key: 'geoguessme:logout:v1',
+                    newValue: 'another-tab-logout',
+                }),
+            );
+        });
+        expect(await screen.findByText('Sign in')).toBeInTheDocument();
+        expect(screen.queryByText('Private settings')).not.toBeInTheDocument();
+        expect(localStorage.getItem('geoguessme:pwa-session:v1')).toBeNull();
+        await act(async () => finishRefresh(authResponse));
+        expect(screen.getByText('Sign in')).toBeInTheDocument();
+        expect(mocks.setAccessToken).not.toHaveBeenCalledWith('access-token');
+    });
+
+    it('broadcasts logout to other tabs even without a cached hint', async () => {
+        mocks.refreshAuthSession.mockResolvedValueOnce(null);
+        mocks.post.mockResolvedValueOnce({ data: {} });
+        function Consumer() {
+            const { logout } = useAuth();
+            return <button onClick={() => void logout()}>Logout</button>;
+        }
+        render(
+            <AuthProvider>
+                <Consumer />
+            </AuthProvider>,
+        );
+        await waitFor(() => expect(mocks.refreshAuthSession).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
+        await waitFor(() => expect(localStorage.getItem('geoguessme:logout:v1')).not.toBeNull());
     });
 
     it('renders a cached session immediately while it refreshes in the background', async () => {

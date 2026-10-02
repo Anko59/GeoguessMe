@@ -19,11 +19,13 @@ import type {
 import { apiBaseURL } from './platform/endpoints';
 
 let accessToken: string | null = null;
+let tokenVersion = 0;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
 let oidcExchangePromise: Promise<AuthResponse> | null = null;
 
 export const setAccessToken = (token: string | null): void => {
     accessToken = token;
+    tokenVersion += 1;
 };
 
 export const getAccessToken = (): string | null => accessToken;
@@ -51,14 +53,16 @@ function isPublicAuthRequest(url: string | undefined): boolean {
 
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
+        const version = tokenVersion;
         refreshPromise = axios
             .post<AuthResponse>(`${apiBaseURL}/auth/refresh`, undefined, { withCredentials: true })
             .then((response) => {
+                if (version !== tokenVersion) return null;
                 setAccessToken(response.data.access_token);
                 return response.data;
             })
             .catch(() => {
-                setAccessToken(null);
+                if (version === tokenVersion) setAccessToken(null);
                 return null;
             })
             .finally(() => {
