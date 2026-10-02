@@ -1,4 +1,6 @@
-import type { Page, TestInfo } from '@playwright/test';
+import * as THREE from 'three';
+import type { Locator, Page, TestInfo } from '@playwright/test';
+import { globePosition } from '../src/components/globe/globeScene';
 import { test, expect } from './support/fixtures';
 import { createScenario, closeScenario } from './support/challengeScenario';
 
@@ -49,6 +51,34 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
         .poll(() => globe.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBeLessThanOrEqual(1);
     return globe;
+}
+
+function projectGlobePin(
+    width: number,
+    height: number,
+    latitude: number,
+    longitude: number,
+): { x: number; y: number; width: number; height: number } {
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 50);
+    camera.position.copy(globePosition(22, 12, 3.5));
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const marker = globePosition(latitude, longitude, 1.016);
+    const markerView = marker.clone().applyMatrix4(camera.matrixWorldInverse);
+    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2));
+    const depth = Math.max(-markerView.z, 0.1);
+    const pinRadius = (6 * depth * tanHalfFov) / height;
+    const pinHeight = pinRadius * 7;
+    marker.addScaledVector(marker.clone().normalize(), pinHeight * 0.48);
+    const projected = marker.project(camera);
+    const screenHeight = (pinHeight * height) / (2 * depth * tanHalfFov);
+
+    return {
+        x: ((projected.x + 1) * width) / 2,
+        y: ((1 - projected.y) * height) / 2,
+        width: screenHeight * 0.78,
+        height: screenHeight,
+    };
 }
 
 const GLOBE_SCREENSHOT_TIMEOUT_MS = 20_000;
@@ -116,6 +146,7 @@ test('explores group challenges on Earth without revealing an unplayed location'
         const { uploader, guesser } = scenario;
         const emptyGlobe = await openGlobe(uploader, testInfo);
         await expect(emptyGlobe).toContainText('No geochallenges yet.');
+        await expect(emptyGlobe.locator('.globe-pin-marker')).toHaveCount(0);
         await captureGlobe(uploader, testInfo, 'empty');
         await emptyGlobe.getByRole('button', { name: 'Close group globe' }).click();
         await uploader.getByRole('button', { name: 'Camera', exact: true }).click();
@@ -126,7 +157,11 @@ test('explores group challenges on Earth without revealing an unplayed location'
         await uploader.getByRole('button', { name: /Send/ }).click();
         expect((await upload).status()).toBe(201);
         const globeButton = uploader.getByRole('button', { name: 'Open group globe' });
+        const defaultPinResponse = uploader.waitForResponse((response) =>
+            response.url().endsWith('/assets/map-pins/standard-marker-v1.svg'),
+        );
         const globe = await openGlobe(uploader, testInfo);
+        expect((await defaultPinResponse).status(), 'the globe should load its default pin artwork').toBe(200);
         await expect(globe).toContainText('1 challenge · 1 on the globe');
         const refresh = globe.getByRole('button', { name: 'Refresh geochallenges' });
         const refreshed = uploader.waitForResponse(
@@ -135,6 +170,30 @@ test('explores group challenges on Earth without revealing an unplayed location'
         await refresh.click();
         expect((await refreshed).status()).toBe(200);
         await expect(globe).toContainText('1 challenge · 1 on the globe');
+        const globePin = globe.locator('.globe-pin-marker');
+        await expect(globePin).toHaveCount(1);
+        await expect(globePin).toBeVisible();
+        await expect(globePin).toHaveAttribute('src', '/assets/map-pins/standard-marker-v1.svg');
+        await expect
+            .poll(
+                () =>
+                    globePin.evaluate((element) => {
+                        const image = element as HTMLImageElement;
+                        return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+                    }),
+                { message: 'the designed pin artwork should decode before it is shown', timeout: 8_000 },
+            )
+            .toBe(true);
+        const [canvasBounds, pinBounds] = await Promise.all([
+            globe.locator('canvas').boundingBox(),
+            globePin.boundingBox(),
+        ]);
+        if (!canvasBounds || !pinBounds) throw new Error('The visible globe pin and canvas must have bounding boxes');
+        const expectedPin = projectGlobePin(canvasBounds.width, canvasBounds.height, 48.8566, 2.3522);
+        expect(Math.abs(pinBounds.x + pinBounds.width / 2 - canvasBounds.x - expectedPin.x)).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(pinBounds.y + pinBounds.height / 2 - canvasBounds.y - expectedPin.y)).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(pinBounds.width - expectedPin.width)).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(pinBounds.height - expectedPin.height)).toBeLessThanOrEqual(1.5);
         await captureGlobe(uploader, testInfo, 'overview');
         if (mobile) {
             const sheet = globe.getByRole('button', { name: 'Expand geochallenge list' });
@@ -167,6 +226,7 @@ test('explores group challenges on Earth without revealing an unplayed location'
 
         const privateGlobe = await openGlobe(guesser, testInfo);
         await expect(privateGlobe).toContainText('1 challenge · 0 on the globe');
+        await expect(privateGlobe.locator('.globe-pin-marker')).toHaveCount(0);
         await expect(privateGlobe).toContainText('Guess this challenge to reveal its location');
         if (mobile) {
             const expandList = privateGlobe.getByRole('button', { name: 'Expand geochallenge list' });

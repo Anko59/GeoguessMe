@@ -128,6 +128,15 @@ SMTP credentials for native-account verification/reset mail, the production/dev
 client secrets, and Google credentials. Apple and GitHub variables remain
 placeholder-only reservations until a separately reviewed provider rollout.
 
+## Hosted monitoring image state
+
+`SOCKET_PROXY_IMAGE` is not an application dotenv setting and contains no
+secret. The independent `geoguessme-watch` project reads its digest-qualified
+reference from `/var/lib/geoguessme/watch/current.env`; only the forced
+`watch IMAGE REVISION` operation updates it after signature verification. The
+pinned upstream Compose default is temporary bootstrap compatibility, not a
+runtime update mechanism. Local rehearsals use the patched local derivative.
+
 ## Example `.env` for development
 
 ```bash

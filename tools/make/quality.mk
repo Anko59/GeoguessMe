@@ -25,7 +25,7 @@ mod-tidy: ## Reconcile backend Go module metadata in Docker after dependency cha
 format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'test -z "$$(git ls-files -z "*.go" | xargs -0 -r gofmt -l)" && test -z "$$(git ls-files -z "*.go" | xargs -0 -r goimports -l)"'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'git ls-files -z | while IFS= read -r -d "" f; do case "$$f" in *.ts|*.tsx|*.js|*.jsx|*.css|*.html|*.json|*.md|*.yaml|*.yml) if [ -f "$$f" ]; then printf "%s\\0" "$$f"; fi;; esac; done | xargs -0 -r prettier --check'
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci
 
 lint-go: ## Run strict Go analyzers.
@@ -44,16 +44,16 @@ lint-css: ## Run Stylelint.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && stylelint --config /workspace/frontend/.stylelintrc.json --config-basedir /workspace/frontend "src/**/*.css"'
 
 lint-shell: ## Run ShellCheck on every tracked shell script.
-	find . -type f -name '*.sh' -not -path './.git/*' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck -x
+	find . \( -path './.git' -o -path './.local' \) -prune -o -type f -name '*.sh' -not -path './frontend/node_modules/*' -not -path './frontend/coverage/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck -x
 
 lint-docker: ## Run Hadolint on every Dockerfile.
-	find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './.git/*' -not -path './frontend/node_modules/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps hadolint hadolint
+	find . \( -path './.git' -o -path './.local' \) -prune -o -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -not -path './frontend/node_modules/*' -print0 | sort -z | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps hadolint hadolint
 
 lint-actions: ## Run actionlint on tracked workflows.
-	git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint
+	git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) actionlint actionlint
 
 lint-sql: ## Run SQLFluff against migrations.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 
 lint-caddy: ## Validate and format-check Caddy configuration.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh /workspace/tools/quality/test/caddy/check-policy.sh
@@ -126,7 +126,7 @@ endif
 HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
 
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract test-mobile-sdk-contract test-play-api hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -134,7 +134,7 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-play-api test-dev-workflow-regression test-load-harness-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
+quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-mobile-sdk-contract test-play-api test-ops-credentials test-dev-workflow-regression test-load-harness-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
 verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal watch-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 

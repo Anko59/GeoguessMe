@@ -173,6 +173,7 @@
       "type": "string"
     "avatar":
       "type": "string"
+    "map_pin": { "$ref": "./schemas-pins.yaml#/MapPin" }
     "score":
       "type": "integer"
       "minimum": 0
@@ -245,6 +246,7 @@
     "user_id": { "type": "string", "format": "uuid" }
     "username": { "type": "string" }
     "avatar": { "type": "string" }
+    "map_pin": { "$ref": "./schemas-pins.yaml#/MapPin" }
     "lat": { "type": "number", "format": "double" }
     "long": { "type": "number", "format": "double" }
     "score": { "type": "integer", "minimum": 0, "maximum": 5000 }

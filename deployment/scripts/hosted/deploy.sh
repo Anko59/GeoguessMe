@@ -6,20 +6,34 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/common.sh"
 
 environment=${1:-}
+validate_environment "$environment"
 backend_image=${2:-}
 web_image=${3:-}
-case "$#" in
-    4)
+# Phase-one legacy arities use a digest-pinned upstream bootstrap without this
+# project's CI signature; the final runtime update removes these branches.
+case "$environment:$#" in
+    dev:4)
         keycloak_image=''
+        sops_image=$SOPS_BOOTSTRAP_IMAGE
         revision=$4
         ;;
-    5)
-        keycloak_image=$4
+    dev:5)
+        keycloak_image=''
+        sops_image=$4
         revision=$5
         ;;
-    *) die 'expected 4 or 5 deployment arguments' ;;
+    production:5)
+        keycloak_image=$4
+        sops_image=$SOPS_BOOTSTRAP_IMAGE
+        revision=$5
+        ;;
+    production:6)
+        keycloak_image=$4
+        sops_image=$5
+        revision=$6
+        ;;
+    *) die 'expected dev BACKEND WEB [SOPS] REVISION or production BACKEND WEB KEYCLOAK [SOPS] REVISION' ;;
 esac
-validate_environment "$environment"
 
 validate_image_reference "$backend_image" backend
 validate_image_reference "$web_image" web
@@ -30,6 +44,13 @@ case "$revision" in
     *[!0-9a-f]* | '') die 'revision must be a lowercase hexadecimal Git commit' ;;
 esac
 [ "${#revision}" -eq 40 ] || die 'revision must contain exactly 40 hexadecimal characters'
+case "$environment" in
+    dev) expected_sops_tag="dev-$revision" ;;
+    production) expected_sops_tag="release-$revision" ;;
+esac
+if [ "$sops_image" != "$SOPS_BOOTSTRAP_IMAGE" ]; then
+    validate_sops_image_reference "$sops_image" "$expected_sops_tag"
+fi
 
 exec 9>"$LOCK_ROOT/geoguessme-deploy.lock"
 flock -n 9 || die 'another host deployment is already running'
@@ -42,6 +63,19 @@ case "$environment" in
         identity='^https://github.com/Anko59/GeoguessMe/.github/workflows/release\.yml@refs/heads/main$'
         ;;
 esac
+
+verify_image_signature() {
+    image=$1
+    docker run --rm -v "$HOME/.docker:/root/.docker:ro" "$COSIGN_IMAGE" verify \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp "$identity" \
+        --annotations "revision=$revision" "$image" >/dev/null
+}
+
+if [ "$sops_image" != "$SOPS_BOOTSTRAP_IMAGE" ]; then
+    verify_image_signature "$sops_image"
+fi
+docker pull "$sops_image"
 
 release=$(release_dir "$revision")
 prune_releases "$APP_ROOT" "$STATE_ROOT" "$CONFIG_ROOT" "$revision" ||
@@ -70,10 +104,13 @@ if [ -f "$encrypted" ]; then
     docker run --rm \
         -e "SOPS_AGE_KEY_FILE=/age/$environment.txt" \
         -v "$release:/source:ro" -v "$SECRET_ROOT/age:/age:ro" \
-        "$SOPS_IMAGE" decrypt --input-type dotenv --output-type dotenv \
+        "$sops_image" decrypt --input-type dotenv --output-type dotenv \
         "/source/deployment/secrets/$environment.env.enc" \
         >"$temporary_secret"
     chmod 600 "$temporary_secret"
+    if oidc_enabled "$temporary_secret"; then
+        normalize_oauth2_proxy_cookie_secret "$temporary_secret"
+    fi
 fi
 
 registry_secret=$secret_file
@@ -90,7 +127,7 @@ if oidc_enabled "$registry_secret"; then
     docker run --rm \
         -e "SOPS_AGE_KEY_FILE=/age/$environment.txt" \
         -v "$release:/source:ro" -v "$SECRET_ROOT/age:/age:ro" \
-        "$SOPS_IMAGE" decrypt --input-type dotenv --output-type dotenv \
+        "$sops_image" decrypt --input-type dotenv --output-type dotenv \
         "/source/deployment/secrets/identity.env.enc" \
         >"$identity_temporary"
     chmod 600 "$identity_temporary"
@@ -115,13 +152,6 @@ if [ -z "$registry_username" ] || [ -z "$registry_token" ]; then
 fi
 printf '%s' "$registry_token" | docker login ghcr.io \
     --username "$registry_username" --password-stdin >/dev/null
-verify_image_signature() {
-    image=$1
-    docker run --rm -v "$HOME/.docker:/root/.docker:ro" "$COSIGN_IMAGE" verify \
-        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-        --certificate-identity-regexp "$identity" \
-        --annotations "revision=$revision" "$image" >/dev/null
-}
 verify_image_signature "$backend_image"
 verify_image_signature "$web_image"
 if [ -n "$keycloak_image" ]; then verify_image_signature "$keycloak_image"; fi
@@ -263,6 +293,7 @@ umask 077
 {
     printf 'BACKEND_IMAGE=%s\n' "$backend_image"
     printf 'WEB_IMAGE=%s\n' "$web_image"
+    printf 'SOPS_IMAGE=%s\n' "$sops_image"
     if [ "$environment" = production ] && [ "$oidc_enabled" = true ] &&
         [ -n "$keycloak_image" ]; then
         printf 'KEYCLOAK_IMAGE=%s\n' "$keycloak_image"
@@ -276,4 +307,4 @@ ln -sfn "$release" "$APP_ROOT/$environment/current"
 trap - EXIT INT TERM
 [ -z "$old_secret" ] || rm -f "$old_secret"
 [ -z "$identity_temporary" ] || rm -f "$identity_temporary"
-printf 'deployment completed: environment=%s revision=%s\n' "$environment" "$revision"
+printf 'deployment completed: environment=%s revision=%s sops_image=%s\n' "$environment" "$revision" "$sops_image"

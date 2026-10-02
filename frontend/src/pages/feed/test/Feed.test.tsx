@@ -49,6 +49,8 @@ describe('Public feed', () => {
         expect(await screen.findByText('4,900 points')).toBeInTheDocument();
         expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
         expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
+        expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
+        expect(mocks.timedResults).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
@@ -77,8 +79,10 @@ describe('Public feed', () => {
             server_time: new Date(startedAt).toISOString(),
         });
 
+        let unmount = () => {};
         try {
-            renderFeed();
+            ({ unmount } = renderFeed());
+            await screen.findByAltText('Blurred preview of an unsolved geo challenge');
             fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
             await waitFor(() => expect(mocks.timedMediaDelivered).toHaveBeenCalled());
 
@@ -89,10 +93,13 @@ describe('Public feed', () => {
 
             await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
             expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
+            await screen.findByAltText('Geo challenge photo');
+            expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
             fireEvent.click(screen.getByRole('button', { name: 'Close' }));
             fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
             expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         } finally {
+            unmount();
             vi.useRealTimers();
         }
     });

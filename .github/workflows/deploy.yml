@@ -193,6 +193,8 @@ jobs:
       web: ${{ steps.refs.outputs.web }}
       keycloak: ${{ steps.refs.outputs.keycloak }}
       restic: ${{ steps.refs.outputs.restic }}
+      sops: ${{ steps.refs.outputs.sops }}
+      socket_proxy: ${{ steps.refs.outputs.socket_proxy }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
@@ -214,6 +216,8 @@ jobs:
             echo "web=ghcr.io/$owner/geoguessme-web:dev-${GITHUB_SHA}"
             echo "keycloak=ghcr.io/$owner/geoguessme-keycloak:dev-${GITHUB_SHA}"
             echo "restic=ghcr.io/$owner/geoguessme-restic:dev-${GITHUB_SHA}"
+            echo "sops=ghcr.io/$owner/geoguessme-sops:dev-${GITHUB_SHA}"
+            echo "socket_proxy=ghcr.io/$owner/geoguessme-socket-proxy:dev-${GITHUB_SHA}"
           } >> "$GITHUB_OUTPUT"
       - name: Build and push backend with SBOM and provenance
         id: backend
@@ -265,16 +269,33 @@ jobs:
           provenance: mode=max
           cache-from: type=gha,scope=dev-restic
           cache-to: type=gha,mode=max,scope=dev-restic
-      - name: Sign immutable images
-        env:
-          BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
-          WEB: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
-          KEYCLOAK: ${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}
-          RESTIC: ${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}
-        run: |
-          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$RESTIC"; do
-            cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
-          done
+      - name: Build and push patched SOPS with SBOM and provenance
+        id: sops
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          file: deployment/docker/sops-tools/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.sops }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=dev-sops
+          cache-to: type=gha,mode=max,scope=dev-sops
+      - name: Build and push PCRE2-fixed socket-proxy with SBOM and provenance
+        id: socket_proxy
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          file: deployment/docker/socket-proxy-tools/Dockerfile
+          build-args: GEOGUESSME_REVISION=${{ github.sha }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.socket_proxy }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=dev-socket-proxy
+          cache-to: type=gha,mode=max,scope=dev-socket-proxy
       - name: Export immutable references
         id: refs
         run: |
@@ -283,6 +304,8 @@ jobs:
             echo "web=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}"
             echo "keycloak=${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}"
             echo "restic=${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}"
+            echo "sops=${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}"
+            echo "socket_proxy=${{ steps.names.outputs.socket_proxy }}@${{ steps.socket_proxy.outputs.digest }}"
           } >> "$GITHUB_OUTPUT"
       - name: Scan published images for fixed High/Critical CVEs
         # Runs `make audit-images` (trivy via compose.tools) against the exact
@@ -293,6 +316,8 @@ jobs:
           WEB_IMAGE: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
           KEYCLOAK_IMAGE: ${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}
           RESTIC_IMAGE: ${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}
+          SOPS_IMAGE: ${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}
+          SOCKET_PROXY_IMAGE: ${{ steps.names.outputs.socket_proxy }}@${{ steps.socket_proxy.outputs.digest }}
         run: |
           # Buildx pushes without loading the images into the runner. Pull the
           # authenticated exact digests so audit-images can export them for
@@ -301,7 +326,45 @@ jobs:
           docker pull "$WEB_IMAGE"
           docker pull "$KEYCLOAK_IMAGE"
           docker pull "$RESTIC_IMAGE"
+          docker pull "$SOPS_IMAGE"
+          docker pull "$SOCKET_PROXY_IMAGE"
           make audit-images
+      - name: Verify SOPS package is anonymously pullable
+        env:
+          SOPS_IMAGE: ${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$SOPS_IMAGE" == ghcr.io/*@sha256:* ]]
+          ref=${SOPS_IMAGE#ghcr.io/}
+          tagged_image=${ref%@*}
+          repository=${tagged_image%:*}
+          digest=${ref#*@}
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          token=$(curl -fsS --get \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode "scope=repository:$repository:pull" \
+            https://ghcr.io/token | jq -er '.token // .access_token')
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --head \
+            --header "Authorization: Bearer $token" \
+            --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/$repository/manifests/$digest")
+          [[ "$status" == 200 ]] || {
+            echo "SOPS image must be anonymously pullable before hosted secret decryption (HTTP $status)" >&2
+            exit 1
+          }
+      - name: Sign immutable images after the exact-digest audit
+        env:
+          BACKEND: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
+          WEB: ${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}
+          KEYCLOAK: ${{ steps.names.outputs.keycloak }}@${{ steps.keycloak.outputs.digest }}
+          RESTIC: ${{ steps.names.outputs.restic }}@${{ steps.restic.outputs.digest }}
+          SOPS: ${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}
+          SOCKET_PROXY_IMAGE: ${{ steps.names.outputs.socket_proxy }}@${{ steps.socket_proxy.outputs.digest }}
+        run: |
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$RESTIC" "$SOPS" "$SOCKET_PROXY_IMAGE"; do
+            cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
+          done
       - name: Upload image-scan reports and SBOMs
         # Reports/SBOM contain no secrets; retained 7 days. Globbing only the
         # report and SBOM files keeps the trivy DB cache
@@ -331,6 +394,8 @@ jobs:
           echo '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb' | sha256sum -c -
           sudo dpkg -i cloudflared.deb
       - name: Deploy through Cloudflare Access
+        # Keep the four-field command until this revision's compatible host
+        # bundle is installed; the next staged update adds the signed SOPS ref.
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}

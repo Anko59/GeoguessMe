@@ -428,8 +428,9 @@ func (r *Repository) readExistingGuess(ctx context.Context, photoID, userID stri
 // rendering.
 type GuessWithUser struct {
 	models.Guess
-	Username string `json:"username"`
-	Avatar   string `json:"avatar"`
+	Username string         `json:"username"`
+	Avatar   string         `json:"avatar"`
+	MapPin   *models.MapPin `json:"map_pin,omitempty"`
 	// When the guesser's guessing window opened (their recorded view end),
 	// so results can show how long the guess took. Nullable: legacy rows may
 	// predate the challenge_views window tracking.
@@ -439,7 +440,14 @@ type GuessWithUser struct {
 // GuessesForPhoto returns every guess on a challenge with the guesser's
 // profile, ordered by score descending then creation time ascending.
 func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]GuessWithUser, error) {
-	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.timed_out, g.created_at, u.username, u.avatar, v.view_expires_at FROM guesses g JOIN users u ON g.user_id = u.id LEFT JOIN challenge_views v ON v.photo_id = g.photo_id AND v.user_id = g.user_id WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
+	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.timed_out, g.created_at, u.username, u.avatar, v.view_expires_at,
+		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
+		FROM guesses g
+		JOIN users u ON g.user_id = u.id
+		LEFT JOIN challenge_views v ON v.photo_id = g.photo_id AND v.user_id = g.user_id
+		LEFT JOIN user_equipped_map_pins ep ON ep.user_id = g.user_id
+		LEFT JOIN map_pins mp ON mp.pin_key = ep.pin_key
+		WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
 	if err != nil {
 		return nil, err
 	}
@@ -447,8 +455,12 @@ func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]Gue
 	var guesses []GuessWithUser
 	for rows.Next() {
 		var g GuessWithUser
-		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.TimedOut, &g.CreatedAt, &g.Username, &g.Avatar, &g.ViewExpiresAt); err != nil {
+		var pinKey, pinName, pinImage string
+		if err := rows.Scan(&g.ID, &g.PhotoID, &g.UserID, &g.GroupID, &g.Lat, &g.Long, &g.Score, &g.Distance, &g.TimedOut, &g.CreatedAt, &g.Username, &g.Avatar, &g.ViewExpiresAt, &pinKey, &pinName, &pinImage); err != nil {
 			return nil, err
+		}
+		if pinKey != "" {
+			g.MapPin = &models.MapPin{Key: pinKey, Name: pinName, ImageURL: pinImage}
 		}
 		guesses = append(guesses, g)
 	}

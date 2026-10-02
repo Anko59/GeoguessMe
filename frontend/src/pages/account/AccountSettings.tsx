@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
+import MapPinPicker from '../../components/settings/MapPinPicker';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import type { OIDCConfig } from '../../types';
 import { backendURL } from '../../platform/endpoints';
@@ -239,6 +240,7 @@ export default function AccountSettings() {
                             </button>
                         ))}
                     </div>
+                    <MapPinPicker />
                     <label htmlFor="settings-username">Username</label>
                     <input
                         id="settings-username"

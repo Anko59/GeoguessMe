@@ -31,9 +31,10 @@ Dockerized Make targets are the required repository interface. Use a Make target
 whenever one exists. Do not run project compilers, package managers, linters,
 formatters, Playwright, migration tools, or test runners directly on the host.
 Add or improve a Dockerized Make target instead of documenting a host command.
-The supported host prerequisites are Git, Make, Docker, and Docker Compose. See
-[docs/local-development.md](docs/local-development.md) for setup and the
-canonical target list in `make help`.
+The supported development host prerequisites are Git, Make, Docker, and Docker
+Compose. Hosted operator access also needs `secret-tool`, `curl`, `jq`, and the
+OpenSSH client/agent. See [docs/local-development.md](docs/local-development.md)
+for setup and the canonical target list in `make help`.
 
 ## Hooks
 
@@ -46,6 +47,29 @@ configuration.
 The commit hook runs repository-wide formatting, structure, and lint checks. The
 push hook runs `make preflight`; it deliberately does not duplicate the complete
 operational gate that CI runs after merge to `dev`.
+
+## Credential discovery before asking
+
+Before asking a user to provide or expose a credential, run
+`make credentials-preflight` and follow the credential sources in
+[the Access token runbook](docs/runbooks/access-tokens.md). An unset environment
+variable does not mean the credential is unavailable: check the documented
+Secret Service keyring, `gh auth status`, and SSH agent, then use the
+repository's scoped access helper when available. Never ask the user to paste a
+secret into chat or print a credential to verify it. Ask only after the
+preflight and documented retrieval paths fail, and name the exact missing source
+and required scope.
+
+`make credentials-preflight` covers operator Access/SSH credentials and local
+tooling; it does not check Terraform credentials. For hosted infrastructure,
+inspect the local `.envrc` when present and run
+`direnv exec "$PWD" make terraform-credentials-preflight` so the check sees the
+same keyring-backed environment as Terraform. Run Terraform targets with the
+same `direnv exec "$PWD"` prefix. The Terraform preflight reports only
+availability for `HCLOUD_TOKEN`, `CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`,
+and `AWS_SECRET_ACCESS_KEY`; it never prints their values. If the variables are
+not available in that execution context, complete the documented keyring or
+environment lookup before asking the user.
 
 ## Structure
 

@@ -73,7 +73,10 @@ exposing the application's bearer token or Docker socket publicly.
 
 The capacity gate, installation, token rotation, alert behavior, backup, and
 rollback procedure are canonical in the
-[monitoring runbook](runbooks/monitoring.md).
+[monitoring runbook](runbooks/monitoring.md). The Docker socket proxy is a
+separately signed image; update it only with the forced `watch` protocol after
+the exact artifact passes the dev gate. Never pass its image through the app
+`deploy` command or update the shared production monitor from dev CI.
 
 ## Logging
 
@@ -127,6 +130,18 @@ Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
 
+Each hosted deployment records the selected `SOPS_IMAGE` reference in its
+release metadata. When the project SOPS digest is supplied, the host verifies
+its signature before pulling it; the first monitored runtime cutover temporarily
+retains a digest-pinned upstream bootstrap for legacy command arities. Because
+SOPS must decrypt the environment before GHCR login, the project SOPS package is
+public-pullable and CI checks anonymous access to the exact digest. GHCR creates
+new packages as private, so the package owner must change visibility to public
+after the first push; the image contains only the SOPS utility, not secrets. The
+final runtime bundle removes the bootstrap and requires the signed digest, as
+described in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
+
 The host also stores an immutable source directory for each deployed revision.
 The deploy runtime retains the current and previous revision for dev and
 production, plus the root-owned runtime-definition revision. It removes other
@@ -145,13 +160,15 @@ revision-bound artifact. It builds and verifies the signed bundle before image
 promotion, stores the bundle and provenance manifest as one short-lived workflow
 artifact, and publishes the same files to Google Play only after the hosted
 deployment has succeeded. It authenticates with GitHub OIDC and a short-lived
-Android Publisher token; no service-account JSON key or credential file is used.
+Android Publisher token from the `play-publishing` environment; the `production`
+environment is reserved for hosted-service deployment. No service-account JSON
+key or credential file is used.
 
 The `play-access` job blocks image promotion when the Play configuration or
 app-scoped permission is invalid. The `play-publish` job blocks the Play write
-when the artifact provenance, version monotonicity, edit validation, or
-post-commit track readback is invalid. A Play publication failure therefore does
-not silently upload a different bundle; inspect the exact release run and the
+when the artifact provenance, version monotonicity, track update response, or
+edit validation is invalid. A Play publication failure therefore does not
+silently upload a different bundle; inspect the exact release run and the
 restricted manifest evidence before retrying. For the full state model,
 configuration, and Play-track recovery actions, use the
 [Google Play account runbook](runbooks/google-play-console.md).

@@ -29,6 +29,8 @@ and submit one server-timed guess.
 - [Configuration](configuration.md) — every environment variable, defaults,
   validation
 - [Gameplay](gameplay.md) — challenge lifecycle, scoring, result visibility
+- [Personalized map pins](map-pins.md) — unlock rules, selection, and offline
+  country boundaries
 - [Photo filters](photo-filters.md) — camera filters, capture behavior, and
   permissions
 - [Rank badges](rank-badges.md) — progression badge artwork and global rank
@@ -64,8 +66,9 @@ and submit one server-timed guess.
   Cloudflare, CI/CD, launch, and recovery checklist
 - [Google Play review access runbook](runbooks/google-play-review-access.md) —
   dedicated reviewer account, keyring storage, and Play Console instructions
-- [Cloudflare Access service-token runbook](runbooks/access-tokens.md) — three
-  isolated service tokens, GitHub secrets, rotation
+- [Cloudflare Access service-token runbook](runbooks/access-tokens.md) —
+  isolated workflow tokens, local keyring discovery, temporary operator
+  sessions, and rotation
 - [HSTS rollout runbook](runbooks/hsts-rollout.md) — staged HSTS max-age
   increase after seven green days
 - [DMARC rollout runbook](runbooks/dmarc-rollout.md) — p=none to reject,

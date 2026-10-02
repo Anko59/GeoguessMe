@@ -15,6 +15,9 @@
 #      include their canonical components and the PR-14 checks are wired in).
 set -u
 
+# Keep sort and comm ordering deterministic across developer locales.
+export LC_ALL=C
+
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT" || exit 1
 

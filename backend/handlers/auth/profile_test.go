@@ -23,7 +23,7 @@ func profileUser(id, username string) *models.User {
 
 // expectProfileQueries queues every SQL expectation a profile fetch issues:
 // score stats (sum, count, average), the lifetime-points global rank, the
-// average global rank, and the global Elo challenge load.
+// average global rank, global Elo, and equipped map pin.
 func expectProfileQueries(t *testing.T, mock pgxmock.PgxPoolIface, userID string, totalPoints, guessCount int64, average float64, pointsRank, pointsPlayers, averageRank, averagePlayers int64) {
 	t.Helper()
 	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(score\\), 0\\), COUNT\\(\\*\\), COALESCE\\(AVG\\(score\\), 0\\)").WithArgs(userID).
@@ -34,6 +34,51 @@ func expectProfileQueries(t *testing.T, mock pgxmock.PgxPoolIface, userID string
 		WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(averageRank, averagePlayers))
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
+	mock.ExpectQuery("SELECT p.pin_key, p.name, p.image_url, p.description").WithArgs(userID).
+		WillReturnRows(pgxmock.NewRows([]string{"pin_key", "name", "image_url", "description", "challenge_key", "challenge_name", "challenge_description"}))
+}
+
+func TestMapPinsCatalogSelectionAndStandardMarker(t *testing.T) {
+	mock := newAuthMockPool(t)
+	api := newAuthAPI(t, mock, nil)
+	now := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+	mock.ExpectQuery("SELECT p.pin_key, p.name, p.description, p.image_url").WithArgs("user-1").WillReturnRows(
+		pgxmock.NewRows([]string{"pin_key", "name", "description", "image_url", "challenge_key", "challenge_name", "challenge_description", "unlocked_at", "selected"}).
+			AddRow("north-star", "North Star", "A clear sky marker.", "/map-pins/north-star.svg", "first-perfect", "Perfect score", "Reach the top score.", now, true),
+	)
+	recorder := httptest.NewRecorder()
+	api.MapPins(recorder, requestWithUser(http.MethodGet, "/", "", "user-1"))
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("catalog response = %d, headers %v, body %s", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+	for _, want := range []string{`"selected_pin_key":"north-star"`, `"unlocked":true`, `"key":"first-perfect"`, `"unlocked_at":"2026-09-27T10:00:00Z"`} {
+		if !strings.Contains(recorder.Body.String(), want) {
+			t.Fatalf("catalog missing %s: %s", want, recorder.Body.String())
+		}
+	}
+
+	// Selection is persisted only after the server confirms ownership.
+	mock.ExpectExec("INSERT INTO user_equipped_map_pins").WithArgs("user-1", "unknown").
+		WillReturnResult(pgxmock.NewResult("INSERT", 0))
+	recorder = httptest.NewRecorder()
+	api.MapPins(recorder, requestWithUser(http.MethodPut, "/", `{"pin_key":"unknown"}`, "user-1"))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "map_pin_unavailable") {
+		t.Fatalf("locked selection response = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+
+	recorder = httptest.NewRecorder()
+	api.MapPins(recorder, requestWithUser(http.MethodPut, "/", `{"pin_key":"Bad Key"}`, "user-1"))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("invalid selection status = %d (%s)", recorder.Code, recorder.Body.String())
+	}
+
+	mock.ExpectExec("DELETE FROM user_equipped_map_pins").WithArgs("user-1").
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	recorder = httptest.NewRecorder()
+	api.MapPins(recorder, requestWithUser(http.MethodDelete, "/", "", "user-1"))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("clear selection response = %d (%s)", recorder.Code, recorder.Body.String())
+	}
 }
 
 func TestGetPublicProfile(t *testing.T) {
@@ -189,6 +234,8 @@ func TestProfileReturnsLifetimeProgression(t *testing.T) {
 	mock.ExpectQuery("WITH scores AS").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"rank", "total_players"}).AddRow(int64(7), int64(1943)))
 	mock.ExpectQuery(`(?s)SELECT p\.id, p\.created_at, g\.user_id, g\.score.*WHERE TRUE AND NOT g\.timed_out ORDER BY`).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "user_id", "score"}))
+	mock.ExpectQuery("SELECT p.pin_key, p.name, p.image_url, p.description").WithArgs(user.ID).
+		WillReturnRows(pgxmock.NewRows([]string{"pin_key", "name", "image_url", "description", "challenge_key", "challenge_name", "challenge_description"}))
 	recorder := httptest.NewRecorder()
 	api.GetProfile(recorder, requestWithUser(http.MethodGet, "/", "", user.ID))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"name":"Lost Tourist"`) || !strings.Contains(recorder.Body.String(), `"total_points":7600`) || !strings.Contains(recorder.Body.String(), `"global_rank":{"rank":3,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"average_score":2533.33`) || !strings.Contains(recorder.Body.String(), `"global_average_rank":{"rank":7,"total_players":1943}`) || !strings.Contains(recorder.Body.String(), `"elo":0`) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import FeedCard, { FeedResultsFooter } from './FeedCard';
 import FeedComposer from './FeedComposer';
@@ -107,7 +107,12 @@ function FeedPage() {
 function FeedResultsRoute({ id }: { id: string }) {
     const feed = useFeed(id);
     const post = feed.items[0];
+    const postId = post?.id;
+    const updateFeedPost = feed.update;
     const navigate = useNavigate();
+    const markResolved = useCallback(() => {
+        if (postId) updateFeedPost({ id: postId, resolved: true });
+    }, [postId, updateFeedPost]);
 
     return (
         <AuthenticatedPageShell className="public-feed">
@@ -137,7 +142,7 @@ function FeedResultsRoute({ id }: { id: string }) {
                         openResultsDirectly={post.is_owner || post.resolved}
                         restoreFocus={() => {}}
                         onClose={() => navigate('/feed')}
-                        onResolved={() => feed.update({ id: post.id, resolved: true })}
+                        onResolved={markResolved}
                         resultsFooter={
                             post.is_owner || post.resolved ? (
                                 <FeedResultsFooter post={post} onUpdate={feed.update} />

@@ -89,12 +89,13 @@ run "hosted_plan" {
 
   assert {
     condition = nonsensitive(length(templatefile("../cloud-init/cloud-config.yaml.tftpl", {
-      admin_key        = var.admin_ssh_public_key
-      dev_ci_key       = var.dev_ci_ssh_public_key
-      production_key   = var.production_ci_ssh_public_key
-      runtime_revision = var.runtime_revision
-      tunnel_token     = "mock-tunnel-token"
-      runtime_bundle   = local.runtime_bundle
+      admin_key         = var.admin_ssh_public_key
+      dev_ci_key        = var.dev_ci_ssh_public_key
+      production_key    = var.production_ci_ssh_public_key
+      runtime_revision  = var.runtime_revision
+      tunnel_token      = "mock-tunnel-token"
+      runtime_bundle    = local.runtime_bundle
+      runtime_installer = local.runtime_installer
     }))) <= 32768
     error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
   }
@@ -170,11 +171,11 @@ run "hosted_plan" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-backup@dev.timer") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-watch-health.timer") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "watch-refresh-metrics-token") &&
+      strcontains(file("../cloud-init/install-runtime-bundle.sh"), "geoguessme-watch-health.timer") &&
+      strcontains(file("../cloud-init/install-runtime-bundle.sh"), "watch-refresh-metrics-token") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.production.yaml") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "/opt/geoguessme/config/compose.watch.yaml")
+      strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.production.yaml") &&
+      strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.watch.yaml")
     )
     error_message = "Cloud-init must secure SSH, recreate volatile locks, and schedule backups."
   }

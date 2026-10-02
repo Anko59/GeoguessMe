@@ -7,7 +7,11 @@ set -eu
 COMPOSE_PROJECT_NAME=geoguessme-watch
 export COMPOSE_PROJECT_NAME
 WATCH_GATEWAY_IMAGE=$(watch_gateway_image)
-export WATCH_GATEWAY_IMAGE
+SOCKET_PROXY_IMAGE=${SOCKET_PROXY_IMAGE:-}
+if [ -n "$SOCKET_PROXY_IMAGE" ]; then
+    validate_socket_proxy_state_image "$SOCKET_PROXY_IMAGE"
+fi
+export WATCH_GATEWAY_IMAGE SOCKET_PROXY_IMAGE
 
 compose() {
     WEB_IMAGE="$WATCH_GATEWAY_IMAGE" \

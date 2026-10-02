@@ -19,8 +19,18 @@ readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
 readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
+# Temporary compatibility for the first staged host cutover only. New workflows
+# pass the signed SOPS digest explicitly; remove this bootstrap pin once both
+# host environments and workflows use that protocol.
 # shellcheck disable=SC2034
-readonly SOPS_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
+readonly SOPS_BOOTSTRAP_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
+readonly SOPS_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-sops'
+readonly SOCKET_PROXY_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-socket-proxy'
+# Temporary bootstrap references for the staged root-bundle cutover. The first
+# is used by the new Compose definition; the second may still be running on an
+# already-provisioned host before the first signed watch update.
+readonly SOCKET_PROXY_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d'
+readonly SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd'
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -42,6 +52,54 @@ valid_image_reference() {
     esac
     case "$candidate_digest" in *[!0-9a-f]* | '') return 1 ;; esac
     [ "${#candidate_digest}" -eq 64 ]
+}
+
+validate_sops_image_reference() {
+    sops_candidate=$1
+    sops_expected_tag=$2
+    case "$sops_candidate" in
+        "${SOPS_IMAGE_REPOSITORY}:${sops_expected_tag}"@sha256:*) ;;
+        *) die 'SOPS image must be the expected development/release tag with an immutable digest' ;;
+    esac
+    valid_image_reference "$sops_candidate" ||
+        die 'SOPS image reference must end with a valid immutable sha256 digest'
+}
+
+validate_socket_proxy_image_reference() {
+    socket_candidate=$1
+    socket_expected_tag=$2
+    case "$socket_candidate" in
+        "${SOCKET_PROXY_IMAGE_REPOSITORY}:${socket_expected_tag}"@sha256:*) ;;
+        *) die 'socket-proxy image must use the expected development/release tag with an immutable digest' ;;
+    esac
+    valid_image_reference "$socket_candidate" ||
+        die 'socket-proxy image reference must end with a valid immutable sha256 digest'
+}
+
+validate_socket_proxy_bootstrap_image() {
+    case "$1" in
+        "$SOCKET_PROXY_BOOTSTRAP_IMAGE" | "$SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+validate_socket_proxy_state_image() {
+    socket_candidate=$1
+    if validate_socket_proxy_bootstrap_image "$socket_candidate"; then
+        return 0
+    fi
+    case "$socket_candidate" in
+        "${SOCKET_PROXY_IMAGE_REPOSITORY}:dev-"*@sha256:* | \
+            "${SOCKET_PROXY_IMAGE_REPOSITORY}:release-"*@sha256:*) ;;
+        *) die 'watch state must contain a signed development or release socket-proxy image' ;;
+    esac
+    socket_tag=${socket_candidate#"${SOCKET_PROXY_IMAGE_REPOSITORY}:"}
+    socket_revision=${socket_tag#*-}
+    socket_revision=${socket_revision%%@*}
+    valid_release_revision "$socket_revision" ||
+        die 'watch state image tag must contain a lowercase 40-character revision'
+    valid_image_reference "$socket_candidate" ||
+        die 'watch state image must end with a valid immutable sha256 digest'
 }
 
 valid_release_revision() {
@@ -142,6 +200,42 @@ environment_env_file() {
 
 oidc_enabled() {
     grep -Eq '^OIDC_ENABLED=(true|1)$' "$1"
+}
+
+normalize_oauth2_proxy_cookie_secret() {
+    normalized_env_file=$1
+    normalized_secret_count=$(grep -c '^OAUTH2_PROXY_COOKIE_SECRET=' "$normalized_env_file" || true)
+    case "$normalized_secret_count" in
+        0) return 0 ;;
+        1) ;;
+        *) die 'deployment environment has duplicate OAuth2 Proxy cookie secrets' ;;
+    esac
+
+    normalized_cookie_secret=$(sed -n 's/^OAUTH2_PROXY_COOKIE_SECRET=//p' "$normalized_env_file")
+    [ -n "$normalized_cookie_secret" ] || die 'OAuth2 Proxy cookie secret is empty'
+    case "$normalized_cookie_secret" in
+        *[!A-Za-z0-9_+/=-]*) die 'OAuth2 Proxy cookie secret has an unsupported encoding' ;;
+    esac
+
+    normalized_standard_secret=$(printf '%s' "$normalized_cookie_secret" | tr -- '-_' '+/')
+    normalized_decoded_bytes=''
+    if printf '%s' "$normalized_standard_secret" | base64 -d >/dev/null 2>&1; then
+        normalized_decoded_bytes=$(printf '%s' "$normalized_standard_secret" | base64 -d | wc -c | tr -d '[:space:]')
+    fi
+
+    case "$normalized_decoded_bytes" in
+        16 | 24 | 32)
+            # oauth2-proxy accepts URL-safe Base64. Converting the alphabet
+            # preserves the decoded key while supporting legacy standard Base64.
+            sed -i '/^OAUTH2_PROXY_COOKIE_SECRET=/y@+/@-_@' "$normalized_env_file"
+            ;;
+        *)
+            case "${#normalized_cookie_secret}" in
+                16 | 24 | 32) ;;
+                *) die 'OAuth2 Proxy cookie secret must be raw AES key material or Base64 for 16, 24, or 32 bytes' ;;
+            esac
+            ;;
+    esac
 }
 
 release_dir() {

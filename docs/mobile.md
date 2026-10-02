@@ -38,7 +38,7 @@ emulator falls back to software acceleration otherwise.
 From the repository root:
 
 ```text
-make mobile-prepare  # pinned SDK packages and the API 36 AVD
+make mobile-prepare  # API 36 tools and the Maestro-supported API 34 AOSP AVD
 make mobile-sync     # production web build and Capacitor sync
 make mobile-build    # debug APK
 make test-mobile     # isolated stack + seed + build + emulator + Maestro
@@ -49,7 +49,17 @@ make test-mobile     # isolated stack + seed + build + emulator + Maestro
 is unattended: it builds an APK with a test-only localhost server URL, boots a
 clean headless emulator, uses `adb reverse` to reach the isolated Compose
 gateway, grants declared test permissions, installs the APK, and runs Maestro.
-Its cleanup removes the disposable database and media volumes.
+The app still compiles and targets Android API 36; the emulator uses API 34
+because Maestro's
+[published Android support range](https://github.com/mobile-dev-inc/maestro-docs/blob/main/introduction/get-started/quickstart.md)
+currently ends at API 34. The test AVD uses the AOSP `default` image and a
+separate `_aosp` name so a cached Google APIs AVD cannot be silently reused.
+Play Services can restart its RCS module and kill apps bound to its
+FontsProvider; the mobile journey uses the platform location fallback with
+emulator-fed GPS and WebView camera capture, so it does not require Play
+Services. This keeps the journey isolated from GMS module updates while
+preserving the app's supported runtime. Its cleanup removes the disposable
+database and media volumes.
 
 The local-server override exists only through `CAPACITOR_SERVER_URL` during the
 test build. Normal mobile builds leave it empty and embed production assets. To
@@ -214,14 +224,17 @@ changing the track. If an error occurs before commit, it deletes the temporary
 edit; it never deletes an edit after a commit attempt whose outcome is
 uncertain.
 
-Configure these values in the GitHub `production` environment before running a
-production release:
+Configure Android signing values in the GitHub `production` environment before
+running a production release:
 
 - `MOBILE_UPLOAD_KEYSTORE_BASE64` secret: the base64-encoded upload keystore;
 - `MOBILE_KEYSTORE_PASSWORD` and `MOBILE_KEY_PASSWORD` secrets: signing
   passwords;
 - `MOBILE_UPLOAD_CERT_SHA256` variable: the expected upload certificate
-  fingerprint;
+  fingerprint.
+
+Configure the Play API values in the GitHub `play-publishing` environment:
+
 - `PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER` variable: the Google WIF provider
   resource;
 - `PLAY_GCP_SERVICE_ACCOUNT` variable: the Play-authorized service-account
@@ -232,15 +245,17 @@ production release:
 `PLAY_RELEASE_STATUS` is an optional variable and defaults to `completed`; use
 `inProgress` only when the release process explicitly requires a staged rollout.
 The Google service account must separately have the required app-scoped Play
-permissions. The workflow accepts no JSON key and does not create a credential
-file.
+permissions. Restrict the `play-publishing` GitHub environment to `main`, and
+ensure the Google WIF provider and service-account binding trust that
+environment's GitHub OIDC identity. The workflow accepts no JSON key and does
+not create a credential file.
 
 The repository also includes a read-only **Play API access check** workflow. Use
 it to validate OIDC and app identity without creating an edit or changing Play
 state. It is a diagnostic, not an alternative publication path.
 
 If the access preflight, artifact verification, production deployment, or
-post-commit track readback fails, the release stops and retains the failing
+pre-commit track verification fails, the release stops and retains the failing
 workflow evidence. A successful commit is reported with the package, edit ID,
 track, version, digest, and source provenance; tokens and signing material are
 never printed or stored.

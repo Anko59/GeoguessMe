@@ -15,7 +15,7 @@ build-images: build-keycloak-image ## Build production images with normal Docker
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
 	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
 
-build-keycloak-image: ## Build Keycloak with the fixed FreeMarker dependency.
+build-keycloak-image: ## Build the digest-pinned Keycloak image.
 	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 clean-build: ## Build production images from scratch without any layer cache.
@@ -24,25 +24,34 @@ clean-build: ## Build production images from scratch without any layer cache.
 	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
 
 # Final/runtime images audited by `make audit-images` (F-01). The defaults are
-# the digest-pinned third-party runtime/deployment images; override with
+# digest-pinned third-party runtime/deployment images; override with
 # AUDIT_IMAGES=... The backend/web application images and locally rebuilt
 # security-patched tool images are appended automatically when they exist.
+# SOPS and socket-proxy are locally patched derivatives of digest-pinned
+# upstream releases; CI overrides these with exact published digests for
+# deployment scanning. Their unpatched upstream bases are build inputs only.
 # Images already present in the host daemon are exported and scanned via
 # --input so private registry credentials never need to enter the Trivy
 # container.
+SOPS_IMAGE ?= geoguessme/sops-tools:3.13.3-expat-deb12u4
+SOCKET_PROXY_IMAGE ?= geoguessme/socket-proxy-tools:local
+export SOPS_IMAGE SOCKET_PROXY_IMAGE
 AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
 	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
 	henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46 \
-	lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd \
 	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
 	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
 	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
-	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded \
-	cloudflare/cloudflared:2026.9.1@sha256:d68fa057087c359c79a255570e891215877ce48aa48ba6f28aac90d8077acbc3 \
-	ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
+	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
 
-build-security-tool-images: ## Build locally patched security-tool images used by the image audit.
+build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
+	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build sops
+
+build-socket-proxy-image: ## Build the PCRE2-patched socket-proxy derivative.
+	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build socket-proxy-tools
+
+build-security-tool-images: build-sops-image build-socket-proxy-image ## Build locally patched security-tool images used by the image audit.
 	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
 
 ifeq ($(strip $(KEYCLOAK_IMAGE)),)
@@ -52,12 +61,17 @@ audit-images: build-security-tool-images
 endif
 audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
 	@bash tools/quality/image-scan-exceptions-check.sh
+	@$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
 	@set -eu; \
 	mkdir -p security/image-reports/.trivy-cache; \
 	image_archive=''; \
 	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
 	trap cleanup_image_archive EXIT; \
 	images="$(AUDIT_IMAGES)"; \
+	[ -n "$${SOPS_IMAGE:-}" ] || { echo 'audit-images: error: SOPS_IMAGE is required' >&2; exit 1; }; \
+	images="$$images $${SOPS_IMAGE}"; \
+	[ -n "$${SOCKET_PROXY_IMAGE:-}" ] || { echo 'audit-images: error: SOCKET_PROXY_IMAGE is required' >&2; exit 1; }; \
+	images="$$images $${SOCKET_PROXY_IMAGE}"; \
 	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
 		images="$$images $${KEYCLOAK_IMAGE}"; \
 	elif docker image inspect geoguessme-keycloak:local >/dev/null 2>&1; then \
@@ -205,6 +219,7 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/keycloak-image-contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/watch-deploy-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-hash-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/prune-releases.sh
@@ -213,7 +228,7 @@ hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollbac
 watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
 	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
 
-watch-rehearsal: watch-config build-images ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
+watch-rehearsal: watch-config build-images build-socket-proxy-image ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
 	deployment/scripts/watch/rehearsal.sh
 
 cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.
@@ -221,6 +236,18 @@ cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-t
 	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
 	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
+
+export OPS_SSH_COMMAND
+
+credentials-preflight: ## Safely report local keyring, SSH-agent, and operator tooling availability.
+	@bash tools/ops/credentials.sh preflight
+
+terraform-credentials-preflight: ## Report Terraform cloud credential availability without printing values.
+	@bash tools/ops/credentials.sh terraform-preflight
+
+ops-ssh: ## Open the documented operator SSH route; set HOST=dev|production and optional OPS_SSH_COMMAND.
+	@case "$(HOST)" in dev|production) ;; *) echo 'HOST must be dev or production' >&2; exit 2 ;; esac
+	@bash tools/ops/credentials.sh ssh "$(HOST)"
 
 deployment-hash-check: ## Verify installed host runtime definitions match the deployed revision (via Access SSH).
 	@case "$(ENVIRONMENT)" in dev) ;; production) ;; *) echo 'ENVIRONMENT=dev|production is required' >&2; exit 2 ;; esac
@@ -270,13 +297,13 @@ terraform-apply: ## Apply the exact reviewed plan; requires CONFIRM=apply.
 vapid-keys: ## Print a fresh Web Push keypair for VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
 	@$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go run . vapid-keys'
 
-secrets-encrypt: ## Encrypt ENV=dev|production from its example using RECIPIENT.
+secrets-encrypt: build-sops-image ## Encrypt ENV=dev|production from its example using RECIPIENT.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	cp deployment/env/$(ENV).env.example deployment/secrets/$(ENV).env.enc
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
 
-secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
+secrets-generate: build-sops-image ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	@mkdir -p deployment/secrets
@@ -297,7 +324,7 @@ secrets-generate: ## Generate and SOPS-encrypt ENV=dev|production without a plai
 	mv "$$temporary" deployment/secrets/$(ENV).env.enc; \
 	trap - EXIT INT TERM
 
-identity-secrets-generate: ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
+identity-secrets-generate: build-sops-image ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT must contain both host age recipients'; exit 2; }
 	@mkdir -p deployment/secrets
 	@temporary=$$(mktemp deployment/secrets/.identity.env.enc.XXXXXX); \

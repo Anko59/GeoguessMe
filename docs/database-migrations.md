@@ -185,6 +185,28 @@ separate tables. A delete trigger records media cleanup jobs atomically,
 including account cascades. Existing private challenge rows are unaffected. See
 [public feed rollout and rollback](public-feed.md#storage-deployment-and-rollback).
 
+## Migration 034: Personalized map pins
+
+Adds the pin catalog, unlock-challenge definitions, per-player unlock evidence,
+and the equipped-pin selection. Unlock records are server-owned and idempotent;
+the equipped row references the exact unlock so profiles can name the challenge
+that earned the selected pin. Artwork paths are constrained to same-origin
+assets. Migration 035 adds the 30 pins and their challenge descriptions.
+
+## Migration 035: Initial map pin catalog
+
+Seeds the 30 map pins and unlock challenge definitions. Image files are shipped
+with the frontend under `frontend/public/assets/map-pins/`; the database stores
+their same-origin paths. Challenge criteria are recorded as structured JSON for
+server-side progression evaluation.
+
+## Migration 036: Map pin progression indexes
+
+Adds indexes for a player's scored guesses, group participation, and ordered
+guess history. They support server-side unlock evaluation without scanning
+unrelated players' histories; the ordered indexes include timeout rows because
+timeouts break scoring streaks.
+
 ## Status command
 
 `make migrate-status` prints each migration with its version, name, and applied

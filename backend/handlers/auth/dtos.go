@@ -75,30 +75,32 @@ type GlobalRank struct {
 // excludes email and account details; it contains only the identity and
 // progression data already visible inside a shared group.
 type PublicProfileResponse struct {
-	ID                string           `json:"id"`
-	Username          string           `json:"username"`
-	Avatar            string           `json:"avatar"`
-	TotalPoints       int              `json:"total_points"`
-	GuessCount        int              `json:"guess_count"`
-	AverageScore      float64          `json:"average_score"`
-	Elo               int              `json:"elo"`
-	Rank              progression.Rank `json:"rank"`
-	GlobalRank        GlobalRank       `json:"global_rank"`
-	GlobalAverageRank GlobalRank       `json:"global_average_rank"`
-	GlobalEloRank     GlobalRank       `json:"global_elo_rank"`
+	ID                string                `json:"id"`
+	Username          string                `json:"username"`
+	Avatar            string                `json:"avatar"`
+	TotalPoints       int                   `json:"total_points"`
+	GuessCount        int                   `json:"guess_count"`
+	AverageScore      float64               `json:"average_score"`
+	Elo               int                   `json:"elo"`
+	Rank              progression.Rank      `json:"rank"`
+	GlobalRank        GlobalRank            `json:"global_rank"`
+	GlobalAverageRank GlobalRank            `json:"global_average_rank"`
+	GlobalEloRank     GlobalRank            `json:"global_elo_rank"`
+	MapPin            *models.ProfileMapPin `json:"map_pin,omitempty"`
 }
 
 // ProfileResponse is the authenticated player's own profile.
 type ProfileResponse struct {
 	AuthUser
-	TotalPoints       int              `json:"total_points"`
-	GuessCount        int              `json:"guess_count"`
-	AverageScore      float64          `json:"average_score"`
-	Elo               int              `json:"elo"`
-	Rank              progression.Rank `json:"rank"`
-	GlobalRank        GlobalRank       `json:"global_rank"`
-	GlobalAverageRank GlobalRank       `json:"global_average_rank"`
-	GlobalEloRank     GlobalRank       `json:"global_elo_rank"`
+	TotalPoints       int                   `json:"total_points"`
+	GuessCount        int                   `json:"guess_count"`
+	AverageScore      float64               `json:"average_score"`
+	Elo               int                   `json:"elo"`
+	Rank              progression.Rank      `json:"rank"`
+	GlobalRank        GlobalRank            `json:"global_rank"`
+	GlobalAverageRank GlobalRank            `json:"global_average_rank"`
+	GlobalEloRank     GlobalRank            `json:"global_elo_rank"`
+	MapPin            *models.ProfileMapPin `json:"map_pin,omitempty"`
 }
 
 // userResponse maps a user row onto the wire-shaped AuthUser view model.

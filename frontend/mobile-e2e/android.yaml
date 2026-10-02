@@ -3,6 +3,9 @@ name: GeoGuessMe Android core journey
 ---
 - launchApp:
     clearState: true
+# Keep the first tap outside the landing card's 600ms entrance animation.
+- waitForAnimationToEnd:
+    timeout: 5000
 - tapOn: "Already Playing? Login"
 - extendedWaitUntil:
     visible: "Welcome Back!"
@@ -19,10 +22,13 @@ name: GeoGuessMe Android core journey
 - extendedWaitUntil:
     visible: "Connected"
     timeout: 30000
-- tapOn: "Message"
+- tapOn:
+    id: chat-message
 - inputText: "Hello from Android"
 - tapOn: "Send message"
-- assertVisible: "Hello from Android"
+- extendedWaitUntil:
+    visible: "Hello from Android"
+    timeout: 15000
 - tapOn: "Accept challenge"
 - extendedWaitUntil:
     visible: "Where was this taken?"

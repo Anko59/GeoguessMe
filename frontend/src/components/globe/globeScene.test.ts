@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import {
     createGlobeScene,
     earthMinDistance,
@@ -84,6 +85,52 @@ describe('Earth scene', () => {
         expect(texture.anisotropy).toBe(4);
         expect(globe.controls.minDistance).toBe(HIGH_RES_MIN_DISTANCE);
         globe.dispose();
+    });
+
+    it('projects each designed pin over the globe and releases the scene cleanly', () => {
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            const texture = new THREE.Texture<HTMLImageElement>();
+            onLoad?.(texture);
+            return texture;
+        });
+        const host = document.createElement('div');
+        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
+        const globe = createGlobeScene(host, vi.fn(), vi.fn());
+        const items = [
+            {
+                photo_id: 'photo-1',
+                group_id: 'group-1',
+                user_id: 'user-1',
+                username: 'Alice',
+                created_at: '2026-09-27T10:00:00Z',
+                expires_at: '2026-09-28T10:00:00Z',
+                status: 'results' as const,
+                lat: 48.8,
+                long: 2.3,
+                map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
+            },
+            {
+                photo_id: 'photo-2',
+                group_id: 'group-1',
+                user_id: 'user-2',
+                username: 'Bob',
+                created_at: '2026-09-27T10:00:00Z',
+                expires_at: '2026-09-28T10:00:00Z',
+                status: 'results' as const,
+                lat: 51.5,
+                long: -0.1,
+            },
+        ];
+        globe.update(items, null);
+        const markers = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
+        expect(markers).toHaveLength(2);
+        expect(markers[0].getAttribute('src')).toBe('/map-pins/north-star.svg');
+        expect(markers[1].getAttribute('src')).toBe(DEFAULT_MAP_PIN_IMAGE_URL);
+        expect(markers[0].hidden).toBe(false);
+        expect(Number.parseFloat(markers[0].style.width)).toBeGreaterThan(0);
+        expect(Number.parseFloat(markers[0].style.height)).toBeGreaterThan(0);
+        globe.dispose();
+        expect(host.children).toHaveLength(0);
     });
 
     it('keeps the bundled texture and conservative zoom on smaller WebGL limits', () => {
@@ -267,10 +314,15 @@ describe('Earth scene', () => {
         expect(globePosition(48.8566, 2.3522, 2).length()).toBeCloseTo(2);
     });
 
-    it('draws only visible coordinates, keeps navigation bounded and releases resources', () => {
-        const texture = new THREE.Texture<HTMLImageElement>();
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(texture);
-        const disposeTexture = vi.spyOn(texture, 'dispose');
+    it('keeps hit targets invisible, selection visible, navigation bounded and resources released', () => {
+        const textures: THREE.Texture[] = [];
+        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+            const texture = new THREE.Texture<HTMLImageElement>();
+            textures.push(texture);
+            vi.spyOn(texture, 'dispose');
+            onLoad?.(texture);
+            return texture;
+        });
         const disposeGeometry = vi.spyOn(THREE.SphereGeometry.prototype, 'dispose');
         const host = document.createElement('div');
         Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
@@ -288,12 +340,23 @@ describe('Earth scene', () => {
             lat: 0,
             long: 0,
         };
-        const items = [item, { ...item, photo_id: 'hidden', lat: undefined, long: undefined }];
+        const items = [
+            item,
+            { ...item, photo_id: 'hidden', lat: undefined, long: undefined },
+            { ...item, photo_id: 'far', lat: -22, long: -168 },
+        ];
         globe.update(items, 'p');
         const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
         const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
-        expect(pins.count).toBe(1);
-        expect((pins.material as THREE.MeshBasicMaterial).vertexColors).toBe(true);
+        expect(pins.count).toBe(2);
+        expect((pins.material as THREE.MeshBasicMaterial).colorWrite).toBe(false);
+        expect((pins.material as THREE.MeshBasicMaterial).depthWrite).toBe(false);
+        const markerImages = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
+        expect(markerImages).toHaveLength(2);
+        expect(markerImages[0].hidden).toBe(false);
+        expect(markerImages[1].hidden).toBe(true);
+        const marker = markerImages[0];
+        const selectedMarkerHeight = Number.parseFloat(marker.style.height);
         const selectedMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, selectedMatrix);
         const selectedScale = new THREE.Vector3();
@@ -301,15 +364,13 @@ describe('Earth scene', () => {
         const matrixVersion = pins.instanceMatrix.version;
         globe.update(items, null);
         expect(scene.children).toContain(pins);
+        expect(Number.parseFloat(marker.style.height)).toBeLessThan(selectedMarkerHeight);
         expect(pins.instanceMatrix.version).toBeGreaterThan(matrixVersion);
         const regularMatrix = new THREE.Matrix4();
         pins.getMatrixAt(0, regularMatrix);
         const regularScale = new THREE.Vector3();
         regularMatrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), regularScale);
         expect(regularScale.x).toBeLessThan(selectedScale.x);
-        const pinColor = new THREE.Color();
-        pins.getColorAt(0, pinColor);
-        expect(pinColor.getHexString()).toBe('ffb638');
         globe.focus(item);
         expect(camera.position.x).toBeCloseTo(camera.position.length());
         const distance = camera.position.length();
@@ -332,7 +393,8 @@ describe('Earth scene', () => {
         host.querySelector('canvas')?.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
         expect(onError).toHaveBeenCalledWith(expect.stringContaining('3D rendering is unavailable'));
         globe.dispose();
-        expect(disposeTexture).toHaveBeenCalledOnce();
+        expect(textures).toHaveLength(1);
+        textures.forEach((texture) => expect(texture.dispose).toHaveBeenCalledOnce());
         expect(disposeGeometry).toHaveBeenCalledTimes(2);
         expect(mocks.disconnect).toHaveBeenCalledOnce();
         expect(mocks.dispose).toHaveBeenCalledOnce();

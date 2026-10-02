@@ -2,29 +2,27 @@ import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import type { ChallengeGuess } from '../../types';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import './Map.css';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
+const LOCATION_ICON_SIZE: [number, number] = [25, 41];
+// Keep custom guess pins slightly smaller than the blue target-location marker.
+const GUESS_ICON_SIZE: [number, number] = [22, 36];
 const DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
-    iconSize: [25, 41],
+    iconSize: LOCATION_ICON_SIZE,
     iconAnchor: [12, 41],
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-interface Guess {
-    user_id: string;
-    lat?: number;
-    long?: number;
-    username: string;
-    avatar: string;
-    score: number;
-}
+type Guess = Pick<ChallengeGuess, 'user_id' | 'lat' | 'long' | 'username' | 'avatar' | 'score' | 'map_pin'>;
 
 function hasCoordinates(guess: Guess): guess is Guess & { lat: number; long: number } {
     return guess.lat !== undefined && guess.long !== undefined;
@@ -72,12 +70,14 @@ function LocationMarker({
     return position ? <Marker position={[position.lat, position.long]} /> : null;
 }
 
-const GuessIcon = L.divIcon({
-    className: 'guess-marker',
-    html: `<div style="background-color: #f59e0b; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-});
+function guessIcon(guess: Guess): L.Icon {
+    return L.icon({
+        iconUrl: guess.map_pin?.image_url ?? DEFAULT_MAP_PIN_IMAGE_URL,
+        iconSize: GUESS_ICON_SIZE,
+        iconAnchor: [11, 34],
+        popupAnchor: [0, -31],
+    });
+}
 
 /** Fits the map so every guess and the revealed spot stay visible with a
  *  little padding: close markers zoom in hard, far-apart markers zoom out.
@@ -131,7 +131,7 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                         icon={L.icon({
                             iconUrl: icon,
                             shadowUrl: iconShadow,
-                            iconSize: [25, 41],
+                            iconSize: LOCATION_ICON_SIZE,
                             iconAnchor: [12, 41],
                             popupAnchor: [1, -34],
                             shadowSize: [41, 41],
@@ -142,7 +142,12 @@ export default function Map({ onLocationSelect, selectedLocation, actualLocation
                 {/* User Guesses (only guesses with returned coordinates render; a
                     hidden-location challenge sends just the viewer's own point) */}
                 {guesses?.filter(hasCoordinates).map((guess) => (
-                    <Marker key={guess.user_id} position={[guess.lat, guess.long]} icon={GuessIcon} opacity={0.8}>
+                    <Marker
+                        key={guess.user_id}
+                        position={[guess.lat, guess.long]}
+                        icon={guessIcon(guess)}
+                        opacity={0.8}
+                    >
                         <Popup>
                             <strong>{guess.username}</strong>
                             <span className="guess-popup-score">{guess.score} pts</span>

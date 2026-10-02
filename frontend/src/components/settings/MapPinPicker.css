@@ -1,0 +1,99 @@
+.map-pin-picker {
+    display: grid;
+    gap: 0.8rem;
+    margin-block: 1.5rem;
+}
+
+.map-pin-picker__heading h3,
+.map-pin-picker__heading p {
+    margin: 0;
+}
+
+.map-pin-picker__heading p,
+.map-pin-picker__empty {
+    margin-top: 0.3rem;
+    color: var(--ink-subtle);
+    font-size: 0.9rem;
+}
+
+.map-pin-picker__choices {
+    max-block-size: 20rem;
+    padding-right: 0.3rem;
+    display: grid;
+    gap: 0.65rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.map-pin-picker__choices:focus-visible {
+    outline: 3px solid var(--brand-blue-accessible);
+    outline-offset: 2px;
+}
+
+.map-pin-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+}
+
+/* Keep dimming on the decorative image; card opacity lowers text contrast. */
+.map-pin-choice.is-locked .map-pin-choice__image {
+    opacity: 0.72;
+}
+
+.map-pin-choice__image,
+.map-pin-choice__default {
+    width: 2.4rem;
+    height: 3rem;
+    flex: none;
+    object-fit: contain;
+}
+
+.map-pin-choice__copy {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.map-pin-choice__copy span,
+.map-pin-choice__locked {
+    color: var(--ink-subtle);
+    font-size: 0.82rem;
+}
+
+.map-pin-choice__challenge {
+    margin-top: 0.2rem;
+}
+
+.map-pin-picker__error {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--danger);
+}
+
+@media (max-width: 560px) {
+    .map-pin-picker__choices {
+        max-block-size: min(16rem, 36dvh);
+    }
+
+    .map-pin-choice {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .map-pin-choice__copy {
+        flex-basis: calc(100% - 4rem);
+    }
+
+    .map-pin-choice > button,
+    .map-pin-choice__locked {
+        margin-left: 3.3rem;
+    }
+}

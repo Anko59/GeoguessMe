@@ -4,6 +4,17 @@ The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
+Nightly `make verify` builds local application and Keycloak images with Buildx
+`--load` before `make audit-images` scans them, so the image gate inspects the
+artifacts produced by that verification run. The Keycloak base-image pin and its
+narrowly scoped audit exceptions are maintained in the
+[security scanning guide](security-scanning.md). Hosted SOPS and the monitoring
+socket proxy use project-owned, digest-pinned security derivatives; CI scans
+their exact published digests before signing and production promotion never
+rebuilds them. The proxy fixes Alpine PCRE2 without a CVE exception and is
+updated through a separate `watch` command, not the app deploy. Host runtime
+changes follow the staged procedure in the
+[runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
@@ -15,8 +26,10 @@ separate artifact from the hosted services. The production workflow builds and
 verifies the signed Android App Bundle before image promotion, retains its
 provenance manifest, and publishes that exact artifact to the configured Play
 track only after the production deployment succeeds. The Play publication job
-uses GitHub OIDC and fails closed on access, digest, version, edit-validation,
-or post-commit track checks. See the [mobile release guide](mobile.md) and
+uses GitHub OIDC and the separate `play-publishing` environment; only the host
+deployment uses GitHub's `production` environment. It fails closed on access,
+digest, version, and edit-validation checks. See the
+[mobile release guide](mobile.md) and
 [Google Play account runbook](runbooks/google-play-console.md) for the
 configuration and recovery procedure.
 

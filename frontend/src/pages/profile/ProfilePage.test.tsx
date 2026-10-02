@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
 import type { User } from '../../types';
 import ProfilePage from './ProfilePage';
+import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), profileLeaderboard: vi.fn() }));
 
@@ -97,11 +98,43 @@ beforeEach(() => {
 });
 
 describe('ProfilePage', () => {
+    it('shows an equipped map pin and the challenge that unlocked it', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                map_pin: {
+                    key: 'north-star',
+                    name: 'North Star',
+                    description: 'A clear sky marker.',
+                    image_url: '/map-pins/north-star.svg',
+                    unlocked_by: {
+                        key: 'perfect-score',
+                        name: 'Perfect score',
+                        description: 'Get the maximum score once.',
+                    },
+                },
+            },
+        });
+        renderProfile();
+
+        expect(await screen.findByRole('heading', { name: 'North Star' })).toBeInTheDocument();
+        expect(screen.getByText('Perfect score')).toBeInTheDocument();
+        expect(screen.getByText('Get the maximum score once.')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: "alice's North Star map pin" })).toHaveAttribute(
+            'src',
+            '/map-pins/north-star.svg',
+        );
+    });
+
     it('loads the profile and renders progression trackers with the next rank', async () => {
         mocks.get.mockResolvedValueOnce({ data: profile });
         renderProfile();
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
+        expect(document.querySelector('.profile-map-pin__artwork img')).toHaveAttribute(
+            'src',
+            DEFAULT_MAP_PIN_IMAGE_URL,
+        );
         expect(screen.getByText('6,000')).toBeInTheDocument();
         expect(screen.getByText('#3 of 1,943 players')).toBeInTheDocument();
         expect(screen.getByText('1500.0')).toBeInTheDocument();

@@ -5,7 +5,7 @@
 test-debt-markers-regression: ## Exercise owned and unowned maintenance-marker fixtures.
 	tools/quality/debt/check-markers-test.sh
 
-test-unit: test-backend test-frontend test-reconnect-harness test-play-api ## Run application and operational-tool unit tests.
+test-unit: test-backend test-frontend test-reconnect-harness test-play-api test-ops-credentials ## Run application and operational-tool unit tests.
 
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
@@ -18,6 +18,9 @@ test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
 
 test-play-api: ## Run the Google Play Publisher API client unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd tools/mobile/play-publisher && go test ./...'
+
+test-ops-credentials: ## Verify credential discovery stays quiet and reports available sources.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/ops/test/credentials.sh
 
 test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
@@ -52,6 +55,9 @@ test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection saf
 
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
+
+test-mobile-sdk-contract: ## Verify Android's build SDK and Maestro runtime SDK stay aligned.
+	bash tools/mobile/test-android-sdk-contract.sh
 
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh

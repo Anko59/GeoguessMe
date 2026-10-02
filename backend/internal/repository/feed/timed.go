@@ -266,8 +266,11 @@ func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now ti
 			return result, ErrForbidden
 		}
 	}
-	rows, err := r.pool.Query(ctx, `SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score,g.distance,g.timed_out,g.created_at
+	rows, err := r.pool.Query(ctx, `SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score,g.distance,g.timed_out,g.created_at,
+		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM public_guesses g JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
+		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
+		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
 		WHERE g.challenge_id=$1 ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, id)
 	if err != nil {
 		return result, err
@@ -277,8 +280,12 @@ func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now ti
 	for rows.Next() {
 		var guess models.PublicTimedResultGuess
 		var lat, long, distance float64
-		if err := rows.Scan(&guess.ID, &guess.UserID, &guess.Username, &guess.Avatar, &lat, &long, &guess.Score, &distance, &guess.TimedOut, &guess.CreatedAt); err != nil {
+		var pinKey, pinName, pinImage string
+		if err := rows.Scan(&guess.ID, &guess.UserID, &guess.Username, &guess.Avatar, &lat, &long, &guess.Score, &distance, &guess.TimedOut, &guess.CreatedAt, &pinKey, &pinName, &pinImage); err != nil {
 			return result, err
+		}
+		if pinKey != "" {
+			guess.MapPin = &models.MapPin{Key: pinKey, Name: pinName, ImageURL: pinImage}
 		}
 		if !guess.TimedOut {
 			guess.Lat, guess.Long, guess.Distance = &lat, &long, &distance
