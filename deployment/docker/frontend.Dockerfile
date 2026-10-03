@@ -50,6 +50,7 @@ RUN addgroup -S -g 1000 caddy \
     && adduser -S -D -H -u 1000 -G caddy caddy \
     && setcap cap_net_bind_service=+ep /usr/bin/caddy \
     && chown -R caddy:caddy /srv /data /config \
+    && chmod 0644 /etc/caddy/Caddyfile \
     && apk add --no-cache 'openssl>=3.5.8-r0' \
         'curl>=8.22.0-r0' \
         'libcurl>=8.22.0-r0' \

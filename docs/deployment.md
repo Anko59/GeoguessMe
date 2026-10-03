@@ -29,6 +29,11 @@ regressions in addition to normal dependency scanning. See the
 for provenance and the upstream replacement/removal condition. Production still
 promotes the exact verified image digest without rebuilding.
 
+The gateway image explicitly installs its public Caddy configuration as
+root-owned mode `0644`, so the non-root runtime can read it even when the source
+checkout uses a restrictive umask. This does not change permissions on host
+credentials or encrypted deployment configuration.
+
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
