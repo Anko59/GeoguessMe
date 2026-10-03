@@ -19,6 +19,9 @@ verify-braces-backport-source: ## Reproduce the reviewed local backport from the
 test-npm-security-overrides: test-braces-security-backport ## Verify patched tooling dependencies preserve their consumer APIs.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-security-overrides.cjs
 
+test-feed-fixtures: ## Verify feed media settlement, cancellation, and interaction fixtures.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run src/pages/feed/test
+
 test-frontend: test-npm-security-overrides ## Run frontend unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
