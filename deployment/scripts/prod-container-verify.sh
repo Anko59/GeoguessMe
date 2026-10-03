@@ -12,6 +12,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
+bash "$REPO/deployment/oauth2-proxy/prepare-public-configs.sh" "$REPO"
 
 backend_image="${BACKEND_IMAGE:-geoguessme-backend:local}"
 web_image="${WEB_IMAGE:-geoguessme-web:local}"
@@ -163,11 +164,11 @@ mv "$TMPDIR/production.env.rendered" "$TMPDIR/production.env"
 cat >"$TMPDIR/override.yaml" <<YAMLEOF
 services:
   migration:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   backend:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   oauth2-proxy:
@@ -183,24 +184,24 @@ services:
       - --skip-auth-strip-headers=false
       - --cookie-secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       - --redirect-url=https://localhost/oauth2/callback
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   web:
     ports: !override ["127.0.0.1:${WEB_PORT}:80"]
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: false
   db:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   minio:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   smtp:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: false
 YAMLEOF
@@ -226,10 +227,27 @@ cleanup_stack() {
 }
 trap 'cleanup_stack' EXIT
 
-BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-    COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
-    docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
-    --project-directory "$REPO" -p "$PROJECT" up -d --wait
+# Every service's env_file is replaced above: diagnostics are restricted to
+# this managed project with fake fixture values, never an operator's secrets.
+fixture_compose() {
+    BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
+        docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
+        --project-directory "$REPO" -p "$PROJECT" "$@"
+}
+
+fixture_compose up -d --wait || {
+    status=$?
+    echo "FAIL: startup of managed fixture project $PROJECT failed (exit $status)" >&2
+    fixture_compose ps --all || echo 'FAIL: fixture status diagnostic failed' >&2
+    fixture_compose logs --no-color --tail 100 || echo 'FAIL: fixture logs diagnostic failed' >&2
+    ids=$(fixture_compose ps -aq) || ids=""
+    for id in $ids; do
+        docker inspect --format '{{.Name}} status={{.State.Status}} health={{json .State.Health}}' "$id" ||
+            echo 'FAIL: fixture health diagnostic failed' >&2
+    done
+    exit "$status"
+}
 
 # ---------------------------------------------------------------------------
 # Phase 4: Effective runtime hardening

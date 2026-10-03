@@ -322,6 +322,11 @@ case "$1" in
     run)
         echo '62 0'
         ;;
+    inspect)
+        test "${4:-}" = fixture-oauth2-proxy
+        printf 'health %s\n' "$4" >>"$PROD_VERIFY_CALLS"
+        echo 'fixture-oauth2-proxy status=restarting health={"Status":"unhealthy"}'
+        ;;
     compose)
         args=("$@")
         override=""
@@ -334,7 +339,7 @@ case "$1" in
                     shift
                     ;;
                 -p) project="$2"; shift ;;
-                config | up | down) operation="$1" ;;
+                config | up | down | ps | logs) operation="$1" ;;
             esac
             shift
         done
@@ -355,6 +360,16 @@ case "$1" in
                 "$PROD_VERIFY_REAL_DOCKER" "${config_args[@]}" config >"$PROD_VERIFY_CONFIG"
                 exit 73
                 ;;
+            ps | logs)
+                test "$project" = "$GEOGUESSME_PROD_VERIFY_PROJECT"
+                test -f "$override"
+                printf '%s %s %s\n' "$operation" "$project" "$override" >>"$PROD_VERIFY_CALLS"
+                if [[ " ${args[*]} " == *' ps -aq '* ]]; then
+                    echo fixture-oauth2-proxy
+                else
+                    echo "fixture $operation diagnostic"
+                fi
+                ;;
             down)
                 test "$project" = "$GEOGUESSME_PROD_VERIFY_PROJECT"
                 test -f "$override"
@@ -373,6 +388,7 @@ esac
 DOCKEREOF
 chmod +x "$fixture/docker"
 
+printf 'FORBIDDEN_PRODUCTION_VALUE=fake-private-sentinel\n' >"$fixture/inherited.env"
 for scenario in default custom; do
     expected_port=18083
     base_port=8081
@@ -389,7 +405,7 @@ for scenario in default custom; do
     PATH="$fixture:$PATH" GEOGUESSME_PROD_VERIFY_PROJECT="$project" \
         GEOGUESSME_PROD_VERIFY_WEB_PORT="$requested_port" \
         GEOGUESSME_WEB_PORT="$base_port" \
-        GEOGUESSME_ENV_FILE="$fixture/absent-production.env" \
+        GEOGUESSME_ENV_FILE="$fixture/inherited.env" \
         bash "$SCRIPT" >"$fixture/$scenario.log" 2>&1 || status=$?
     if [ "$status" -ne 73 ]; then
         fail "$scenario: expected simulated startup failure (73), got $status"
@@ -415,7 +431,16 @@ for scenario in default custom; do
         printf '%s\n' "$bindings"
     fi
     override=$(awk '$1 == "up" { print $3 }' "$PROD_VERIFY_CALLS")
-    expected_calls=$(printf 'up %s %s\ndown %s %s' "$project" "$override" "$project" "$override")
+    expected_calls=$(printf 'up %s %s\nps %s %s\nlogs %s %s\nps %s %s\nhealth fixture-oauth2-proxy\ndown %s %s' \
+        "$project" "$override" "$project" "$override" "$project" "$override" \
+        "$project" "$override" "$project" "$override")
+    if grep -q 'fixture logs diagnostic' "$fixture/$scenario.log" &&
+        grep -q 'health={"Status":"unhealthy"}' "$fixture/$scenario.log" &&
+        ! grep -q 'FORBIDDEN_PRODUCTION_VALUE' "$PROD_VERIFY_CONFIG"; then
+        pass "$scenario: fixture-only logs/status/health emitted before teardown"
+    else
+        fail "$scenario: diagnostic missing or inherited env_file retained"
+    fi
     if [ "$(<"$PROD_VERIFY_CALLS")" = "$expected_calls" ] &&
         [ -n "$override" ] && [ ! -e "$(dirname "$override")" ]; then
         pass "$scenario: failed up tears down only managed project and removes temp files"
@@ -424,69 +449,8 @@ for scenario in default custom; do
     fi
 done
 
-# ── Test 17: Teardown failures fail success but preserve primary failure ──────
-echo "--- Test 17: Failed teardown exit status and diagnostics ---"
-# Exercise the actual cleanup function as an EXIT trap without bypassing or
-# mocking any runtime hardening checks in the production verification script.
-awk '/^cleanup_stack\(\) \{/ { inside = 1 } inside { print } inside && /^}/ { exit }' \
-    "$SCRIPT" >"$fixture/cleanup.sh"
-for primary in 0 73; do
-    managed_tmp=$(mktemp -d "$fixture/managed.XXXXXX")
-    touch "$managed_tmp/override.yaml"
-    calls="$fixture/cleanup-$primary.calls"
-    diagnostic="$fixture/cleanup-$primary.log"
-    project="geoguessme-prod-verify-regression-cleanup-$primary"
-    status=0
-    PATH="$fixture:$PATH" PROD_VERIFY_DOWN_FAIL=1 PROD_VERIFY_CALLS="$calls" \
-        GEOGUESSME_PROD_VERIFY_PROJECT="$project" PROJECT="$project" \
-        TMPDIR="$managed_tmp" REPO="$(dirname "$COMPOSE_PROD")/.." \
-        backend_image=fixture-backend web_image=fixture-web \
-        bash -c 'source "$1"; trap cleanup_stack EXIT; exit "$2"' \
-        _ "$fixture/cleanup.sh" "$primary" >"$diagnostic" 2>&1 || status=$?
-    expected_status="$primary"
-    if [ "$primary" -eq 0 ]; then expected_status=42; fi
-    if [ "$status" -eq "$expected_status" ] &&
-        [ "$(<"$calls")" = "down $project $managed_tmp/override.yaml" ] &&
-        [ ! -e "$managed_tmp" ] &&
-        grep -q 'simulated down failure diagnostic' "$diagnostic" &&
-        grep -q "teardown of managed project $project failed" "$diagnostic"; then
-        pass "down failure is visible; primary=$primary exits $expected_status and removes temp files"
-    else
-        fail "failed teardown masks primary status or suppresses diagnostics/cleanup"
-        cat "$diagnostic"
-    fi
-done
-
-# Simulate rm failure only in these cleanup-trap subprocesses. The outer
-# fixture's EXIT trap still uses real rm to remove all controlled test files.
-mkdir "$fixture/rm-failure"
-printf '#!/usr/bin/env bash\necho "simulated rm failure diagnostic" >&2\nexit 43\n' >"$fixture/rm-failure/rm"
-chmod +x "$fixture/rm-failure/rm"
-for primary in 0 73; do
-    managed_tmp=$(mktemp -d "$fixture/managed.XXXXXX")
-    touch "$managed_tmp/override.yaml"
-    calls="$fixture/rm-$primary.calls"
-    diagnostic="$fixture/rm-$primary.log"
-    project="geoguessme-prod-verify-regression-rm-$primary"
-    status=0
-    PATH="$fixture/rm-failure:$fixture:$PATH" PROD_VERIFY_CALLS="$calls" \
-        GEOGUESSME_PROD_VERIFY_PROJECT="$project" PROJECT="$project" \
-        TMPDIR="$managed_tmp" REPO="$(dirname "$COMPOSE_PROD")/.." \
-        backend_image=fixture-backend web_image=fixture-web \
-        bash -c 'source "$1"; trap cleanup_stack EXIT; exit "$2"' \
-        _ "$fixture/cleanup.sh" "$primary" >"$diagnostic" 2>&1 || status=$?
-    expected_status="$primary"
-    if [ "$primary" -eq 0 ]; then expected_status=1; fi
-    if [ "$status" -eq "$expected_status" ] && [ -d "$managed_tmp" ] &&
-        [ "$(<"$calls")" = "down $project $managed_tmp/override.yaml" ] &&
-        grep -q 'simulated rm failure diagnostic' "$diagnostic" &&
-        grep -q 'removing verification temporary files failed' "$diagnostic"; then
-        pass "rm failure is visible; primary=$primary exits $expected_status"
-    else
-        fail "temporary cleanup masks primary status or suppresses diagnostics"
-        cat "$diagnostic"
-    fi
-done
+# shellcheck source=tools/quality/test/prod-container-verify/cleanup-regression.sh
+source "$(dirname "$0")/prod-container-verify/cleanup-regression.sh"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 if [ "$FAIL" -eq 0 ]; then

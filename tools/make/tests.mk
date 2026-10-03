@@ -157,6 +157,7 @@ test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
 	bash tools/quality/test/check-disk-cleanup-regression.sh
 
 test-prod-container-verify-regression: ## Run prod-container-verify.sh regression tests.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/prod-container-verify/check-public-config-permissions.sh
 	bash tools/quality/test/check-prod-container-verify-regression.sh
 
 test-artifacts-clean-regression: ## Verify artifacts-clean target structure and safety.

@@ -32,6 +32,27 @@ readonly SOCKET_PROXY_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-socket-proxy'
 readonly SOCKET_PROXY_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d'
 readonly SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd'
 
+# Public oauth templates are bind-mounted into the pinned non-root image.
+# Keep this in the installed runtime: older signed releases have no preparer.
+prepare_public_configs() (
+    public_root=$(CDPATH='' cd -- "$1" && pwd -P) || exit 1
+    public_dir="$public_root/deployment/oauth2-proxy"
+    for directory in "$public_root/deployment" "$public_dir"; do
+        if [ ! -d "$directory" ] || [ -L "$directory" ]; then
+            echo 'Public config preparation requires regular checkout directories' >&2
+            exit 1
+        fi
+    done
+    # Validate both before chmod; never follow a symlink to a private file.
+    for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+        if [ ! -f "$public_dir/$name" ] || [ -L "$public_dir/$name" ]; then
+            echo "Public config preparation requires regular non-symlink $name" >&2
+            exit 1
+        fi
+    done
+    chmod 0644 "$public_dir/oauth2-proxy.cfg" "$public_dir/oauth2-proxy-alpha.yaml"
+)
+
 die() {
     printf 'ERROR: %s\n' "$*" >&2
     exit 1

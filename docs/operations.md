@@ -19,6 +19,12 @@ curl -s -o /dev/null -w '%{http_code}' http://localhost/health/ready
 curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 ```
 
+`make prod-container-verify` replaces every service's environment-file list with
+its generated fake fixture. If startup fails, it prints only that managed
+project's status, bounded logs, and container health state before teardown,
+preserving the startup exit code. It never dumps container environment values or
+collects logs from another running project.
+
 ## Metrics
 
 OpenMetrics (Prometheus) format at `/metrics`:

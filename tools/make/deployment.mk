@@ -201,6 +201,7 @@ prod-legacy-identity-provision: prod-config ## Provision verified legacy emails 
 	$(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
 
 prod-up: prod-config ## Start the production stack.
+	bash deployment/oauth2-proxy/prepare-public-configs.sh
 	@if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
 		$(COMPOSE_PROD) --profile social up -d; \
 	else \

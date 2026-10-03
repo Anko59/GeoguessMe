@@ -144,6 +144,7 @@ dev-social-init: ## Generate the trusted local certificate used by Caddy.
 	./deployment/caddy/init-local-tls.sh
 
 dev-social: dev-social-init ## Start dev with local HTTPS, Keycloak, and OAuth2 Proxy.
+	bash deployment/oauth2-proxy/prepare-public-configs.sh
 	@set -eu; \
 	if [ -n "$${GEOGUESSME_GOOGLE_CLIENT_JSON:-}" ]; then \
 		test -r "$${GEOGUESSME_GOOGLE_CLIENT_JSON}" || { echo 'GEOGUESSME_GOOGLE_CLIENT_JSON is not readable' >&2; exit 2; }; \

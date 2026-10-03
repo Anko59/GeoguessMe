@@ -34,6 +34,14 @@ root-owned mode `0644`, so the non-root runtime can read it even when the source
 checkout uses a restrictive umask. This does not change permissions on host
 credentials or encrypted deployment configuration.
 
+OAuth2 Proxy retains its pinned upstream image and read-only UID `65532`
+configuration mounts. Hosted deployment, `make prod-up`, and the production
+rehearsal run the
+[public config preparer](../deployment/oauth2-proxy/prepare-public-configs.sh)
+to set only its two tracked public templates to mode `0644`, independent of the
+checkout/extraction umask. The preparer rejects missing files and symlinks;
+private environment files and runtime credential values are never changed.
+
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,

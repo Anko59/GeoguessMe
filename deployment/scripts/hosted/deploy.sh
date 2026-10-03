@@ -92,6 +92,10 @@ if [ ! -d "$release" ]; then
     trap - EXIT INT TERM
 fi
 
+# Archive extraction and operator umasks must not make public templates
+# unreadable to the pinned oauth proxy's UID 65532. Secrets are not touched.
+prepare_public_configs "$release"
+
 encrypted="$release/deployment/secrets/$environment.env.enc"
 secret_file=$(environment_env_file "$environment")
 temporary_secret=''
