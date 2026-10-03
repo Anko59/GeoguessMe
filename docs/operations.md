@@ -25,6 +25,12 @@ project's status, bounded logs, and container health state before teardown,
 preserving the startup exit code. It never dumps container environment values or
 collects logs from another running project.
 
+Host provisioning executes the compressed bootstrap only after checking its
+required tools, and stops on runtime extraction or Cloudflared integrity errors.
+The decoded bootstrap remains available for failure diagnosis; it is removed
+after successful setup. Do not print generated age private keys or tunnel tokens
+while investigating cloud-init failures.
+
 ## Metrics
 
 OpenMetrics (Prometheus) format at `/metrics`:

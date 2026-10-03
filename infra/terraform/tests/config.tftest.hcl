@@ -96,6 +96,7 @@ run "hosted_plan" {
       tunnel_token      = "mock-tunnel-token"
       runtime_bundle    = local.runtime_bundle
       runtime_installer = local.runtime_installer
+      host_bootstrap    = local.host_bootstrap
     }))) <= 32768
     error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
   }
@@ -166,14 +167,14 @@ run "hosted_plan" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf") &&
       length(regexall("defer: true", file("../cloud-init/cloud-config.yaml.tftpl"))) == 2 &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-backup@dev.timer") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "ufw allow in on lo to any") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "chown -R deploy:deploy /etc/geoguessme/age") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "geoguessme-backup@dev.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "geoguessme-watch-health.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "watch-refresh-metrics-token") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemctl enable --now") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.production.yaml") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.watch.yaml")
     )

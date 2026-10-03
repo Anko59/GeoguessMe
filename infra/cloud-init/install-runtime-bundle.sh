@@ -3,7 +3,8 @@ set -eu
 
 bundle=${1:?runtime bundle path is required}
 manifest=$(mktemp /opt/geoguessme/config/runtime-hashes.XXXXXX)
-trap 'rm -f "$manifest"' EXIT INT TERM
+temporary=''
+trap 'rm -f "$manifest" "$temporary"' EXIT INT TERM
 exec 3<"$bundle"
 IFS= read -r magic <&3
 [ "$magic" = GEOGUESSME_RUNTIME_BUNDLE_V1 ]
@@ -26,7 +27,9 @@ while IFS=' ' read -r path mode; do
     esac
     install -d -m 0755 "$(dirname "$path")"
     temporary=$(mktemp "$path.XXXXXX")
-    dd if=/dev/fd/3 of="$temporary" bs=1 count="$size" 2>/dev/null
+    # Duplicate the open descriptor: reopening /dev/fd/3 resets a regular
+    # bundle file to byte zero instead of sharing the parsed stream offset.
+    dd bs=1 count="$size" <&3 >"$temporary" 2>/dev/null
     [ "$(wc -c <"$temporary")" -eq "$size" ]
     chown root:root "$temporary"
     chmod "$mode" "$temporary"

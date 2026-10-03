@@ -47,6 +47,16 @@ The concrete hosted implementation and launch checklist is in the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
 
+Terraform losslessly compresses the full host bootstrap, runtime installer, and
+32-member runtime bundle with `gzip+base64`; the rendered cloud-init still must
+fit Hetzner's unchanged 32 KiB limit. Cloud-init writes the bootstrap as a
+root-owned `0700` executable after installing the required packages. The
+[bootstrap script](../infra/cloud-init/bootstrap-host.sh) checks its tools
+before configuring the host, retains the ordered SSH/firewall/backup setup, and
+leaves monitoring disabled pending operator setup. Runtime extraction consumes
+one shared file descriptor and hashes the exact installed bytes with fixed
+ownership and permissions.
+
 Android distribution is part of the production release boundary but remains a
 separate artifact from the hosted services. The production workflow builds and
 verifies the signed Android App Bundle before image promotion, retains its
