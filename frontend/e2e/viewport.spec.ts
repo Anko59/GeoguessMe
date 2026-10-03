@@ -158,7 +158,7 @@ test.describe('Profile responsive overflow', () => {
             for (const width of [320, 390]) {
                 await page.setViewportSize({ width, height: 568 });
                 await page.goto('/profile');
-                await expect(page.getByRole('heading', { name: username })).toBeVisible();
+                await expect(page.getByRole('heading', { name: username, exact: true })).toBeVisible();
                 await expect(page.locator('.profile-rank-name')).toBeVisible();
                 await expect(page.getByRole('heading', { name: 'Standard marker' })).toBeVisible();
                 const geometry = await page.evaluate(() => {
