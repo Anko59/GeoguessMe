@@ -16,6 +16,7 @@ interface BracesNode {
 }
 
 interface BracesAPI {
+    (input: string | string[], options?: BracesOptions): string[];
     expand(input: string | BracesNode, options?: BracesOptions): string[];
     parse(input: string, options?: BracesOptions): BracesNode;
     compile(input: string | BracesNode, options?: BracesOptions): string;
@@ -49,6 +50,8 @@ describe('vendored braces security backport', () => {
     it('bounds nested braces and parentheses at the default depth', () => {
         expect(() => braces.parse(nestedBraces(100))).not.toThrow();
         expect(() => braces.parse(nestedBraces(101))).toThrow(/exceeds max depth/);
+        expect(() => braces(nestedBraces(101))).toThrow(/exceeds max depth/);
+        expect(() => braces(nestedBraces(5), { maxDepth: 4 })).toThrow(/exceeds max depth/);
         expect(() => braces.parse(nestedParentheses(101))).toThrow(/exceeds max depth/);
     });
 

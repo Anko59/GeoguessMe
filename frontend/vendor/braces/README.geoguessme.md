@@ -9,10 +9,11 @@ the follow-up compatibility fixes included in that commit.
 
 The local package version `3.0.4+geoguessme.1` identifies this patched private
 copy; it is not an upstream npm release. The `vendor-braces-security-backport`
-Make target reimports the exact commit and fails closed if its pinned branch has
-moved. The dependency is covered by the focused Vitest security/compatibility
-tests under `frontend/src/utils/bracesSecurity/`; `make lint-css` also exercises
-Stylelint's globbing consumers.
+Make target fetches the upstream PR head ref, verifies the exact source commit,
+and fails closed if that ref moves. It writes only to an absent destination and
+regenerates this provenance note. The dependency is covered by the focused
+Vitest security/compatibility tests under `frontend/src/utils/bracesSecurity/`;
+`make lint-css` also exercises Stylelint's globbing consumers.
 
 Remove this package and its local devDependency after upstream publishes a
 patched release for the issue tracked at

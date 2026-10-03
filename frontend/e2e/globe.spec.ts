@@ -16,8 +16,10 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
     // let each layout branch below assert its own visibility state.
     await expect(globe.locator('.globe-controls')).toBeAttached();
     await expect(globe).toBeInViewport({ ratio: 1 });
-    await expect(globe.locator('canvas')).toBeVisible();
-    const maxTextureSize = await globe.locator('canvas').evaluate((canvas) => {
+    const rendererCanvas = globe.locator('.globe-stage canvas[data-engine]');
+    await expect(rendererCanvas).toBeVisible();
+    await expect(globe.locator('.globe-stage canvas.globe-pin-overlay')).toBeVisible();
+    const maxTextureSize = await rendererCanvas.evaluate((canvas) => {
         const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
         return context?.getParameter(context.MAX_TEXTURE_SIZE) ?? 0;
     });
