@@ -303,16 +303,29 @@ func (s *Service) deliverJob(ctx context.Context, job fanoutJob) {
 		return
 	}
 	for i := range subs {
-		deliver := func() { s.deliverOne(ctx, &subs[i], job.payload) }
-		if s.FilterDelivery != nil && job.senderID != "" {
-			s.FilterDelivery(ctx, job.senderID, subs[i].UserID, deliver)
-		} else {
-			deliver()
-		}
+		s.deliverSubscription(ctx, job, &subs[i])
+	}
+}
+
+func (s *Service) deliverSubscription(ctx context.Context, job fanoutJob, sub *Subscription) {
+	// Authorization and delivery share one budget, even when the privacy
+	// filter invokes a closure rather than passing its check context to it.
+	ctx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
+	defer cancel()
+	deliver := func() { s.deliverOne(ctx, sub, job.payload) }
+	if s.FilterDelivery != nil && job.senderID != "" {
+		s.FilterDelivery(ctx, job.senderID, sub.UserID, deliver)
+	} else {
+		deliver()
 	}
 }
 
 func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []byte) {
+	// Bound the entire privacy-protected lifecycle, including semaphore waits
+	// and database housekeeping after network delivery. A stalled touch/delete
+	// must not hold the preference barrier beyond the delivery budget.
+	ctx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
+	defer cancel()
 	host := endpointHost(sub.Endpoint)
 	// Cap concurrent sends to one push-service host (PUSH_DELIVERY_PER_HOST)
 	// across the global worker pool. Waiting on the slot honours ctx so a
@@ -326,10 +339,11 @@ func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []b
 			return
 		}
 	}
-	sendCtx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
-	defer cancel()
+	if ctx.Err() != nil {
+		return
+	}
 	started := time.Now()
-	err := s.deliver.Send(sendCtx, sub, payload)
+	err := s.deliver.Send(ctx, sub, payload)
 	s.metrics.deliveries.Add(1)
 	s.metrics.observeDuration(time.Since(started).Seconds())
 	if err != nil {
