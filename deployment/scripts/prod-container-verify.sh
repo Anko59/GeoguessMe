@@ -158,7 +158,8 @@ sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env" >"$TMPDIR/producti
 mv "$TMPDIR/production.env.rendered" "$TMPDIR/production.env"
 
 # Compose override: redirect env_file to the temp file for every service and
-# override the web port to avoid host port conflicts.
+# replace (not merge) the inherited web bindings with one loopback-only port.
+# Compose 2.24.4+ supports !override; ordinary ports lists append distinct tuples.
 cat >"$TMPDIR/override.yaml" <<YAMLEOF
 services:
   migration:
@@ -186,7 +187,7 @@ services:
       - path: ${TMPDIR}/production.env
         required: true
   web:
-    ports: ["${WEB_PORT}:80"]
+    ports: !override ["127.0.0.1:${WEB_PORT}:80"]
     env_file:
       - path: ${TMPDIR}/production.env
         required: false
@@ -205,12 +206,23 @@ services:
 YAMLEOF
 
 cleanup_stack() {
-    set +e
+    local status=$?
+    local cleanup_status=0
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
         COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
-        --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans 2>/dev/null
-    rm -rf "$TMPDIR"
+        --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans || cleanup_status=$?
+    if [ "$cleanup_status" -ne 0 ]; then
+        echo "FAIL: teardown of managed project $PROJECT failed (exit $cleanup_status)" >&2
+    fi
+    if ! rm -rf "${TMPDIR:?}"; then
+        echo "FAIL: removing verification temporary files failed" >&2
+        cleanup_status=1
+    fi
+    # Cleanup must not mask a verification failure, or turn success into a
+    # passing gate when managed resources could not be removed.
+    if [ "$status" -eq 0 ]; then status=$cleanup_status; fi
+    exit "$status"
 }
 trap 'cleanup_stack' EXIT
 

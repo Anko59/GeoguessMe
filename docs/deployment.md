@@ -83,9 +83,14 @@ test-only credentials, polls health and readiness, verifies representative HTTP
 behavior (liveness, readiness, auth enforcement, WebSocket auth), and tears down
 all resources. It is safe for local/CI use because it uses the `local-db`,
 `local-minio`, and `local-smtp` Compose profiles and never touches production
-infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
-`18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
-`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
+infrastructure. The gateway binds only `127.0.0.1:18083` and the disposable
+Mailpit UI uses `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
+`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied. The rehearsal
+requires Docker Compose 2.24.4+ for `!override`: the gateway binding replaces
+all inherited production web ports, including `GEOGUESSME_WEB_PORT`, rather than
+publishing both the production and rehearsal ports. Teardown errors are visible
+and fail an otherwise successful rehearsal; an earlier verification failure
+keeps its original exit status.
 
 Development, integration/E2E, and the optional `local-minio` profile pull the
 MinIO release from the public `quay.io/thanos/minio` mirror. All three pin the
