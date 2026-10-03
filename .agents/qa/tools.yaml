@@ -17,6 +17,7 @@ tools:
   - browser_transfer_link
   - browser_open_transferred_link
   - browser_capabilities
+  - browser_security_headers
   - browser_click
   - browser_type
   - browser_select

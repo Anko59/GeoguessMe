@@ -37,6 +37,7 @@ export const tools = [
     type: "object", required: ["session_id", "transfer_id"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, transfer_id: { type: "string" } },
   }),
   tool("browser_capabilities", "Probe the granted synthetic camera and location services with a fixed safe check.", pageSchema()),
+  tool("browser_security_headers", "Reload the current same-origin page and inspect only fixed document security-header presence and safe policy flags; never return raw header values, cookies, or nonce material.", pageSchema()),
   tool("browser_click", "Click one visible control selected by role, label, text, or placeholder.", actionSchema()),
   tool("browser_type", "Fill one visible text control selected by role, label, text, or placeholder.", {
     ...actionSchema(),
