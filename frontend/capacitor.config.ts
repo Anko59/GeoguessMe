@@ -1,5 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
-// Capacitor intercepts every GET on its asset host, including /api/v1 paths.
+// Capacitor intercepts asset-host requests, including the startup refresh POST.
 // The virtual origin must never be the backend or public web origin.
 const nativeAssetHostname = 'app.geoguessme.com';
 
@@ -9,7 +9,9 @@ const config: CapacitorConfig = {
     appId: 'com.geoguessme.app',
     appName: 'GeoGuessMe',
     webDir: 'dist',
-    loggingBehavior: 'none',
+    // Bridge and JS console logs are enabled only for debuggable APKs.
+    // Capacitor keeps them disabled in signed release builds.
+    loggingBehavior: 'debug',
     android: {
         path: 'android',
         minWebViewVersion: 105,

@@ -14,16 +14,17 @@ redact tokens, email addresses, and URLs with credentials before sharing.
 
 If the landing appears but Google sign-in does not, verify that the **packaged**
 Capacitor config uses the virtual asset origin `https://app.geoguessme.com`, not
-`https://geoguessme.com` (which intercepts API GETs as local HTML), and has no
-`server.url`. Check the deployed backend `ALLOWED_ORIGINS` includes the virtual
-origin as well as the web origin; a CORS preflight failure blocks credentialed
-API calls. Run `make mobile-verify-release` on a signed AAB before publishing.
-For a Play-only failure, record the installed app version/code, device model,
-Android/WebView versions, exact cold-start steps, and a screenshot or Android
-Developer Options bug report from the affected device. Keep the bug report
-private. The debug APK and an emulator result cannot identify the cause of an
-unexamined Play-installed white screen; compare the exact retained signed AAB
-and its provenance with the version installed through Play.
+`https://geoguessme.com` (which intercepts API requests, including the refresh
+POST, as local HTML), and has no `server.url`. Check the deployed backend
+`ALLOWED_ORIGINS` includes the virtual origin as well as the web origin; a CORS
+preflight failure blocks credentialed API calls. Run
+`make mobile-verify-release` on a signed AAB before publishing. For a Play-only
+failure, record the installed app version/code, device model, Android/WebView
+versions, exact cold-start steps, and a screenshot or Android Developer Options
+bug report from the affected device. Keep the bug report private. The debug APK
+and an emulator result cannot identify the cause of an unexamined Play-installed
+white screen; compare the exact retained signed AAB and its provenance with the
+version installed through Play.
 
 ## PostgreSQL volume version mismatch
 

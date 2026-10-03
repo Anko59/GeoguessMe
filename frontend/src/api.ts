@@ -49,13 +49,34 @@ function isPublicAuthRequest(url: string | undefined): boolean {
     return publicAuthPaths.has(path);
 }
 
+function decodedAuthResponse(value: unknown): AuthResponse {
+    const auth = value as Partial<AuthResponse> | null;
+    if (
+        !auth ||
+        typeof auth !== 'object' ||
+        typeof auth.access_token !== 'string' ||
+        !auth.access_token ||
+        !auth.user ||
+        typeof auth.user.id !== 'string' ||
+        !auth.user.id ||
+        typeof auth.user.username !== 'string' ||
+        !auth.user.username
+    ) {
+        // A misrouted native request can return bundled HTML with status 200.
+        // Never turn that into an undefined user and an authenticated session.
+        throw new Error('The server returned an invalid sign-in response. Please try again.');
+    }
+    return auth as AuthResponse;
+}
+
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
         refreshPromise = axios
             .post<AuthResponse>(`${apiBaseURL}/auth/refresh`, undefined, { withCredentials: true })
             .then((response) => {
-                setAccessToken(response.data.access_token);
-                return response.data;
+                const auth = decodedAuthResponse(response.data);
+                setAccessToken(auth.access_token);
+                return auth;
             })
             .catch(() => {
                 setAccessToken(null);
@@ -75,8 +96,9 @@ export const exchangeOIDCSession = async (username?: string): Promise<AuthRespon
                 withCredentials: true,
             })
             .then((response) => {
-                setAccessToken(response.data.access_token);
-                return response.data;
+                const auth = decodedAuthResponse(response.data);
+                setAccessToken(auth.access_token);
+                return auth;
             })
             .finally(() => {
                 oidcExchangePromise = null;
@@ -127,7 +149,16 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 });
 
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const contentType = String(response.headers['content-type'] ?? '')
+            .split(';', 1)[0]
+            .trim()
+            .toLowerCase();
+        if (!response.config.url?.startsWith('http') && contentType === 'text/html') {
+            throw new Error('The API returned a web page instead of application data. Please try again.');
+        }
+        return response;
+    },
     async (error: AxiosError<APIErrorBody>) => {
         const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
         if (error.response?.status === 401 && request && !request._retried && !request.url?.includes('/auth/refresh')) {

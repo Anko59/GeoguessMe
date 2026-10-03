@@ -16,17 +16,23 @@ transport boundary.
 
 The production native build serves bundled assets from the virtual WebView
 origin `https://app.geoguessme.com` and talks to the normal production API at
-`https://geoguessme.com`. Capacitor intercepts GET requests on its virtual asset
-hostname: using the API hostname for assets makes API GETs return bundled
-`index.html` instead of reaching the backend. Native HTTP, WebSocket,
-refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`; invite links
-are derived from `VITE_WEB_ORIGIN`. Both default to `https://geoguessme.com` in
-the Make workflow. The API must explicitly permit the virtual origin in
-`ALLOWED_ORIGINS` for credentialed CORS and WebSocket origin checks. These hosts
-are same-site, so existing SameSite cookies still apply; do not relax cookie
-flags or use a development server URL in a distributable build. OIDC's full
-browser-navigation return path still needs physical-device acceptance; the
-read-only bundled smoke checks only that its API configuration loads.
+`https://geoguessme.com`. Capacitor intercepts requests on its virtual asset
+hostname, including POST: using the API hostname for assets makes extensionless
+API paths return bundled `index.html` instead of reaching the backend. A startup
+refresh POST can consequently appear successful with HTML rather than a session;
+the previous client treated its undefined user as authenticated, redirected to
+the feed, and crashed while reading a missing `items` array. The client now
+rejects invalid session responses and HTML API responses, and a render-error
+boundary provides a recovery screen as a final safeguard. Native HTTP,
+WebSocket, refresh-cookie, and OIDC URLs are derived from `VITE_API_ORIGIN`;
+invite links are derived from `VITE_WEB_ORIGIN`. Both default to
+`https://geoguessme.com` in the Make workflow. The API must explicitly permit
+the virtual origin in `ALLOWED_ORIGINS` for credentialed CORS and WebSocket
+origin checks. These hosts are same-site, so existing SameSite cookies still
+apply; do not relax cookie flags or use a development server URL in a
+distributable build. OIDC's full browser-navigation return path still needs
+physical-device acceptance; the read-only bundled smoke checks only that its API
+configuration loads.
 
 Android uses native geolocation, share sheets, haptics, status-bar styling, deep
 links, and system-back handling. Camera capture deliberately retains the WebView
@@ -99,6 +105,44 @@ background/resume, and a reinstall/update without clearing app data. Do not
 confuse a green localhost Maestro run with validation of a bundled or signed
 release. Cleartext traffic is enabled only for the Android debug build type;
 release builds prohibit it.
+
+## Physical-device testing and logs
+
+On a Linux Docker host, connect the device by USB, enable Android Developer
+Options → USB debugging, unlock it, and accept the device's computer RSA prompt.
+The optional device-tool container mounts USB only for these commands; no host
+Android SDK or `adb` is needed. Connect the device before starting the target.
+Capacitor `loggingBehavior: 'debug'` enables bridge/JS console diagnostics only
+for debuggable APKs; signed release builds keep them disabled, as defined by
+[Capacitor's configuration implementation](https://github.com/ionic-team/capacitor/blob/8.5.2/android/capacitor/src/main/java/com/getcapacitor/CapConfig.java).
+A Play snapshot can therefore have fewer JS diagnostics than a debug snapshot.
+
+```text
+make mobile-device-list
+export MOBILE_DEVICE_SERIAL=the-serial-shown-for-your-device
+# Before replacing a failing Play install, open it and capture its evidence:
+make mobile-device-logs
+# Build against hosted dev first, then install that bundled debug APK:
+make mobile-build MOBILE_API_ORIGIN=https://dev.geoguessme.com MOBILE_WEB_ORIGIN=https://dev.geoguessme.com
+make mobile-device-install
+```
+
+Installation never uninstalls the app, clears data, or automatically launches
+it. A Play-installed app uses a different signature from the debug APK: Android
+will refuse that replacement. Use a separate test device or Play internal
+testing; do not delete the failing installation before capturing its logs. Open
+the installed app manually and reproduce the issue before
+`make mobile-device-logs`. Snapshot files go into a new private directory under
+`.local/mobile/device-artifacts`, including app-process logs, a screenshot, and
+device/app/WebView version evidence. Logs may still contain sensitive data:
+review and redact before sharing; these files are never committed. A process
+that has already exited cannot provide current-PID logs; use a private Android
+Developer Options bug report for a crash that kills the app process.
+
+For release acceptance use the **exact signed AAB** through Play's internal
+track, not the locally signed debug APK. Check cold start, existing-install
+update, username and Google sign-in, protected data, background/resume, and
+logout; record the installed version code and device/WebView versions.
 
 ## Automated journey and diagnostics
 
