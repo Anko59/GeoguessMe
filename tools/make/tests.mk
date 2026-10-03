@@ -53,6 +53,12 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
 
+test-tools-namespace: ## Verify tool caches stay checkout-scoped and every helper preserves that namespace.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/tools-namespace/check-tools-namespace.sh
+
+test-braces-security: ## Verify installed brace parser and AST walkers resist stack exhaustion.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/frontend/tooling/dependencies/braces-security.js
+
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
 

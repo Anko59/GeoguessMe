@@ -230,7 +230,11 @@ name). It is destructive — existing objects are dropped by `pg_restore`.
 ### Restart rehearsal
 
 The `make restart-rehearsal` and `make reconnect-rehearsal` targets run stateful
-rehearsals that verify all services recover cleanly with persistent data.
+rehearsals that verify all services recover cleanly with persistent data. Run
+`make bootstrap` for a fresh checkout first: rehearsal tool containers share
+that checkout's isolated tools namespace, never another worktree's dependency
+volume. Application/rehearsal project names and their data isolation are
+unchanged.
 
 `make restart-rehearsal`:
 

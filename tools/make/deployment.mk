@@ -8,7 +8,7 @@ build: build-frontend build-backend ## Build production frontend and backend art
 build-backend: ## Build the backend binary in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && go build -trimpath -o bin/geoguessme .'
 
-build-frontend: ## Build the frontend bundle in Docker.
+build-frontend: prepare-frontend-cache ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
 build-images: build-keycloak-image ## Build production images with normal Docker layer caching.
@@ -46,13 +46,13 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
 
 build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build sops
+	$(COMPOSE_TOOLS) build sops
 
 build-socket-proxy-image: ## Build the PCRE2-patched socket-proxy derivative.
-	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build socket-proxy-tools
+	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) $(COMPOSE_TOOLS) build socket-proxy-tools
 
 build-security-tool-images: build-sops-image build-socket-proxy-image ## Build locally patched security-tool images used by the image audit.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
+	$(COMPOSE_TOOLS) build restic postgres-openssl cloudflared
 
 ifeq ($(strip $(KEYCLOAK_IMAGE)),)
 audit-images: build-security-tool-images build-keycloak-image

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
@@ -40,6 +42,6 @@ export GEOGUESSME_TEST_ALLOWED_ORIGINS="$PUBLIC_URL,http://host.docker.internal:
 docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -d --wait
 "$REPO/deployment/scripts/wait-for-health.sh" "$PUBLIC_URL" 120
 
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run -T --rm --no-deps go-tools sh -c \
     "cd /workspace/backend && TEST_BASE_URL=http://host.docker.internal:${WEB_PORT} MAILPIT_BASE_URL=http://host.docker.internal:${MAILPIT_PORT} TEST_DATABASE_URL=postgres://test:test@host.docker.internal:${DB_PORT}/geoguessme_test?sslmode=disable TOXIPROXY_API_URL=http://host.docker.internal:${TOXIPROXY_PORT} go test ./integration_test -count=1"

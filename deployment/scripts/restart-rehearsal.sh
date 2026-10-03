@@ -6,6 +6,8 @@
 # Uses polling/state checks with deadlines — never unconditional sleeps.
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
@@ -56,13 +58,13 @@ die() {
 
 # Run curl inside the go-tools container against the test stack.
 tool_curl() {
-    docker compose -p geoguessme-tools -f "$TOOLS_FILE" --project-directory "$REPO" \
+    docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f "$TOOLS_FILE" --project-directory "$REPO" \
         run --rm --no-deps go-tools curl -s --fail --show-error "$@" 2>/dev/null
 }
 
 # Run psql inside the go-security container.
 tool_psql() {
-    docker compose -p geoguessme-tools -f "$TOOLS_FILE" --project-directory "$REPO" \
+    docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f "$TOOLS_FILE" --project-directory "$REPO" \
         run --rm --no-deps go-security psql "$DB_URL" -v ON_ERROR_STOP=1 "$@"
 }
 

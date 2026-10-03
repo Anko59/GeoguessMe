@@ -32,10 +32,10 @@ include tools/make/openapi-contract.mk
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-load-harness-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
 	mobile-init mobile-prepare mobile-sync mobile-build mobile-keystore mobile-build-release mobile-verify-release mobile-release-manifest play-api-check play-api-publish mobile-smoke mobile-test test-mobile \
-	test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract mobile-device-list mobile-device-install mobile-device-logs \
+	test-tools-namespace test-braces-security test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract mobile-device-list mobile-device-install mobile-device-logs \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
-	audit deps-go-security-update deps-npm-security-update deps-npm-lock \
+	prepare-frontend-cache audit deps-go-security-update deps-npm-security-update deps-npm-lock \
 	build build-backend build-frontend build-images build-keycloak-image clean-build build-sops-image build-socket-proxy-image build-security-tool-images audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test operational-gate \

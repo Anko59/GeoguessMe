@@ -173,6 +173,22 @@ Tests supply explicit configuration (`APP_ENV=test` and explicit secrets via the
 Dockerized test stack). Override by setting environment variables before running
 the relevant Dockerized Make target.
 
+### Local tool namespace
+
+`GEOGUESSME_TOOLS_PROJECT` optionally overrides the Docker tools project name.
+By default Make derives a stable name from the checkout's absolute path and
+exports it to every tool/rehearsal helper. Different worktrees therefore receive
+separate mutable dependency caches; the name does not change with each commit.
+Do not reuse an override across concurrently active checkouts. For example:
+
+```sh
+GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-review make bootstrap
+```
+
+A fresh namespace requires `make bootstrap`. This setting does not rename any
+application, development, production or identity project, and is not a hosted
+secret/environment setting.
+
 ## `.env` file lookup
 
 Docker Compose reads environment from `deployment/env/*.env` files. The

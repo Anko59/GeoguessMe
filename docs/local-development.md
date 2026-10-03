@@ -83,6 +83,17 @@ Use make reset-dev CONFIRM=reset-dev only when deleting development data is
 intentional. make tools-clean removes tool caches and containers without
 touching application volumes.
 
+Frontend builds and Android synchronization automatically run
+`make prepare-frontend-cache` to repair ownership of the shared Vite
+configuration cache after root-running test containers. The helper rejects cache
+symlinks and changes only that ignored cache, not source files or the whole
+dependency tree.
+
+Mutable tool caches are isolated by checkout path, so a second worktree cannot
+replace this checkout's installed dependencies. Run `make bootstrap` when first
+using the checkout-scoped cache. Previous globally named tool volumes are left
+untouched; application, development and production data volumes do not change.
+
 ## Configuration
 
 Development defaults are defined in deployment/compose.dev.yaml. Environment

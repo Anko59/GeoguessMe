@@ -159,14 +159,14 @@ before removing the stack and preserves the original failure status.
 
 ## Cache and artifact bounds
 
-| Resource              | Scope              | Bound                                                                      |
-| --------------------- | ------------------ | -------------------------------------------------------------------------- |
-| Docker layer cache    | BuildKit           | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
-| Named tool caches     | geoguessme-tools   | Removed by make tools-clean or make prune --include-build-cache            |
-| Project images        | geoguessme* prefix | prune.sh --max-images 50                                                   |
-| Project volumes       | geoguessme* prefix | prune.sh --max-volumes 20 (opt-in)                                         |
-| Workspace artifacts   | repo paths         | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
-| CI workflow artifacts | GitHub Actions     | retention-days: 7                                                          |
+| Resource              | Scope                         | Bound                                                                      |
+| --------------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| Docker layer cache    | BuildKit                      | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
+| Named tool caches     | Checkout-scoped tools project | Removed by make tools-clean or make prune --include-build-cache            |
+| Project images        | geoguessme* prefix            | prune.sh --max-images 50                                                   |
+| Project volumes       | geoguessme* prefix            | prune.sh --max-volumes 20 (opt-in)                                         |
+| Workspace artifacts   | repo paths                    | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
+| CI workflow artifacts | GitHub Actions                | retention-days: 7                                                          |
 
 All cleanup targets are dry-run by default and require explicit CONFIRM before
 execution.

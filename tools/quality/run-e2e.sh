@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
@@ -64,7 +66,7 @@ docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -
 # Environment variables and arguments are passed directly; output directories
 # are host-mounted so artifacts land deterministically.
 run_status=0
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run -T --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \

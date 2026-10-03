@@ -2,7 +2,7 @@
 #
 # Human-readable versions are next to immutable image digests. Tool services
 # have no application volumes, production env files, or Docker socket access.
-name: geoguessme-tools
+name: ${GEOGUESSME_TOOLS_PROJECT:?Run tooling through Make}
 
 x-workspace: &workspace ./:/workspace:ro
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 # ==============================================================================
 # Deterministic migration test: representative legacy fixture, concurrent run,
 # idempotent rerun, duplicate survivor verification, and rollback expectations.
@@ -18,7 +20,7 @@ cd "$REPO"
 PROJECT="${GEOGUESSME_MIGRATION_PROJECT:-geoguessme-migration-test}"
 DB_PORT="${GEOGUESSME_MIGRATION_DB_PORT:-15433}"
 DB_URL="postgres://test:test@host.docker.internal:${DB_PORT}/geoguessme_test?sslmode=disable"
-TOOLS_PSQL=(docker compose -p geoguessme-tools -f deployment/compose.tools.yaml
+TOOLS_PSQL=(docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml
     --project-directory "$REPO" run --rm --no-deps go-security
     psql "$DB_URL" -v ON_ERROR_STOP=1)
 FIXTURE="/workspace/deployment/scripts/legacy-migration-fixture.sql"

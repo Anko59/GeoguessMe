@@ -69,7 +69,7 @@ test-mobile-device-contract: ## Test USB install/logging safeguards with fake ad
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci tools/mobile/device.sh tools/mobile/test-device-contract.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps mobile-tools bash tools/mobile/test-device-contract.sh
 
-mobile-init: ## Generate the tracked Capacitor Android project when absent.
+mobile-init: prepare-frontend-cache ## Generate the tracked Capacitor Android project when absent.
 	@if test -d frontend/android; then echo 'frontend/android already exists'; else \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write \
 		sh -ec 'npm --prefix frontend run build && cd frontend && npx cap add android'; \
@@ -80,15 +80,11 @@ mobile-prepare: ## Install the pinned Android SDK packages and create the test A
 	$(COMPOSE_TOOLS) build mobile-tools
 	$(MOBILE_TOOLS_RUN) tools/mobile/prepare-android.sh
 
-mobile-sync: mobile-init ## Build shared web assets and sync them into the Android project.
-	# Read-only node tools can create this shared cache as root during tests.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
-		-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) node-tools \
-		sh -ec 'test ! -L /workspace/frontend/node_modules/.vite-temp; mkdir -p /workspace/frontend/node_modules/.vite-temp; chown -R "$$HOST_UID:$$HOST_GID" /workspace/frontend/node_modules/.vite-temp'
+mobile-sync: mobile-init prepare-frontend-cache ## Build shared web assets and sync them into the Android project.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e VITE_API_ORIGIN=$(MOBILE_API_ORIGIN) -e VITE_WEB_ORIGIN=$(MOBILE_WEB_ORIGIN) \
 		-e CAPACITOR_SERVER_URL=$(CAPACITOR_SERVER_URL) node-tools-write \
-		sh -ec 'mkdir -p frontend/node_modules/.vite-temp && npm --prefix frontend run build && cd frontend && npx cap sync android'
+		sh -ec 'npm --prefix frontend run build && cd frontend && npx cap sync android'
 
 mobile-build: mobile-prepare mobile-sync ## Build a debug APK entirely through Docker.
 	$(MOBILE_TOOLS_RUN) tools/mobile/build-android.sh

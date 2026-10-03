@@ -6,6 +6,30 @@ gate is deterministic: it fails on **fixed** High/Critical findings (a fix is
 available in a newer release) and merely reports unfixed High/Critical findings,
 which cannot be remediated by bumping a version.
 
+## JavaScript dependency backports
+
+`make audit` retains the high-severity npm audit gate and also runs
+`make test-braces-security` against the dependency actually used by micromatch.
+For [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm),
+there is no published fixed upstream braces release. The project therefore
+maintains a private, scoped **code backport**, not an advisory exception: the
+published 3.0.3 implementation plus the reviewed depth, fractional-limit and
+parent-cycle guards from
+[upstream PR 72](https://github.com/micromatch/braces/pull/72). Unrelated
+upstream-master parser changes are deliberately excluded.
+
+The [backport provenance](../frontend/vendor/braces-security/README.md) records
+source and patch identities. npm installs a copy through `install-links=true`,
+so clean container installs use the same reviewed files rather than broken
+transitive symlinks. The security gate verifies installed executable bytes
+before loading them, rejects excessive/cyclic nesting, and preserves ordinary
+brace/micromatch behavior. Registry version matching cannot verify a downstream
+patch; changing a package name alone is not remediation. No audit threshold,
+advisory suppression or postinstall rewrite is used. Replace this temporary
+backport with a verified upstream release when it passes the same regressions;
+[issue 392](https://github.com/Anko59/GeoguessMe/issues/392) owns that
+follow-up.
+
 ## Scope of `make audit-images`
 
 The target scans the following images (see `AUDIT_IMAGES` in

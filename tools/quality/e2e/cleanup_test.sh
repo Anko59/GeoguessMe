@@ -35,6 +35,7 @@ run_case() {
     PATH="$fixture/bin:$PATH" E2E_DOCKER_TRACE="$trace" \
         E2E_UP_STATUS="$startup" E2E_BROWSER_STATUS="$browser" \
         E2E_TEARDOWN_STATUS="$teardown" E2E_LOG_STATUS="$logs" \
+        GEOGUESSME_TOOLS_PROJECT=fixture-tools \
         GEOGUESSME_TEST_PROJECT=fixture GEOGUESSME_E2E_PROJECTS=desktop \
         GEOGUESSME_E2E_SPEC='' GEOGUESSME_E2E_SHARD='' \
         bash "$fixture/tools/quality/run-e2e.sh" >"$output" 2>&1 || status=$?

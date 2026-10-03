@@ -10,7 +10,10 @@ COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml 
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
 COMPOSE_IDENTITY := GEOGUESSME_KEYCLOAK_IMAGE=geoguessme-keycloak:local docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
-COMPOSE_TOOLS := docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory .
+# Mutable tool volumes must not mix dependency trees from different checkouts.
+GEOGUESSME_TOOLS_PROJECT ?= geoguessme-tools-$(word 1,$(shell printf '%s' "$(CURDIR)" | cksum))
+export GEOGUESSME_TOOLS_PROJECT
+COMPOSE_TOOLS := docker compose -p "$${GEOGUESSME_TOOLS_PROJECT}" -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
 TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
@@ -63,7 +66,7 @@ help: ## Show this help.
 bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
 	@# frontend/node_modules is gitignored, so a fresh checkout lacks the host
 	@# mountpoint that the read-only workspace bind mount needs for the
-	@# geoguessme-tools_frontend-node-modules named volume. Create the stub so
+	@# checkout-scoped frontend-node-modules named volume. Create the stub so
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy cloudflared terraform
@@ -96,6 +99,13 @@ bootstrap-mobile: ## Prepare only the Node and Android tools needed by mobile E2
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build mobile-tools node-tools
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
+
+prepare-frontend-cache: ## Prepare the narrow Vite cache for non-root frontend builds.
+	# Root-running tests can create this cache in the shared dependency volume.
+	# Do not change ownership of node_modules or follow a cache directory symlink.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
+		-e HOST_UID=$(TOOLS_UID) -e HOST_GID=$(TOOLS_GID) node-tools \
+		sh -ec 'test ! -L /workspace/frontend/node_modules/.vite-temp; mkdir -p /workspace/frontend/node_modules/.vite-temp; chown -R "$$HOST_UID:$$HOST_GID" /workspace/frontend/node_modules/.vite-temp'
 
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
