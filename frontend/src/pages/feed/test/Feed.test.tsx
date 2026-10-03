@@ -104,13 +104,18 @@ describe('Public feed', () => {
                 server_time: new Date().toISOString(),
             });
             renderFeed(route);
-            if (route === '/feed') fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
+            if (route === '/feed') {
+                await screen.findByAltText('Blurred preview of an unsolved geo challenge');
+                fireEvent.click(screen.getByRole('button', { name: 'Play challenge' }));
+            }
             const dialog = await screen.findByRole('dialog', { name: 'Challenge guessing' });
             fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
             fireEvent.click(within(dialog).getByRole('button', { name: 'Submit guess' }));
             await screen.findByText('4,900 points');
             const results = await screen.findByRole('dialog', { name: 'Challenge results' });
             await within(results).findByText('New comment');
+            await within(results).findByAltText('Challenge location');
+            if (route === '/feed') await screen.findByAltText('Geo challenge photo');
             await waitFor(() => expect(within(results).getByText('4 comments')).toBeInTheDocument());
             expect(mocks.get).toHaveBeenCalledTimes(route === '/feed' ? 1 : 2);
         },
