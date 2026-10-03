@@ -10,7 +10,13 @@ test-unit: test-backend test-frontend test-reconnect-harness test-play-api test-
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
-test-npm-security-overrides: ## Verify patched tooling dependencies preserve their consumer APIs.
+test-braces-security-backport: ## Verify local braces provenance, recursion bounds and consumer compatibility.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-braces-backport.cjs
+
+verify-braces-backport-source: ## Reproduce the reviewed local backport from the integrity-pinned upstream tarball.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node /workspace/tools/quality/npm/verify-braces-source.cjs
+
+test-npm-security-overrides: test-braces-security-backport ## Verify patched tooling dependencies preserve their consumer APIs.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-security-overrides.cjs
 
 test-frontend: test-npm-security-overrides ## Run frontend unit tests.

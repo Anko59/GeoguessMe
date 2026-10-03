@@ -20,6 +20,15 @@ updated through a separate `watch` command, not the app deploy. Host runtime
 changes follow the staged procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
+Both frontend Dockerfiles include the reviewed local braces security backport
+before npm installs dependencies. Keep the vendor source in the build context; a
+manifest/lockfile-only copy is insufficient for this file dependency.
+`make audit` verifies upstream integrity, reconstructed source, and depth-limit
+regressions in addition to normal dependency scanning. See the
+[backport compatibility ledger](agent-engineering.md#braces-security-backport)
+for provenance and the upstream replacement/removal condition. Production still
+promotes the exact verified image digest without rebuilding.
+
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,

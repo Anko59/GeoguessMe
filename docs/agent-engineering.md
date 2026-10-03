@@ -338,6 +338,37 @@ override when its parent dependency accepts the patched version and the same
 contracts pass without it. These are dependency fixes, not audit exceptions or
 threshold changes.
 
+### Braces security backport
+
+The npm registry has no patched `braces` release for CVE-2026-93687. The private
+local package `frontend/vendor/geoguessme-patched-braces` retains the licensed
+v3.0.3 source/API, with the parser and AST-walker depth guards from reviewed
+[PR 72](https://github.com/micromatch/braces/pull/72), capped at 100. It
+preserves the original stringify escaping behavior rather than the PR's
+unrelated change.
+[Its provenance](../frontend/vendor/geoguessme-patched-braces/provenance.json)
+pins upstream tarball integrity, commits, original/patched file hashes, and the
+exact reproducible security patch. It is explicitly a GeoGuessMe-maintained
+backport, not an upstream version or an unaffected alias.
+
+A direct file dependency anchors the local package at the frontend root; the
+`$braces` override makes Micromatch use the same verified module. Both frontend
+Dockerfiles copy the vendor source before dependency installation. Npm audit
+cannot associate renamed local source with upstream advisories: zero findings
+alone are insufficient. `make audit` therefore requires
+`make test-braces-security-backport` (source hashes, patch
+reversal/reapplication, all recursion entry points, prebuilt/cyclic ASTs, option
+limits, boundary tests, original-result parity, and consumer APIs) and
+`make verify-braces-backport-source` (download and integrity-check the original
+npm artifact, reconstruct and compare every shipped source file). Transitive
+registry packages remain scanner-visible; audit thresholds are unchanged.
+
+Remove the file dependency, override, local source/provenance, Docker copy
+steps, and special tests together once a patched supported upstream release
+passes the same contracts. Rollback must not reinstate vulnerable 3.0.3 for
+normal tooling; retain the security backport until that replacement is
+available.
+
 ## Residual risks
 
 - The Cloudflared security-tool build

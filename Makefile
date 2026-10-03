@@ -27,7 +27,7 @@ include tools/make/openapi-contract.mk
 	format format-check fmt fmt-check mod-tidy lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \
-	test-unit test-backend test-frontend test-npm-security-overrides test-reconnect-harness test-play-api test-race test-verified test-structure-regression test-debt-markers-regression \
+	test-unit test-backend test-frontend test-npm-security-overrides test-braces-security-backport verify-braces-backport-source test-reconnect-harness test-play-api test-race test-verified test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-load-harness-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \

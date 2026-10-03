@@ -51,6 +51,11 @@ tools from pinned images and named caches.
 [the compatibility ledger](agent-engineering.md#tooling-security-overrides-376).
 It runs before `make test-frontend` and `make test-verified`, covering the
 actual Xcode/Markdownlint APIs and deterministic advisory regression cases.
+`make test-braces-security-backport` covers the explicit local braces security
+backport; `make verify-braces-backport-source` reconstructs its shipped source
+from the integrity-pinned upstream artifact. Both are required by `make audit`
+because npm audit alone cannot assess renamed local source. See
+[the backport ledger](agent-engineering.md#braces-security-backport).
 
 Reports and traces are written to ignored repository output directories from
 inside containers.
