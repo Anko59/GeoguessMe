@@ -186,9 +186,14 @@ export GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-review
 make bootstrap
 ```
 
-A fresh namespace requires `make bootstrap`. This setting does not rename any
-application, development, production or identity project, and is not a hosted
-secret/environment setting.
+A fresh namespace requires `make bootstrap`. This setting does not rename live
+development, production or identity projects, and is not a hosted secret
+setting. Disposable test/rehearsal projects include the checkout namespace and
+process ID. `GEOGUESSME_TEST_PORT_BASE` chooses a checkout-scoped port block by
+default; specific existing test/rehearsal port overrides retain precedence.
+Occupied ports fail closed rather than resetting another run. Parallel runs
+within the same checkout need explicit nonoverlapping port blocks; canonical E2E
+report publication is not parallel-safe within one checkout.
 
 `LOCAL_BACKEND_IMAGE`, `LOCAL_WEB_IMAGE` and `LOCAL_KEYCLOAK_IMAGE` optionally
 override the local build output tags, which default to tags scoped by

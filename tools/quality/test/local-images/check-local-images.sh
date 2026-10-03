@@ -151,7 +151,8 @@ for helper in "${consumers[@]}"; do
         consumer=verify
         [ "$helper" != deployment/scripts/watch/rehearsal.sh ] || consumer=watch
         status=0
-        "${scope[@]}" IMAGE_TEST_MODE=consumer IMAGE_CONSUMER="$consumer" IMAGE_TEST_STATE="$state" \
+        "${scope[@]}" GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-image-fixture GEOGUESSME_TEST_PORT_BASE=32100 \
+            IMAGE_TEST_MODE=consumer IMAGE_CONSUMER="$consumer" IMAGE_TEST_STATE="$state" \
             EXPECTED_BACKEND="$backend_ref" EXPECTED_WEB="$web_ref" bash "$ROOT/$helper" >"$TMP/output" 2>&1 || status=$?
         expected_status=86
         [ "$helper" != deployment/scripts/container-verify.sh ] || expected_status=0
@@ -164,6 +165,7 @@ for helper in "${consumers[@]}"; do
     done
     : >"$IMAGE_TEST_LOG"
     if env -u BACKEND_IMAGE -u WEB_IMAGE -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE \
+        GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-image-fixture GEOGUESSME_TEST_PORT_BASE=32100 \
         IMAGE_TEST_MODE=consumer bash "$ROOT/$helper" >"$TMP/output" 2>&1; then
         fail "$helper accepted undefined scoped image references"
     fi

@@ -7,6 +7,9 @@ trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/bin" "$fixture/frontend" "$fixture/tools/quality/e2e" "$fixture/deployment/scripts"
 cp "$ROOT/tools/quality/run-e2e.sh" "$fixture/tools/quality/"
 cp "$ROOT/tools/quality/e2e/arguments.sh" "$fixture/tools/quality/e2e/"
+foreign_stage="$fixture/frontend/.playwright-run-foreign.active"
+mkdir -p "$foreign_stage"
+printf 'active browser work\n' >"$foreign_stage/sentinel"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$fixture/deployment/scripts/wait-for-health.sh"
 chmod +x "$fixture/deployment/scripts/wait-for-health.sh"
 cat >"$fixture/bin/docker" <<'MOCK'
@@ -21,8 +24,16 @@ case "$*" in
         ;;
     *" down -v "*) exit "$E2E_TEARDOWN_STATUS" ;;
     *" playwright node "*)
-        mkdir -p frontend/.playwright-run/test-results
-        printf 'browser diagnostic' >frontend/.playwright-run/test-results/evidence.txt
+        args=("$@")
+        stage=""
+        for ((i = 0; i < ${#args[@]}; i++)); do
+            if [ "${args[i]}" = -v ] && [[ "${args[i + 1]:-}" == *:/tmp/playwright ]]; then
+                stage="${args[i + 1]%:/tmp/playwright}"
+            fi
+        done
+        [ -n "$stage" ] || exit 99
+        mkdir -p "$stage/test-results"
+        printf 'browser diagnostic' >"$stage/test-results/evidence.txt"
         exit "$E2E_BROWSER_STATUS"
         ;;
 esac
@@ -36,6 +47,7 @@ run_case() {
         E2E_UP_STATUS="$startup" E2E_BROWSER_STATUS="$browser" \
         E2E_TEARDOWN_STATUS="$teardown" E2E_LOG_STATUS="$logs" \
         GEOGUESSME_TOOLS_PROJECT=fixture-tools \
+        GEOGUESSME_TEST_WEB_PORT=32100 GEOGUESSME_TEST_MAILPIT_PORT=32101 \
         GEOGUESSME_TEST_PROJECT=fixture GEOGUESSME_E2E_PROJECTS=desktop \
         GEOGUESSME_E2E_SPEC='' GEOGUESSME_E2E_SHARD='' \
         bash "$fixture/tools/quality/run-e2e.sh" >"$output" 2>&1 || status=$?
@@ -58,7 +70,14 @@ run_case() {
     if [ "$startup" -eq 0 ]; then
         grep -q 'browser diagnostic' "$fixture/frontend/test-results/evidence.txt"
     fi
-    echo "PASS: E2E cleanup $name preserves status, diagnostics, and teardown"
+    grep -Fxq 'active browser work' "$foreign_stage/sentinel"
+    for stage in "$fixture"/frontend/.playwright-run-*; do
+        [ "$stage" = "$foreign_stage" ] || {
+            echo "FAIL: $name left its own staging directory behind" >&2
+            exit 1
+        }
+    done
+    echo "PASS: E2E cleanup $name preserves status, diagnostics, teardown, and another run's staging"
 }
 
 run_case startup-failure 42 0 0 0 42
@@ -67,3 +86,5 @@ run_case diagnostics-failure 42 0 0 23 42
 run_case cleanup-after-failure 42 0 19 0 42
 run_case cleanup-failure 0 0 19 0 19
 run_case success 0 0 0 0 0
+
+bash "$ROOT/tools/quality/e2e/runner_isolation_test.sh"

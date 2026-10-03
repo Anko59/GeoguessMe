@@ -33,8 +33,22 @@ TOOLS_USER := --user $(TOOLS_UID):$(TOOLS_GID)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
 ARTIFACTS_USER := --user 0:0
-GEOGUESSME_TEST_WEB_PORT ?= 18080
-GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
+# Checkouts receive separate local fixture port blocks. Occupied ports fail
+# closed; callers can override the base or individual ports for parallel runs.
+GEOGUESSME_TEST_PORT_BASE ?= $(shell printf '%s' "$(CURDIR)" | cksum | awk '{print 20000 + ($$1 % 3000) * 10}')
+# Freeze values before export: recursive shell-derived exports otherwise expand
+# one another while Make constructs a shell environment. Overrides retain value.
+override GEOGUESSME_TEST_PORT_BASE := $(GEOGUESSME_TEST_PORT_BASE)
+GEOGUESSME_TEST_WEB_PORT ?= $(GEOGUESSME_TEST_PORT_BASE)
+override GEOGUESSME_TEST_WEB_PORT := $(GEOGUESSME_TEST_WEB_PORT)
+GEOGUESSME_TEST_MAILPIT_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 1)
+override GEOGUESSME_TEST_MAILPIT_PORT := $(GEOGUESSME_TEST_MAILPIT_PORT)
+GEOGUESSME_TEST_DB_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 2)
+override GEOGUESSME_TEST_DB_PORT := $(GEOGUESSME_TEST_DB_PORT)
+GEOGUESSME_TEST_TOXIPROXY_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 3)
+override GEOGUESSME_TEST_TOXIPROXY_PORT := $(GEOGUESSME_TEST_TOXIPROXY_PORT)
+export GEOGUESSME_TEST_PORT_BASE GEOGUESSME_TEST_WEB_PORT GEOGUESSME_TEST_MAILPIT_PORT
+export GEOGUESSME_TEST_DB_PORT GEOGUESSME_TEST_TOXIPROXY_PORT
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 QA_REPORT_DIR ?= qa-artifacts

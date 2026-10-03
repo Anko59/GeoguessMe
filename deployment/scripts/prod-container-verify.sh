@@ -24,9 +24,9 @@ if [[ ! "$backend_image" =~ ^sha256:[a-f0-9]{64}$ || ! "$web_image" =~ ^sha256:[
     exit 2
 fi
 
-PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify}"
-WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-18083}"
-SMTP_WEB_PORT="${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-18085}"
+PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify-${GEOGUESSME_TOOLS_PROJECT:?Run through Make}-$$}"
+WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 4))}"
+SMTP_WEB_PORT="${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 5))}"
 export GEOGUESSME_PROD_VERIFY_SMTP_PORT="$SMTP_WEB_PORT"
 # The production config requires an HTTPS public origin. The disposable local
 # gateway is intentionally plain HTTP, so probes use a separate URL.

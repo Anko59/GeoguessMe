@@ -85,12 +85,17 @@ deployment, infrastructure, tools, and Makefile changes also select both suites.
 ## Integration stack
 
 deployment/compose.test.yaml is disposable and uses dedicated database and media
-volumes. GEOGUESSME_TEST_WEB_PORT and GEOGUESSME_TEST_MAILPIT_PORT may be set to
-non-default ports (the defaults are `18080` and `18025` to avoid the development
-stack's `8080` and `8025`). The runner derives one public URL and supplies it to
-PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket origins, and email-link
-assertions. Mailpit is addressed through the separately derived
-MAILPIT_BASE_URL.
+volumes. Make derives a checkout-scoped port block using
+`GEOGUESSME_TEST_PORT_BASE` (default `20000 + (checkout checksum % 3000) * 10`).
+Web, Mailpit, database and Toxiproxy use offsets 0–3; specific
+`GEOGUESSME_TEST_*_PORT` overrides take precedence. Disposable projects include
+the checkout namespace and process ID, so another run cannot reuse or tear down
+this run's data. An occupied port fails closed; for simultaneous runs in the
+same checkout, explicitly choose distinct port blocks. Canonical report
+publication is not parallel-safe within one checkout. The runner derives one
+public URL and supplies it to PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket
+origins, and email-link assertions. Mailpit is addressed through the separately
+derived MAILPIT_BASE_URL.
 
 The suite covers authentication, group boundaries, challenge lifecycle and media
 visibility, transactions, rate limits, storage failures, cleanup retries,

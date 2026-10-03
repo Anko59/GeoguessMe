@@ -5,9 +5,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
-PROJECT="${GEOGUESSME_LOAD_PROJECT:-geoguessme-load}"
-WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-18080}"
-MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-18025}"
+PROJECT="${GEOGUESSME_LOAD_PROJECT:-geoguessme-load-${GEOGUESSME_TOOLS_PROJECT}-$$}"
+WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:?Run through Make}"
+MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}"
 PUBLIC_URL="http://localhost:${WEB_PORT}"
 
 cleanup() {

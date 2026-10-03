@@ -235,8 +235,11 @@ rehearsals that verify all services recover cleanly with persistent data. Run
 that checkout's isolated tools namespace, never another worktree's dependency
 volume. Local verification images also use checkout-scoped build tags; selected
 container artifacts are pinned to immutable IDs before inspection/start. Caller
-signed-digest selections and production promotion remain unchanged, as do
-application/rehearsal project names and their data isolation.
+signed-digest selections and production promotion remain unchanged. Disposable
+rehearsal projects include the checkout namespace and process ID and use the
+checkout's test-port block. Existing specific port/project overrides still work;
+occupied ports fail closed. Live development, production and identity project
+names and data are unchanged.
 
 `make restart-rehearsal`:
 
@@ -254,9 +257,10 @@ application/rehearsal project names and their data isolation.
    backlog
 8. Cleans up all project resources on exit
 
-The rehearsal is self-contained and uses the `geoguessme-restart-rehearsal`
-project. It refuses project names that do not contain `rehearsal`. Regression
-tests validate script structure via `make test-restart-regression`.
+The rehearsal is self-contained and uses a unique checkout-scoped
+`restart-rehearsal` project. It refuses project names that do not contain
+`rehearsal`. Regression tests validate script structure via
+`make test-restart-regression`.
 
 `make reconnect-rehearsal` starts the same disposable stack and runs the Go
 reconnect-rehearsal harness, which exercises concurrent WebSocket clients,

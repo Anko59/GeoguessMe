@@ -53,6 +53,9 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
 	bash tools/quality/test/check-e2e-regression.sh
 
+test-rehearsal-isolation: ## Verify disposable projects and ports cannot reuse another checkout's fixture.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/rehearsal-isolation/check-rehearsal-isolation.sh
+
 test-local-images: ## Verify local artifact scoping, caller precedence and immutable verification identities.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/local-images/check-local-images.sh
 

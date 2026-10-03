@@ -92,20 +92,24 @@ export PATH="$TMP/bin:$PATH" NAMESPACE_LOG="$TMP/docker.log"
 # expression and export, rather than copying its hash algorithm into the test.
 cat >"$TMP/probe.mk" <<'MAKE'
 include $(NAMESPACE_REPO)/tools/make/setup.mk
-.PHONY: namespace-probe app-probe
+.PHONY: namespace-probe app-probe port-probe
 namespace-probe:
 	@printf '%s\n' "$${GEOGUESSME_TOOLS_PROJECT}"
 	@$(COMPOSE_TOOLS) config --quiet
 app-probe:
 	@printf '%s\n' '$(COMPOSE_DEV)' '$(COMPOSE_PROD)' '$(COMPOSE_IDENTITY)' '$(COMPOSE_TEST)'
+port-probe:
+	@printf '%s|%s|%s|%s|%s\n' "$${GEOGUESSME_TEST_PORT_BASE}" "$${GEOGUESSME_TEST_WEB_PORT}" "$${GEOGUESSME_TEST_MAILPIT_PORT}" "$${GEOGUESSME_TEST_DB_PORT}" "$${GEOGUESSME_TEST_TOXIPROXY_PORT}"
 MAKE
 export NAMESPACE_REPO="$REPO"
 mkdir -p "$TMP/checkout one" "$TMP/checkout-two"
 probe() {
     local -a scope=(env -u GEOGUESSME_TOOLS_PROJECT -u MAKEFLAGS -u MAKEOVERRIDES -u EXPECTED_NAMESPACE
-        -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE -u LOCAL_KEYCLOAK_IMAGE -u BACKEND_IMAGE -u WEB_IMAGE -u KEYCLOAK_IMAGE)
+        -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE -u LOCAL_KEYCLOAK_IMAGE -u BACKEND_IMAGE -u WEB_IMAGE -u KEYCLOAK_IMAGE
+        -u GEOGUESSME_TEST_PORT_BASE -u GEOGUESSME_TEST_WEB_PORT -u GEOGUESSME_TEST_MAILPIT_PORT
+        -u GEOGUESSME_TEST_DB_PORT -u GEOGUESSME_TEST_TOXIPROXY_PORT -u GEOGUESSME_TEST_PUBLIC_URL)
     if [ -n "${2:-}" ]; then scope+=("GEOGUESSME_TOOLS_PROJECT=$2"); fi
-    "${scope[@]}" NAMESPACE_PROBE=1 make --no-print-directory -s -C "$1" -f "$TMP/probe.mk" namespace-probe
+    "${scope[@]}" NAMESPACE_PROBE=1 make --no-print-directory -s -C "$1" -f "$TMP/probe.mk" "${3:-namespace-probe}" "${@:4}"
 }
 : >"$NAMESPACE_LOG"
 first="$(probe "$TMP/checkout one")"
@@ -118,6 +122,17 @@ grep -Fxq "tools|$first" "$NAMESPACE_LOG" || fail "Compose did not receive the d
 custom="$(probe "$TMP/checkout one" geoguessme-tools-explicit-123)"
 [ "$custom" = geoguessme-tools-explicit-123 ] || fail "explicit namespace override ignored"
 grep -Fxq "tools|$custom" "$NAMESPACE_LOG" || fail "Compose did not receive the explicit project"
+
+ports="$(probe "$TMP/checkout one" '' port-probe)"
+[ "$ports" = "$(probe "$TMP/checkout one" '' port-probe)" ] || fail 'same checkout changed default ports'
+[ "$ports" != "$(probe "$TMP/checkout-two" '' port-probe)" ] || fail 'different checkout fixtures share default ports'
+IFS='|' read -r base web mail db toxi <<<"$ports"
+if ((base < 20000 || base > 49990)); then fail 'default port base outside supported range'; fi
+if ((web != base || mail != base + 1 || db != base + 2 || toxi != base + 3)); then
+    fail 'default port offsets changed'
+fi
+custom_ports="$(probe "$TMP/checkout one" '' port-probe GEOGUESSME_TEST_PORT_BASE=33000 GEOGUESSME_TEST_WEB_PORT=33100 GEOGUESSME_TEST_MAILPIT_PORT=33101 GEOGUESSME_TEST_DB_PORT=33102 GEOGUESSME_TEST_TOXIPROXY_PORT=33103)"
+[ "$custom_ports" = '33000|33100|33101|33102|33103' ] || fail 'caller port overrides were ignored'
 
 # Tool-cache isolation must not rename application projects or their volumes.
 app_defaults="$(cd "$TMP/checkout one" && make --no-print-directory -s -f "$TMP/probe.mk" app-probe)"
@@ -136,6 +151,8 @@ run_helper() (
         deployment/scripts/smoke-test.sh | deployment/scripts/wait-for-health.sh) shell="sh" ;;
     esac
     export NAMESPACE_HELPER="$helper"
+    export GEOGUESSME_TEST_PORT_BASE=32100 GEOGUESSME_TEST_WEB_PORT=32100 GEOGUESSME_TEST_MAILPIT_PORT=32101
+    export GEOGUESSME_TEST_DB_PORT=32102 GEOGUESSME_TEST_TOXIPROXY_PORT=32103
     case "$mode" in
         missing) unset GEOGUESSME_TOOLS_PROJECT ;;
         empty) export GEOGUESSME_TOOLS_PROJECT="" ;;
@@ -160,21 +177,20 @@ for helper in "${helpers[@]}"; do
     grep -Fxq 'tools|geoguessme-tools-namespace-test' "$NAMESPACE_LOG" ||
         fail "$helper did not propagate the selected project"
     if grep -Fq 'incorrect tool project' "$TMP/output"; then fail "$helper split or changed the project"; fi
+    expected=""
     case "$helper" in
-        tools/quality/run-e2e.sh) app=geoguessme-e2e ;;
-        tools/quality/run-integration.sh) app=geoguessme-integration ;;
-        deployment/scripts/migration-concurrency.sh) app=geoguessme-migration-test ;;
-        deployment/scripts/restart-rehearsal.sh) app=geoguessme-restart-rehearsal ;;
-        deployment/scripts/load-test.sh) app=geoguessme-load ;;
-        deployment/scripts/reconnect-rehearsal.sh) app=geoguessme-reconnect-rehearsal ;;
-        deployment/scripts/backup-restore-rehearsal.sh) app=geoguessme-backup-rehearsal ;;
-        *) app="" ;;
+        tools/quality/run-e2e.sh) expected=geoguessme-tools-namespace-test-e2e ;;
+        tools/quality/run-integration.sh) expected=geoguessme-tools-namespace-test-integration ;;
+        deployment/scripts/migration-concurrency.sh) expected=geoguessme-migration-test-geoguessme-tools-namespace-test ;;
+        deployment/scripts/restart-rehearsal.sh) expected=geoguessme-restart-rehearsal-geoguessme-tools-namespace-test ;;
+        deployment/scripts/load-test.sh) expected=geoguessme-load-geoguessme-tools-namespace-test ;;
+        deployment/scripts/reconnect-rehearsal.sh) expected=geoguessme-reconnect-rehearsal-geoguessme-tools-namespace-test ;;
+        deployment/scripts/backup-restore-rehearsal.sh) expected=geoguessme-backup-rehearsal-geoguessme-tools-namespace-test ;;
     esac
-    if [ -n "$app" ]; then
-        grep -Fxq "app|$app" "$NAMESPACE_LOG" || fail "$helper changed the application project"
-        if grep '^app|' "$NAMESPACE_LOG" | grep -Fvx "app|$app" >/dev/null; then
-            fail "$helper touched an unexpected application project"
-        fi
+    if [ -n "$expected" ]; then
+        app="$(sed -n 's/^app|//p' "$NAMESPACE_LOG" | sort -u)"
+        [[ "$app" =~ ^${expected}-[0-9]+$ ]] ||
+            fail "$helper did not retain one checkout/PID-scoped ephemeral project"
     fi
     # This deliberately invalid Compose name is only passed to fake Docker: it
     # proves the command-array/string boundaries do not split an exported value.

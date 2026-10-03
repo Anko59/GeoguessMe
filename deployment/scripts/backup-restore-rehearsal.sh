@@ -5,8 +5,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
-PROJECT="${GEOGUESSME_REHEARSAL_PROJECT:-geoguessme-backup-rehearsal}"
-DB_PORT="${GEOGUESSME_REHEARSAL_DB_PORT:-15432}"
+PROJECT="${GEOGUESSME_REHEARSAL_PROJECT:-geoguessme-backup-rehearsal-${GEOGUESSME_TOOLS_PROJECT}-$$}"
+DB_PORT="${GEOGUESSME_REHEARSAL_DB_PORT:-${GEOGUESSME_TEST_DB_PORT:?Run through Make}}"
 DB_URL="postgres://test:test@host.docker.internal:${DB_PORT}/geoguessme_test?sslmode=disable"
 RESTORE_URL="postgres://test:test@host.docker.internal:${DB_PORT}/geoguessme_restore?sslmode=disable"
 
