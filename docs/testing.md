@@ -16,7 +16,7 @@ tools from pinned images and named caches.
 | make test-structure-regression             | Structure-check regression tests in disposable Git repos                                                                                                                                                                                                                                                                              | check-structure-regression.sh PASS                                        |
 | make test-debt-markers-regression          | Owned and unowned deferred-work marker fixtures                                                                                                                                                                                                                                                                                       | check-markers-test.sh PASS                                                |
 | make test-ci-retention-regression          | Verify CI bounded retention and cache scopes                                                                                                                                                                                                                                                                                          | check-ci-retention-regression.sh PASS                                     |
-| make test-e2e-regression                   | Verify E2E cleanup, safe arguments, browser selection, and volume safeguards                                                                                                                                                                                                                                                          | check-e2e-regression.sh PASS                                              |
+| make test-e2e-regression                   | Verify E2E safeguards and integration working-directory/container/image ownership                                                                                                                                                                                                                                                     | All runner safeguard checks PASS                                          |
 | make test-load-harness-regression          | Verify signup attestation, nonroot owner mapping, restrictive k6 compilation, and isolated load lifecycle                                                                                                                                                                                                                             | All load harness checks PASS                                              |
 | make test-cache-status-regression          | Cache-status reporting regression tests                                                                                                                                                                                                                                                                                               | check-cache-status-regression.sh PASS                                     |
 | make test-restart-regression               | Restart-rehearsal script structure regression                                                                                                                                                                                                                                                                                         | check-restart-regression.sh PASS                                          |
@@ -46,6 +46,23 @@ tools from pinned images and named caches.
 | make prod-container-verify                 | Production-image hardening, compose, local stack startup, smoke, teardown                                                                                                                                                                                                                                                             | prod-container-verify.sh PASS                                             |
 | make smoke-rehearsal                       | Smoke test against a disposable test stack                                                                                                                                                                                                                                                                                            | smoke-rehearsal.sh PASS                                                   |
 | make verify                                | quality + test-integration + test-e2e + container-verify + prod-container-verify + migration-test + backup-rehearsal + restart-rehearsal + reconnect-rehearsal + smoke + load-test                                                                                                                                                    | All gates PASS; complete release readiness                                |
+
+Concurrent integration/E2E runs in different worktrees must select a private
+`GEOGUESSME_TEST_PROJECT` and `GEOGUESSME_TOOLS_PROJECT`, plus separate
+`GEOGUESSME_TEST_WEB_PORT`, `GEOGUESSME_TEST_MAILPIT_PORT`,
+`GEOGUESSME_TEST_DB_PORT`, and `GEOGUESSME_TEST_TOXIPROXY_PORT`. Make's test
+environment honors these caller values. Sequential integration/E2E phases may
+reuse that private project after successful teardown; they must not overlap.
+
+The integration runner refuses pre-existing stacks and verifies every
+container's Compose working-directory label against its canonical checkout. It
+snapshots container/image IDs after startup, checks the backend against its
+pre-start image ID, and rejects identity changes before tests, after tests, and
+before diagnostics or teardown. A foreign working directory or replacement
+container leaves the project untouched and fails the run, never gathering peer
+logs or destroying peer resources. A present revision label must match the
+checkout; legacy images without revision labels do not prove their source SHA.
+Private projects are essential: the label checks are not a distributed lock.
 
 `make load-test` runs the pinned k6 image with the canonical non-root
 `TOOLS_UID:TOOLS_GID` checkout-owner mapping, preserving owner-only directory

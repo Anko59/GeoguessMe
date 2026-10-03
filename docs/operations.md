@@ -30,6 +30,12 @@ fake-environment application project before teardown. It preserves startup or k6
 failure status if teardown also fails, and a teardown failure cannot report a
 passing load run. UID `0` mappings are rejected before starting a stack.
 
+If integration reports an ownership or identity mismatch, its selected project
+is left untouched: do not follow it with an unconditional Compose `down`.
+Inspect only public ownership/image metadata and coordinate with the other
+worktree's owner. Select a fresh private project and ports before a new gate; a
+mixed-source run is a failed gate, not valid application test evidence.
+
 Host provisioning executes the compressed bootstrap only after checking its
 required tools, and stops on runtime extraction or Cloudflared integrity errors.
 The decoded bootstrap remains available for failure diagnosis; it is removed

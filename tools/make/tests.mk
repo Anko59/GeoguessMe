@@ -59,8 +59,9 @@ test-cache-status-regression: ## Run cache-status regression tests.
 test-ci-classifier: ## Verify deterministic CI path classification.
 	bash tools/quality/ci/test-classify-changes.sh
 
-test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
+test-e2e-regression: ## Verify E2E safeguards and integration source-ownership isolation.
 	bash tools/quality/test/check-e2e-regression.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/integration-runner/check-integration-runner.sh
 
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
