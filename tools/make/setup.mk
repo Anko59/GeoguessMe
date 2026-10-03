@@ -9,10 +9,19 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
-COMPOSE_IDENTITY := GEOGUESSME_KEYCLOAK_IMAGE=geoguessme-keycloak:local docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
+COMPOSE_IDENTITY = GEOGUESSME_KEYCLOAK_IMAGE="$(if $(strip $(KEYCLOAK_IMAGE)),$(KEYCLOAK_IMAGE),$(LOCAL_KEYCLOAK_IMAGE))" docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
 # Mutable tool volumes must not mix dependency trees from different checkouts.
 GEOGUESSME_TOOLS_PROJECT ?= geoguessme-tools-$(word 1,$(shell printf '%s' "$(CURDIR)" | cksum))
 export GEOGUESSME_TOOLS_PROJECT
+# Local build tags must not let another checkout replace our test artifacts.
+# Caller-supplied signed production references take precedence in consumers;
+# build targets always write local tags, never those promotion references.
+LOCAL_BACKEND_IMAGE ?= geoguessme-backend:local-$(GEOGUESSME_TOOLS_PROJECT)
+LOCAL_WEB_IMAGE ?= geoguessme-web:local-$(GEOGUESSME_TOOLS_PROJECT)
+LOCAL_KEYCLOAK_IMAGE ?= geoguessme-keycloak:local-$(GEOGUESSME_TOOLS_PROJECT)
+BACKEND_IMAGE ?= $(LOCAL_BACKEND_IMAGE)
+WEB_IMAGE ?= $(LOCAL_WEB_IMAGE)
+export LOCAL_BACKEND_IMAGE LOCAL_WEB_IMAGE LOCAL_KEYCLOAK_IMAGE BACKEND_IMAGE WEB_IMAGE
 COMPOSE_TOOLS := docker compose -p "$${GEOGUESSME_TOOLS_PROJECT}" -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform

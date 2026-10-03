@@ -102,7 +102,8 @@ MAKE
 export NAMESPACE_REPO="$REPO"
 mkdir -p "$TMP/checkout one" "$TMP/checkout-two"
 probe() {
-    local -a scope=(env -u GEOGUESSME_TOOLS_PROJECT -u MAKEFLAGS -u MAKEOVERRIDES -u EXPECTED_NAMESPACE)
+    local -a scope=(env -u GEOGUESSME_TOOLS_PROJECT -u MAKEFLAGS -u MAKEOVERRIDES -u EXPECTED_NAMESPACE
+        -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE -u LOCAL_KEYCLOAK_IMAGE -u BACKEND_IMAGE -u WEB_IMAGE -u KEYCLOAK_IMAGE)
     if [ -n "${2:-}" ]; then scope+=("GEOGUESSME_TOOLS_PROJECT=$2"); fi
     "${scope[@]}" NAMESPACE_PROBE=1 make --no-print-directory -s -C "$1" -f "$TMP/probe.mk" namespace-probe
 }

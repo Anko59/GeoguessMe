@@ -233,8 +233,10 @@ The `make restart-rehearsal` and `make reconnect-rehearsal` targets run stateful
 rehearsals that verify all services recover cleanly with persistent data. Run
 `make bootstrap` for a fresh checkout first: rehearsal tool containers share
 that checkout's isolated tools namespace, never another worktree's dependency
-volume. Application/rehearsal project names and their data isolation are
-unchanged.
+volume. Local verification images also use checkout-scoped build tags; selected
+container artifacts are pinned to immutable IDs before inspection/start. Caller
+signed-digest selections and production promotion remain unchanged, as do
+application/rehearsal project names and their data isolation.
 
 `make restart-rehearsal`:
 

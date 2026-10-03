@@ -93,6 +93,10 @@ Mutable tool caches are isolated by checkout path, so a second worktree cannot
 replace this checkout's installed dependencies. Run `make bootstrap` when first
 using the checkout-scoped cache. Previous globally named tool volumes are left
 untouched; application, development and production data volumes do not change.
+Local verification image tags are checkout-scoped too. Rebuild with
+`make build-images`; container verifiers pin the selected image IDs so another
+build cannot silently switch artifacts during inspection. Explicit
+`BACKEND_IMAGE`/`WEB_IMAGE` signed-digest selections still take precedence.
 
 ## Configuration
 

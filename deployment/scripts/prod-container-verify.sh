@@ -13,8 +13,16 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
-backend_image="${BACKEND_IMAGE:-geoguessme-backend:local}"
-web_image="${WEB_IMAGE:-geoguessme-web:local}"
+backend_image="${BACKEND_IMAGE:-${LOCAL_BACKEND_IMAGE:?Run through Make or set BACKEND_IMAGE}}"
+web_image="${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?Run through Make or set WEB_IMAGE}}"
+# Capture immutable IDs once; every inspection and stack start below must use
+# these same artifacts even if another build moves either selected local tag.
+backend_image="$(docker image inspect --format '{{.Id}}' "$backend_image")"
+web_image="$(docker image inspect --format '{{.Id}}' "$web_image")"
+if [[ ! "$backend_image" =~ ^sha256:[a-f0-9]{64}$ || ! "$web_image" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo 'Docker returned an invalid application image ID' >&2
+    exit 2
+fi
 
 PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify}"
 WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-18083}"

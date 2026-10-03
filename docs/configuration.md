@@ -182,12 +182,22 @@ separate mutable dependency caches; the name does not change with each commit.
 Do not reuse an override across concurrently active checkouts. For example:
 
 ```sh
-GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-review make bootstrap
+export GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-review
+make bootstrap
 ```
 
 A fresh namespace requires `make bootstrap`. This setting does not rename any
 application, development, production or identity project, and is not a hosted
 secret/environment setting.
+
+`LOCAL_BACKEND_IMAGE`, `LOCAL_WEB_IMAGE` and `LOCAL_KEYCLOAK_IMAGE` optionally
+override the local build output tags, which default to tags scoped by
+`GEOGUESSME_TOOLS_PROJECT`. Verification uses these outputs unless
+`BACKEND_IMAGE` or `WEB_IMAGE` explicitly selects another artifact, such as a
+promoted signed digest. Local builds never retag those caller-selected
+deployment references. Container verifiers freeze selected artifacts to
+immutable Docker image IDs before inspecting or starting them, preventing a
+concurrent tag change from switching the tested artifact.
 
 ## `.env` file lookup
 

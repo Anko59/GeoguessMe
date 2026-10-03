@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+web_image="${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?LOCAL_WEB_IMAGE must be exported by Make}}"
+WEB_IMAGE=$(docker image inspect --format '{{.Id}}' "$web_image")
+printf '%s\n' "$WEB_IMAGE" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+    echo "watch rehearsal could not resolve an immutable image ID: $web_image" >&2
+    exit 1
+}
+export WEB_IMAGE
+
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)
 WATCH_COMPOSE="$ROOT/deployment/compose.watch.yaml"
 PROJECT="geoguessme-watch-rehearsal-$$"
@@ -43,11 +51,10 @@ for spec in \
         --tmpfs /config:size=16m,noexec,nosuid,nodev \
         --mount "type=bind,src=$TMP/mock.Caddyfile,dst=/etc/caddy/Caddyfile,ro" \
         --mount "type=bind,src=$TMP/metrics,dst=/srv/metrics,ro" \
-        geoguessme-web:local \
+        "$WEB_IMAGE" \
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 done
 
-export WEB_IMAGE=geoguessme-web:local
 SOCKET_PROXY_IMAGE=${SOCKET_PROXY_IMAGE:-geoguessme/socket-proxy-tools:local}
 export SOCKET_PROXY_IMAGE
 export GEOGUESSME_WATCH_METRICS_DIR="$TMP"
