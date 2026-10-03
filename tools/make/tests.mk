@@ -71,8 +71,10 @@ test-mobile-sdk-contract: ## Verify Android's build SDK and Maestro runtime SDK 
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
-test-load-harness-regression: ## Verify the k6 load profile attests age on every signup.
+test-load-harness-regression: ## Verify signup attestation and isolated nonroot k6 ownership/lifecycle.
 	bash tools/quality/test/load-harness/check-load-attestation.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/load-harness/check-load-runner.sh
+	bash tools/quality/test/load-harness/check-k6-permissions.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh && bash tools/quality/test/check-restart-regression.sh --determinism

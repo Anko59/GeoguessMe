@@ -57,6 +57,19 @@ leaves monitoring disabled pending operator setup. Runtime extraction consumes
 one shared file descriptor and hashes the exact installed bytes with fixed
 ownership and permissions.
 
+`make watch-rehearsal` stages only the three public monitoring configurations
+into a readable temporary directory and replaces their Compose mounts, leaving
+checkout permissions and hosted root-owned `0444` configuration unchanged. Its
+metrics token and mock gateway files are fake fixtures; the agent environment
+remains private. Vector collects only the two owned fake containers while still
+checking the production-label allowlist.
+
+`make load-test` preserves the pinned k6 image and strict load profile, using
+the canonical non-root checkout-owner UID/GID rather than changing private
+checkout permissions. Its tooling container honors `GEOGUESSME_TOOLS_PROJECT`;
+the load stack remains separate from smoke and production projects. See the
+[testing guide](testing.md) for ownership and isolation regressions.
+
 Android distribution is part of the production release boundary but remains a
 separate artifact from the hosted services. The production workflow builds and
 verifies the signed Android App Bundle before image promotion, retains its
