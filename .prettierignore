@@ -1,2 +1,3 @@
-# Vendored browser runtime and neural-network data are pinned upstream assets.
+# Vendored upstream sources stay byte-for-byte aligned with their pinned commit.
+frontend/vendor/braces/**/*.js
 frontend/public/vendor/jeeliz/**

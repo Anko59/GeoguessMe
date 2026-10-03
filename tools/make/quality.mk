@@ -93,6 +93,10 @@ deps-npm-security-update: ## Apply compatible npm security fixes to the frontend
 deps-npm-lock: ## Refresh the frontend lockfile after an intentional manifest edit.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache install --package-lock-only --ignore-scripts
 
+BRACES_BACKPORT_DESTINATION ?= /workspace/frontend/vendor/braces
+vendor-braces-security-backport: ## Import pinned braces recursion-guard code; override BRACES_BACKPORT_DESTINATION for a smoke path.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write env BRACES_BACKPORT_DESTINATION="$(BRACES_BACKPORT_DESTINATION)" bash /workspace/tools/quality/vendor-braces-security-backport.sh
+
 ARCHCHECK := $(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/tools/quality/archcheck && go run .'
 
 archcheck: ## Run the durable architecture rules (mutable globals, SQL in handlers, env reads) via tools/quality/archcheck.
