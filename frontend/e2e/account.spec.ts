@@ -11,6 +11,11 @@ import {
 test('profile blocking invalidates another tab and Settings can restore access', async ({ browser, context }) => {
     const other = await newAuthContext(browser);
     try {
+        // Keep the HTTP-origin regression even when CI serves a secure origin:
+        // randomUUID is secure-context-only, unlike getRandomValues and storage.
+        await context.addInitScript(() => {
+            Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: undefined });
+        });
         const first = await signupWithToken(context);
         const second = await signupWithToken(other);
         const firstHeaders = { Authorization: `Bearer ${first.token}` };

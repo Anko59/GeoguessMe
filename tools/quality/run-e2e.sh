@@ -5,6 +5,11 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
 PROJECT="${GEOGUESSME_TEST_PROJECT:-geoguessme-e2e}"
+TOOLS_PROJECT="${GEOGUESSME_TOOLS_PROJECT-geoguessme-tools}"
+if [[ ! "$TOOLS_PROJECT" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+    echo 'GEOGUESSME_TOOLS_PROJECT must match [a-z0-9][a-z0-9_-]*' >&2
+    exit 2
+fi
 WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-18080}"
 MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-18025}"
 PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
@@ -64,7 +69,7 @@ docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -
 # Environment variables and arguments are passed directly; output directories
 # are host-mounted so artifacts land deterministically.
 run_status=0
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "$TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run -T --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \

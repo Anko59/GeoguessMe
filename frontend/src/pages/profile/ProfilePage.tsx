@@ -181,7 +181,7 @@ export default function ProfilePage() {
                         )}
                         <p className="profile-rank-name">
                             <RankBadge rank={rank} />
-                            {rank.name}
+                            <span className="profile-rank-label">{rank.name}</span>
                         </p>
                     </div>
                 </div>
@@ -238,7 +238,7 @@ export default function ProfilePage() {
                     <strong>#{rank.level}</strong>
                     <span className="profile-stat-rank-name">
                         <RankBadge rank={rank} />
-                        {rank.name}
+                        <span className="profile-rank-label">{rank.name}</span>
                     </span>
                 </article>
             </section>

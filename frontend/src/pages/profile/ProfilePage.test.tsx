@@ -212,6 +212,39 @@ describe('ProfilePage', () => {
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
+    it('preserves full long identity, rank and pin text in shrinkable layout content', async () => {
+        const username = 'qa_long_123456789012345678901234';
+        const rankName = 'Clueless Wanderer With An Especially Long Rank';
+        const pinName = 'North Star With An Especially Long Marker Name';
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                username,
+                rank: { ...profile.rank, name: rankName },
+                map_pin: {
+                    key: 'north-star',
+                    name: pinName,
+                    description: 'A clear sky marker.',
+                    image_url: '/map-pins/north-star.svg',
+                    unlocked_by: {
+                        key: 'perfect-score',
+                        name: 'Perfect score',
+                        description: 'Get the maximum score once.',
+                    },
+                },
+            },
+        });
+        renderProfile();
+
+        expect(await screen.findByRole('heading', { name: username })).toHaveTextContent(username);
+        const rankLabels = screen.getAllByText(rankName);
+        expect(rankLabels).toHaveLength(2);
+        for (const label of rankLabels) expect(label).toHaveClass('profile-rank-label');
+        expect(screen.getByRole('heading', { name: pinName })).toHaveTextContent(pinName);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: `Best at guessing ${username}` })).toBeInTheDocument();
+    });
+
     it('shows an actionable error and retries the profile request', async () => {
         mocks.get
             .mockRejectedValueOnce(new Error('Profile service unavailable'))

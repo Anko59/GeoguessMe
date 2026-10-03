@@ -74,6 +74,21 @@ describe('FeedLeaderboard', () => {
         expect(screen.queryByRole('button', { name: 'More players' })).not.toBeInTheDocument();
     });
 
+    it('preserves long usernames and scores inside the profile-only responsive layout', async () => {
+        const username = 'qa_long_123456789012345678901234';
+        mocks.profileLeaderboard.mockResolvedValueOnce({
+            items: [{ rank: 12, user_id: 'user-1', username, avatar: 'avatar.png', total_score: 123456789 }],
+            next_cursor: '',
+        });
+        renderLeaderboard();
+
+        const link = await screen.findByRole('link', { name: username });
+        expect(link).toHaveTextContent(username);
+        expect(link.closest('.profile-feed-leaderboard')).toBeInTheDocument();
+        expect(screen.getByText('123,456,789')).toBeInTheDocument();
+        expect(screen.getByText('Score on visible challenges')).toBeInTheDocument();
+    });
+
     it('keeps a retry action for an unavailable feed leaderboard', async () => {
         mocks.profileLeaderboard
             .mockRejectedValueOnce(new Error('rankings unavailable'))

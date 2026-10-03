@@ -4,11 +4,18 @@
     margin-inline: auto;
     padding: clamp(1rem, 3vw, 2rem);
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     gap: var(--space-5);
     background:
         radial-gradient(circle at 85% -10%, rgba(0, 192, 255, 0.1), transparent 38%),
         radial-gradient(circle at 5% 25%, rgba(255, 182, 0, 0.08), transparent 32%), var(--surface-soft);
+}
+
+/* Cards must shrink within the page instead of sizing its implicit grid track
+   to the widest username, rank, or leaderboard header. */
+.profile-page > * {
+    min-width: 0;
 }
 
 .profile-state {
@@ -115,6 +122,11 @@
     font-weight: 900;
 }
 
+.profile-rank-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .profile-trackers {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -128,6 +140,7 @@
     display: grid;
     align-content: center;
     gap: 0.2rem;
+    overflow-wrap: anywhere;
     overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--line);
@@ -198,6 +211,7 @@
     margin: 0;
     color: var(--brand-navy);
     font-size: clamp(1.2rem, 3vw, 1.7rem);
+    overflow-wrap: anywhere;
 }
 
 .profile-rank-path {
@@ -264,6 +278,7 @@
     border: 1px solid #f7c9c5;
     border-radius: var(--radius-md);
     text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .profile-error span {
