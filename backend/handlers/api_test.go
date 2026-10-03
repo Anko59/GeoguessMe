@@ -191,7 +191,7 @@ func TestGroupAndReadHandlers(t *testing.T) {
 
 	chatAPI := newChatAPI(t, mock, mustTestStore(t), nil)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(group.ID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500).WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}))
+	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").WithArgs(group.ID, 500, "user-1").WillReturnRows(pgxmock.NewRows([]string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}))
 	recorder = httptest.NewRecorder()
 	chatAPI.GetGroupMessages(recorder, ownerRequest(http.MethodGet, "/?group_id="+group.ID, ""))
 	if recorder.Code != http.StatusOK {
@@ -308,7 +308,7 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 	requireStatus(t, chatAPI.GetGroupReactionUsage, usageRequest, http.StatusForbidden)
 
 	columns := []string{"id", "group_id", "user_id", "username", "avatar", "kind", "photo_id", "media_id", "mime_type", "reply_to_id", "content", "created_at"}
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID, "user-1").
 		WillReturnRows(pgxmock.NewRows(columns))
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusNotFound)
 
@@ -316,12 +316,12 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 		return pgxmock.NewRows(columns).
 			AddRow(messageID, groupID, "user-2", "bob", "", kind, nil, nil, nil, nil, "hello", time.Now())
 	}
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("system"))
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID, "user-1").WillReturnRows(messageRows("system"))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	requireStatus(t, chatAPI.SetMessageReaction, reactionRequest(http.MethodPut, "👍"), http.StatusBadRequest)
 
-	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows("text"))
+	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID, "user-1").WillReturnRows(messageRows("text"))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
@@ -335,9 +335,75 @@ func TestReactionAndGroupSettingFailures(t *testing.T) {
 
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-	mock.ExpectQuery("SELECT mr.reaction, COUNT").WithArgs(groupID).
+	mock.ExpectQuery("SELECT mr.reaction, COUNT").WithArgs(groupID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"reaction", "count"}).AddRow("like", 3))
 	requireStatus(t, chatAPI.GetGroupReactionUsage, requestWithUser(http.MethodGet, "/?group_id="+groupID, "", "user-1"), http.StatusOK)
+}
+
+// A filtered challenge is indistinguishable from a missing challenge. No
+// membership, guess, location or object-storage lookup may follow that denial.
+func TestBlockedChallengeBoundaries(t *testing.T) {
+	photoID := "00000000-0000-0000-0000-000000000002"
+	for _, name := range []string{"results", "media", "accept", "guess", "timeout"} {
+		t.Run(name, func(t *testing.T) {
+			mock := newMockPool(t)
+			repos := repository.NewRepository(mock)
+			store := &countingStore{ObjectStore: mustTestStore(t)}
+			api := NewGameAPI(repos.Groups, repos.Chat, repos, store, handlerConfig(), nil, nil, time.Now)
+			handler, method := api.GetChallengeResults, http.MethodGet
+			switch name {
+			case "media":
+				handler = api.ServeChallengeMedia
+			case "accept":
+				handler, method = api.AcceptChallenge, http.MethodPost
+			case "guess":
+				handler, method = api.SubmitChallengeGuess, http.MethodPost
+			case "timeout":
+				handler, method = api.TimeoutChallengeGuess, http.MethodPost
+			}
+			transaction := name == "accept" || name == "guess"
+			if transaction {
+				mock.ExpectBegin()
+			}
+			mock.ExpectQuery("SELECT id, user_id, group_id.*FROM photos.*user_blocks").WithArgs(photoID, "viewer-1").WillReturnRows(pgxmock.NewRows([]string{"id"}))
+			if transaction {
+				mock.ExpectRollback()
+			}
+			request := requestWithUser(method, "/", `{"lat":48.8,"long":2.3}`, "viewer-1")
+			request.SetPathValue("photoID", photoID)
+			requireStatus(t, handler, request, http.StatusNotFound)
+			if store.getCalls != 0 || store.statCalls != 0 {
+				t.Fatal("blocked challenge accessed object storage")
+			}
+		})
+	}
+}
+
+func TestBlockedChatContentBoundaries(t *testing.T) {
+	contentID := "00000000-0000-0000-0000-000000000002"
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			mock := newMockPool(t)
+			store := &countingStore{ObjectStore: mustTestStore(t)}
+			api := newChatAPI(t, mock, store, nil)
+			request := requestWithUser(method, "/", `{"reaction":"like"}`, "viewer-1")
+			handler := api.SetMessageReaction
+			query := "SELECT .*FROM messages.*user_blocks"
+			if method == http.MethodGet {
+				handler = api.ServeChatMedia
+				query = "SELECT cm.group_id.*FROM chat_media.*user_blocks"
+				request.SetPathValue("mediaID", contentID)
+			} else {
+				request.SetPathValue("messageID", contentID)
+			}
+			mock.ExpectQuery(query).WithArgs(contentID, "viewer-1").WillReturnRows(pgxmock.NewRows([]string{"id"}))
+			// Neither membership probes nor reaction mutations are allowed here.
+			requireStatus(t, handler, request, http.StatusNotFound)
+			if store.getCalls != 0 || store.statCalls != 0 {
+				t.Fatal("blocked chat accessed object storage")
+			}
+		})
+	}
 }
 
 func TestGroupPhotoAvailabilityFailures(t *testing.T) {

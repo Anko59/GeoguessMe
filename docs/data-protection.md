@@ -35,6 +35,34 @@ setup and re-checks it at least annually.
 | 7   | Optional social sign-in        | Third-party account linking                    | Provider identifier, basic profile claim                                                   | Players                        | (b) contract (user-initiated) | Until unlinking or account deletion          | Keycloak, upstream identity provider |
 | 8   | Legal compliance               | Respond to valid requests, defend claims       | Request-specific data                                                                      | Any                            | (c) legal obligation / (f)    | Per legal requirement                        | Authorities on valid request         |
 
+## Player blocking preferences
+
+`user_blocks` stores the blocking account ID, target account ID, and creation
+time. Its purpose is user-requested interaction safety (Art. 6(1)(b), providing
+the requested service). Preferences remain until the owner unblocks or either
+account is deleted; both foreign keys cascade on account deletion. Only the
+owner's authenticated management endpoint returns their preferences and the
+target's minimal identity. The target cannot query who blocked them. Include
+owned preferences in access/portability exports; no notice text or reason is
+collected for a block.
+
+Either direction hides the pair's chat, reactions, comments, challenge entries,
+profiles, avatar/media access and new message/challenge push deliveries from one
+another. Membership and persisted score/Elo leaderboards are unchanged; a block
+is not group removal, score erasure, or anonymity from other group members.
+Blocking cannot recall bytes or notifications already delivered. A legal content
+notice remains reportable using a known target ID, without disclosing its
+content. Operational review and reports are independent of personal preferences.
+See [the API contract](api.md#player-blocking) for visibility and rollout.
+
+The current notice intake covers private group messages and player profiles
+sharing a group. A public-feed author who shares no group with the reporter does
+not yet have an in-app notice affordance. This is a remaining moderation scope
+item in [issue #307](https://github.com/Anko59/GeoguessMe/issues/307), not a
+claim that all public-feed content can be reported through the existing
+endpoints. The privacy mailbox remains the documented operator contact in the
+meantime.
+
 ## Processor and vendor matrix
 
 | Vendor                                       | Role                                                | Data location                              | Safeguard                                                       | DPA status expected              |

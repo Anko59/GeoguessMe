@@ -7,6 +7,7 @@ import (
 
 	"geoguessme/internal/database"
 	"geoguessme/internal/models"
+	"geoguessme/internal/repository/blocking"
 	"geoguessme/internal/repository/chat"
 	feedrepo "geoguessme/internal/repository/feed"
 	"geoguessme/internal/repository/groups"
@@ -30,7 +31,8 @@ import (
 // Instances are independent: two Repositories built on different pools never
 // share state.
 type Repository struct {
-	pool database.Pool
+	pool   database.Pool
+	Blocks *blocking.Repository
 	// Chat is the chat slice's persistence collection (messages, reactions,
 	// chat media, and WebSocket tickets). The application composition root
 	// hands it to the ChatAPI through App.Repos.Chat.
@@ -51,7 +53,7 @@ type Repository struct {
 // NewRepository returns a Repository bound to the given pool and all of its
 // persistence slices.
 func NewRepository(pool database.Pool) *Repository {
-	return &Repository{pool: pool, Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool), Party: party.NewRepository(pool), Pins: pins.NewRepository(pool)}
+	return &Repository{pool: pool, Blocks: blocking.NewRepository(pool), Chat: chat.NewRepository(pool), Groups: groups.NewRepository(pool), Party: party.NewRepository(pool), Pins: pins.NewRepository(pool)}
 }
 
 // UserGroups returns the groups a user belongs to, newest first. It is the

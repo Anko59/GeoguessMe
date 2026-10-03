@@ -50,7 +50,7 @@ func TestGameAndChatValidationBranches(t *testing.T) {
 	requireStatus(t, gameAPI.GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, gameAPI.GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, gameAPI.SubmitChallengeGuess, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("", "user-1").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, gameAPI.GetChallengeResults, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusNotFound)
 	requireStatus(t, gameAPI.AcceptChallenge, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
 	repos := repository.NewRepository(mock)
@@ -109,7 +109,7 @@ func TestTimeoutChallengeGuessMethodAndNotFound(t *testing.T) {
 		return r
 	}(), http.StatusBadRequest)
 	photoID := "00000000-0000-0000-0000-000000000099"
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(pgxmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"id"}))
 	req := requestWithUser(http.MethodPost, "/", "", "user-1")
 	req.SetPathValue("photoID", photoID)
 	requireStatus(t, gameAPI.TimeoutChallengeGuess, req, http.StatusNotFound)

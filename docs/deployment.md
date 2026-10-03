@@ -1,5 +1,9 @@
 # Deployment guide
 
+Player blocking requires the forward-only `038_user_blocks` migration and the
+enforcing backend before the updated frontend. Retain block data on rollback;
+see [blocking rollout and rollback](user-blocking.md#api-and-rollout).
+
 The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart

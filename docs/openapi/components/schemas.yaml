@@ -1,3 +1,7 @@
+BlockedUser:
+  $ref: ./schemas-reports.yaml#/BlockedUser
+BlockedUsersPage:
+  $ref: ./schemas-reports.yaml#/BlockedUsersPage
 PublicChallenge:
   $ref: ./schemas-feed.yaml#/PublicChallenge
 PublicFeedPage:

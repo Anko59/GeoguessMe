@@ -382,3 +382,30 @@ func TestCountAndTouchSubscriptions(t *testing.T) {
 		t.Fatalf("DeleteAll = %d, %v; want 2, nil", removed, err)
 	}
 }
+
+func TestQueuedPushRechecksBlockingAtDelivery(t *testing.T) {
+	store := &fakeStore{subsByUser: map[string][]Subscription{"viewer": {{ID: "subscription", UserID: "viewer"}}}}
+	deliver := newFakeDeliverer()
+	svc := newTestService(store, deliver)
+	blocked, checks := false, 0
+	svc.FilterDelivery = func(_ context.Context, sender, viewer string, send func()) {
+		checks++
+		if sender != "author" || viewer != "viewer" {
+			t.Errorf("pair %s/%s", sender, viewer)
+		}
+		if !blocked {
+			send()
+		}
+	}
+	svc.enqueue(fanoutJob{senderID: "author", userIDs: []string{"viewer"}, groupID: "group", payload: []byte("private")})
+	blocked = true
+	svc.deliverJob(context.Background(), <-svc.jobs)
+	if checks != 1 || len(deliver.snapshot()) != 0 {
+		t.Fatal("queued push disclosed blocked author")
+	}
+	blocked = false
+	svc.deliverJob(context.Background(), fanoutJob{senderID: "author", userIDs: []string{"viewer"}, groupID: "group", payload: []byte("allowed")})
+	if checks != 2 || len(deliver.snapshot()) != 1 {
+		t.Fatal("unblock did not restore authorized push")
+	}
+}

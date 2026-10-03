@@ -28,6 +28,8 @@ export type ChallengePublication = components['schemas']['ChallengePublication']
 
 // --- Wire types (generated from docs/openapi.yaml) ---
 
+export type BlockedUser = components['schemas']['BlockedUser'];
+export type BlockedUsersPage = components['schemas']['BlockedUsersPage'];
 export type User = components['schemas']['AuthUser'];
 export type ProgressionRank = components['schemas']['ProgressionRank'];
 export type GlobalRank = components['schemas']['GlobalRank'];

@@ -8,6 +8,10 @@ servers:
   - url: /api/v1
     description: Same-origin API gateway prefix.
 paths:
+  /users/{id}/block:
+    $ref: ./openapi/paths/reports.yaml#/userBlock
+  /users/blocks:
+    $ref: ./openapi/paths/reports.yaml#/userBlocks
   /messages/{id}/report:
     $ref: ./openapi/paths/reports.yaml#/messageReport
   /users/{id}/report:

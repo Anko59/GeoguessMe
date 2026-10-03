@@ -17,6 +17,7 @@ vi.mock('../../api', () => ({
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 vi.mock('../../components/settings/MapPinPicker', () => ({ default: () => null }));
+vi.mock('../../components/settings/BlockedUsersManager', () => ({ default: () => <h2>Blocked users</h2> }));
 
 const user: User = {
     id: 'user-1',

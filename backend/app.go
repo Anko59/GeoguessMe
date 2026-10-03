@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,8 +17,10 @@ import (
 	"geoguessme/internal/database"
 	"geoguessme/internal/email"
 	"geoguessme/internal/middleware"
+	"geoguessme/internal/models"
 	"geoguessme/internal/push"
 	"geoguessme/internal/repository"
+	"geoguessme/internal/repository/blocking"
 	feedrepo "geoguessme/internal/repository/feed"
 	moderationrepo "geoguessme/internal/repository/moderation"
 	"geoguessme/internal/storage"
@@ -76,6 +79,7 @@ type App struct {
 	Party   *partyhandlers.API
 	Feed    *feedhandlers.API
 	Reports *moderationhandlers.ContentReportAPI
+	Blocks  *moderationhandlers.BlockAPI
 }
 
 // NewApp constructs an application instance from explicit dependencies. Each
@@ -94,6 +98,51 @@ func NewApp(
 	identityVerifiers ...auth.IdentityVerifier,
 ) *App {
 	authService := auth.NewService(cfg.JWTSecret, "geoguessme", "geoguessme-web", cfg.AccessTokenTTL)
+	blocks := blocking.NewRepository(db)
+	if hub != nil {
+		hub.Delivery = func(ctx context.Context, queued models.Message, viewer string) (*models.Message, error) {
+			if err := repos.Groups.RequireMember(ctx, queued.GroupID, viewer); err != nil {
+				return nil, err
+			}
+			current, err := repos.Chat.GetMessageForViewer(ctx, queued.ID, viewer)
+			if err != nil || current == nil {
+				return nil, err
+			}
+			if queued.ReactionUpdate != nil {
+				blocked, err := blocks.Blocked(ctx, viewer, queued.ReactionUpdate.UserID)
+				if err != nil || blocked {
+					return nil, err
+				}
+				current.ReactionUpdate = queued.ReactionUpdate
+			}
+			return current, nil
+		}
+	}
+	if pushSvc != nil {
+		pushSvc.FilterDelivery = func(ctx context.Context, sender, viewer string, deliver func()) {
+			check := func() {
+				checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				blocked, err := blocks.Blocked(checkCtx, viewer, sender)
+				if err != nil {
+					logger.Warn("push privacy authorization failed", "error", err)
+					return
+				}
+				if !blocked {
+					deliver()
+				}
+			}
+			if hub != nil {
+				hub.WithPrivacyRead(check)
+			} else {
+				check()
+			}
+		}
+	}
+	blockAPI := &moderationhandlers.BlockAPI{Store: blocks}
+	if hub != nil {
+		blockAPI.SerializeChanges = hub.SerializePrivacyChange
+	}
 	return &App{
 		Config:  cfg,
 		DB:      db,
@@ -116,6 +165,7 @@ func NewApp(
 		// TODO(#302): confirm the dedicated abuse mailbox before changing routing.
 		// Notifications contain only a receipt ID, never notice or target data.
 		Reports: &moderationhandlers.ContentReportAPI{Store: moderationrepo.NewRepository(db), Mailer: mailer, Logger: logger, Contact: "privacy@geoguessme.com"},
+		Blocks:  blockAPI,
 	}
 }
 
@@ -236,6 +286,9 @@ func (a *App) routes() http.Handler {
 	mux.Handle("/api/v1/user/profile/{userID}", protected(a.AuthAPI.GetPublicProfile))
 	mux.Handle("POST /api/v1/messages/{id}/report", protected(a.Reports.ReportMessage))
 	mux.Handle("POST /api/v1/users/{id}/report", protected(a.Reports.ReportUser))
+	mux.Handle("GET /api/v1/users/blocks", protected(a.Blocks.List))
+	mux.Handle("POST /api/v1/users/{id}/block", protected(a.Blocks.Change))
+	mux.Handle("DELETE /api/v1/users/{id}/block", protected(a.Blocks.Change))
 	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
 	mux.Handle("POST /api/v1/group/invites", protected(a.Game.CreateInvite))

@@ -10,7 +10,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   automatically by the `/api/v1/auth/refresh` endpoint.
 - **Request body**: JSON (`application/json`), except multipart uploads such as
   `POST /api/v1/auth/profile/avatar` and `POST /api/v1/photo/upload`.
-- **Response body**: Always JSON (or image bytes for media endpoints).
+- **Response body**: JSON (or image bytes for media endpoints), except 204
+  responses with no body.
 - **Errors**: `{"error":{"code":"machine_readable","message":"human_readable"}}`
 - **Timestamps**: ISO 8601 / RFC 3339 format in UTC.
 - **Rate limits**: When exceeded, the response includes a `Retry-After` header
@@ -78,8 +79,9 @@ ladders moderately (`K = 20`), and all-time ladders slowest (`K = 8`).
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must
 share at least one group with the requester (viewing yourself always works);
-otherwise the endpoint returns 403. This is the data behind the player profile
-page reachable from chat and leaderboards.
+otherwise the endpoint returns 403. A block in either direction instead returns
+404 without revealing the relationship. This is the data behind the player
+profile page reachable from chat and leaderboards.
 
 Profiles may include `map_pin` when the player has equipped an unlocked pin. It
 contains the pin artwork and the unlock challenge credited when that pin was
@@ -159,6 +161,24 @@ passing that time alone does not grant access to an unplayed active challenge.
 | DELETE | `/api/v1/group/message-reactions/{messageID}`                | Bearer | Remove the authenticated user's reaction                                               |
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
 | GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                           |
+
+### Player blocking
+
+`POST /api/v1/users/{id}/block` creates an idempotent outgoing block;
+`DELETE /api/v1/users/{id}/block` removes only your outgoing block. Both return
+204 with no body. The target must share a group, have authored public feed
+content, or already be blocked by you. Self-blocks and malformed IDs return 400;
+missing or ineligible block targets return 404. Authentication and normal write
+rate limits apply (401/429).
+
+`GET /api/v1/users/blocks` returns
+`{items:[{user_id,username,avatar,created_at}]}`; all identity fields are
+strings, and `created_at` is RFC 3339. Only outgoing blocks are listed; an empty
+list is `{items:[]}`. Either direction suppresses chat/feed/profile/media
+interaction, while group membership and ranking identities remain intact.
+Blocked profile, avatar, and media access returns ordinary 404 without
+disclosing incoming blocks. See [Player blocking](user-blocking.md) for controls
+and rollout.
 
 ### Content reports
 

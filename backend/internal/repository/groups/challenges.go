@@ -76,7 +76,7 @@ func (r *Repository) AcceptChallenge(ctx context.Context, photoID, userID string
 		return nil, nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
+	photo, err := visiblePhoto(ctx, tx, photoID, userID, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,6 +152,8 @@ func (r *Repository) MarkMediaDelivered(ctx context.Context, photoID, userID str
 			END
 		FROM photos p
 		WHERE v.photo_id = $1 AND v.user_id = $2 AND p.id = v.photo_id
+		AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$2 AND b.blocked_id=p.user_id) OR (b.blocker_id=p.user_id AND b.blocked_id=$2))
 		RETURNING v.view_expires_at, v.guess_expires_at`, photoID, userID, now, int64(viewWindow.Seconds()), int64(guessWindow.Seconds())).Scan(&viewExpiresAt, &guessExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return time.Time{}, time.Time{}, ErrForbidden
@@ -166,7 +168,7 @@ func (r *Repository) MarkMediaDelivered(ctx context.Context, photoID, userID str
 // layer.
 func (r *Repository) ViewDeliveryStatus(ctx context.Context, photoID, userID string) (delivered bool, viewExpiresAt time.Time, err error) {
 	var deliveredAt pgtype.Timestamptz
-	err = r.pool.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt)
+	err = r.pool.QueryRow(ctx, `SELECT media_delivered_at, view_expires_at FROM challenge_views WHERE photo_id = $1 AND user_id = $2 AND EXISTS (SELECT 1 FROM photos WHERE id = $1 AND `+photoVisibility+`)`, photoID, userID).Scan(&deliveredAt, &viewExpiresAt)
 	if err != nil {
 		return false, time.Time{}, err
 	}
@@ -186,7 +188,7 @@ type GuessResult struct {
 // CanViewResults reports whether a member may view a challenge's results:
 // owners and anyone after expiry may always view; others must have guessed.
 func (r *Repository) CanViewResults(ctx context.Context, photoID, userID string, now time.Time) (*models.Photo, bool, error) {
-	photo, err := r.Photo(ctx, photoID)
+	photo, err := r.PhotoForViewer(ctx, photoID, userID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -238,7 +240,7 @@ func (r *Repository) submitGuessOnce(ctx context.Context, photoID, userID string
 		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	photo, err := scanPhoto(tx.QueryRow(ctx, `SELECT id, user_id, group_id, url, storage_key, mime_type, byte_size, lat, long, lifecycle_status, hide_location, created_at, expires_at, retention_at FROM photos WHERE id = $1 FOR UPDATE`, photoID))
+	photo, err := visiblePhoto(ctx, tx, photoID, userID, true)
 	if err != nil {
 		return nil, isRetryable(err), err
 	}
@@ -351,7 +353,7 @@ func (r *Repository) ensureTimeoutGuess(ctx context.Context, tx pgx.Tx, photoID,
 // TimeoutGuess records a timed-out guess for the caller without coordinates.
 // It is idempotent and used when the client's countdown expires.
 func (r *Repository) TimeoutGuess(ctx context.Context, photoID, userID string, now time.Time) (*GuessResult, error) {
-	photo, err := r.Photo(ctx, photoID)
+	photo, err := r.PhotoForViewer(ctx, photoID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -439,15 +441,16 @@ type GuessWithUser struct {
 
 // GuessesForPhoto returns every guess on a challenge with the guesser's
 // profile, ordered by score descending then creation time ascending.
-func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string) ([]GuessWithUser, error) {
-	rows, err := r.pool.Query(ctx, `SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.timed_out, g.created_at, u.username, u.avatar, v.view_expires_at,
+func (r *Repository) GuessesForPhoto(ctx context.Context, photoID string, viewers ...string) ([]GuessWithUser, error) {
+	query, args := viewerGuessQuery(`SELECT g.id, g.photo_id, g.user_id, g.group_id, g.lat, g.long, g.score, g.distance, g.timed_out, g.created_at, u.username, u.avatar, v.view_expires_at,
 		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM guesses g
 		JOIN users u ON g.user_id = u.id
 		LEFT JOIN challenge_views v ON v.photo_id = g.photo_id AND v.user_id = g.user_id
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id = g.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key = ep.pin_key
-		WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID)
+		WHERE g.photo_id = $1 ORDER BY g.score DESC, g.created_at ASC`, photoID, viewers...)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

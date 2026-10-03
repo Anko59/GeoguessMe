@@ -74,6 +74,8 @@ illustrations below are part of GeoGuessMe’s own visual language.
 
 ## ✨ What you can do
 
+- **Control your interactions** with [player blocking](docs/user-blocking.md)
+  from profiles and a blocked-users manager in Settings.
 - **Challenge your people** with private, short-lived photo and video prompts.
 - **Explore your group's world** on a rotatable 3D Earth, opened from the globe
   icon in group chat. Browse all challenges while hidden locations stay private.

@@ -1,3 +1,18 @@
+BlockedUser:
+  type: object
+  required: [user_id, username, avatar, created_at]
+  properties:
+    user_id: { type: string, format: uuid }
+    username: { type: string }
+    avatar: { type: string }
+    created_at: { type: string, format: date-time }
+BlockedUsersPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items: { $ref: "#/BlockedUser" }
 ReportRequest:
   type: object
   additionalProperties: false

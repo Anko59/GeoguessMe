@@ -293,7 +293,11 @@ once (see the Object URL cleanup invariant above).
 The shared `createObjectUrlStore` (`frontend/src/utils/objectUrlCache.ts`) is
 used only by caches with identical lifecycle semantics (avatar and group
 photos); data caches with different lifetimes (leaderboard, PWA session) must
-not use it.
+not use it. `BlockVisibilityBoundary` owns block-change invalidation: it clears
+all four caches and remounts route content for local and same-origin cross-tab
+signals. Blob stores revoke cached URLs and reject in-flight generations;
+leaderboard responses from earlier generations cannot repopulate its cache. See
+[Player blocking](user-blocking.md) for the browser-storage fallback.
 
 ## Compatibility ledger
 

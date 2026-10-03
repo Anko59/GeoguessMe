@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type {
     APIErrorBody,
+    BlockedUsersPage,
     AuthResponse,
     PublicChallenge,
     PublicFeedPage,
@@ -16,6 +17,7 @@ import type {
     GroupInbox,
     ChallengePublication,
 } from './types';
+import { notifyBlockVisibilityChanged } from './utils/blockVisibility';
 import { apiBaseURL } from './platform/endpoints';
 import type { components } from './types/openapi.generated';
 
@@ -234,6 +236,19 @@ export const moderationAPI = {
         signal?: AbortSignal,
     ): Promise<ReportReceipt> =>
         (await api.post<ReportReceipt>(`/${kind}/${encodeURIComponent(targetID)}/report`, notice, { signal })).data,
+};
+
+export const userBlocksAPI = {
+    list: async (signal?: AbortSignal): Promise<BlockedUsersPage> =>
+        (await api.get<BlockedUsersPage>('/users/blocks', { signal })).data,
+    block: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.post(`/users/${encodeURIComponent(userID)}/block`, undefined, { signal });
+        notifyBlockVisibilityChanged();
+    },
+    unblock: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.delete(`/users/${encodeURIComponent(userID)}/block`, { signal });
+        notifyBlockVisibilityChanged();
+    },
 };
 
 export default api;

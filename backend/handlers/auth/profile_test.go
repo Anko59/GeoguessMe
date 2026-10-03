@@ -91,15 +91,18 @@ func TestGetPublicProfile(t *testing.T) {
 	requireStatus(t, api.GetPublicProfile, requestWithUser(http.MethodPost, "/", "", viewer.ID), http.StatusMethodNotAllowed)
 
 	// Unknown target player.
+	mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs(viewer.ID, target.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, target.ID), http.StatusNotFound)
 
 	// Players without a shared group cannot view each other's profile.
+	mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs(viewer.ID, target.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(handlerUserRows(target))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(target.ID, viewer.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, target.ID), http.StatusForbidden)
 
 	// Players sharing a group see the target's progression without email.
+	mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs(viewer.ID, target.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(target.ID).WillReturnRows(handlerUserRows(target))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(target.ID, viewer.ID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	expectProfileQueries(t, mock, target.ID, 7600, 3, 2533.33, 3, 1943, 7, 1943)
@@ -122,6 +125,41 @@ func TestGetPublicProfile(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(viewer.ID).WillReturnRows(handlerUserRows(viewer))
 	expectProfileQueries(t, mock, viewer.ID, 0, 0, 0, 0, 0, 0, 0)
 	requireStatus(t, api.GetPublicProfile, getPublicProfileRequest(viewer.ID, viewer.ID), http.StatusOK)
+}
+
+func TestPublicProfileBlockPrivacyAndFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		blocked bool
+		err     error
+		status  int
+	}{
+		{name: "blocked target is absent", blocked: true, status: http.StatusNotFound},
+		{name: "block lookup failure denies disclosure", err: errors.New("private database details"), status: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := newAuthMockPool(t)
+			api := newAuthAPI(t, mock, nil)
+			expected := mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs("viewer-1", "target-1")
+			if tc.err != nil {
+				expected.WillReturnError(tc.err)
+			} else {
+				expected.WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(tc.blocked))
+			}
+			// No user, score, ranking or pin lookup is permitted after denial.
+			recorder := httptest.NewRecorder()
+			api.GetPublicProfile(recorder, getPublicProfileRequest("viewer-1", "target-1"))
+			if recorder.Code != tc.status {
+				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+			}
+			if tc.blocked && recorder.Body.String() != "{\"error\":{\"code\":\"not_found\",\"message\":\"Player not found\"}}\n" {
+				t.Fatalf("blocked profile response differs from an absent player: %s", recorder.Body.String())
+			}
+			if strings.Contains(recorder.Body.String(), "private database details") || strings.Contains(recorder.Body.String(), "blocked") {
+				t.Fatalf("profile denial leaked private state: %s", recorder.Body.String())
+			}
+		})
+	}
 }
 
 func getPublicProfileRequest(viewerID, targetID string) *http.Request {

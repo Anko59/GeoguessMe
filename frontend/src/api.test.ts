@@ -8,10 +8,34 @@ import api, {
     publicFeedAPI,
     moderationAPI,
     refreshAuthSession,
+    userBlocksAPI,
     setAccessToken,
 } from './api';
 
 describe('api client', () => {
+    it('uses typed block endpoints, preserves 204 and broadcasts only successful changes', async () => {
+        const get = vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [] } });
+        const post = vi.spyOn(api, 'post').mockResolvedValue({ status: 204 });
+        const remove = vi.spyOn(api, 'delete').mockResolvedValue({ status: 204 });
+        const listener = vi.fn();
+        window.addEventListener('geoguessme:block-visibility', listener);
+        const signal = new AbortController().signal;
+        await expect(userBlocksAPI.list(signal)).resolves.toEqual({ items: [] });
+        await expect(userBlocksAPI.block('id/space here', signal)).resolves.toBeUndefined();
+        await expect(userBlocksAPI.unblock('id/space here', signal)).resolves.toBeUndefined();
+        expect(get).toHaveBeenCalledWith('/users/blocks', { signal });
+        expect(post).toHaveBeenCalledWith('/users/id%2Fspace%20here/block', undefined, { signal });
+        expect(remove).toHaveBeenCalledWith('/users/id%2Fspace%20here/block', { signal });
+        expect(listener).toHaveBeenCalledTimes(2);
+        expect(localStorage.getItem('geoguessme:block-visibility:v1')).not.toContain('id/space');
+        post.mockRejectedValueOnce(new Error('Denied'));
+        await expect(userBlocksAPI.block('id')).rejects.toThrow('Denied');
+        expect(listener).toHaveBeenCalledTimes(2);
+        window.removeEventListener('geoguessme:block-visibility', listener);
+        get.mockRestore();
+        post.mockRestore();
+        remove.mockRestore();
+    });
     it('sends typed content reports on the authenticated client', async () => {
         const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'notice-1' } });
         const controller = new AbortController();
