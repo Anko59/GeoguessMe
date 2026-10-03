@@ -10,7 +10,10 @@ test-unit: test-backend test-frontend test-reconnect-harness test-play-api test-
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
-test-frontend: ## Run frontend unit tests.
+test-npm-security-overrides: ## Verify patched tooling dependencies preserve their consumer APIs.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-security-overrides.cjs
+
+test-frontend: test-npm-security-overrides ## Run frontend unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
 test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
@@ -26,7 +29,7 @@ test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
 
 
-test-verified: ## Run unit tests once with race detection and coverage thresholds.
+test-verified: test-npm-security-overrides ## Run unit tests once with race detection and coverage thresholds.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash -c 'set -o pipefail; cd backend && go test -race -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
 

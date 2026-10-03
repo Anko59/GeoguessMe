@@ -47,6 +47,11 @@ tools from pinned images and named caches.
 | make smoke-rehearsal                       | Smoke test against a disposable test stack                                                                                                                                                                                                                                                                                            | smoke-rehearsal.sh PASS                                                   |
 | make verify                                | quality + test-integration + test-e2e + container-verify + prod-container-verify + migration-test + backup-rehearsal + restart-rehearsal + reconnect-rehearsal + smoke + load-test                                                                                                                                                    | All gates PASS; complete release readiness                                |
 
+`make test-npm-security-overrides` verifies the scoped tooling patches in
+[the compatibility ledger](agent-engineering.md#tooling-security-overrides-376).
+It runs before `make test-frontend` and `make test-verified`, covering the
+actual Xcode/Markdownlint APIs and deterministic advisory regression cases.
+
 Reports and traces are written to ignored repository output directories from
 inside containers.
 

@@ -320,6 +320,24 @@ deployed and left its rollback window. Forward catch-up uses the opaque
 documented in [deployment.md](deployment.md). No temporary application
 compatibility entries remain.
 
+### Tooling security overrides (#376)
+
+`frontend/package.json` scopes patched `uuid@11.1.1` to `xcode` and
+`js-yaml@5.4.2` to `markdownlint-cli`, retaining `js-yaml@4.3.2` for v4
+consumers. `xcode@3.0.1` uses only CommonJS `require("uuid").v4()` with no
+arguments; v11 retains that export and UUID string format. Markdownlint CLI uses
+only CommonJS `load(text)`; the v5.3/v5.4 AST, custom-tag, and dumper changes do
+not affect that call. The v4/v5 split preserves Redocly and Cosmiconfig's
+existing YAML schemas.
+
+`make test-npm-security-overrides` exercises consumer-relative resolution, Xcode
+project ID generation/collision retry and writer/parser round trips, UUID buffer
+bounds, YAML configuration and merge limits, and Markdownlint CLI success/error
+exits. It runs with both frontend unit and verified coverage suites. Remove each
+override when its parent dependency accepts the patched version and the same
+contracts pass without it. These are dependency fixes, not audit exceptions or
+threshold changes.
+
 ## Residual risks
 
 - The Cloudflared security-tool build
