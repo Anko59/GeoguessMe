@@ -17,7 +17,11 @@ Capacitor config uses the virtual asset origin `https://app.geoguessme.com`, not
 `https://geoguessme.com` (which intercepts API requests, including the refresh
 POST, as local HTML), and has no `server.url`. Check the deployed backend
 `ALLOWED_ORIGINS` includes the virtual origin as well as the web origin; a CORS
-preflight failure blocks credentialed API calls. Run
+preflight failure blocks credentialed API calls. An OIDC session OPTIONS 401
+indicates the gateway still sends preflights to OAuth2 Proxy; the fixed gateway
+sends only OPTIONS to backend CORS and keeps actual session requests protected.
+Check both the approved native origin and a denied origin with
+`make prod-container-verify` before deploying that gateway revision. Run
 `make mobile-verify-release` on a signed AAB before publishing. For a Play-only
 failure, record the installed app version/code, device model, Android/WebView
 versions, exact cold-start steps, and a screenshot or Android Developer Options

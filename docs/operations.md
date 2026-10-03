@@ -180,6 +180,16 @@ restricted manifest evidence before retrying. For the full state model,
 configuration, and Play-track recovery actions, use the
 [Google Play account runbook](runbooks/google-play-console.md).
 
+Before native acceptance, verify the deployed `ALLOWED_ORIGINS` includes
+`https://app.geoguessme.com` and deploy the gateway from the same verified
+revision. OIDC session OPTIONS must reach the backend CORS policy; a 401 from
+OAuth2 Proxy during preflight indicates old gateway routing. A 401 on an actual
+unauthenticated session POST is expected and must remain enforced. Environment
+examples do not update the encrypted payloads or installed configuration. Use
+`make prod-container-verify` for the isolated gateway contract and
+`make mobile-smoke` for the bundled app against the live API, followed by the
+[physical-device checklist](mobile.md#physical-device-testing-and-logs).
+
 ### Database
 
 Use the Dockerized `make db-backup` target:

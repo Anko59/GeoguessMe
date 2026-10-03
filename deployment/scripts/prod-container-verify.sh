@@ -126,7 +126,7 @@ VERIFICATION_TOKEN_TTL=24h
 RESET_TOKEN_TTL=1h
 BCRYPT_COST=4
 OIDC_ENABLED=false
-ALLOWED_ORIGINS=__PUBLIC_URL__
+ALLOWED_ORIGINS=__PUBLIC_URL__,https://app.geoguessme.com
 TRUSTED_PROXY_CIDRS=0.0.0.0/0
 RATE_LIMIT_REQUESTS=100
 RATE_LIMIT_WINDOW=1m
@@ -186,7 +186,7 @@ services:
       - path: ${TMPDIR}/production.env
         required: true
   web:
-    ports: ["${WEB_PORT}:80"]
+    ports: !override ["127.0.0.1:${WEB_PORT}:80"]
     env_file:
       - path: ${TMPDIR}/production.env
         required: false
@@ -327,7 +327,8 @@ check() {
     desc="$1"
     expected="$2"
     url="$3"
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo 000)
+    shift 3
+    code=$(curl -s -D "$TMPDIR/probe-headers" -o /dev/null -w "%{http_code}" "$@" "$url" 2>/dev/null || echo 000)
     if [ "$code" = "$expected" ]; then
         echo "  ok   $desc ($code)"
     else
@@ -340,6 +341,58 @@ check "liveness" 200 "$PROBE_URL/health/live"
 check "readiness" 200 "$PROBE_URL/health/ready"
 check "protected route (401)" 401 "$PROBE_URL/api/v1/user/groups"
 check "websocket ticket (401)" 401 "$PROBE_URL/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
+
+# Inspect only named CORS headers from disposable requests; never print cookie,
+# authorization, identity headers, response bodies, or the generated test env.
+header_value() {
+    awk -v name="$1" 'tolower($1) == tolower(name) ":" {
+        sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); print
+    }' "$TMPDIR/probe-headers"
+}
+check_header() {
+    if [ "$(header_value "$2")" = "$3" ]; then
+        echo "  ok   $1"
+    else
+        echo "  FAIL $1"
+        fail=1
+    fi
+}
+check_header_token() {
+    if header_value "$2" | grep -Eq "(^|,)[[:space:]]*$3([[:space:]]*,|$)"; then
+        echo "  ok   $1"
+    else
+        echo "  FAIL $1"
+        fail=1
+    fi
+}
+
+session_url="$PROBE_URL/api/v1/auth/oidc/session"
+native_origin=https://app.geoguessme.com
+check "OIDC session allowed preflight" 200 "$session_url" -X OPTIONS \
+    -H "Origin: $native_origin" -H 'Access-Control-Request-Method: POST' \
+    -H 'Access-Control-Request-Headers: Content-Type, Authorization'
+check_header "OIDC preflight exact native origin" Access-Control-Allow-Origin "$native_origin"
+check_header "OIDC preflight credentials" Access-Control-Allow-Credentials true
+check_header_token "OIDC preflight permits POST" Access-Control-Allow-Methods POST
+check_header_token "OIDC preflight permits Content-Type" Access-Control-Allow-Headers Content-Type
+check_header_token "OIDC preflight permits Authorization" Access-Control-Allow-Headers Authorization
+check_header_token "OIDC preflight varies by Origin" Vary Origin
+check "OIDC session denied preflight" 403 "$session_url" -X OPTIONS \
+    -H 'Origin: https://unapproved.invalid' -H 'Access-Control-Request-Method: POST'
+check_header "OIDC denied preflight has no allowed origin" Access-Control-Allow-Origin ''
+# The backend's current CORS policy accepts OPTIONS without preflight metadata
+# and OPTIONS without Origin. Missing Origin must not gain an allowed origin.
+check "OIDC session OPTIONS without preflight headers" 200 "$session_url" -X OPTIONS -H "Origin: $native_origin"
+check_header "OIDC metadata-free OPTIONS exact origin" Access-Control-Allow-Origin "$native_origin"
+check "OIDC session OPTIONS without Origin" 200 "$session_url" -X OPTIONS -H 'Access-Control-Request-Method: POST'
+check_header "OIDC origin-free OPTIONS has no allowed origin" Access-Control-Allow-Origin ''
+check "OIDC session bare OPTIONS" 200 "$session_url" -X OPTIONS
+check_header "OIDC bare OPTIONS has no allowed origin" Access-Control-Allow-Origin ''
+check "OIDC session POST without OAuth cookie" 401 "$session_url" -X POST -H "Origin: $native_origin"
+check "OIDC session POST rejects forged identity" 401 "$session_url" -X POST \
+    -H "Origin: $native_origin" -H 'Authorization: Bearer forged-test-token' \
+    -H 'X-Forwarded-User: forged-user' -H 'X-Forwarded-Email: forged@example.invalid' \
+    -H 'X-Forwarded-Preferred-Username: forged-user' -H 'X-Forwarded-Groups: forged-group'
 
 if [ "$fail" -ne 0 ]; then
     echo "prod-container-verify FAILED: HTTP smoke checks did not pass" >&2
