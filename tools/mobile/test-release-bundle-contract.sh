@@ -43,7 +43,25 @@ set -euo pipefail
 printf 'Certificate fingerprints:\n'
 printf '         SHA256: 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF\n'
 EOF
-chmod 0555 "$fakebin/java" "$fakebin/jarsigner" "$fakebin/keytool"
+cat >"$fakebin/unzip" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${3:-}" in
+    base/assets/capacitor.config.json)
+        if [[ -n "${FAKE_CAPACITOR_CONFIG:-}" ]]; then
+            printf '%s\n' "$FAKE_CAPACITOR_CONFIG"
+        else
+            printf '%s\n' '{"server":{"hostname":"app.geoguessme.com","androidScheme":"https"}}'
+        fi
+        ;;
+    base/assets/public/index.html)
+        [[ "${FAKE_MISSING_ENTRY:-false}" != true ]] || exit 11
+        printf '<html><div id="root"></div></html>\n'
+        ;;
+    *) exit 11 ;;
+esac
+EOF
+chmod 0555 "$fakebin/java" "$fakebin/jarsigner" "$fakebin/keytool" "$fakebin/unzip"
 
 base_env=(
     PATH="$fakebin:$PATH"
@@ -95,6 +113,14 @@ jq -e --arg version_name "$release_version" --argjson version_code "$expected_ve
 ' "$manifest_output" >/dev/null
 echo "PASS: manifest contains verified provenance"
 
+assert_failure "test server URL is rejected" env "${base_env[@]}" \
+    FAKE_CAPACITOR_CONFIG='{"server":{"url":"http://localhost:18081","cleartext":true}}' \
+    "$SCRIPT" verify "$tmpdir/app-release.aab"
+assert_failure "backend asset host collision is rejected" env "${base_env[@]}" \
+    FAKE_CAPACITOR_CONFIG='{"server":{"hostname":"geoguessme.com","androidScheme":"https"}}' \
+    "$SCRIPT" verify "$tmpdir/app-release.aab"
+assert_failure "missing bundled entry is rejected" env "${base_env[@]}" \
+    FAKE_MISSING_ENTRY=true "$SCRIPT" verify "$tmpdir/app-release.aab"
 assert_failure "unsigned bundle is rejected" env "${base_env[@]}" FAKE_UNSIGNED=true "$SCRIPT" verify "$tmpdir/app-release.aab"
 assert_failure "invalid bundle is rejected" env "${base_env[@]}" FAKE_INVALID=true "$SCRIPT" verify "$tmpdir/app-release.aab"
 assert_failure "wrong certificate is rejected" env "${base_env[@]}" \

@@ -126,6 +126,10 @@ jobs:
             echo 'Missing play-publishing variable PLAY_RELEASE_TRACK.' >&2
             exit 1
           }
+          if [[ "$PLAY_TRACK" == production ]]; then
+            echo 'Automatic Play publication must first go to an internal or closed-test track; promote only after device acceptance.' >&2
+            exit 1
+          fi
           [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
             echo 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER is not a Google WIF provider resource.' >&2
             exit 1
@@ -447,6 +451,9 @@ jobs:
         with:
           name: android-release-${{ github.sha }}
           path: android-release
+      - name: Require deployed native API origin
+        run: |
+          test "$(curl --silent --show-error --max-time 15 --output /dev/null --write-out '%{http_code}' -X OPTIONS https://geoguessme.com/api/v1/auth/oidc/config -H 'Origin: https://app.geoguessme.com' -H 'Access-Control-Request-Method: GET')" = 200
       - name: Verify artifact provenance before publication
         env:
           RELEASE_SHA: ${{ github.sha }}

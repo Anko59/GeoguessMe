@@ -199,6 +199,12 @@ else
     fail "does not use compose override file"
 fi
 
+if grep -Fq "ports: !override [\"127.0.0.1:\${WEB_PORT}:80\"]" "$SCRIPT"; then
+    pass "test gateway replaces production ports with an isolated loopback binding"
+else
+    fail "test gateway must replace rather than merge the production port binding"
+fi
+
 # ── Test 13: Container runtime security invariants ───────────────────────────
 echo "--- Test 13: Runtime security checks ---"
 # Compose schema validation cannot require our security policy, so verify the
@@ -292,6 +298,54 @@ if [ -f "$COMPOSE_PROD" ]; then
     fi
 else
     fail "production compose file not found for image reference check"
+fi
+
+# ── Test 16: OIDC preflight policy and authentication boundary ───────────────
+echo "--- Test 16: OIDC session CORS and auth boundary ---"
+if grep -Fq 'ALLOWED_ORIGINS=__PUBLIC_URL__,https://app.geoguessme.com' "$SCRIPT"; then
+    pass "fixture allowlist includes the native origin"
+else
+    fail "fixture allowlist omits the native origin"
+fi
+cors_probes=(
+    'check "OIDC session allowed preflight" 200'
+    'check_header "OIDC preflight exact native origin" Access-Control-Allow-Origin'
+    'check_header "OIDC preflight credentials" Access-Control-Allow-Credentials true'
+    'check_header_token "OIDC preflight permits POST" Access-Control-Allow-Methods POST'
+    'check_header_token "OIDC preflight permits Content-Type" Access-Control-Allow-Headers Content-Type'
+    'check_header_token "OIDC preflight permits Authorization" Access-Control-Allow-Headers Authorization'
+    'check "OIDC session denied preflight" 403'
+    'check_header "OIDC denied preflight has no allowed origin" Access-Control-Allow-Origin'
+    'check "OIDC session OPTIONS without preflight headers" 200'
+    'check "OIDC session OPTIONS without Origin" 200'
+    'check_header "OIDC origin-free OPTIONS has no allowed origin" Access-Control-Allow-Origin'
+    'check "OIDC session bare OPTIONS" 200'
+    'check_header "OIDC bare OPTIONS has no allowed origin" Access-Control-Allow-Origin'
+    'check "OIDC session POST without OAuth cookie" 401'
+    'check "OIDC session POST rejects forged identity" 401'
+)
+for probe in "${cors_probes[@]}"; do
+    if grep -Fq "$probe" "$SCRIPT"; then
+        pass "gateway probe present: $probe"
+    else
+        fail "gateway probe missing: $probe"
+    fi
+done
+CADDYFILE="${SCRIPT%/scripts/prod-container-verify.sh}/caddy/Caddyfile"
+session_block=$(sed -n '/^[[:space:]]*handle \/api\/v1\/auth\/oidc\/session {$/,/^[[:space:]]*handle \/api\/\* {$/p' "$CADDYFILE")
+if grep -Fq '@sessionPreflight method OPTIONS' <<<"$session_block" &&
+    grep -Fq 'handle @sessionPreflight {' <<<"$session_block" &&
+    grep -Fq 'reverse_proxy backend:8080' <<<"$session_block" &&
+    grep -Eq '^[[:space:]]*handle \{$' <<<"$session_block" &&
+    grep -Fq 'reverse_proxy oauth2-proxy:4180' <<<"$session_block"; then
+    pass "mutually exclusive session OPTIONS/backend and default/OAuth handles"
+else
+    fail "session routing must separate OPTIONS/backend from default/OAuth"
+fi
+if grep -qi 'Access-Control-Allow' "$CADDYFILE"; then
+    fail "gateway must not supply credentialed CORS policy headers"
+else
+    pass "backend retains sole ownership of credentialed CORS policy headers"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

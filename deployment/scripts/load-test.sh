@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
-PROJECT="${GEOGUESSME_LOAD_PROJECT:-geoguessme-load}"
-WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-18080}"
-MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-18025}"
+PROJECT="${GEOGUESSME_LOAD_PROJECT:-geoguessme-load-${GEOGUESSME_TOOLS_PROJECT}-$$}"
+WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:?Run through Make}"
+MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}"
 PUBLIC_URL="http://localhost:${WEB_PORT}"
 
 cleanup() {
@@ -20,7 +22,7 @@ export GEOGUESSME_TEST_MAILPIT_PORT="$MAILPIT_PORT"
 export GEOGUESSME_TEST_PUBLIC_URL="$PUBLIC_URL"
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run --rm --no-deps loadtest k6 run \
     -e BASE_URL="http://host.docker.internal:${WEB_PORT}" \
     -e VUS="${LOAD_VUS:-5}" -e DURATION="${LOAD_DURATION:-30s}" \

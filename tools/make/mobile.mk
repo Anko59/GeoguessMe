@@ -45,8 +45,31 @@ PLAY_API_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
 	-e PLAY_RELEASE_STATUS="$(PLAY_RELEASE_STATUS)" \
 	go-tools
 
+MOBILE_DEVICE_RUN := $(COMPOSE_TOOLS_RUN) --rm --no-deps \
+	-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) \
+	-e MOBILE_DEVICE_SERIAL mobile-device-tools
+
 ##@ Mobile
-mobile-init: ## Generate the tracked Capacitor Android project when absent.
+mobile-device-list: ## List Linux USB devices and their authorization status in Docker.
+	@test -d /dev/bus/usb || { echo 'Linux USB bus unavailable' >&2; exit 2; }
+	$(MOBILE_DEVICE_RUN) bash tools/mobile/device.sh list
+
+mobile-device-install: ## Install the built bundled APK on the explicitly selected USB device; never launch it.
+	@test -n "$${MOBILE_DEVICE_SERIAL:-}" || { echo 'Export MOBILE_DEVICE_SERIAL first' >&2; exit 2; }
+	@test -d /dev/bus/usb || { echo 'Linux USB bus unavailable' >&2; exit 2; }
+	$(MOBILE_DEVICE_RUN) bash tools/mobile/device.sh install
+
+mobile-device-logs: ## Capture private installed-app PID logs, WebView versions, and screenshot without launching.
+	@test -n "$${MOBILE_DEVICE_SERIAL:-}" || { echo 'Export MOBILE_DEVICE_SERIAL first' >&2; exit 2; }
+	@test -d /dev/bus/usb || { echo 'Linux USB bus unavailable' >&2; exit 2; }
+	$(MOBILE_DEVICE_RUN) bash tools/mobile/device.sh logs
+
+test-mobile-device-contract: ## Test USB install/logging safeguards with fake adb in Docker; no device needed.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps shellcheck shellcheck tools/mobile/device.sh tools/mobile/test-device-contract.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci tools/mobile/device.sh tools/mobile/test-device-contract.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps mobile-tools bash tools/mobile/test-device-contract.sh
+
+mobile-init: prepare-frontend-cache ## Generate the tracked Capacitor Android project when absent.
 	@if test -d frontend/android; then echo 'frontend/android already exists'; else \
 		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write \
 		sh -ec 'npm --prefix frontend run build && cd frontend && npx cap add android'; \
@@ -57,7 +80,7 @@ mobile-prepare: ## Install the pinned Android SDK packages and create the test A
 	$(COMPOSE_TOOLS) build mobile-tools
 	$(MOBILE_TOOLS_RUN) tools/mobile/prepare-android.sh
 
-mobile-sync: mobile-init ## Build shared web assets and sync them into the Android project.
+mobile-sync: mobile-init prepare-frontend-cache ## Build shared web assets and sync them into the Android project.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e VITE_API_ORIGIN=$(MOBILE_API_ORIGIN) -e VITE_WEB_ORIGIN=$(MOBILE_WEB_ORIGIN) \
 		-e CAPACITOR_SERVER_URL=$(CAPACITOR_SERVER_URL) node-tools-write \
@@ -98,6 +121,12 @@ play-api-publish: ## Upload, validate, and commit the verified Android bundle to
 		--manifest "/workspace/$(PLAY_API_MANIFEST)" \
 		--track "$$PLAY_RELEASE_TRACK" \
 		--status "$$PLAY_RELEASE_STATUS"'
+
+mobile-smoke: mobile-build ## Boot the bundled production-like APK against the live API without adb reverse.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
+		-e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) \
+		-e MOBILE_BUNDLED_SMOKE=true \
+		$(MOBILE_TOOLS_SERVICE) tools/mobile/run-maestro.sh
 
 mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps \

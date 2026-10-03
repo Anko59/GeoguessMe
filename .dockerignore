@@ -10,6 +10,7 @@ backups
 *.log
 *.md
 !frontend/README.md
+!frontend/vendor/braces-security/README.md
 
 # Secrets and local environment files (examples are tracked elsewhere).
 **/.env
