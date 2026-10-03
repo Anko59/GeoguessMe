@@ -1,5 +1,9 @@
 # Deployment guide
 
+Player blocking requires the forward-only `038_user_blocks` migration and the
+enforcing backend before the updated frontend. Retain block data on rollback;
+see [blocking rollout and rollback](user-blocking.md#api-and-rollout).
+
 The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart
@@ -16,10 +20,55 @@ updated through a separate `watch` command, not the app deploy. Host runtime
 changes follow the staged procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
+Both frontend Dockerfiles include the reviewed local braces security backport
+before npm installs dependencies. Keep the vendor source in the build context; a
+manifest/lockfile-only copy is insufficient for this file dependency.
+`make audit` verifies upstream integrity, reconstructed source, and depth-limit
+regressions in addition to normal dependency scanning. See the
+[backport compatibility ledger](agent-engineering.md#braces-security-backport)
+for provenance and the upstream replacement/removal condition. Production still
+promotes the exact verified image digest without rebuilding.
+
+The gateway image explicitly installs its public Caddy configuration as
+root-owned mode `0644`, so the non-root runtime can read it even when the source
+checkout uses a restrictive umask. This does not change permissions on host
+credentials or encrypted deployment configuration.
+
+OAuth2 Proxy retains its pinned upstream image and read-only UID `65532`
+configuration mounts. Hosted deployment, `make prod-up`, and the production
+rehearsal run the
+[public config preparer](../deployment/oauth2-proxy/prepare-public-configs.sh)
+to set only its two tracked public templates to mode `0644`, independent of the
+checkout/extraction umask. The preparer rejects missing files and symlinks;
+private environment files and runtime credential values are never changed.
+
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
+
+Terraform losslessly compresses the full host bootstrap, runtime installer, and
+32-member runtime bundle with `gzip+base64`; the rendered cloud-init still must
+fit Hetzner's unchanged 32 KiB limit. Cloud-init writes the bootstrap as a
+root-owned `0700` executable after installing the required packages. The
+[bootstrap script](../infra/cloud-init/bootstrap-host.sh) checks its tools
+before configuring the host, retains the ordered SSH/firewall/backup setup, and
+leaves monitoring disabled pending operator setup. Runtime extraction consumes
+one shared file descriptor and hashes the exact installed bytes with fixed
+ownership and permissions.
+
+`make watch-rehearsal` stages only the three public monitoring configurations
+into a readable temporary directory and replaces their Compose mounts, leaving
+checkout permissions and hosted root-owned `0444` configuration unchanged. Its
+metrics token and mock gateway files are fake fixtures; the agent environment
+remains private. Vector collects only the two owned fake containers while still
+checking the production-label allowlist.
+
+`make load-test` preserves the pinned k6 image and strict load profile, using
+the canonical non-root checkout-owner UID/GID rather than changing private
+checkout permissions. Its tooling container honors `GEOGUESSME_TOOLS_PROJECT`;
+the load stack remains separate from smoke and production projects. See the
+[testing guide](testing.md) for ownership and isolation regressions.
 
 Android distribution is part of the production release boundary but remains a
 separate artifact from the hosted services. The production workflow builds and
@@ -65,9 +114,14 @@ test-only credentials, polls health and readiness, verifies representative HTTP
 behavior (liveness, readiness, auth enforcement, WebSocket auth), and tears down
 all resources. It is safe for local/CI use because it uses the `local-db`,
 `local-minio`, and `local-smtp` Compose profiles and never touches production
-infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
-`18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
-`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
+infrastructure. The gateway binds only `127.0.0.1:18083` and the disposable
+Mailpit UI uses `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
+`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied. The rehearsal
+requires Docker Compose 2.24.4+ for `!override`: the gateway binding replaces
+all inherited production web ports, including `GEOGUESSME_WEB_PORT`, rather than
+publishing both the production and rehearsal ports. Teardown errors are visible
+and fail an otherwise successful rehearsal; an earlier verification failure
+keeps its original exit status.
 
 Development, integration/E2E, and the optional `local-minio` profile pull the
 MinIO release from the public `quay.io/thanos/minio` mirror. All three pin the

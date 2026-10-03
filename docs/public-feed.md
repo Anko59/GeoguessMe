@@ -65,8 +65,10 @@ idempotent.
 Comments accept 1–1000 characters after trimming whitespace. Threads are
 collapsed by default and carry a spoiler notice for unresolved players. Opening
 a thread shows the newest comments first, with pagination for older comments.
-Comment authors can delete their own comments; a post author can remove any
-comment on their post. Only the author can delete a post.
+After guessing, the feed refreshes the post's comment count so comments added
+while the player was guessing agree with the results discussion without a
+reload. Comment authors can delete their own comments; a post author can remove
+any comment on their post. Only the author can delete a post.
 
 **Share challenge** opens the device's share sheet when available, otherwise
 copies the post link. If clipboard access is unavailable, a selectable link

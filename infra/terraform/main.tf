@@ -64,6 +64,9 @@ locals {
     local.runtime_bundle_files,
   )))
   runtime_installer = base64gzip(file("${path.module}/../cloud-init/install-runtime-bundle.sh"))
+  # Bootstrap commands must share the same lossless compression as runtime
+  # files, rather than consume the 32 KiB budget as repeated inline YAML.
+  host_bootstrap = base64gzip(file("${path.module}/../cloud-init/bootstrap-host.sh"))
 }
 
 resource "random_bytes" "tunnel_secret" {
@@ -347,6 +350,7 @@ resource "hcloud_server" "app" {
     tunnel_token      = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
     runtime_bundle    = local.runtime_bundle
     runtime_installer = local.runtime_installer
+    host_bootstrap    = local.host_bootstrap
   })
 
   public_net {

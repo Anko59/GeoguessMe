@@ -41,7 +41,7 @@ func TestQuarantineKeysAreUnservable(t *testing.T) {
 	t.Cleanup(hub.Stop)
 	chatAPI := newChatAPI(t, mock, store, hub)
 	asset := &models.ChatMedia{ID: "00000000-0000-0000-0000-000000000002", GroupID: groupID, UserID: "user-2", StorageKey: "quarantine/raw-uuid", MIMEType: "video/mp4", ByteSize: int64(len(raw)), CreatedAt: now}
-	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(asset.ID).WillReturnRows(
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(asset.ID, "user-1").WillReturnRows(
 		pgxmock.NewRows([]string{"group_id", "user_id", "storage_key", "mime_type", "byte_size", "created_at"}).AddRow(asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt),
 	)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
@@ -60,7 +60,7 @@ func TestQuarantineKeysAreUnservable(t *testing.T) {
 	mock2 := newMockPool(t)
 	gameAPI := newGameAPI(t, mock2)
 	photo := &models.Photo{ID: "00000000-0000-0000-0000-000000000003", UserID: "user-2", GroupID: groupID, StorageKey: "quarantine/raw-uuid", MIMEType: "video/mp4", ByteSize: int64(len(raw)), Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now, ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
-	mock2.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
+	mock2.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-1").WillReturnRows(handlerPhotoRows(photo))
 	mock2.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock2.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(time.Hour)))

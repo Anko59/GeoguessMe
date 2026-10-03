@@ -5,6 +5,92 @@
  */
 
 export interface paths {
+    '/users/{id}/block': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Block a player in both directions.
+         * @description The player must share a group, have authored public feed content, or already be blocked by the requester. Self-blocks and malformed IDs return 400; missing or ineligible targets return 404. Duplicate blocks are idempotent. Membership and ranking identities remain intact.
+         */
+        post: operations['blockUser'];
+        /**
+         * Remove your outgoing block.
+         * @description Idempotent. Does not remove a block created by the other player.
+         */
+        delete: operations['unblockUser'];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/users/blocks': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your outgoing blocks.
+         * @description Returns identity metadata for managing your own blocks, never incoming blocks. An empty list has items set to an empty array.
+         */
+        get: operations['listBlockedUsers'];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/messages/{id}/report': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a group message to the moderation team.
+         * @description The reporter must currently belong to the message's group; duplicate notices return the original ID.
+         */
+        post: operations['reportMessage'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/users/{id}/report': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a player to the moderation team.
+         * @description The reporter must currently share a group with the player; duplicate notices return the original ID.
+         */
+        post: operations['reportUser'];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     '/group/challenges': {
         parameters: {
             query?: never;
@@ -1251,6 +1337,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        APIError: {
+            error: {
+                code: string;
+                message: string;
+            };
+        };
+        BlockedUser: {
+            /** Format: uuid */
+            user_id: string;
+            username: string;
+            avatar: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BlockedUsersPage: {
+            items: components['schemas']['BlockedUser'][];
+        };
+        ReportRequest: {
+            /** @enum {string} */
+            reason: 'illegal_content' | 'harassment' | 'sexual_content' | 'other';
+            /** @description Required when reason is illegal_content; explain why the content may be illegal. Do not include sensitive personal data unless necessary. */
+            details?: string;
+        };
+        ReportReceipt: {
+            /** Format: uuid */
+            id: string;
+        };
         MapPin: {
             key: string;
             name: string;
@@ -1285,12 +1398,6 @@ export interface components {
             next_cursor?: string;
             /** Format: date-time */
             server_time: string;
-        };
-        APIError: {
-            error: {
-                code: string;
-                message: string;
-            };
         };
         PublicChallenge: {
             /** Format: uuid */
@@ -1510,9 +1617,9 @@ export interface components {
             next_rank?: components['schemas']['ProgressionRank'];
         };
         GlobalRank: {
-            /** @description Position among every player who has guessed at least once, ordered by lifetime points using standard competition ranking. Zero while the player has no guesses of their own. */
+            /** @description Position among every player with a group challenge guess, ordered by group challenge lifetime points using standard competition ranking. Zero while the player has no group challenge guesses. */
             rank: number;
-            /** @description Number of players who have guessed at least once. */
+            /** @description Number of players with at least one group challenge guess. */
             total_players: number;
         };
         MapPinUnlockChallenge: {
@@ -1526,6 +1633,7 @@ export interface components {
         };
         Profile: components['schemas']['AuthUser'] & {
             total_points: number;
+            /** @description Persisted group and public challenge guesses, including zero-point guesses. */
             guess_count: number;
             average_score: number;
             /** @description Global all-time Elo; 0 while never compared. */
@@ -1579,6 +1687,7 @@ export interface components {
             username: string;
             avatar: string;
             total_points: number;
+            /** @description Persisted group and public challenge guesses, including zero-point guesses. */
             guess_count: number;
             average_score: number;
             elo: number;
@@ -1970,6 +2079,139 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    blockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Player blocked; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    unblockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Outgoing block removed; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    listBlockedUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your outgoing blocked users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['BlockedUsersPage'];
+                };
+            };
+            401: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    reportMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['ReportRequest'];
+            };
+        };
+        responses: {
+            /** @description Notice accepted (or previously accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReportReceipt'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
+    reportUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                'application/json': components['schemas']['ReportRequest'];
+            };
+        };
+        responses: {
+            /** @description Notice accepted (or previously accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ReportReceipt'];
+                };
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            404: components['responses']['ErrorResponse'];
+            429: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
+        };
+    };
     listGroupChallenges: {
         parameters: {
             query: {

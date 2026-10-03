@@ -1,2 +1,5 @@
 # Vendored browser runtime and neural-network data are pinned upstream assets.
 frontend/public/vendor/jeeliz/**
+# Preserve upstream formatting for reproducible, hash-verified security backports.
+frontend/vendor/geoguessme-patched-braces/index.js
+frontend/vendor/geoguessme-patched-braces/lib/**

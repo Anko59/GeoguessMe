@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "localPackage": "geoguessme-patched-braces@1.0.0",
+  "upstream": {
+    "package": "braces@3.0.3",
+    "tarball": "https://registry.npmjs.org/braces/-/braces-3.0.3.tgz",
+    "integrity": "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==",
+    "gitCommit": "74b2db2938fad48a2ea54a9c8bf27a37a62c350d"
+  },
+  "security": {
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "cve": "CVE-2026-93687",
+    "patchReference": "https://github.com/micromatch/braces/pull/72",
+    "patchReferenceCommit": "d0d575e55e74a4e0218e5248fafb79efc3e54ebb",
+    "localPatch": "security.patch",
+    "localPatchSha256": "83efd452079cfc852836f6e2e2fa24676d51547a520eec3b16bed75ae37faf87",
+    "maximumDepth": 100
+  },
+  "files": {
+    "index.js": {
+      "upstreamSha256": "332ea07c7b006361aad12aa994ca75dc1db8e8382b884909e2f38f10b85c88a4",
+      "patchedSha256": "332ea07c7b006361aad12aa994ca75dc1db8e8382b884909e2f38f10b85c88a4"
+    },
+    "LICENSE": {
+      "upstreamSha256": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2",
+      "patchedSha256": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2"
+    },
+    "lib/compile.js": {
+      "upstreamSha256": "dc98f22eee3d511785d92a00758d5f0d48efed5f5813bdecc2de430c529b5c9f",
+      "patchedSha256": "236039f298e7d7aaeec17601107abe906ca08fed0a2c36b981c3baf1474361c0"
+    },
+    "lib/constants.js": {
+      "upstreamSha256": "c18ac5adb57308f1ce42a28552da3a31f5d83709743ebd9a636336813a744d4b",
+      "patchedSha256": "f9fb688959232eee3e6ad7906a5b0e3234815db49ee857ef86983d65b917dc7c"
+    },
+    "lib/expand.js": {
+      "upstreamSha256": "41ccc196ebfa7b7781a634e721eb744e4e7bcb54cba427a7e3d6806a1b9e58f7",
+      "patchedSha256": "1f79818744253b9492e638c9b7b9debcdbf9e5d0f195db35e4f8dfc4c06d82f7"
+    },
+    "lib/parse.js": {
+      "upstreamSha256": "e572166565f15fa6ad9865ae49d678218e32aabfd1b3720f6d0d43d39800d310",
+      "patchedSha256": "aa32ba1378c5c770729995c22eb4c07556bcae54bdbf7cb25fa2d602cbca8bb7"
+    },
+    "lib/stringify.js": {
+      "upstreamSha256": "379f22d77bfa1478341ccd49c5e4267464aabcbba03558bab332aac23fc6f23a",
+      "patchedSha256": "75339ff0d0a9033d9730d49afc4e6f7be91c10c9f26af5244aafe45c421e0a07"
+    },
+    "lib/utils.js": {
+      "upstreamSha256": "b5a7596aa67730412b3c029ef09e84e6b67b8e445cffd35d1d295549c89066c7",
+      "patchedSha256": "c8670512d3ff33f6de59189e4f88cc8e0c0f261948c926ccb97b8364551302b2"
+    }
+  }
+}

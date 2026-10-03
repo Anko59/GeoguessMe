@@ -76,8 +76,8 @@ func (r *Repository) MarkTimedMediaDelivered(ctx context.Context, id, viewer str
 		view_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second' ELSE v.view_expires_at END,
 		guess_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second'+$5::double precision * INTERVAL '1 second' ELSE v.guess_expires_at END
 		FROM public_challenges p
-		WHERE v.challenge_id=$1 AND v.user_id=$2 AND p.id=v.challenge_id AND `+challengeVisibility+`
-		RETURNING v.media_delivered_at,v.view_expires_at,v.guess_expires_at`, id, viewer, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow)).Scan(&deliveredAt, &view.ViewExpiresAt, &view.GuessExpiresAt)
+		WHERE v.challenge_id=$2 AND v.user_id=$1 AND p.id=v.challenge_id AND `+challengeVisibility+`
+		RETURNING v.media_delivered_at,v.view_expires_at,v.guess_expires_at`, viewer, id, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow)).Scan(&deliveredAt, &view.ViewExpiresAt, &view.GuessExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PublicChallengeView{}, ErrForbidden
 	}
@@ -271,7 +271,9 @@ func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now ti
 		FROM public_guesses g JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
-		WHERE g.challenge_id=$1 ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, id)
+		WHERE g.challenge_id=$1 AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$2 AND b.blocked_id=g.user_id) OR (b.blocker_id=g.user_id AND b.blocked_id=$2))
+		ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, id, viewer)
 	if err != nil {
 		return result, err
 	}

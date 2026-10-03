@@ -3,6 +3,7 @@ package groups
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -70,5 +71,16 @@ func TestMarkInboxReadRequiresMembershipAndIsMonotonic(t *testing.T) {
 		WillReturnResult(pgxmock.NewResult("INSERT", 0))
 	if err := repo.MarkInboxRead(context.Background(), "group-2", "outsider", now); !errors.Is(err, ErrNotMember) {
 		t.Fatalf("outsider mark read = %v, want ErrNotMember", err)
+	}
+}
+
+func TestInboxExcludesBlockedActivityFromUnreadAndLatest(t *testing.T) {
+	mock := newMockPool(t)
+	r := NewRepository(mock)
+	predicate := regexp.QuoteMeta(inboxMessageVisibility)
+	mock.ExpectQuery(predicate + `.*LEFT JOIN LATERAL.*` + predicate + `.*ORDER BY m.created_at DESC, m.id DESC LIMIT 1`).WithArgs("viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "name", "unread", "message_id", "kind", "username", "message_at"}).AddRow("group", "Group", int64(0), nil, nil, nil, nil))
+	inbox, err := r.UserInbox(t.Context(), "viewer")
+	if err != nil || len(inbox) != 1 || inbox[0].UnreadCount != 0 || inbox[0].LatestMessage != nil {
+		t.Fatalf("blocked activity leaked through inbox = %+v, %v", inbox, err)
 	}
 }

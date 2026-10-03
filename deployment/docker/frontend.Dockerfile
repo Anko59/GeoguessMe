@@ -5,6 +5,7 @@
 FROM node:22.23.2-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/vendor/ ./vendor/
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
@@ -49,6 +50,7 @@ RUN addgroup -S -g 1000 caddy \
     && adduser -S -D -H -u 1000 -G caddy caddy \
     && setcap cap_net_bind_service=+ep /usr/bin/caddy \
     && chown -R caddy:caddy /srv /data /config \
+    && chmod 0644 /etc/caddy/Caddyfile \
     && apk add --no-cache 'openssl>=3.5.8-r0' \
         'curl>=8.22.0-r0' \
         'libcurl>=8.22.0-r0' \

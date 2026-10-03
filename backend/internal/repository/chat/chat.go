@@ -25,6 +25,8 @@ var (
 	// ErrInvalidMessageReply reports a reply_to_id that does not reference an
 	// existing message in the same group.
 	ErrInvalidMessageReply = errors.New("invalid message reply")
+	// ErrMessageForbidden reports revoked membership or reply visibility at write time.
+	ErrMessageForbidden = errors.New("message no longer authorized")
 	// ErrInvalidReaction reports an empty reaction key.
 	ErrInvalidReaction = errors.New("invalid reaction")
 )

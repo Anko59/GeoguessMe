@@ -293,7 +293,11 @@ once (see the Object URL cleanup invariant above).
 The shared `createObjectUrlStore` (`frontend/src/utils/objectUrlCache.ts`) is
 used only by caches with identical lifecycle semantics (avatar and group
 photos); data caches with different lifetimes (leaderboard, PWA session) must
-not use it.
+not use it. `BlockVisibilityBoundary` owns block-change invalidation: it clears
+all four caches and remounts route content for local and same-origin cross-tab
+signals. Blob stores revoke cached URLs and reject in-flight generations;
+leaderboard responses from earlier generations cannot repopulate its cache. See
+[Player blocking](user-blocking.md) for the browser-storage fallback.
 
 ## Compatibility ledger
 
@@ -315,6 +319,55 @@ deployed and left its rollback window. Forward catch-up uses the opaque
 `stable_cursor` anchor plus the `cursor` parameter. The staged rollout is
 documented in [deployment.md](deployment.md). No temporary application
 compatibility entries remain.
+
+### Tooling security overrides (#376)
+
+`frontend/package.json` scopes patched `uuid@11.1.1` to `xcode` and
+`js-yaml@5.4.2` to `markdownlint-cli`, retaining `js-yaml@4.3.2` for v4
+consumers. `xcode@3.0.1` uses only CommonJS `require("uuid").v4()` with no
+arguments; v11 retains that export and UUID string format. Markdownlint CLI uses
+only CommonJS `load(text)`; the v5.3/v5.4 AST, custom-tag, and dumper changes do
+not affect that call. The v4/v5 split preserves Redocly and Cosmiconfig's
+existing YAML schemas.
+
+`make test-npm-security-overrides` exercises consumer-relative resolution, Xcode
+project ID generation/collision retry and writer/parser round trips, UUID buffer
+bounds, YAML configuration and merge limits, and Markdownlint CLI success/error
+exits. It runs with both frontend unit and verified coverage suites. Remove each
+override when its parent dependency accepts the patched version and the same
+contracts pass without it. These are dependency fixes, not audit exceptions or
+threshold changes.
+
+### Braces security backport
+
+The npm registry has no patched `braces` release for CVE-2026-93687. The private
+local package `frontend/vendor/geoguessme-patched-braces` retains the licensed
+v3.0.3 source/API, with the parser and AST-walker depth guards from reviewed
+[PR 72](https://github.com/micromatch/braces/pull/72), capped at 100. It
+preserves the original stringify escaping behavior rather than the PR's
+unrelated change.
+[Its provenance](../frontend/vendor/geoguessme-patched-braces/provenance.json)
+pins upstream tarball integrity, commits, original/patched file hashes, and the
+exact reproducible security patch. It is explicitly a GeoGuessMe-maintained
+backport, not an upstream version or an unaffected alias.
+
+A direct file dependency anchors the local package at the frontend root; the
+`$braces` override makes Micromatch use the same verified module. Both frontend
+Dockerfiles copy the vendor source before dependency installation. Npm audit
+cannot associate renamed local source with upstream advisories: zero findings
+alone are insufficient. `make audit` therefore requires
+`make test-braces-security-backport` (source hashes, patch
+reversal/reapplication, all recursion entry points, prebuilt/cyclic ASTs, option
+limits, boundary tests, original-result parity, and consumer APIs) and
+`make verify-braces-backport-source` (download and integrity-check the original
+npm artifact, reconstruct and compare every shipped source file). Transitive
+registry packages remain scanner-visible; audit thresholds are unchanged.
+
+Remove the file dependency, override, local source/provenance, Docker copy
+steps, and special tests together once a patched supported upstream release
+passes the same contracts. Rollback must not reinstate vulnerable 3.0.3 for
+normal tooling; retain the security backport until that replacement is
+available.
 
 ## Residual risks
 

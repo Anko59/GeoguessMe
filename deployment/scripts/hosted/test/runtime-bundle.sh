@@ -50,4 +50,12 @@ if grep -Eq 'runtime_hashes|runtime_hash_files' "$TEMPLATE" "$TERRAFORM"; then
     fail 'the cloud-init manifest must be generated from installed files, not duplicated Terraform data'
 fi
 
+grep -Eq 'host_bootstrap[[:space:]]*=[[:space:]]*base64gzip\(file\(' "$TERRAFORM" ||
+    fail 'Terraform must compress the complete bootstrap without dropping commands'
+grep -Fq "content: \${host_bootstrap}" "$TEMPLATE" ||
+    fail 'cloud-init must decode the compressed bootstrap'
+grep -Fq '[/usr/local/sbin/geoguessme-bootstrap-host]' "$TEMPLATE" ||
+    fail 'cloud-init must run the root-owned decoded bootstrap'
+sh "$ROOT/deployment/scripts/hosted/test/runtime-bundle-extraction.sh"
+sh "$ROOT/deployment/scripts/hosted/test/bootstrap-host.sh"
 printf 'runtime bundle tests passed\n'

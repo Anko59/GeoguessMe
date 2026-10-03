@@ -14,7 +14,9 @@ export default function ResetPassword() {
         setError('');
         try {
             await api.post('/auth/password/reset', { token: params.get('token') ?? '', password });
-            setMessage('Password reset. You can log in now.');
+            setMessage(
+                'Direct-login password reset. Sign in with Username or email / Password. Your GeoGuessMe ID password has not changed.',
+            );
             setTimeout(() => navigate('/login'), 1200);
         } catch (requestError: unknown) {
             setError(getAPIErrorMessage(requestError, 'Unable to reset password'));
@@ -23,7 +25,8 @@ export default function ResetPassword() {
     return (
         <div className="auth-container">
             <div className="auth-card fade-in">
-                <h2 className="auth-title gradient-text">Choose a new password</h2>
+                <h2 className="auth-title gradient-text">Choose a new direct-login password</h2>
+                <p className="auth-subtitle">This will not change your separate GeoGuessMe ID password.</p>
                 <form onSubmit={submit} className="auth-form">
                     <label htmlFor="reset-password">New password</label>
                     <input

@@ -25,6 +25,9 @@ describe('ForgotPassword', () => {
                 <ForgotPassword />
             </MemoryRouter>,
         );
+        expect(screen.getByRole('heading', { name: 'Reset your direct-login password' })).toBeInTheDocument();
+        expect(screen.getByText(/not your separate GeoGuessMe ID password/)).toBeInTheDocument();
+        expect(screen.getByText(/select Forgot your password\? on the GeoGuessMe ID page/)).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'alice@example.test' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send reset or verification link' }));
         expect(await screen.findByText('Check your inbox')).toBeInTheDocument();

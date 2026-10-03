@@ -26,7 +26,8 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 		JOIN public_challenges p ON p.id=g.challenge_id
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
-		WHERE g.challenge_id=$2 AND `+challengeVisibility+`
+		WHERE g.challenge_id=$2 AND `+challengeVisibility+` AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$1 AND b.blocked_id=g.user_id) OR (b.blocker_id=g.user_id AND b.blocked_id=$1))
 		ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, viewer, id)
 	if err != nil {
 		return nil, err

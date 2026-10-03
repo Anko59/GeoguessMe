@@ -83,6 +83,28 @@ Use make reset-dev CONFIRM=reset-dev only when deleting development data is
 intentional. make tools-clean removes tool caches and containers without
 touching application volumes.
 
+## Isolated tooling
+
+Concurrent worktrees or jobs must use distinct tooling projects so one job's
+`npm ci` cannot replace dependencies while another is running Playwright. Set
+the same Make variable for bootstrap and every subsequent gate:
+
+```text
+make bootstrap-e2e GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-my-job
+make verify GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-my-job
+```
+
+`GEOGUESSME_TOOLS_PROJECT` defaults to `geoguessme-tools`. Make exports it to
+the E2E runner; both use the selected project's existing named dependency
+volumes. Names must start with a lowercase letter or digit and contain only
+lowercase letters, digits, underscores, and hyphens. Do not override the
+`COMPOSE_TOOLS` shell command to select isolation: the E2E runner does not parse
+that command. This isolates tooling volumes, not application stacks, ports,
+artifacts, or image tags; concurrent live-stack jobs still need distinct test
+projects and ports and must coordinate shared outputs and image builds. To
+delete only the selected tooling project's containers and caches, run
+`make tools-clean` with the same variable.
+
 ## Configuration
 
 Development defaults are defined in deployment/compose.dev.yaml. Environment

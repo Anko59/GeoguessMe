@@ -80,7 +80,7 @@ structure-check: ## Enforce tracked-file and directory structure limits.
 type-check: ## Run the TypeScript compiler without emitting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && tsc --noEmit'
 
-audit: ## Run dependency vulnerability audits in Docker.
+audit: test-braces-security-backport verify-braces-backport-source ## Run dependency vulnerability audits in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 

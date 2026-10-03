@@ -1,0 +1,150 @@
+diff --git a/lib/compile.js b/lib/compile.js
+index dce69beb..45fe4f4d 100644
+--- a/lib/compile.js
++++ b/lib/compile.js
+@@ -4,0 +5 @@ const utils = require('./utils');
++const { MAX_DEPTH } = require('./constants');
+@@ -7 +8,8 @@ const compile = (ast, options = {}) => {
+-  const walk = (node, parent = {}) => {
++  const requestedMaxDepth = options.maxDepth;
++  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
++
++  const walk = (node, parent = {}, depth = 0) => {
++    utils.validateValues(node);
++    if (node.nodes && depth > maxDepth) {
++      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
++    }
+@@ -50 +58 @@ const compile = (ast, options = {}) => {
+-        output += walk(child, node);
++        output += walk(child, node, child.nodes ? depth + 1 : depth);
+@@ -57 +65 @@ const compile = (ast, options = {}) => {
+-  return walk(ast);
++  return walk(ast, {}, ast.type === 'root' ? 0 : 1);
+diff --git a/lib/constants.js b/lib/constants.js
+index 2bb3b884..c2370995 100644
+--- a/lib/constants.js
++++ b/lib/constants.js
+@@ -3,0 +4 @@ module.exports = {
++  MAX_DEPTH: 100,
+diff --git a/lib/expand.js b/lib/expand.js
+index 35b2c41d..efadd035 100644
+--- a/lib/expand.js
++++ b/lib/expand.js
+@@ -5,0 +6 @@ const utils = require('./utils');
++const { MAX_DEPTH } = require('./constants');
+@@ -36,5 +37,16 @@ const expand = (ast, options = {}) => {
+-  const walk = (node, parent = {}) => {
+-    node.queue = [];
+-
+-    let p = parent;
+-    let q = parent.queue;
++  const requestedMaxDepth = options.maxDepth;
++  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
++
++  const stringifyNode = (node, depth) => stringify(node, Object.create(options, {
++    maxDepth: { value: maxDepth - depth + (node.type === 'root' ? 0 : 1) }
++  }));
++  const enclosingBlock = node => {
++    let depth = 0;
++    while (node.type !== 'brace' && node.type !== 'root' && node.parent) {
++      if (++depth > maxDepth) {
++        throw new RangeError(`AST parent depth (${depth}), exceeds max depth (${maxDepth})`);
++      }
++      node = node.parent;
++    }
++    return node;
++  };
+@@ -42,3 +54,4 @@ const expand = (ast, options = {}) => {
+-    while (p.type !== 'brace' && p.type !== 'root' && p.parent) {
+-      p = p.parent;
+-      q = p.queue;
++  const walk = (node, parent = {}, depth = 0) => {
++    utils.validateValues(node);
++    if (node.nodes && depth > maxDepth) {
++      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
+@@ -45,0 +59,4 @@ const expand = (ast, options = {}) => {
++    node.queue = [];
++
++    const p = enclosingBlock(parent);
++    const q = p.queue;
+@@ -48 +65 @@ const expand = (ast, options = {}) => {
+-      q.push(append(q.pop(), stringify(node, options)));
++      q.push(append(q.pop(), stringifyNode(node, depth)));
+@@ -66 +83 @@ const expand = (ast, options = {}) => {
+-        range = stringify(node, options);
++        range = stringifyNode(node, depth);
+@@ -75,7 +92,2 @@ const expand = (ast, options = {}) => {
+-    let queue = node.queue;
+-    let block = node;
+-
+-    while (block.type !== 'brace' && block.type !== 'root' && block.parent) {
+-      block = block.parent;
+-      queue = block.queue;
+-    }
++    const block = enclosingBlock(node);
++    const queue = block.queue;
+@@ -103 +115 @@ const expand = (ast, options = {}) => {
+-        walk(child, node);
++        walk(child, node, child.nodes ? depth + 1 : depth);
+@@ -110 +122 @@ const expand = (ast, options = {}) => {
+-  return utils.flatten(walk(ast));
++  return utils.flatten(walk(ast, {}, ast.type === 'root' ? 0 : 1));
+diff --git a/lib/parse.js b/lib/parse.js
+index 3a6988e6..52eafee2 100644
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -10,0 +11 @@ const {
++  MAX_DEPTH,
+@@ -41,0 +43,2 @@ const parse = (input, options = {}) => {
++  const requestedMaxDepth = opts.maxDepth;
++  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
+@@ -145,0 +149,3 @@ const parse = (input, options = {}) => {
++      if (stack.length > maxDepth) {
++        throw new RangeError(`Input depth (${stack.length}), exceeds max depth (${maxDepth})`);
++      }
+@@ -197,0 +204,3 @@ const parse = (input, options = {}) => {
++      if (stack.length > maxDepth) {
++        throw new RangeError(`Input depth (${stack.length}), exceeds max depth (${maxDepth})`);
++      }
+diff --git a/lib/stringify.js b/lib/stringify.js
+index 8bcf872c..fb46621d 100644
+--- a/lib/stringify.js
++++ b/lib/stringify.js
+@@ -3,0 +4 @@ const utils = require('./utils');
++const { MAX_DEPTH } = require('./constants');
+@@ -6 +7,8 @@ module.exports = (ast, options = {}) => {
+-  const stringify = (node, parent = {}) => {
++  const requestedMaxDepth = options.maxDepth;
++  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
++
++  const stringify = (node, parent = {}, depth = 0) => {
++    utils.validateValues(node);
++    if (node.nodes && depth > maxDepth) {
++      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
++    }
+@@ -24 +32 @@ module.exports = (ast, options = {}) => {
+-        output += stringify(child);
++        output += stringify(child, {}, child.nodes ? depth + 1 : depth);
+@@ -30 +38 @@ module.exports = (ast, options = {}) => {
+-  return stringify(ast);
++  return stringify(ast, {}, ast.type === 'root' ? 0 : 1);
+@@ -32 +39,0 @@ module.exports = (ast, options = {}) => {
+-
+diff --git a/lib/utils.js b/lib/utils.js
+index d19311fe..8a55b7dd 100644
+--- a/lib/utils.js
++++ b/lib/utils.js
+@@ -2,0 +3,13 @@
++// AST values are strings, never expansion queues or recursively nested arrays.
++exports.validateValues = node => {
++  const validate = value => {
++    if (value !== undefined && typeof value !== 'string') {
++      throw new TypeError('Expected AST value to be a string');
++    }
++  };
++  validate(node.value);
++  if (node.nodes) {
++    for (const child of node.nodes) validate(child.value);
++  }
++};
++

@@ -33,6 +33,11 @@
     object-fit: contain;
 }
 
+.profile-map-pin__details {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .profile-map-pin__details h2,
 .profile-map-pin__details p {
     margin: 0;

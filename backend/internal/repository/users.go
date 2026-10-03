@@ -78,13 +78,16 @@ type UserScoreStats struct {
 	AverageScore float64
 }
 
-// GetUserScoreStats aggregates a player's guess statistics.
+// GetUserScoreStats counts both group and public challenge submissions, while
+// points and average remain based on group guesses (the progression ladder).
 func (r *Repository) GetUserScoreStats(ctx context.Context, userID string) (UserScoreStats, error) {
 	var stats UserScoreStats
 	var totalPoints, guessCount int64
 	var averageScore float64
 	err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(score), 0), COUNT(*), COALESCE(AVG(score), 0)
+		SELECT COALESCE(SUM(score), 0),
+		       COUNT(*) + (SELECT COUNT(*) FROM public_guesses WHERE user_id = $1),
+		       COALESCE(AVG(score), 0)
 		FROM guesses
 		WHERE user_id = $1`, userID).Scan(&totalPoints, &guessCount, &averageScore)
 	if err != nil {
@@ -336,9 +339,6 @@ func (r *Repository) VerifyEmailTransaction(ctx context.Context, tokenHash strin
 	return tx.Commit(ctx)
 }
 
-// ResetPasswordTransaction consumes a reset token, updates the password hash,
-// bumps the auth version (invalidating outstanding access tokens), and revokes
-// every refresh session — all atomically.
 // ResetPasswordTransaction consumes a one-time reset token and installs a new
 // password, returning the owning user so callers can close that user's live
 // sockets. Token consumption, password update, auth-version bump, session

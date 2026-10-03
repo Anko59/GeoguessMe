@@ -19,6 +19,29 @@ curl -s -o /dev/null -w '%{http_code}' http://localhost/health/ready
 curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 ```
 
+`make prod-container-verify` replaces every service's environment-file list with
+its generated fake fixture. If startup fails, it prints only that managed
+project's status, bounded logs, and container health state before teardown,
+preserving the startup exit code. It never dumps container environment values or
+collects logs from another running project.
+
+A failed `make load-test` emits bounded status/log diagnostics only for its
+fake-environment application project before teardown. It preserves startup or k6
+failure status if teardown also fails, and a teardown failure cannot report a
+passing load run. UID `0` mappings are rejected before starting a stack.
+
+If integration reports an ownership or identity mismatch, its selected project
+is left untouched: do not follow it with an unconditional Compose `down`.
+Inspect only public ownership/image metadata and coordinate with the other
+worktree's owner. Select a fresh private project and ports before a new gate; a
+mixed-source run is a failed gate, not valid application test evidence.
+
+Host provisioning executes the compressed bootstrap only after checking its
+required tools, and stops on runtime extraction or Cloudflared integrity errors.
+The decoded bootstrap remains available for failure diagnosis; it is removed
+after successful setup. Do not print generated age private keys or tunnel tokens
+while investigating cloud-init failures.
+
 ## Metrics
 
 OpenMetrics (Prometheus) format at `/metrics`:
@@ -77,6 +100,12 @@ rollback procedure are canonical in the
 separately signed image; update it only with the forced `watch` protocol after
 the exact artifact passes the dev gate. Never pass its image through the app
 `deploy` command or update the shared production monitor from dev CI.
+
+A failed `make watch-rehearsal` prints only its managed fixture project's
+bounded logs, service status, and health state before teardown. Environment-file
+mounts are replaced with fake values; container environments and peer-project
+logs are never dumped. Startup failures remain failures even if diagnostics or
+cleanup also fail, and a failed teardown cannot produce a passing rehearsal.
 
 ## Logging
 

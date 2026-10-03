@@ -26,7 +26,11 @@ camera device and each context receives a fixed geolocation (Paris by default;
 override with `QA_FAKE_LATITUDE`, `QA_FAKE_LONGITUDE`, and
 `QA_FAKE_LOCATION_ACCURACY`). `browser_capabilities` performs a controlled
 camera/location probe so the report can distinguish an unexercised journey from
-a missing test capability.
+a missing test capability. `browser_security_headers` reloads the current
+same-origin page and returns only a fixed inventory of top-level document
+security-header presence and safe CSP flags; it never returns raw values, which
+can contain nonces, cookies, or redirect credentials. It does not inspect every
+response in a redirect chain, cross-origin identity provider, or API call.
 
 Same-origin link clicks wait for a destination change before returning their
 observation, so a transient pre-navigation page cannot be mistaken for a failed
@@ -69,15 +73,21 @@ claim email coverage until `mailbox_search`, `mailbox_read`, and
 `CLOUDFLARE_API_TOKEN` needs the Access permissions used by the browser; it does
 not need Email Routing Rules access. A visible “verification sent” page proves
 only that the identity service accepted the request; it is not delivery
-evidence. During the September 2026 recovery, the public Mail.tm fallback
-reached that page but received no message. Keycloak mail uses multipart and
-quoted-printable encoding; the gateway decodes both before redacting previews
-and opening links. It classifies Keycloak action-token links by message subject
-so verification and password reset remain distinct. On September 25, a full
-diagnostic run against then-deployed revision
-`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and both reset
-flows through the controlled relay. Release evidence still requires a full run
-against the actual release candidate after that candidate deploys.
+evidence. Likewise, opening a reset link is not evidence that reset completion
+or changed-password sign-in succeeded: the generic `browser_type` contract would
+reveal the supplied password in the MCP call, so the source-blind agent must
+leave those stages unexercised until a dedicated credential-holding helper is
+available. Do not enter secrets using generic browser tools. During the
+September 2026 recovery, the public Mail.tm fallback reached that page but
+received no message. Keycloak mail uses multipart and quoted-printable encoding;
+the gateway decodes both before redacting previews and opening links. It
+classifies Keycloak action-token links by message subject so verification and
+password reset remain distinct. On September 25, a full diagnostic run against
+then-deployed revision `1ac86feea5e18b2eca2b03ebf46f368248edd370` completed
+verification and opened both reset-link paths through the controlled relay;
+password change and subsequent sign-in were not evidenced. Release evidence
+still requires a full run against the actual release candidate after that
+candidate deploys.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -190,7 +200,15 @@ handoff, multi-session chat observations, challenge submission, camera/location
 probes, leaderboard and profile/settings visits, refresh, and mobile viewport
 evidence. If any required area is missing, `qa_finish` converts the result to
 `BLOCKED` and lists the missing coverage in the report; a model-supplied `PASS`
-or `FINDINGS` status cannot override that gate.
+or `FINDINGS` status cannot override that gate. This coarse gate does not
+certify natural expiry, reset completion, hidden-location reveal after its
+deadline, challenge timeout, Party Time cooldown, or pixel-level responsive
+review. The runbook requires explicitly recording each stage that was not
+exercised. Do not use a synthetic clock, arbitrary wait, or a screenshot path as
+proof of these behaviors; the deadline can exceed even the nightly budget.
+Screenshots remain local artifacts for a trusted operator to inspect, not image
+content returned to the model, because they can contain one-time links or other
+private data.
 
 ## Release evidence
 

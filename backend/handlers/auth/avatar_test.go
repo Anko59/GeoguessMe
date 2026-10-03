@@ -143,9 +143,10 @@ func TestServeUserAvatarSuccess(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAvatarAPI(t, mock, store)
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "custom"}
+	mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs("viewer-1", avatarTestUserID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
 	recorder := httptest.NewRecorder()
-	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
+	request := requestWithUser(http.MethodGet, "/", "", "viewer-1")
 	request.SetPathValue("userID", avatarTestUserID)
 	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusOK {
@@ -190,13 +191,47 @@ func TestServeUserAvatarMissingObject(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAvatarAPI(t, mock, avatarStore(t))
 	user := &models.User{ID: avatarTestUserID, Username: "alice", Email: "alice@example.test", Avatar: "custom"}
+	mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs("viewer-1", avatarTestUserID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs(avatarTestUserID).WillReturnRows(handlerUserRows(user))
 	recorder := httptest.NewRecorder()
-	request := requestWithUser(http.MethodGet, "/", "", avatarTestUserID)
+	request := requestWithUser(http.MethodGet, "/", "", "viewer-1")
 	request.SetPathValue("userID", avatarTestUserID)
 	api.ServeUserAvatar(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("missing object status = %d", recorder.Code)
+	}
+}
+
+func TestAvatarBlockPrivacyAndFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+	}{
+		{name: "blocked avatar is absent", status: http.StatusNotFound},
+		{name: "block lookup error fails closed", err: errors.New("private database details"), status: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := newAuthMockPool(t)
+			api := newAvatarAPI(t, mock, avatarStore(t))
+			expected := mock.ExpectQuery("SELECT EXISTS.*user_blocks").WithArgs("viewer-1", avatarTestUserID)
+			if tc.err != nil {
+				expected.WillReturnError(tc.err)
+			} else {
+				expected.WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+			}
+			// User existence and object storage must not be probed after denial.
+			request := requestWithUser(http.MethodGet, "/", "", "viewer-1")
+			request.SetPathValue("userID", avatarTestUserID)
+			recorder := httptest.NewRecorder()
+			api.ServeUserAvatar(recorder, request)
+			if recorder.Code != tc.status || strings.Contains(recorder.Body.String(), "blocked") || strings.Contains(recorder.Body.String(), "private database details") {
+				t.Fatalf("avatar denial = %d %s", recorder.Code, recorder.Body.String())
+			}
+			if recorder.Header().Get("Content-Type") == "image/jpeg" {
+				t.Fatal("denied avatar returned image content")
+			}
+		})
 	}
 }
 
