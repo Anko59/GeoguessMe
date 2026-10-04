@@ -402,15 +402,15 @@ describe('Chat', () => {
         fireEvent.click(screen.getByText('Hello'));
         fireEvent.click(screen.getByRole('button', { name: 'React with thumbs up' }));
 
-        await waitFor(() =>
-            expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { reaction: 'like' }),
-        );
-        expect(onMessageUpdated).toHaveBeenCalledWith(
-            expect.objectContaining({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
-        );
-        // A saved reaction closes the panel and returns focus to the message.
-        expect(screen.getByRole('button', { name: 'Reply to bob' })).toHaveAttribute('tabindex', '-1');
-        expect(screen.getByText('Hello').closest('[data-message-id]')).toHaveFocus();
+        await waitFor(() => {
+            expect(put).toHaveBeenCalledWith('/group/message-reactions/message-1', { reaction: 'like' });
+            expect(onMessageUpdated).toHaveBeenCalledWith(
+                expect.objectContaining({ reactions: [{ reaction: 'like', count: 1, reacted: true }] }),
+            );
+            // Await the saved reaction's committed UI, not just request dispatch.
+            expect(screen.getByRole('button', { name: 'Reply to bob' })).toHaveAttribute('tabindex', '-1');
+            expect(screen.getByText('Hello').closest('[data-message-id]')).toHaveFocus();
+        });
     });
 
     it('shows the members who selected each reaction', () => {
