@@ -1,8 +1,17 @@
-import { afterEach, beforeEach, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { afterEach, beforeEach, expect, vi } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { PublicChallenge } from '../../../types';
 import Feed from '../Feed';
+import { createFeedMediaFixture } from './FeedMediaFixture';
+
+let mediaFixture = createFeedMediaFixture();
+export const getMediaFixture = () => mediaFixture;
+export const settleFeedMedia = () => mediaFixture.settle();
+export async function clickFeed(element: Element) {
+    fireEvent.click(element);
+    await settleFeedMedia();
+}
 
 const mocks = vi.hoisted(() => ({
     list: vi.fn(),
@@ -111,8 +120,8 @@ export function post(overrides: Partial<PublicChallenge> = {}): PublicChallenge 
     };
 }
 
-export function renderFeed(initialEntry = '/feed') {
-    return render(
+export async function renderFeed(initialEntry = '/feed') {
+    const view = render(
         <MemoryRouter initialEntries={[initialEntry]}>
             <Routes>
                 <Route path="/feed" element={<Feed />} />
@@ -120,6 +129,8 @@ export function renderFeed(initialEntry = '/feed') {
             </Routes>
         </MemoryRouter>,
     );
+    await settleFeedMedia();
+    return view;
 }
 
 beforeEach(() => {
@@ -127,7 +138,10 @@ beforeEach(() => {
     vi.stubGlobal('IntersectionObserver', undefined);
     mocks.list.mockResolvedValue({ items: [post()], next_cursor: '' });
     mocks.inbox.mockResolvedValue([]);
-    mocks.media.mockResolvedValue(new Blob(['image'], { type: 'image/jpeg' }));
+    mediaFixture = createFeedMediaFixture();
+    mocks.media.mockImplementation((_id: string, _playing: boolean, signal?: AbortSignal) =>
+        mediaFixture.defer('public', signal),
+    );
     mocks.acceptTimed.mockResolvedValue({
         challenge_id: 'post-1',
         media_url: '/api/v1/feed/challenges/post-1/timed-media',
@@ -139,7 +153,7 @@ beforeEach(() => {
         score_grace_seconds: 30,
         server_time: new Date().toISOString(),
     });
-    mocks.timedMedia.mockResolvedValue(new Blob(['timed-image'], { type: 'image/jpeg' }));
+    mocks.timedMedia.mockImplementation((_id: string, signal?: AbortSignal) => mediaFixture.defer('timed', signal));
     mocks.timedMediaDelivered.mockResolvedValue({
         view_expires_at: new Date(Date.now() + 1000).toISOString(),
         guess_after: new Date(Date.now() + 1000).toISOString(),
@@ -160,7 +174,8 @@ beforeEach(() => {
     });
     mocks.comments.mockResolvedValue({ items: [], next_cursor: '' });
     mocks.react.mockResolvedValue(true);
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:feed');
+    let objectURL = 0;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:feed-${++objectURL}`);
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     vi.stubGlobal(
         'createImageBitmap',
@@ -177,4 +192,11 @@ beforeEach(() => {
     });
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+    // Settle mounted consumers before cleanup restores browser/URL ownership.
+    // Tests for cancellation explicitly unmount before delivering late blobs.
+    await settleFeedMedia();
+    expect(mediaFixture.pendingCount).toBe(0);
+    cleanup();
+    vi.unstubAllGlobals();
+});
