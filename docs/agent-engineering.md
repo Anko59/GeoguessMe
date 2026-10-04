@@ -352,6 +352,25 @@ thresholds are unchanged. Remove the local dependency, override, Docker copy
 steps, and special tests only after a compatible patched upstream release passes
 the same contracts.
 
+### Hosted restore semantic completeness
+
+**Owner: Deployment/backups.** The hosted restore rehearsal currently accepts a
+successful SQL restore plus application `SELECT 1`; a gzip-valid empty or
+semantically incomplete application dump can therefore pass without proving
+schema/data completeness. Bash `pipefail` now exposes dump/compression and
+restore/decompression pipeline failures, with 18 deterministic pipeline/cleanup
+regressions; the cleanup trap also covers failure of the second `mktemp`.
+Deployment separately checks the captured Compose database-existence result and
+fails before backup when inspection fails. Neither fixed failure path closes the
+semantic-completeness gap.
+
+Defer stronger schema/data-manifest reconciliation to a separately authorized
+Deployment/backups change, including deterministic empty/incomplete-dump
+rejections and reconciliation against expected restored schema and data. Close
+this entry only when that implementation and its focused hosted restore tests
+land together; retain the isolated restore and release evidence required by the
+[hosted runbook](runbooks/hosted-deployment.md#dev-acceptance-and-production-launch).
+
 ## Residual risks
 
 - The Cloudflared security-tool build

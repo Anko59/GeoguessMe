@@ -56,8 +56,12 @@ and submit one server-timed guess.
 - [Database migrations](database-migrations.md) — rules, execution, recovery
 - [Security and privacy](security-and-privacy.md) — model, data inventory,
   operator obligations
-- [Image security scanning](security-scanning.md) — `make audit-images`,
-  blocking semantics, exception policy, pin refresh
+- [Image security scanning](security-scanning.md) — scan-only complete
+  inventory, reusable signed dependencies, strict failures, exceptions and
+  staged cutover
+- [Local S3 fixture migration](runbooks/s3-fixture-migration.md) — preserve
+  retired MinIO data, verified copy into SeaweedFS, isolated recovery and
+  rollback
 - [Troubleshooting](troubleshooting.md) — frequent issues and solutions
 - [PWA and Web Push](pwa-and-push.md) — installable app, push notifications, iOS
   guidance, VAPID key generation

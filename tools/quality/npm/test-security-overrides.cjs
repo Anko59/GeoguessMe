@@ -1,4 +1,4 @@
-// Regression contracts for the scoped security overrides tracked by issue #376.
+// Installed-consumer regression contracts for scoped security overrides (#376).
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -25,6 +25,16 @@ function emptyProject(filename) {
   project.hash = { project: { objects: { PBXGroup: {} } } };
   return project;
 }
+
+test("manifest scopes fixes without replacing the reviewed braces backport", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "frontend/package.json"), "utf8"));
+  assert.equal(manifest.devDependencies.braces, "file:vendor/braces-security");
+  assert.equal(manifest.overrides.braces, "file:vendor/braces-security");
+  assert.equal(Object.hasOwn(manifest.overrides, "js-yaml"), false);
+  assert.equal(manifest.overrides["js-yaml@^4.0.0"], "4.3.2");
+  assert.deepEqual(manifest.overrides["markdownlint-cli"], { "js-yaml": "5.4.2" });
+  assert.deepEqual(manifest.overrides.xcode, { uuid: "11.1.1" });
+});
 
 test("xcode resolves the patched CommonJS uuid and preserves project IDs", (t) => {
   assert.equal(xcodeRequire("uuid/package.json").version, "11.1.1");

@@ -41,7 +41,7 @@ for tool in gzip install mktemp seq dd wc chown chmod mv sha256sum cut mkdir rm 
 done
 ln -s "$fixture/bin/tool" "$fixture/root/usr/local/sbin/geoguessme-install-runtime-bundle"
 export BOOTSTRAP_FIXTURE="$fixture" BOOTSTRAP_CALLS="$fixture/calls"
-PATH="$fixture/bin" /bin/sh "$fixture/bootstrap.sh"
+PATH="$fixture/bin" /bin/sh "$fixture/bootstrap.sh" 2026.7.2 88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a
 cat >"$fixture/expected" <<'EXPECTED'
 mkdir -p /etc/geoguessme/age /etc/geoguessme/watch-metrics /opt/geoguessme/bin /opt/geoguessme/config/watch /opt/geoguessme/dev /opt/geoguessme/production /opt/geoguessme/releases /var/lib/geoguessme/backups /var/lib/geoguessme/releases
 geoguessme-install-runtime-bundle /tmp/geoguessme-runtime-bundle
@@ -87,10 +87,17 @@ test "$(stat -c %a "$fixture/root/etc/geoguessme/age/production.txt")" = 600
 test "$(sed "s|$fixture/root||g" "$fixture/root/etc/fstab")" = '/swapfile none swap sw 0 0'
 : >"$BOOTSTRAP_CALLS"
 status=0
-BOOTSTRAP_FAIL_COMMAND=sha256sum PATH="$fixture/bin" /bin/sh "$fixture/bootstrap.sh" || status=$?
+BOOTSTRAP_FAIL_COMMAND=sha256sum PATH="$fixture/bin" /bin/sh "$fixture/bootstrap.sh" 2026.7.2 88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a || status=$?
 test "$status" -eq 71
 if grep -q '^dpkg\|^ufw\|^systemctl' "$BOOTSTRAP_CALLS"; then
     echo 'bootstrap continued after cloudflared integrity failure' >&2
     exit 1
 fi
-printf 'host bootstrap tests passed: exact ordered fixture commands, private umask and fail-closed integrity checks\n'
+mkdir "$fixture/no-tools"
+if PATH="$fixture/no-tools" /bin/sh "$fixture/bootstrap.sh" 2026.7.2 \
+    88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a >"$fixture/no-tools.log" 2>&1; then
+    echo 'host bootstrap accepted missing tools' >&2
+    exit 1
+fi
+grep -q 'host bootstrap requires gzip' "$fixture/no-tools.log"
+printf 'host bootstrap tests passed: exact ordered fixture commands, private umask, missing tools and fail-closed integrity checks\n'

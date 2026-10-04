@@ -26,11 +26,11 @@ tools from pinned images and named caches.
 | make test-prod-container-verify-regression | Prod-container-verify script structure regression                                                                                                                                                                                                                                                                                     | check-prod-container-verify-regression.sh PASS                            |
 | make test-disk-cleanup-regression          | Disk-cleanup regression tests                                                                                                                                                                                                                                                                                                         | check-disk-cleanup-regression.sh PASS                                     |
 | make test-build-caching                    | Verify build-images uses layer caching and clean-build does not                                                                                                                                                                                                                                                                       | check-build-caching.sh PASS                                               |
-| make test-image-scan-exceptions-regression | Verify exception validation and nightly Buildx image loading before audit-images                                                                                                                                                                                                                                                      | All image-scan regression checks PASS                                     |
+| make test-image-scan-exceptions-regression | Verify exact digest/package/version exception validation and nightly Buildx image loading before audit-images                                                                                                                                                                                                                         | All image-scan regression checks PASS                                     |
 | make cache-status                          | Report project-only Docker resources (read-only)                                                                                                                                                                                                                                                                                      | script output (non-fatal)                                                 |
 | make maintenance-report                    | Agent-readable deferred-work and structural-pressure summary                                                                                                                                                                                                                                                                          | Markdown summary (non-mutating)                                           |
 | make coverage                              | Backend ≥70% overall; frontend ≥80/80/80/70 (statements/branches/functions/lines)                                                                                                                                                                                                                                                     | go test cover OK; Vitest --coverage PASS                                  |
-| make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                                                                                                                                                                    | All integration tests PASS                                                |
+| make test-integration                      | Isolated PostgreSQL, authenticated SeaweedFS S3 fixture, Mailpit, backend suite                                                                                                                                                                                                                                                       | All integration tests PASS                                                |
 | make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                                                                                                                                                                    | All Playwright projects PASS                                              |
 | make test-e2e-pr                           | Chromium desktop Playwright project; CI may set `GEOGUESSME_E2E_SHARD=N/M` for isolated shards                                                                                                                                                                                                                                        | PR browser checks PASS                                                    |
 | make test-mobile                           | Isolated backend fixture, Capacitor APK build, headless Android emulator, and Maestro gameplay journey                                                                                                                                                                                                                                | APK installs; auth, chat, guess, camera capture, and upload PASS          |
@@ -86,7 +86,35 @@ cannot assess maintained local source. See
 [the backport ledger](agent-engineering.md#braces-security-backport).
 
 Reports and traces are written to ignored repository output directories from
-inside containers.
+inside containers. Security lifecycle regressions always run in preflight and
+quality: `make test-image-audit`, `make test-image-audit-native`,
+`make test-dependency-images`, `make test-security-workflows`, and
+`make test-image-scan-exceptions-regression`. They verify complete scan-only
+scope, immutable identity, independent build/adoption trust, bounded retries,
+and fail-closed operational errors; fixed High/Critical findings still block.
+`make audit-images` never prepares images: use explicit dependency/application
+build targets first. The full default inventory requires 17 references and
+retains raw JSON/SPDX, gate results, resolution and database snapshot evidence.
+See the [security lifecycle](security-scanning.md).
+
+`make terraform-test` delegates to `make terraform-cloud-init-test`: the pinned
+Ubuntu parser dispatches the actual standard gzip cloud-config archive, checks
+all 33 installed members and hashes, and rejects malformed payloads. Terraform
+validates and exercises the real module using three explicit mocked providers,
+without network access, operator credentials, backend configuration, or state.
+Original and realistic synthetic SSH-key/tunnel-token inputs, including UTF-8,
+must remain within Hetzner's strict 32,768-byte user-data limit. The actual
+server resource also enforces that limit for dynamic operator inputs; larger
+keys or future bundle growth can fail closed and require reviewed size
+reductions.
+
+`make test-s3-fixture` verifies client and migration/recovery contracts;
+`make test-s3-fixture-race` runs the HTTP/integrity tests with race detection.
+`make test-s3-fixture-integration` uses a unique disposable real-image project
+for signed authentication, anonymous denial, no-overwrite, verified copy and
+restart persistence. `make verify-s3-upstream` checks the exact official release
+signature. These tests never migrate user data; follow the
+[explicit migration runbook](runbooks/s3-fixture-migration.md).
 
 The harness self-test rows (`test-structure-regression`,
 `test-debt-markers-regression`, `test-e2e-regression`, plus

@@ -1,0 +1,8 @@
+# component	dockerfile	context	extra-inputs (comma-separated repository files, or -)
+keycloak	deployment/docker/keycloak-patched/Dockerfile	deployment/docker/keycloak-patched	-
+restic	deployment/docker/restic-tools.Dockerfile	deployment/docker	-
+sops	deployment/docker/sops-tools/Dockerfile	deployment/docker/sops-tools	-
+socket-proxy	deployment/docker/socket-proxy-tools/Dockerfile	deployment/docker/socket-proxy-tools	-
+postgres	deployment/docker/postgres-openssl.Dockerfile	deployment/docker	-
+cloudflared	deployment/docker/cloudflared-tools.Dockerfile	deployment/docker	-
+caddy-runtime	deployment/docker/security/caddy-runtime.Dockerfile	deployment/docker/security	-

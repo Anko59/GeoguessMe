@@ -18,8 +18,10 @@ case "${1:-}" in
             dev:5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
             production:5) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" ;;
             production:6) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" "$6" ;;
+            dev:7) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" "$6" "$7" ;;
+            production:8) exec /opt/geoguessme/bin/deploy.sh "$allowed_environment" "$2" "$3" "$4" "$5" "$6" "$7" "$8" ;;
             *)
-                printf 'expected: dev deploy BACKEND_IMAGE WEB_IMAGE [SOPS_IMAGE] REVISION; production deploy BACKEND_IMAGE WEB_IMAGE KEYCLOAK_IMAGE [SOPS_IMAGE] REVISION\n' >&2
+                printf 'expected: dev deploy BACKEND_IMAGE WEB_IMAGE SOPS_IMAGE POSTGRES_IMAGE RESTIC_IMAGE REVISION; production deploy BACKEND_IMAGE WEB_IMAGE KEYCLOAK_IMAGE SOPS_IMAGE POSTGRES_IMAGE RESTIC_IMAGE REVISION (legacy cutover arities also supported)\n' >&2
                 exit 126
                 ;;
         esac

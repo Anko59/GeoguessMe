@@ -11,126 +11,25 @@ build-backend: ## Build the backend binary in Docker.
 build-frontend: prepare-frontend-cache ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
-build-images: build-keycloak-image ## Build production images with normal Docker layer caching.
-	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .
-	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
+# Local Caddy aliases exist only in the active daemon. Its builder loads outputs
+# automatically and uses daemon caching, not isolated-builder cache exporters.
+build-images: prepare-app-runtime prepare-database-runtime build-keycloak-image ## Build production images with normal Docker layer caching.
+	@set -eu; caddy=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime build); \
+	load=$$(if docker buildx version >/dev/null 2>&1; then printf -- '--load'; fi); \
+	docker build $$load --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
+	BUILDX_BUILDER="$$(docker context show)" docker build --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
 
 build-keycloak-image: ## Build the digest-pinned Keycloak image.
-	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t "$(LOCAL_KEYCLOAK_IMAGE)" deployment/docker/keycloak-patched
+	bash tools/quality/dependency-images/lifecycle.sh prepare-local keycloak
+	@set -eu; keycloak=$$(bash tools/quality/dependency-images/selected.sh keycloak); \
+	docker tag "$$keycloak" "$(LOCAL_KEYCLOAK_IMAGE)"
 
-clean-build: ## Build production images from scratch without any layer cache.
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t "$(LOCAL_KEYCLOAK_IMAGE)" deployment/docker/keycloak-patched
-
-# Final/runtime images audited by `make audit-images` (F-01). The defaults are
-# digest-pinned third-party runtime/deployment images; override with
-# AUDIT_IMAGES=... The backend/web application images and locally rebuilt
-# security-patched tool images are appended automatically when they exist.
-# SOPS and socket-proxy are locally patched derivatives of digest-pinned
-# upstream releases; CI overrides these with exact published digests for
-# deployment scanning. Their unpatched upstream bases are build inputs only.
-# Images already present in the host daemon are exported and scanned via
-# --input so private registry credentials never need to enter the Trivy
-# container.
-SOPS_IMAGE ?= geoguessme/sops-tools:3.13.3-expat-deb12u4
-SOCKET_PROXY_IMAGE ?= geoguessme/socket-proxy-tools:local
-export SOPS_IMAGE SOCKET_PROXY_IMAGE
-AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
-	geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7 \
-	henrygd/beszel:0.19.0@sha256:fefb27166f5e1611ebf67f8697ea928a23f44efdb00af922e2ac3b5faa2efd5c \
-	henrygd/beszel-agent:0.19.0@sha256:00c88600e7d120128f623b2deb5257603d464e841fd68f88cc791dcc075f9e46 \
-	victoriametrics/victoria-logs:latest@sha256:8f2140dca110705916751b9cdf57c2309555b6f1cf2707be1ee1a774c8c1e1f9 \
-	victoriametrics/victoria-metrics:latest@sha256:58e70086a0eae76562c759ec71ae18af225e57d1986dd2fd357e759349439c4c \
-	timberio/vector:latest-distroless-static@sha256:3e60640c2a002fbe5dbef8a594b2eef0cebf00d8b104ba624ebec006adfa2b01 \
-	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
-
-build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
-	$(COMPOSE_TOOLS) build sops
-
-build-socket-proxy-image: ## Build the PCRE2-patched socket-proxy derivative.
-	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) $(COMPOSE_TOOLS) build socket-proxy-tools
-
-build-security-tool-images: build-sops-image build-socket-proxy-image ## Build locally patched security-tool images used by the image audit.
-	$(COMPOSE_TOOLS) build restic postgres-openssl cloudflared
-
-ifeq ($(strip $(KEYCLOAK_IMAGE)),)
-audit-images: build-security-tool-images build-keycloak-image
-else
-audit-images: build-security-tool-images
-endif
-audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blocking gate) and write JSON reports + SPDX SBOMs under security/image-reports/.
-	@bash tools/quality/image-scan-exceptions-check.sh
-	@$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
-	@set -eu; \
-	mkdir -p security/image-reports/.trivy-cache; \
-	image_archive=''; \
-	cleanup_image_archive() { [ -z "$$image_archive" ] || rm -f "$$image_archive"; }; \
-	trap cleanup_image_archive EXIT; \
-	images="$(AUDIT_IMAGES)"; \
-	[ -n "$${SOPS_IMAGE:-}" ] || { echo 'audit-images: error: SOPS_IMAGE is required' >&2; exit 1; }; \
-	images="$$images $${SOPS_IMAGE}"; \
-	[ -n "$${SOCKET_PROXY_IMAGE:-}" ] || { echo 'audit-images: error: SOCKET_PROXY_IMAGE is required' >&2; exit 1; }; \
-	images="$$images $${SOCKET_PROXY_IMAGE}"; \
-	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
-		images="$$images $${KEYCLOAK_IMAGE}"; \
-	elif docker image inspect "$${LOCAL_KEYCLOAK_IMAGE}" >/dev/null 2>&1; then \
-		images="$$images $${LOCAL_KEYCLOAK_IMAGE}"; \
-	else \
-		echo 'audit-images: error: Keycloak image missing (set KEYCLOAK_IMAGE or build it with `make build-keycloak-image`)' >&2; exit 1; \
-	fi; \
-	for image in "$${BACKEND_IMAGE:-$${LOCAL_BACKEND_IMAGE}}" "$${WEB_IMAGE:-$${LOCAL_WEB_IMAGE}}"; do \
-		if docker image inspect "$$image" >/dev/null 2>&1 || \
-			{ [ "$$image" != "$${LOCAL_BACKEND_IMAGE}" ] && [ "$$image" != "$${LOCAL_WEB_IMAGE}" ]; }; then \
-			images="$$images $$image"; \
-		else \
-			echo "audit-images: warning: local app image $$image missing (run make build-images)" >&2; \
-		fi; \
-	done; \
-	if docker image inspect geoguessme-restic:local >/dev/null 2>&1; then \
-		images="$$images geoguessme-restic:local"; \
-	fi; \
-	if [ -n "$${RESTIC_IMAGE:-}" ]; then \
-		images="$$images $${RESTIC_IMAGE}"; \
-	fi; \
-	for local_image in geoguessme/restic-tools:0.19.1-go-deps-2026-09 geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7; do \
-		if docker image inspect "$$local_image" >/dev/null 2>&1; then \
-			images="$$images $$local_image"; \
-		else \
-			echo "audit-images: warning: local remediation image skipped: $$local_image" >&2; \
-		fi; \
-	done; \
-	for img in $$images; do \
-		safe=$$(printf '%s' "$$img" | tr '/:@' '___'); \
-		mkdir -p "security/image-reports/$$safe"; \
-		image_archive=''; \
-		bash tools/quality/image-scan-exceptions-check.sh --emit "$$img" "security/image-reports/$$safe/ignore.trivy"; \
-		if docker image inspect "$$img" >/dev/null 2>&1; then \
-			base_name=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$$img"); \
-			base_digest=$$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.digest" }}' "$$img"); \
-			[ "$$base_name" = '<no value>' ] && base_name=''; \
-			[ "$$base_digest" = '<no value>' ] && base_digest=''; \
-			if [ -n "$$base_name" ] || [ -n "$$base_digest" ]; then \
-				[ -n "$$base_name" ] && [ -n "$$base_digest" ] || { echo "audit-images: $$img has incomplete OCI base-image provenance" >&2; exit 1; }; \
-				case "$$base_name" in *@sha256:*) echo "audit-images: $$img base.name must not contain a digest" >&2; exit 1;; esac; \
-				printf '%s' "$$base_digest" | grep -Eq '^sha256:[0-9a-f]{64}$$' || { echo "audit-images: $$img has malformed base.digest" >&2; exit 1; }; \
-				bash tools/quality/image-scan-exceptions-check.sh --append "$$base_name@$$base_digest" "security/image-reports/$$safe/ignore.trivy"; \
-			fi; \
-			image_archive="security/image-reports/$$safe/image.tar"; \
-			docker save "$$img" -o "$$image_archive"; \
-			scan_target="--input /workspace/$$image_archive"; \
-		else \
-			scan_target="$$img"; \
-		fi; \
-		echo "==> audit-images: $$img"; \
-		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --exit-code 0 --format json --output "/workspace/security/image-reports/$$safe/report.json" $$scan_target; \
-		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --skip-db-update --format spdx-json --output "/workspace/security/image-reports/$$safe/sbom.spdx.json" $$scan_target; \
-		$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) trivy trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile "/workspace/security/image-reports/$$safe/ignore.trivy" --format table $$scan_target; \
-		cleanup_image_archive; \
-		image_archive=''; \
-		echo "    audit-images: $$img OK (report: security/image-reports/$$safe/report.json, sbom: security/image-reports/$$safe/sbom.spdx.json)"; \
-	done; \
-	echo 'audit-images: complete'
+clean-build: prepare-app-runtime prepare-database-runtime ## Build production images from scratch without any layer cache.
+	@set -eu; caddy=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime build); \
+	load=$$(if docker buildx version >/dev/null 2>&1; then printf -- '--load'; fi); \
+	docker build $$load --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
+	BUILDX_BUILDER="$$(docker context show)" docker build --no-cache --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
+	$(MAKE) build-keycloak-image
 
 compose-validate: ## Validate every Compose file.
 	docker compose --profile social -f deployment/compose.dev.yaml --project-directory . config --quiet
@@ -141,11 +40,11 @@ compose-validate: ## Validate every Compose file.
 	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 BACKEND_IMAGE=geoguessme-backend:local WEB_IMAGE=geoguessme-web:local docker compose --profile social -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 	docker compose -f deployment/compose.tools.yaml --project-directory . config --quiet
 
-migrate-up: ## Apply pending migrations through the backend container.
-	$(COMPOSE_DEV) run --rm backend migrate up
+migrate-up: prepare-database-runtime ## Apply pending migrations through the backend container.
+	$(WITH_SELECTED) postgres -- $(COMPOSE_DEV) run --rm backend migrate up
 
-migrate-status: ## Show migration status through the backend container.
-	$(COMPOSE_DEV) run --rm backend migrate status
+migrate-status: prepare-database-runtime ## Show migration status through the backend container.
+	$(WITH_SELECTED) postgres -- $(COMPOSE_DEV) run --rm backend migrate status
 
 migration-new: ## Create a migration file after checking NAME.
 	@test -n "$(NAME)" || { echo "usage: make migration-new NAME=description"; exit 2; }
@@ -161,27 +60,27 @@ db-restore: ## Restore a PostgreSQL backup through the tool container.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e DATABASE_URL="$(DATABASE_URL)" go-security /workspace/deployment/scripts/restore-postgres.sh "$(FILE)"
 
 backup-rehearsal: build-images ## Run the disposable backup/restore rehearsal.
-	deployment/scripts/backup-restore-rehearsal.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/backup-restore-rehearsal.sh
 
 restart-rehearsal: build-images ## Run the disposable restart/reconnect rehearsal.
-	deployment/scripts/restart-rehearsal.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/restart-rehearsal.sh
 
 reconnect-rehearsal: build-images ## Run the load/reconnect/catch-up rehearsal with exact-once evidence.
-	deployment/scripts/reconnect-rehearsal.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/reconnect-rehearsal.sh
 
 migration-test: build-images ## Run concurrent, idempotent, and legacy-fixture migration tests.
-	deployment/scripts/migration-concurrency.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/migration-concurrency.sh
 
 operational-gate: build-images container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal test-restart-regression smoke ## Run the dev-pipeline operational gate: containers, migrations, rehearsals, smoke. The full release gate (`make verify`) additionally runs the complete browser matrix, load-test, and audit-images on the nightly schedule.
 
 load-test: build-images ## Run the documented disposable load profile.
-	deployment/scripts/load-test.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/load-test.sh
 
 container-verify: build-images ## Verify runtime image hardening and health checks.
-	deployment/scripts/container-verify.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/container-verify.sh
 
 prod-container-verify: build-images ## Full production-container verification: images, compose, stack, health, smoke, teardown.
-	deployment/scripts/prod-container-verify.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/prod-container-verify.sh
 
 prod-config: ## Validate production image and secret configuration.
 	@test -n "$$BACKEND_IMAGE" || { echo "BACKEND_IMAGE is required"; exit 2; }
@@ -191,19 +90,20 @@ prod-config: ## Validate production image and secret configuration.
 	@test -f deployment/env/production.env || { echo "deployment/env/production.env is required"; exit 2; }
 	@echo "production configuration OK"
 
-prod-migrate: prod-config ## Run the production migration job.
-	$(COMPOSE_PROD) run --rm migration migrate up
+prod-migrate: prod-config prepare-database-runtime ## Run the production migration job.
+	$(WITH_SELECTED) postgres -- $(COMPOSE_PROD) run --rm migration migrate up
 
-prod-legacy-identity-plan: prod-config ## Count legacy migration categories without changing Keycloak.
-	$(COMPOSE_PROD) run --rm migration legacy-identity-migration plan
+prod-legacy-identity-plan: prod-config prepare-database-runtime ## Count legacy migration categories without changing Keycloak.
+	$(WITH_SELECTED) postgres -- $(COMPOSE_PROD) run --rm migration legacy-identity-migration plan
 
-prod-legacy-identity-provision: prod-config ## Provision verified legacy emails in Keycloak; requires CONFIRM=provision.
+prod-legacy-identity-provision: prod-config prepare-database-runtime ## Provision verified legacy emails in Keycloak; requires CONFIRM=provision.
 	@test "$(CONFIRM)" = provision || { echo "Refusing without CONFIRM=provision"; exit 2; }
-	$(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
+	$(WITH_SELECTED) postgres -- $(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
 
-prod-up: prod-config ## Start the production stack.
+prod-up: prod-config prepare-database-runtime ## Start the production stack.
 	bash deployment/oauth2-proxy/prepare-public-configs.sh
-	@if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
+	@set -eu; POSTGRES_IMAGE=$$(bash tools/quality/dependency-images/selected.sh postgres); export POSTGRES_IMAGE; \
+	if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
 		$(COMPOSE_PROD) --profile social up -d; \
 	else \
 		$(COMPOSE_PROD) up -d; \
@@ -220,6 +120,8 @@ hosted-config: ## Validate production and dev hosted Compose expansion.
 	COMPOSE_PROJECT_NAME=geoguessme-dev GEOGUESSME_ENV_FILE=deployment/env/dev.env.example GEOGUESSME_WEB_PORT=8082 GEOGUESSME_BACKEND_MEMORY=512M GEOGUESSME_DATABASE_MEMORY=768M BACKEND_IMAGE=example.invalid/geoguessme-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb docker compose -f deployment/compose.production.yaml -f deployment/compose.hosted.yaml --project-directory . config --quiet
 
 hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollback, and header contracts.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/deployment/scripts/hosted/test/backup-pipeline-contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh /workspace/deployment/scripts/hosted/test/dependency-image-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/keycloak-image-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/watch-deploy-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/contracts.sh
@@ -232,13 +134,14 @@ watch-config: ## Validate the isolated monitoring Compose topology with example 
 	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet
 
 watch-rehearsal: watch-config build-images build-socket-proxy-image ## Exercise monitoring ingestion, filtering, path routing, and loopback binding in a disposable stack.
-	deployment/scripts/watch/rehearsal.sh
+	$(WITH_SELECTED) postgres socket-proxy -- deployment/scripts/watch/rehearsal.sh
 
 cloudflared-access-ssh: ## Proxy SSH through Access; requires HOST and service-token env vars.
 	@test -n "$(HOST)" || { echo 'HOST is required' >&2; exit 2; }
 	@test -n "$${TUNNEL_SERVICE_TOKEN_ID:-}" || { echo 'TUNNEL_SERVICE_TOKEN_ID is required' >&2; exit 2; }
 	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
-	@$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
+	@bash tools/quality/dependency-images/lifecycle.sh prepare-local cloudflared
+	@$(WITH_SELECTED) cloudflared -- $(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared access ssh --hostname "$(HOST)"
 
 export OPS_SSH_COMMAND
 
@@ -258,7 +161,9 @@ deployment-hash-check: ## Verify installed host runtime definitions match the de
 	@test -n "$${TUNNEL_SERVICE_TOKEN_SECRET:-}" || { echo 'TUNNEL_SERVICE_TOKEN_SECRET is required' >&2; exit 2; }
 	@test -n "$${DEPLOY_SSH_PRIVATE_KEY:-}" || { echo 'DEPLOY_SSH_PRIVATE_KEY is required' >&2; exit 2; }
 	@test -n "$${DEPLOY_SSH_KNOWN_HOSTS:-}" || { echo 'DEPLOY_SSH_KNOWN_HOSTS is required' >&2; exit 2; }
-	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT INT TERM; \
+	@bash tools/quality/dependency-images/lifecycle.sh prepare-local cloudflared
+	@set -eu; CLOUDFLARED_IMAGE=$$(bash tools/quality/dependency-images/selected.sh cloudflared); export CLOUDFLARED_IMAGE; \
+	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT INT TERM; \
 	case "$(ENVIRONMENT)" in dev) target_host=deploy.geoguessme.com ;; production) target_host=deploy-prod.geoguessme.com ;; esac; \
 	printf '%s\n' "$$DEPLOY_SSH_PRIVATE_KEY" >"$$tmp/deploy"; \
 	printf '%s\n' "$$DEPLOY_SSH_KNOWN_HOSTS" >"$$tmp/known_hosts"; \
@@ -281,8 +186,11 @@ terraform-init: ## Initialize the R2 backend; requires infra/terraform/backend.h
 terraform-validate: ## Initialize without remote state and validate Terraform.
 	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate'
 
-terraform-test: ## Exercise a fresh, mocked infrastructure plan and assertions.
-	$(TERRAFORM_ISOLATED) 'terraform init -backend=false && terraform validate && terraform test'
+terraform-cloud-init-test: ## Prove exact compact user-data decoding using the real Ubuntu cloud-init parser without network or cloud access.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/cloud-init/test-runner.sh
+	DOCKER_BUILD_FLAGS="$(DOCKER_BUILD_FLAGS)" bash tools/quality/cloud-init/run-test.sh
+
+terraform-test: terraform-cloud-init-test ## Validate isolated infrastructure and fully mocked resources offline, without operator state or credentials.
 
 terraform-plan: terraform-init ## Create a reviewed plan in a mode-0700 directory.
 	@install -d -m 0700 infra/terraform/.tfplan
@@ -304,13 +212,14 @@ secrets-encrypt: build-sops-image ## Encrypt ENV=dev|production from its example
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	cp deployment/env/$(ENV).env.example deployment/secrets/$(ENV).env.enc
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
+	$(WITH_SELECTED) sops -- $(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --encrypt --input-type dotenv --output-type dotenv --age "$(RECIPIENT)" --in-place /workspace/deployment/secrets/$(ENV).env.enc
 
 secrets-generate: build-sops-image ## Generate and SOPS-encrypt ENV=dev|production without a plaintext file.
 	@case "$(ENV)" in dev|production) ;; *) echo 'ENV must be dev or production'; exit 2;; esac
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT is required'; exit 2; }
 	@mkdir -p deployment/secrets
-	@temporary=$$(mktemp deployment/secrets/.$(ENV).env.enc.XXXXXX); \
+	@set -eu; SOPS_IMAGE=$$(bash tools/quality/dependency-images/selected.sh sops); export SOPS_IMAGE; \
+	temporary=$$(mktemp deployment/secrets/.$(ENV).env.enc.XXXXXX); \
 	trap 'rm -f "$$temporary"' EXIT INT TERM; \
 	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e TARGET_ENV=$(ENV) -e BREVO_SMTP_USERNAME -e BREVO_SMTP_PASSWORD \
@@ -330,7 +239,8 @@ secrets-generate: build-sops-image ## Generate and SOPS-encrypt ENV=dev|producti
 identity-secrets-generate: build-sops-image ## Generate shared Keycloak secrets and encrypt them for both host age recipients.
 	@test -n "$(RECIPIENT)" || { echo 'RECIPIENT must contain both host age recipients'; exit 2; }
 	@mkdir -p deployment/secrets
-	@temporary=$$(mktemp deployment/secrets/.identity.env.enc.XXXXXX); \
+	@set -eu; SOPS_IMAGE=$$(bash tools/quality/dependency-images/selected.sh sops); export SOPS_IMAGE; \
+	temporary=$$(mktemp deployment/secrets/.identity.env.enc.XXXXXX); \
 	trap 'rm -f "$$temporary"' EXIT INT TERM; \
 	bash -o pipefail -c '$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) \
 		-e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
@@ -346,7 +256,7 @@ identity-secrets-generate: build-sops-image ## Generate shared Keycloak secrets 
 	trap - EXIT INT TERM
 
 smoke: build-images ## Run the smoke test against a selected disposable/staging URL.
-	if [ -n "$${BASE_URL:-}" ]; then deployment/scripts/smoke-test.sh "$$BASE_URL"; else deployment/scripts/smoke-rehearsal.sh; fi
+	if [ -n "$${BASE_URL:-}" ]; then deployment/scripts/smoke-test.sh "$$BASE_URL"; else $(WITH_SELECTED) postgres -- deployment/scripts/smoke-rehearsal.sh; fi
 
 smoke-rehearsal: build-images ## Run the smoke test against a disposable test stack.
-	deployment/scripts/smoke-rehearsal.sh
+	$(WITH_SELECTED) postgres -- deployment/scripts/smoke-rehearsal.sh

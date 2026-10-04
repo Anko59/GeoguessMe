@@ -23,77 +23,77 @@ users:
     lock_passwd: true
 
 write_files:
-  - path: /etc/ssh/sshd_config.d/00-geoguessme.conf
-    permissions: "0644"
-    content: |
-      PasswordAuthentication no
-      KbdInteractiveAuthentication no
-      PermitRootLogin no
-      AllowUsers ops deploy
-  - path: /etc/tmpfiles.d/geoguessme.conf
-    permissions: "0644"
-    content: |
-      d /run/lock/geoguessme 0750 deploy deploy -
-  - path: /home/ops/.ssh/authorized_keys
-    owner: ops:ops
-    permissions: "0600"
-    defer: true
-    content: |
-      ${admin_key}
-  - path: /home/deploy/.ssh/authorized_keys
-    owner: deploy:deploy
-    permissions: "0600"
-    defer: true
-    content: |
-      restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
-      restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
-  - path: /etc/docker/daemon.json
-    permissions: "0644"
-    content: |
-      {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
-  - path: /etc/cloudflared/token
-    permissions: "0600"
-    content: |
-      ${tunnel_token}
-  - path: /etc/systemd/system/cloudflared.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Cloudflare Tunnel
-      After=network-online.target
-      Wants=network-online.target
-      [Service]
-      Type=simple
-      ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/token
-      Restart=always
-      RestartSec=5s
-      NoNewPrivileges=true
-      ProtectSystem=strict
-      ProtectHome=true
-      PrivateTmp=true
-      [Install]
-      WantedBy=multi-user.target
-  - path: /tmp/geoguessme-runtime-bundle
-    owner: root:root
-    permissions: "0600"
-    encoding: gzip+base64
-    content: ${runtime_bundle}
-  - path: /usr/local/sbin/geoguessme-install-runtime-bundle
-    owner: root:root
-    permissions: "0700"
-    encoding: gzip+base64
-    content: ${runtime_installer}
-  - path: /usr/local/sbin/geoguessme-bootstrap-host
-    owner: root:root
-    permissions: "0700"
-    encoding: gzip+base64
-    content: ${host_bootstrap}
-  - path: /opt/geoguessme/config/runtime-revision
-    owner: root:root
-    permissions: "0444"
-    content: |
-      ${runtime_revision}
+- path: /usr/local/sbin/geoguessme-bootstrap-host
+  owner: root:root
+  permissions: "0700"
+  content: |
+    ${indent(4, chomp(host_bootstrap))}
+- path: /usr/local/sbin/geoguessme-install-runtime-bundle
+  owner: root:root
+  permissions: "0700"
+  content: |
+    ${indent(4, chomp(runtime_installer))}
+- path: /tmp/geoguessme-runtime-bundle
+  owner: root:root
+  permissions: "0600"
+  content: |
+    ${indent(4, chomp(runtime_bundle))}
+- path: /etc/ssh/sshd_config.d/00-geoguessme.conf
+  permissions: "0644"
+  content: |
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    PermitRootLogin no
+    AllowUsers ops deploy
+- path: /etc/tmpfiles.d/geoguessme.conf
+  permissions: "0644"
+  content: |
+    d /run/lock/geoguessme 0750 deploy deploy -
+- path: /home/ops/.ssh/authorized_keys
+  owner: ops:ops
+  permissions: "0600"
+  defer: true
+  content: |
+    ${admin_key}
+- path: /home/deploy/.ssh/authorized_keys
+  owner: deploy:deploy
+  permissions: "0600"
+  defer: true
+  content: |
+    restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
+    restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
+- path: /etc/docker/daemon.json
+  permissions: "0644"
+  content: |
+    {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
+- path: /etc/cloudflared/token
+  permissions: "0600"
+  content: |
+    ${tunnel_token}
+- path: /etc/systemd/system/cloudflared.service
+  permissions: "0644"
+  content: |
+    [Unit]
+    Description=Cloudflare Tunnel
+    After=network-online.target
+    Wants=network-online.target
+    [Service]
+    Type=simple
+    ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/token
+    Restart=always
+    RestartSec=5s
+    NoNewPrivileges=true
+    ProtectSystem=strict
+    ProtectHome=true
+    PrivateTmp=true
+    [Install]
+    WantedBy=multi-user.target
+- path: /opt/geoguessme/config/runtime-revision
+  owner: root:root
+  permissions: "0444"
+  content: |
+    ${runtime_revision}
 runcmd:
-  - [/usr/local/sbin/geoguessme-bootstrap-host]
+  - [/usr/local/sbin/geoguessme-bootstrap-host, "${cloudflared_version}", "${cloudflared_deb_sha256}"]
 
 final_message: "GeoGuessMe host bootstrap complete"

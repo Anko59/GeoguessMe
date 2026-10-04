@@ -14,7 +14,9 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-LABEL org.opencontainers.image.source="https://github.com/Anko59/GeoguessMe" \
+ARG DEPENDENCY_INPUTS
+LABEL dev.geoguessme.dependency-inputs="${DEPENDENCY_INPUTS}" \
+    org.opencontainers.image.source="https://github.com/Anko59/GeoguessMe" \
     org.opencontainers.image.description="SOPS v3.13.3 with fixed Debian libexpat" \
     org.opencontainers.image.version="3.13.3-expat-deb12u4" \
     org.opencontainers.image.base.name="ghcr.io/getsops/sops:v3.13.3" \

@@ -25,24 +25,27 @@ assert_contains "$DEPLOY" 'validate_image_reference "$keycloak_image" keycloak'
 assert_contains "$DEPLOY" 'verify_image_signature "$keycloak_image"'
 assert_contains "$DEPLOY" 'GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image'
 assert_contains "$DEPLOY" 'GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'docker pull "$KEYCLOAK_IMAGE"'
+assert_contains "$DEPLOY" 'verify_image_signature "$postgres_image"'
+assert_contains "$DEPLOY" 'verify_image_signature "$restic_image"'
+assert_contains "$FORCED" 'dev:7) exec /opt/geoguessme/bin/deploy.sh'
+assert_contains "$FORCED" 'production:8) exec /opt/geoguessme/bin/deploy.sh'
 assert_contains "$ROOT/.github/workflows/release.yml" 'KEYCLOAK_SOURCE: ${{ steps.names.outputs.keycloak_source }}@${{ steps.digests.outputs.keycloak }}'
 assert_contains "$ROOT/.github/workflows/release.yml" 'run: tools/quality/ci/promote-application-images.sh'
 assert_contains "$ROOT/tools/quality/ci/promote-application-images.sh" 'docker buildx imagetools create --tag "$release" "$source"'
 assert_contains "$ROOT/tools/quality/ci/promote-application-images.sh" '[[ "$actual_digest" == "$expected_digest" ]]'
-assert_contains "$ROOT/.github/workflows/release.yml" '"deploy $BACKEND $WEB $KEYCLOAK $GITHUB_SHA"'
-assert_contains "$ROOT/tools/make/deployment.mk" 'images="$$images $${SOPS_IMAGE}"'
-assert_contains "$ROOT/tools/make/deployment.mk" 'build-sops-image'
-assert_contains "$ROOT/tools/make/deployment.mk" 'geoguessme/sops-tools:3.13.3-expat-deb12u4'
-assert_contains "$ROOT/deployment/compose.tools.yaml" 'deployment/docker/sops-tools/Dockerfile'
-assert_contains "$ROOT/deployment/compose.tools.yaml" 'image: geoguessme/sops-tools:3.13.3-expat-deb12u4'
+assert_contains "$ROOT/.github/workflows/release.yml" '"deploy $BACKEND $WEB $KEYCLOAK $SOPS $POSTGRES $RESTIC $GITHUB_SHA"'
+assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/sops-tools/Dockerfile'
+assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/postgres-openssl.Dockerfile'
+assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/restic-tools.Dockerfile'
 assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'libexpat1=2.5.0-1+deb12u4'
 assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'org.opencontainers.image.source="https://github.com/Anko59/GeoguessMe"'
 assert_contains "$DEPLOY" 'validate_sops_image_reference "$sops_image"'
 assert_contains "$DEPLOY" 'verify_image_signature "$sops_image"'
 assert_contains "$DEPLOY" 'docker pull "$sops_image"'
 assert_contains "$DEPLOY" 'SOPS_IMAGE=%s'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'SOPS: ${{ steps.names.outputs.sops }}@${{ steps.sops.outputs.digest }}'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'tools/quality/dependency-images/adopt.sh'
+assert_contains "$ROOT/tools/quality/dependency-images/adopt.sh" '[[ "$adopted" == "$digest" ]]'
+assert_contains "$ROOT/tools/quality/dependency-images/adopt.sh" 'cosign sign --yes -a "revision=$revision"'
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'Verify SOPS package is anonymously pullable'
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'tagged_image=${ref%@*}'
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'repository=${tagged_image%:*}'
@@ -66,8 +69,8 @@ assert_contains "$ROOT/tools/quality/ci/promote-sops-image.sh" 'docker buildx im
 assert_contains "$ROOT/tools/quality/ci/promote-sops-image.sh" '[[ "$promoted_digest" == "$digest" ]]'
 assert_contains "$ROOT/.github/workflows/release.yml" 'echo "sops=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}"'
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'socket_proxy: ${{ steps.refs.outputs.socket_proxy }}'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'SOCKET_PROXY_IMAGE: ${{ steps.names.outputs.socket_proxy }}@${{ steps.socket_proxy.outputs.digest }}'
-assert_contains "$ROOT/.github/workflows/deploy.yml" 'Sign immutable images after the exact-digest audit'
+assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/socket-proxy-tools/Dockerfile'
+assert_contains "$ROOT/.github/workflows/deploy.yml" 'Sign application images after the exact-digest audit'
 assert_contains "$ROOT/.github/workflows/release.yml" 'tools/quality/ci/promote-socket-proxy-image.sh "$DEV_SHA"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}'
 assert_contains "$ROOT/.github/workflows/release.yml" 'socket_proxy=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}'
@@ -95,8 +98,8 @@ assert_forced_command_arity() {
     }
 }
 
-assert_forced_command_arity "$ROOT/.github/workflows/deploy.yml" 4
-assert_forced_command_arity "$ROOT/.github/workflows/release.yml" 5
+assert_forced_command_arity "$ROOT/.github/workflows/deploy.yml" 7
+assert_forced_command_arity "$ROOT/.github/workflows/release.yml" 8
 sops_verify_line=$(grep -nF 'verify_image_signature "$sops_image"' "$DEPLOY" | cut -d: -f1)
 sops_pull_line=$(grep -nF 'docker pull "$sops_image"' "$DEPLOY" | cut -d: -f1)
 sops_decrypt_line=$(grep -nF '"$sops_image" decrypt' "$DEPLOY" | head -1 | cut -d: -f1)

@@ -28,6 +28,8 @@ cat >"$TMP/bin/docker" <<'DOCKER'
 set -euo pipefail
 printf 'docker|%s\n' "$*" >>"${IMAGE_TEST_LOG:?}"
 args=("$@")
+if [[ "$*" == 'context show' ]]; then echo fixture-context; exit 0; fi
+if [[ "$*" == 'buildx version' ]]; then exit 0; fi
 last="${args[${#args[@]} - 1]}"
 family_for() {
     case "$1" in
@@ -82,12 +84,22 @@ if [ "${1:-}" = image ] && [ "${2:-}" = rm ]; then
     : >"$IMAGE_TEST_STATE/$family"
     exit 0
 fi
+if [ "${1:-}" = tag ]; then
+    [ "$2" = "$IMAGE_KEYCLOAK_ID" ] || { echo 'Keycloak retag did not use a frozen selected ID' >&2; exit 84; }
+    [[ "$3" != *@sha256:* ]] || { echo 'attempted to tag a promotion digest' >&2; exit 84; }
+    printf 'tag|%s\n' "$3" >>"$IMAGE_TEST_LOG"
+    exit 0
+fi
 if [ "${1:-}" = build ]; then
     tag=""
     for ((i = 0; i < ${#args[@]}; i++)); do
         if [ "${args[i]}" = -t ]; then tag="${args[i + 1]:-}"; fi
     done
     [[ "$tag" != *@sha256:* ]] || { echo 'attempted to build a promotion digest' >&2; exit 84; }
+    case "$tag" in
+        fixture/backend:*) [[ " $* " == *' --load '* ]] || exit 84 ;;
+        fixture/web:*) [[ "${BUILDX_BUILDER:-}" == fixture-context && "$*" != *'--cache-to'* ]] || exit 84 ;;
+    esac
     printf 'build|%s\n' "$tag" >>"$IMAGE_TEST_LOG"
     exit 0
 fi
@@ -180,12 +192,40 @@ done
 
 cat >"$TMP/build-probe.mk" <<'PROBE'
 include $(IMAGE_TEST_ROOT)/tools/make/setup.mk
+include $(IMAGE_TEST_ROOT)/tools/make/dependency-images.mk
 include $(IMAGE_TEST_ROOT)/tools/make/deployment.mk
 .PHONY: local-refs
 local-refs:
 	@printf '%s\n' "$${LOCAL_BACKEND_IMAGE}" "$${LOCAL_WEB_IMAGE}" "$${LOCAL_KEYCLOAK_IMAGE}"
 PROBE
-mkdir -p "$TMP/checkout one" "$TMP/checkout-two"
+mkdir -p "$TMP/checkout one" "$TMP/checkout-two" "$TMP/helpers"
+# The probe exercises real Make consumer recipes, not dependency compilation or
+# registry verification. Dedicated lifecycle tests cover preparation and trust.
+cat >"$TMP/helpers/image-ref.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'geoguessme/%s:dependency-%064d\n' "$2" 0
+SH
+cat >"$TMP/helpers/lifecycle.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'prepare|%s\n' "$*" >>"${IMAGE_TEST_LOG:?}"
+SH
+cat >"$TMP/helpers/selected.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'select|%s\n' "$*" >>"${IMAGE_TEST_LOG:?}"
+[ "${IMAGE_SELECT_FAILURE:-}" != "$1" ] || { echo 'selected dependency is unavailable' >&2; exit 84; }
+case "$1:${2:-}" in
+    caddy-runtime:build) printf 'geoguessme/caddy-runtime:config-%064d\n' 7 ;;
+    keycloak:) printf '%s\n' "$IMAGE_KEYCLOAK_ID" ;;
+    *) echo 'unexpected dependency consumer' >&2; exit 84 ;;
+esac
+SH
+for directory in "$TMP" "$TMP/checkout one" "$TMP/checkout-two"; do
+    mkdir -p "$directory/tools/quality/dependency-images"
+    cp "$TMP/helpers/"*.sh "$directory/tools/quality/dependency-images/"
+done
+# Recursive $(MAKE) deliberately finds the same real-fragment probe by default.
+cp "$TMP/build-probe.mk" "$TMP/Makefile"
 default_refs() {
     env -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE -u LOCAL_KEYCLOAK_IMAGE \
         -u BACKEND_IMAGE -u WEB_IMAGE -u KEYCLOAK_IMAGE -u GEOGUESSME_TOOLS_PROJECT \
@@ -210,10 +250,20 @@ env -u MAKEFLAGS -u MAKEOVERRIDES IMAGE_TEST_MODE=build \
     printf '%s\n' "$(<"$TMP/build-output")" >&2
     fail 'real Make build recipes failed with fake Docker'
 }
-for ref in fixture/backend:custom fixture/web:custom fixture/keycloak:custom; do
+for ref in fixture/backend:custom fixture/web:custom; do
     grep -Fxq "build|$ref" "$IMAGE_TEST_LOG" || fail "Make ignored custom local tag $ref"
 done
-if grep '^build|' "$IMAGE_TEST_LOG" | grep -F '@sha256:' >/dev/null; then fail 'Make tagged a signed promotion digest'; fi
+grep -Fxq 'tag|fixture/keycloak:custom' "$IMAGE_TEST_LOG" || fail 'Make ignored custom local Keycloak alias'
+grep -Fxq 'select|keycloak' "$IMAGE_TEST_LOG" || fail 'Make skipped immutable Keycloak selection'
+grep -Fxq 'select|caddy-runtime build' "$IMAGE_TEST_LOG" || fail 'Make skipped frozen frontend base selection'
+if grep -E '^(build|tag)\|' "$IMAGE_TEST_LOG" | grep -F '@sha256:' >/dev/null; then fail 'Make tagged a signed promotion digest'; fi
+: >"$IMAGE_TEST_LOG"
+if env -u MAKEFLAGS -u MAKEOVERRIDES IMAGE_TEST_MODE=build IMAGE_SELECT_FAILURE=caddy-runtime \
+    LOCAL_BACKEND_IMAGE=fixture/backend:custom LOCAL_WEB_IMAGE=fixture/web:custom LOCAL_KEYCLOAK_IMAGE=fixture/keycloak:custom \
+    "$REAL_MAKE" --no-print-directory -s -C "$TMP" -f "$TMP/build-probe.mk" build-images >"$TMP/failed-build-output" 2>&1; then
+    fail 'Make accepted failed dependency selection'
+fi
+if grep '^build|' "$IMAGE_TEST_LOG" >/dev/null; then fail 'Make built application images after selection failure'; fi
 
 : >"$IMAGE_TEST_LOG"
 IMAGE_TEST_MODE=scratch BACKEND_IMAGE=signed:do-not-remove WEB_IMAGE=signed:do-not-remove \

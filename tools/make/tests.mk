@@ -72,6 +72,21 @@ test-tools-namespace: ## Verify tool caches stay checkout-scoped and every helpe
 test-braces-security: ## Verify installed brace parser and AST walkers resist stack exhaustion.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/frontend/tooling/dependencies/braces-security.js
 
+test-image-audit: ## Verify scan-only blocking, complete reporting, and transient-failure handling.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/image-audit/test-image-audit.sh
+
+test-security-workflows: ## Verify scan-before-sign, immutable promotion, publication serialization, and runtime adoption.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-workflow-contracts.sh
+
+test-image-audit-native: ## Verify real pinned Trivy blocks fixed High/Critical fixture findings.
+	bash tools/quality/image-audit/test-native-policy.sh
+
+test-local-dependency-from: ## Prove local Docker builds consume frozen dependency bytes, not a competing mutable tag.
+	bash tools/quality/dependency-images/test-local-from.sh
+
+test-dependency-images: ## Verify immutable dependency identities and trust-preserving artifact reuse.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-dependency-images.sh
+
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
 
@@ -93,7 +108,7 @@ test-migration-fixture-regression: ## Run migration fixture regression tests.
 	bash tools/quality/test/check-migration-fixture-regression.sh
 
 test-image-scan-exceptions-regression: ## Run image-scan exceptions regression tests.
-	bash tools/quality/test/image-scan-exceptions/test-image-scan-exceptions-regression.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/image-scan-exceptions/test-image-scan-exceptions-regression.sh
 
 test-integration: build-images ## Run the isolated integration stack and tests in Docker.
 	$(TEST_ENV) tools/quality/run-integration.sh

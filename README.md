@@ -177,8 +177,12 @@ flows.
   clean at handoff.
 - Production releases use a short-lived repository `release/*` branch based on
   `main`. Its tree must exactly match the successfully deployed `dev` tree.
-- Merges publish signed, immutable development images first. Production then
-  promotes those exact image digests without rebuilding them.
+- Dependency images are reused by reviewed input hash, not application revision.
+  Merges freshly scan exact runtime digests before signing revision adoption;
+  production promotes those exact bytes without rebuilding.
+- `make audit-images` is scan-only and reports the entire required inventory.
+  See [image security scanning](docs/security-scanning.md) for explicit
+  preparation targets, strict failures, and the staged host cutover.
 
 See [Contributing](CONTRIBUTING.md), [Testing](docs/testing.md), and the
 [hosted deployment runbook](docs/runbooks/hosted-deployment.md) before working

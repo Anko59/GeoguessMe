@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
-# Ubuntu cloud-init installs these packages before runcmd and decodes the three
-# gzip+base64 files. Fail early rather than partially configuring a host.
+# Ubuntu cloud-init installs these packages and writes the raw runtime files
+# before runcmd. Fail early rather than partially configuring a host.
+cloudflared_version=${1:?reviewed Cloudflared version is required}
+cloudflared_deb_sha256=${2:?reviewed Cloudflared checksum is required}
 for tool in gzip install mktemp seq dd wc chown chmod mv sha256sum cut \
     mkdir rm systemd-tmpfiles age-keygen curl dpkg fallocate mkswap swapon ufw systemctl; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -33,8 +35,8 @@ chown deploy:deploy /etc/geoguessme
 chmod 0600 /etc/geoguessme/age/dev.txt /etc/geoguessme/age/production.txt
 chmod 0644 /etc/geoguessme/age/dev-recipient.txt /etc/geoguessme/age/production-recipient.txt
 chown -R deploy:deploy /etc/geoguessme/age
-curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb
-echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  /tmp/cloudflared.deb' | sha256sum -c -
+curl -fsSLo /tmp/cloudflared.deb "https://github.com/cloudflare/cloudflared/releases/download/${cloudflared_version}/cloudflared-linux-amd64.deb"
+printf '%s  /tmp/cloudflared.deb\n' "$cloudflared_deb_sha256" | sha256sum -c -
 dpkg -i /tmp/cloudflared.deb
 rm -f /tmp/cloudflared.deb
 fallocate -l 2G /swapfile

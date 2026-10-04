@@ -135,5 +135,5 @@ mobile-test: ## Run Maestro against the built APK and an isolated emulator.
 		-e MOBILE_USERNAME -e MOBILE_PASSWORD -e MOBILE_GROUP_NAME \
 		$(MOBILE_TOOLS_SERVICE) tools/mobile/run-maestro.sh
 
-test-mobile: ## Run the complete backend, APK, emulator, seed, and Maestro loop.
-	tools/mobile/run-e2e.sh
+test-mobile: build-images ## Run the complete backend, APK, emulator, seed, and Maestro loop.
+	$(WITH_SELECTED) postgres -- tools/mobile/run-e2e.sh
