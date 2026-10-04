@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
-PROJECT="${GEOGUESSME_TEST_PROJECT:-geoguessme-e2e}"
-WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:-18080}"
-MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:-18025}"
+PROJECT="${GEOGUESSME_TEST_PROJECT:-${GEOGUESSME_TOOLS_PROJECT}-e2e-$$}"
+WEB_PORT="${GEOGUESSME_TEST_WEB_PORT:?Run through Make}"
+MAILPIT_PORT="${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}"
 PUBLIC_URL="${GEOGUESSME_TEST_PUBLIC_URL:-http://localhost:${WEB_PORT}}"
 COMPOSE_FILE="deployment/compose.test.yaml"
-STAGING_DIR="$REPO/frontend/.playwright-run"
+FRONTEND_DIR="$(cd "$REPO/frontend" && pwd -P)"
 
 # shellcheck disable=SC1091 # Repository-relative helper resolved after cd above.
 source "$REPO/tools/quality/e2e/arguments.sh"
@@ -30,8 +32,22 @@ if [ -e "$REPO/frontend/test-results" ] || [ -e "$REPO/frontend/playwright-repor
     }
 fi
 mkdir -p "$REPO/frontend/test-results" "$REPO/frontend/playwright-report"
-rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR"
+STAGING_DIR="$(mktemp -d "$FRONTEND_DIR/.playwright-run-$$.XXXXXX")"
+
+cleanup_staging() {
+    [ -d "$STAGING_DIR" ] || return 0
+    local resolved
+    resolved="$(realpath "$STAGING_DIR")"
+    case "$resolved" in
+        "$FRONTEND_DIR/.playwright-run-$$."*) ;;
+        *)
+            echo 'refusing unexpected Playwright staging cleanup path' >&2
+            return 1
+            ;;
+    esac
+    [ "$resolved" = "$STAGING_DIR" ] && [ ! -L "$STAGING_DIR" ] || return 1
+    rm -rf -- "$resolved"
+}
 
 # shellcheck disable=SC2317 # Invoked indirectly by EXIT trap below.
 cleanup() {
@@ -47,6 +63,10 @@ cleanup() {
     docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans || cleanup_status=$?
     if [ "$status" -eq 0 ]; then
         status=$cleanup_status
+    fi
+    if ! cleanup_staging; then
+        echo 'unable to remove owned Playwright staging directory' >&2
+        [ "$status" -ne 0 ] || status=1
     fi
     exit "$status"
 }
@@ -64,7 +84,7 @@ docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" up -
 # Environment variables and arguments are passed directly; output directories
 # are host-mounted so artifacts land deterministically.
 run_status=0
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run -T --rm --no-deps --user "$(id -u):$(id -g)" \
     -w /workspace/frontend \
     -e "PLAYWRIGHT_BASE_URL=http://host.docker.internal:${WEB_PORT}" \
@@ -88,5 +108,8 @@ if [ -d "$STAGING_DIR/report" ]; then
 else
     mkdir -p "$REPO/frontend/playwright-report"
 fi
-rm -rf "$STAGING_DIR"
+if ! cleanup_staging; then
+    echo 'unable to remove owned Playwright staging directory' >&2
+    [ "$run_status" -ne 0 ] || run_status=1
+fi
 exit "$run_status"

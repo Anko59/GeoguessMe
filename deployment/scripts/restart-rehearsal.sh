@@ -6,14 +6,16 @@
 # Uses polling/state checks with deadlines — never unconditional sleeps.
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
 # ── Configuration ───────────────────────────────────────────────────────────
-PROJECT="${GEOGUESSME_RESTART_PROJECT:-geoguessme-restart-rehearsal}"
-WEB_PORT="${GEOGUESSME_RESTART_WEB_PORT:-18081}"
-DB_PORT="${GEOGUESSME_RESTART_DB_PORT:-15433}"
-MAILPIT_PORT="${GEOGUESSME_RESTART_MAILPIT_PORT:-18026}"
+PROJECT="${GEOGUESSME_RESTART_PROJECT:-geoguessme-restart-rehearsal-${GEOGUESSME_TOOLS_PROJECT}-$$}"
+WEB_PORT="${GEOGUESSME_RESTART_WEB_PORT:-${GEOGUESSME_TEST_WEB_PORT:?Run through Make}}"
+DB_PORT="${GEOGUESSME_RESTART_DB_PORT:-${GEOGUESSME_TEST_DB_PORT:?Run through Make}}"
+MAILPIT_PORT="${GEOGUESSME_RESTART_MAILPIT_PORT:-${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}}"
 PUBLIC_URL="http://localhost:${WEB_PORT}"
 CONTAINER_URL="http://host.docker.internal:${WEB_PORT}"
 DB_URL="postgres://test:test@host.docker.internal:${DB_PORT}/geoguessme_test?sslmode=disable"
@@ -56,13 +58,13 @@ die() {
 
 # Run curl inside the go-tools container against the test stack.
 tool_curl() {
-    docker compose -p geoguessme-tools -f "$TOOLS_FILE" --project-directory "$REPO" \
+    docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f "$TOOLS_FILE" --project-directory "$REPO" \
         run --rm --no-deps go-tools curl -s --fail --show-error "$@" 2>/dev/null
 }
 
 # Run psql inside the go-security container.
 tool_psql() {
-    docker compose -p geoguessme-tools -f "$TOOLS_FILE" --project-directory "$REPO" \
+    docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f "$TOOLS_FILE" --project-directory "$REPO" \
         run --rm --no-deps go-security psql "$DB_URL" -v ON_ERROR_STOP=1 "$@"
 }
 
