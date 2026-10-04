@@ -112,7 +112,7 @@ cloud-init does not update them because Terraform intentionally ignores
 | Caddy        | Released 2.11.7 build and OS package refresh in a reusable runtime                        | A compatible official digest passes the same final scan and configuration/rehearsal tests |
 | Terraform    | Official 1.16.5 binary with PCRE2 10.49-r0 only; no source rebuild                        | A verified upstream digest includes the package fix                                       |
 | Cloudflared  | Official 2026.9.3 binary with Debian OpenSSL deb13u3 payload and genuine package metadata | A verified upstream image carries the fixes                                               |
-| SOPS         | Official 3.13.3 binary with pinned libexpat deb12u4                                       | A verified upstream digest carries the package fix                                        |
+| SOPS         | Official 3.13.3 binary with pinned libexpat deb12u4 and PCRE2 deb12u2                     | A verified upstream digest carries the package fix                                        |
 | Socket-proxy | Pinned upstream entrypoint/binary with PCRE2 10.49-r0                                     | A verified upstream digest passes the same scan and proxy contracts                       |
 | Restic       | Asserted 0.19.1 source commit and explicitly upgraded module graph                        | A compatible official artifact passes scans and backup/restore rehearsals                 |
 | PostgreSQL   | Compatible 15.x base with OpenSSL/libuuid refresh                                         | A verified compatible official digest plus unchanged entrypoint/data contracts            |
