@@ -2,7 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import FeedShare from '../FeedShare';
 
-afterEach(() => vi.unstubAllGlobals());
+const runtime = vi.hoisted(() => ({ native: false }));
+vi.mock('../../../platform/runtime', () => ({ isNativeRuntime: () => runtime.native }));
+
+afterEach(() => {
+    runtime.native = false;
+    vi.unstubAllGlobals();
+});
 
 it('opens the native share sheet with the challenge link', async () => {
     const share = vi.fn().mockResolvedValue(undefined);
@@ -14,6 +20,16 @@ it('opens the native share sheet with the challenge link', async () => {
         text: 'Can you find this place? A challenge by Explorer.',
         url: `${window.location.origin}/feed/post-1`,
     });
+    await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());
+});
+
+it('uses the public web host rather than the virtual Android asset host', async () => {
+    runtime.native = true;
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { share });
+    render(<FeedShare id="post-1" username="Explorer" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Share challenge' }));
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://geoguessme.com/feed/post-1' }));
     await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());
 });
 

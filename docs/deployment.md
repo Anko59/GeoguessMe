@@ -77,7 +77,19 @@ provenance manifest, and publishes that exact artifact to the configured Play
 track only after the production deployment succeeds. The Play publication job
 uses GitHub OIDC and the separate `play-publishing` environment; only the host
 deployment uses GitHub's `production` environment. It fails closed on access,
-digest, version, and edit-validation checks. See the
+digest, version, deployed native-origin CORS, and edit-validation checks. The
+workflow refuses an automatic production-track publish: validate the exact
+bundle on the internal/closed track and promote it explicitly after physical
+device acceptance. Hosted dev and production `ALLOWED_ORIGINS` must permit the
+virtual `https://app.geoguessme.com` asset origin before native distribution.
+Update the matching encrypted environment payloads, not only the example files;
+use the
+[hosted configuration procedure](runbooks/hosted-deployment.md#provision). Caddy
+forwards only OIDC session **OPTIONS** requests directly to the backend CORS
+policy. Actual session requests still pass through OAuth2 Proxy: accepting a
+preflight is not authorization to exchange a session. The production-container
+verification checks allowed/denied origins and rejects unauthenticated or
+forged-identity POSTs through this gateway. See the
 [mobile release guide](mobile.md) and
 [Google Play account runbook](runbooks/google-play-console.md) for the
 configuration and recovery procedure.

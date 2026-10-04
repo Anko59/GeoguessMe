@@ -4,11 +4,9 @@ const utils = require('./utils');
 const { MAX_DEPTH } = require('./constants');
 
 module.exports = (ast, options = {}) => {
-  const requestedMaxDepth = options.maxDepth;
-  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
+  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;
 
   const stringify = (node, parent = {}, depth = 0) => {
-    utils.validateValues(node);
     if (node.nodes && depth > maxDepth) {
       throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
     }
@@ -29,7 +27,7 @@ module.exports = (ast, options = {}) => {
 
     if (node.nodes) {
       for (const child of node.nodes) {
-        output += stringify(child, {}, child.nodes ? depth + 1 : depth);
+        output += stringify(child, undefined, child.nodes ? depth + 1 : depth);
       }
     }
     return output;

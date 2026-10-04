@@ -109,6 +109,13 @@ cleanup also fail, and a failed teardown cannot produce a passing rehearsal.
 
 ## Logging
 
+For an Android white screen, preserve the failure screenshot and device logcat
+before rerunning the emulator; see the
+[Android troubleshooting procedure](troubleshooting.md#android-white-screen-or-missing-sign-in-options).
+The mobile debug APK used by the localhost Maestro journey is not the bundled
+release artifact. Do not publish full logcat because it may contain private
+account or device data.
+
 The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
 `load group challenge map` with the group ID and database error; coordinates are
 not logged. If the challenge list works but the Earth does not render, check
@@ -202,6 +209,16 @@ restricted manifest evidence before retrying. For the full state model,
 configuration, and Play-track recovery actions, use the
 [Google Play account runbook](runbooks/google-play-console.md).
 
+Before native acceptance, verify the deployed `ALLOWED_ORIGINS` includes
+`https://app.geoguessme.com` and deploy the gateway from the same verified
+revision. OIDC session OPTIONS must reach the backend CORS policy; a 401 from
+OAuth2 Proxy during preflight indicates old gateway routing. A 401 on an actual
+unauthenticated session POST is expected and must remain enforced. Environment
+examples do not update the encrypted payloads or installed configuration. Use
+`make prod-container-verify` for the isolated gateway contract and
+`make mobile-smoke` for the bundled app against the live API, followed by the
+[physical-device checklist](mobile.md#physical-device-testing-and-logs).
+
 ### Database
 
 Use the Dockerized `make db-backup` target:
@@ -242,7 +259,16 @@ name). It is destructive — existing objects are dropped by `pg_restore`.
 ### Restart rehearsal
 
 The `make restart-rehearsal` and `make reconnect-rehearsal` targets run stateful
-rehearsals that verify all services recover cleanly with persistent data.
+rehearsals that verify all services recover cleanly with persistent data. Run
+`make bootstrap` for a fresh checkout first: rehearsal tool containers share
+that checkout's isolated tools namespace, never another worktree's dependency
+volume. Local verification images also use checkout-scoped build tags; selected
+container artifacts are pinned to immutable IDs before inspection/start. Caller
+signed-digest selections and production promotion remain unchanged. Disposable
+rehearsal projects include the checkout namespace and process ID and use the
+checkout's test-port block. Existing specific port/project overrides still work;
+occupied ports fail closed. Live development, production and identity project
+names and data are unchanged.
 
 `make restart-rehearsal`:
 
@@ -260,9 +286,10 @@ rehearsals that verify all services recover cleanly with persistent data.
    backlog
 8. Cleans up all project resources on exit
 
-The rehearsal is self-contained and uses the `geoguessme-restart-rehearsal`
-project. It refuses project names that do not contain `rehearsal`. Regression
-tests validate script structure via `make test-restart-regression`.
+The rehearsal is self-contained and uses a unique checkout-scoped
+`restart-rehearsal` project. It refuses project names that do not contain
+`rehearsal`. Regression tests validate script structure via
+`make test-restart-regression`.
 
 `make reconnect-rehearsal` starts the same disposable stack and runs the Go
 reconnect-rehearsal harness, which exercises concurrent WebSocket clients,

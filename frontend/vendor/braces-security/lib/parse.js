@@ -7,8 +7,8 @@ const stringify = require('./stringify');
  */
 
 const {
-  MAX_LENGTH,
   MAX_DEPTH,
+  MAX_LENGTH,
   CHAR_BACKSLASH, /* \ */
   CHAR_BACKTICK, /* ` */
   CHAR_COMMA, /* , */
@@ -36,12 +36,11 @@ const parse = (input, options = {}) => {
 
   const opts = options || {};
   const max = typeof opts.maxLength === 'number' ? Math.min(MAX_LENGTH, opts.maxLength) : MAX_LENGTH;
+  const maxDepth = Number.isFinite(opts.maxDepth) ? Math.min(MAX_DEPTH, opts.maxDepth) : MAX_DEPTH;
   if (input.length > max) {
     throw new SyntaxError(`Input length (${input.length}), exceeds max characters (${max})`);
   }
 
-  const requestedMaxDepth = opts.maxDepth;
-  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
   const ast = { type: 'root', input, nodes: [] };
   const stack = [ast];
   let block = ast;
@@ -50,6 +49,7 @@ const parse = (input, options = {}) => {
   const length = input.length;
   let index = 0;
   let depth = 0;
+  let nesting = 0;
   let value;
 
   /**
@@ -146,9 +146,10 @@ const parse = (input, options = {}) => {
      */
 
     if (value === CHAR_LEFT_PARENTHESES) {
-      if (stack.length > maxDepth) {
-        throw new RangeError(`Input depth (${stack.length}), exceeds max depth (${maxDepth})`);
+      if (nesting + 1 > maxDepth) {
+        throw new SyntaxError(`Input depth (${nesting + 1}), exceeds max depth (${maxDepth})`);
       }
+      nesting++;
       block = push({ type: 'paren', nodes: [] });
       stack.push(block);
       push({ type: 'text', value });
@@ -162,6 +163,7 @@ const parse = (input, options = {}) => {
       }
       block = stack.pop();
       push({ type: 'text', value });
+      nesting--;
       block = stack[stack.length - 1];
       continue;
     }
@@ -201,9 +203,10 @@ const parse = (input, options = {}) => {
      */
 
     if (value === CHAR_LEFT_CURLY_BRACE) {
-      if (stack.length > maxDepth) {
-        throw new RangeError(`Input depth (${stack.length}), exceeds max depth (${maxDepth})`);
+      if (nesting + 1 > maxDepth) {
+        throw new SyntaxError(`Input depth (${nesting + 1}), exceeds max depth (${maxDepth})`);
       }
+      nesting++;
       depth++;
 
       const dollar = prev.value && prev.value.slice(-1) === '$' || block.dollar === true;
@@ -240,6 +243,7 @@ const parse = (input, options = {}) => {
 
       push({ type, value });
       depth--;
+      nesting--;
 
       block = stack[stack.length - 1];
       continue;

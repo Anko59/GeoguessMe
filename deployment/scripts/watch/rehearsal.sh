@@ -1,22 +1,32 @@
 #!/bin/sh
 set -eu
 
+web_image="${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?LOCAL_WEB_IMAGE must be exported by Make}}"
+WEB_IMAGE=$(docker image inspect --format '{{.Id}}' "$web_image")
+printf '%s\n' "$WEB_IMAGE" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+    echo "watch rehearsal could not resolve an immutable image ID: $web_image" >&2
+    exit 1
+}
+export WEB_IMAGE
+
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)
 WATCH_COMPOSE="$ROOT/deployment/compose.watch.yaml"
-PROJECT="geoguessme-watch-rehearsal-$$"
-NETWORK="geoguessme-watch-production-$$"
+PROJECT="${GEOGUESSME_WATCH_PROJECT:-geoguessme-watch-rehearsal-${GEOGUESSME_TOOLS_PROJECT:?Run through Make}-$$}"
+NETWORK="geoguessme-watch-production-${GEOGUESSME_TOOLS_PROJECT}-$$"
+PRODUCTION_MOCK_PORT="${GEOGUESSME_WATCH_PRODUCTION_MOCK_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 6))}"
+DEV_MOCK_PORT="${GEOGUESSME_WATCH_DEV_MOCK_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 7))}"
+GEOGUESSME_WATCH_PORT="${GEOGUESSME_WATCH_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 8))}"
+GEOGUESSME_WATCH_DOCKER_PROXY_PORT="${GEOGUESSME_WATCH_DOCKER_PROXY_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 9))}"
 TMP=$(mktemp -d)
 chmod 0755 "$TMP"
-MOCK_BACKEND="geoguessme-production-backend-rehearsal-$$"
-MOCK_DEV="geoguessme-dev-backend-rehearsal-$$"
-export WEB_IMAGE=geoguessme-web:local
+MOCK_BACKEND="geoguessme-production-backend-rehearsal-${GEOGUESSME_TOOLS_PROJECT}-$$"
+MOCK_DEV="geoguessme-dev-backend-rehearsal-${GEOGUESSME_TOOLS_PROJECT}-$$"
 SOCKET_PROXY_IMAGE=${SOCKET_PROXY_IMAGE:-geoguessme/socket-proxy-tools:local}
 export SOCKET_PROXY_IMAGE
 export GEOGUESSME_WATCH_METRICS_DIR="$TMP"
 export GEOGUESSME_WATCH_AGENT_ENV="$TMP/agent.env"
 export GEOGUESSME_PRODUCTION_FRONTEND_NETWORK="$NETWORK"
-export GEOGUESSME_WATCH_PORT=18084
-export GEOGUESSME_WATCH_DOCKER_PROXY_PORT=12375
+export GEOGUESSME_WATCH_PORT GEOGUESSME_WATCH_DOCKER_PROXY_PORT
 
 compose() {
     docker compose -p "$PROJECT" -f "$WATCH_COMPOSE" -f "$TMP/override.yaml" \
@@ -64,9 +74,9 @@ for spec in \
     "$MOCK_DEV|geoguessme-dev"; do
     name=${spec%%|*}
     label=${spec##*|}
-    port=18081
+    port=$PRODUCTION_MOCK_PORT
     network_alias=backend
-    [ "$name" = "$MOCK_DEV" ] && port=18082
+    [ "$name" = "$MOCK_DEV" ] && port=$DEV_MOCK_PORT
     [ "$name" = "$MOCK_DEV" ] && network_alias=dev-backend
     docker run -d --name "$name" \
         --label "com.docker.compose.project=$label" \
@@ -77,7 +87,7 @@ for spec in \
         --tmpfs /config:size=16m,noexec,nosuid,nodev \
         --mount "type=bind,src=$TMP/mock.Caddyfile,dst=/etc/caddy/Caddyfile,ro" \
         --mount "type=bind,src=$TMP/metrics,dst=/srv/metrics,ro" \
-        geoguessme-web:local \
+        "$WEB_IMAGE" \
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 done
 
@@ -88,9 +98,9 @@ compose up -d gateway socket-proxy victoria-logs victoria-metrics vector >/dev/n
 
 ready=0
 for _ in $(seq 1 60); do
-    if curl --fail --silent --max-time 2 http://127.0.0.1:18084/api/health >/dev/null &&
-        curl --fail --silent --max-time 2 http://127.0.0.1:18084/logs/-/healthy >/dev/null &&
-        curl --fail --silent --max-time 2 http://127.0.0.1:18084/metrics/-/healthy >/dev/null; then
+    if curl --fail --silent --max-time 2 "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/api/health >/dev/null &&
+        curl --fail --silent --max-time 2 "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/logs/-/healthy >/dev/null &&
+        curl --fail --silent --max-time 2 "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/metrics/-/healthy >/dev/null; then
         ready=1
         break
     fi
@@ -101,8 +111,8 @@ done
     exit 1
 }
 
-curl --fail --silent --show-error http://127.0.0.1:18081/health/ready >/dev/null
-unauthorized_metric=$(curl --silent --show-error --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:18081/metrics)
+curl --fail --silent --show-error "http://127.0.0.1:${PRODUCTION_MOCK_PORT}"/health/ready >/dev/null
+unauthorized_metric=$(curl --silent --show-error --max-time 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PRODUCTION_MOCK_PORT}"/metrics)
 [ "$unauthorized_metric" = 401 ] || {
     echo "mock production metrics endpoint accepted an unauthenticated request: $unauthorized_metric" >&2
     exit 1
@@ -117,10 +127,10 @@ log_ok=0
 for _ in $(seq 1 90); do
     metric_response=$(curl --fail --silent --max-time 2 -G \
         --data-urlencode 'query=up{job="geoguessme-production"}' \
-        http://127.0.0.1:18084/metrics/api/v1/query 2>/dev/null || true)
+        "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/metrics/api/v1/query 2>/dev/null || true)
     log_response=$(curl --fail --silent --max-time 2 -G \
         --data-urlencode "query=container_name:$MOCK_BACKEND _time:5m" \
-        http://127.0.0.1:18084/logs/select/logsql/query 2>/dev/null || true)
+        "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/logs/select/logsql/query 2>/dev/null || true)
     if printf '%s' "$metric_response" | grep -Fq '"0"'; then
         metric_denied=1
         printf 'rehearsal-metrics-token\n' >"$TMP/production-metrics-token"
@@ -145,14 +155,14 @@ done
 
 dev_response=$(curl --fail --silent --max-time 2 -G \
     --data-urlencode "query=container_name:$MOCK_DEV _time:5m" \
-    http://127.0.0.1:18084/logs/select/logsql/query)
+    "http://127.0.0.1:${GEOGUESSME_WATCH_PORT}"/logs/select/logsql/query)
 if printf '%s' "$dev_response" | grep -Fq '"_msg"'; then
     echo 'Vector forwarded a development-labelled container' >&2
     exit 1
 fi
 
 published=$(docker port "$PROJECT-gateway-1" 80/tcp)
-printf '%s' "$published" | grep -Fq '127.0.0.1:18084' || {
+printf '%s' "$published" | grep -Fq "127.0.0.1:${GEOGUESSME_WATCH_PORT}" || {
     echo "watch gateway is not loopback-bound: $published" >&2
     exit 1
 }

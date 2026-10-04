@@ -18,7 +18,11 @@ case "$1" in
         elif [ "$state" != empty ]; then echo fixture-backend; fi
         exit 0
         ;;
-    image) echo sha256:expected; exit 0 ;;
+    image)
+        test "${5:-}" = geoguessme-backend:local-private
+        echo sha256:expected
+        exit 0
+        ;;
     inspect)
         case "$3" in
             *working_dir*)
@@ -110,7 +114,7 @@ for scenario in success existing-own foreign-start foreign-after-up foreign-afte
         INTEGRATION_TOOLS=geoguessme-private-tools GEOGUESSME_TEST_PROJECT=geoguessme-private-integration \
         GEOGUESSME_TOOLS_PROJECT=geoguessme-private-tools GEOGUESSME_TEST_WEB_PORT=28480 \
         GEOGUESSME_TEST_MAILPIT_PORT=28425 GEOGUESSME_TEST_DB_PORT=25432 \
-        GEOGUESSME_TEST_TOXIPROXY_PORT=28474 \
+        GEOGUESSME_TEST_TOXIPROXY_PORT=28474 BACKEND_IMAGE=geoguessme-backend:local-private \
         bash "$root/tools/quality/run-integration.sh" >"$fixture/$scenario.log" 2>&1 || status=$?
     expected=1
     case "$scenario" in

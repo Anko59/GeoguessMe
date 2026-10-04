@@ -14,12 +14,20 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 bash "$REPO/deployment/oauth2-proxy/prepare-public-configs.sh" "$REPO"
 
-backend_image="${BACKEND_IMAGE:-geoguessme-backend:local}"
-web_image="${WEB_IMAGE:-geoguessme-web:local}"
+backend_image="${BACKEND_IMAGE:-${LOCAL_BACKEND_IMAGE:?Run through Make or set BACKEND_IMAGE}}"
+web_image="${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?Run through Make or set WEB_IMAGE}}"
+# Capture immutable IDs once; every inspection and stack start below must use
+# these same artifacts even if another build moves either selected local tag.
+backend_image="$(docker image inspect --format '{{.Id}}' "$backend_image")"
+web_image="$(docker image inspect --format '{{.Id}}' "$web_image")"
+if [[ ! "$backend_image" =~ ^sha256:[a-f0-9]{64}$ || ! "$web_image" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo 'Docker returned an invalid application image ID' >&2
+    exit 2
+fi
 
-PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify}"
-WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-18083}"
-SMTP_WEB_PORT="${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-18085}"
+PROJECT="${GEOGUESSME_PROD_VERIFY_PROJECT:-geoguessme-prod-verify-${GEOGUESSME_TOOLS_PROJECT:?Run through Make}-$$}"
+WEB_PORT="${GEOGUESSME_PROD_VERIFY_WEB_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 4))}"
+SMTP_WEB_PORT="${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-$((${GEOGUESSME_TEST_PORT_BASE:?Run through Make} + 5))}"
 export GEOGUESSME_PROD_VERIFY_SMTP_PORT="$SMTP_WEB_PORT"
 # The production config requires an HTTPS public origin. The disposable local
 # gateway is intentionally plain HTTP, so probes use a separate URL.
@@ -127,7 +135,7 @@ VERIFICATION_TOKEN_TTL=24h
 RESET_TOKEN_TTL=1h
 BCRYPT_COST=4
 OIDC_ENABLED=false
-ALLOWED_ORIGINS=__PUBLIC_URL__
+ALLOWED_ORIGINS=__PUBLIC_URL__,https://app.geoguessme.com
 TRUSTED_PROXY_CIDRS=0.0.0.0/0
 RATE_LIMIT_REQUESTS=100
 RATE_LIMIT_WINDOW=1m
@@ -357,7 +365,8 @@ check() {
     desc="$1"
     expected="$2"
     url="$3"
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo 000)
+    shift 3
+    code=$(curl -s -D "$TMPDIR/probe-headers" -o /dev/null -w "%{http_code}" "$@" "$url" 2>/dev/null || echo 000)
     if [ "$code" = "$expected" ]; then
         echo "  ok   $desc ($code)"
     else
@@ -370,6 +379,58 @@ check "liveness" 200 "$PROBE_URL/health/live"
 check "readiness" 200 "$PROBE_URL/health/ready"
 check "protected route (401)" 401 "$PROBE_URL/api/v1/user/groups"
 check "websocket ticket (401)" 401 "$PROBE_URL/api/v1/ws/ticket?group_id=00000000-0000-0000-0000-000000000000"
+
+# Inspect only named CORS headers from disposable requests; never print cookie,
+# authorization, identity headers, response bodies, or the generated test env.
+header_value() {
+    awk -v name="$1" 'tolower($1) == tolower(name) ":" {
+        sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); print
+    }' "$TMPDIR/probe-headers"
+}
+check_header() {
+    if [ "$(header_value "$2")" = "$3" ]; then
+        echo "  ok   $1"
+    else
+        echo "  FAIL $1"
+        fail=1
+    fi
+}
+check_header_token() {
+    if header_value "$2" | grep -Eq "(^|,)[[:space:]]*$3([[:space:]]*,|$)"; then
+        echo "  ok   $1"
+    else
+        echo "  FAIL $1"
+        fail=1
+    fi
+}
+
+session_url="$PROBE_URL/api/v1/auth/oidc/session"
+native_origin=https://app.geoguessme.com
+check "OIDC session allowed preflight" 200 "$session_url" -X OPTIONS \
+    -H "Origin: $native_origin" -H 'Access-Control-Request-Method: POST' \
+    -H 'Access-Control-Request-Headers: Content-Type, Authorization'
+check_header "OIDC preflight exact native origin" Access-Control-Allow-Origin "$native_origin"
+check_header "OIDC preflight credentials" Access-Control-Allow-Credentials true
+check_header_token "OIDC preflight permits POST" Access-Control-Allow-Methods POST
+check_header_token "OIDC preflight permits Content-Type" Access-Control-Allow-Headers Content-Type
+check_header_token "OIDC preflight permits Authorization" Access-Control-Allow-Headers Authorization
+check_header_token "OIDC preflight varies by Origin" Vary Origin
+check "OIDC session denied preflight" 403 "$session_url" -X OPTIONS \
+    -H 'Origin: https://unapproved.invalid' -H 'Access-Control-Request-Method: POST'
+check_header "OIDC denied preflight has no allowed origin" Access-Control-Allow-Origin ''
+# The backend's current CORS policy accepts OPTIONS without preflight metadata
+# and OPTIONS without Origin. Missing Origin must not gain an allowed origin.
+check "OIDC session OPTIONS without preflight headers" 200 "$session_url" -X OPTIONS -H "Origin: $native_origin"
+check_header "OIDC metadata-free OPTIONS exact origin" Access-Control-Allow-Origin "$native_origin"
+check "OIDC session OPTIONS without Origin" 200 "$session_url" -X OPTIONS -H 'Access-Control-Request-Method: POST'
+check_header "OIDC origin-free OPTIONS has no allowed origin" Access-Control-Allow-Origin ''
+check "OIDC session bare OPTIONS" 200 "$session_url" -X OPTIONS
+check_header "OIDC bare OPTIONS has no allowed origin" Access-Control-Allow-Origin ''
+check "OIDC session POST without OAuth cookie" 401 "$session_url" -X POST -H "Origin: $native_origin"
+check "OIDC session POST rejects forged identity" 401 "$session_url" -X POST \
+    -H "Origin: $native_origin" -H 'Authorization: Bearer forged-test-token' \
+    -H 'X-Forwarded-User: forged-user' -H 'X-Forwarded-Email: forged@example.invalid' \
+    -H 'X-Forwarded-Preferred-Username: forged-user' -H 'X-Forwarded-Groups: forged-group'
 
 if [ "$fail" -ne 0 ]; then
     echo "prod-container-verify FAILED: HTTP smoke checks did not pass" >&2

@@ -111,7 +111,7 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
             )}
 
             <form
-                action={loginPath}
+                action={backendURL(loginPath)}
                 method="get"
                 className="auth-form auth-oidc-form"
                 onSubmit={(event) => {

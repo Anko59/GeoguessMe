@@ -31,38 +31,34 @@ const append = (queue = '', stash = '', enclose = false) => {
   return utils.flatten(result);
 };
 
+const queueOwner = node => {
+  if (node.type === 'brace' || node.type === 'root' || !node.parent) return node;
+
+  const seen = new Set();
+  while (node.type !== 'brace' && node.type !== 'root' && node.parent) {
+    if (seen.has(node)) {
+      throw new RangeError('AST parent chain contains a cycle');
+    }
+    seen.add(node);
+    node = node.parent;
+  }
+  return node;
+};
+
 const expand = (ast, options = {}) => {
   const rangeLimit = options.rangeLimit === undefined ? 1000 : options.rangeLimit;
-
-  const requestedMaxDepth = options.maxDepth;
-  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
-
-  const stringifyNode = (node, depth) => stringify(node, Object.create(options, {
-    maxDepth: { value: maxDepth - depth + (node.type === 'root' ? 0 : 1) }
-  }));
-  const enclosingBlock = node => {
-    let depth = 0;
-    while (node.type !== 'brace' && node.type !== 'root' && node.parent) {
-      if (++depth > maxDepth) {
-        throw new RangeError(`AST parent depth (${depth}), exceeds max depth (${maxDepth})`);
-      }
-      node = node.parent;
-    }
-    return node;
-  };
+  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;
 
   const walk = (node, parent = {}, depth = 0) => {
-    utils.validateValues(node);
     if (node.nodes && depth > maxDepth) {
       throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
     }
     node.queue = [];
 
-    const p = enclosingBlock(parent);
-    const q = p.queue;
+    const q = queueOwner(parent).queue;
 
     if (node.invalid || node.dollar) {
-      q.push(append(q.pop(), stringifyNode(node, depth)));
+      q.push(append(q.pop(), stringify(node, options)));
       return;
     }
 
@@ -80,7 +76,7 @@ const expand = (ast, options = {}) => {
 
       let range = fill(...args, options);
       if (range.length === 0) {
-        range = stringifyNode(node, depth);
+        range = stringify(node, options);
       }
 
       q.push(append(q.pop(), range));
@@ -89,8 +85,7 @@ const expand = (ast, options = {}) => {
     }
 
     const enclose = utils.encloseBrace(node);
-    const block = enclosingBlock(node);
-    const queue = block.queue;
+    const queue = queueOwner(node).queue;
 
     for (let i = 0; i < node.nodes.length; i++) {
       const child = node.nodes[i];

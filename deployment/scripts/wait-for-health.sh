@@ -3,6 +3,8 @@
 # Usage: wait-for-health.sh [BASE_URL] [TIMEOUT_SECONDS]
 set -eu
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 base="${1:-http://localhost}"
 timeout="${2:-120}"
 case "$base" in
@@ -13,7 +15,7 @@ case "$base" in
     *) container_base="$base" ;;
 esac
 
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$(pwd)" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$(pwd)" \
     run --rm --no-deps go-tools bash -c '
         set -eu
         base="$1"

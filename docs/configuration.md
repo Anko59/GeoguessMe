@@ -37,7 +37,7 @@ validated. Never commit a real `.env` or production secret.
 | `S3_ACCESS_KEY`                   | string   | `minioadmin`                                   | All        | Must be non-empty                                                                                                                                                                                                                                                                                 |
 | `S3_SECRET_KEY`                   | string   | `minioadmin`                                   | All        | Must be non-empty                                                                                                                                                                                                                                                                                 |
 | `S3_USE_PATH_STYLE`               | bool     | `true`                                         | All        |                                                                                                                                                                                                                                                                                                   |
-| `ALLOWED_ORIGINS`                 | list     | `http://localhost:5173,http://localhost:3000`  | All        | Must contain explicit origins, no wildcards. Each must be a valid URL with scheme and host                                                                                                                                                                                                        |
+| `ALLOWED_ORIGINS`                 | list     | `http://localhost:5173,http://localhost:3000`  | All        | Must contain explicit origins, no wildcards. Hosted dev/production must also include the bundled Android virtual origin `https://app.geoguessme.com` for credentialed CORS and WebSocket requests; it must not be the API host                                                                    |
 | `TRUSTED_PROXY_CIDRS`             | list     | — (empty)                                      | All        | Used for rate-limit client IP resolution                                                                                                                                                                                                                                                          |
 | `UPLOAD_MAX_BYTES`                | int64    | `10485760` (10 MiB)                            | All        | Must be > 0; caps each normalized image or camera-recorded video clip                                                                                                                                                                                                                             |
 | `AVATAR_MAX_BYTES`                | int64    | `26214400` (25 MiB)                            | All        | Must be > 0; caps the original profile photo before it is normalized to the stored avatar thumbnail                                                                                                                                                                                               |
@@ -172,6 +172,37 @@ optional string settings (for example `STORAGE_DRIVER=` falls back to S3 and
 Tests supply explicit configuration (`APP_ENV=test` and explicit secrets via the
 Dockerized test stack). Override by setting environment variables before running
 the relevant Dockerized Make target.
+
+### Local tool namespace
+
+`GEOGUESSME_TOOLS_PROJECT` optionally overrides the Docker tools project name.
+By default Make derives a stable name from the checkout's absolute path and
+exports it to every tool/rehearsal helper. Different worktrees therefore receive
+separate mutable dependency caches; the name does not change with each commit.
+Do not reuse an override across concurrently active checkouts. For example:
+
+```sh
+export GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-review
+make bootstrap
+```
+
+A fresh namespace requires `make bootstrap`. This setting does not rename live
+development, production or identity projects, and is not a hosted secret
+setting. Disposable test/rehearsal projects include the checkout namespace and
+process ID. `GEOGUESSME_TEST_PORT_BASE` chooses a checkout-scoped port block by
+default; specific existing test/rehearsal port overrides retain precedence.
+Occupied ports fail closed rather than resetting another run. Parallel runs
+within the same checkout need explicit nonoverlapping port blocks; canonical E2E
+report publication is not parallel-safe within one checkout.
+
+`LOCAL_BACKEND_IMAGE`, `LOCAL_WEB_IMAGE` and `LOCAL_KEYCLOAK_IMAGE` optionally
+override the local build output tags, which default to tags scoped by
+`GEOGUESSME_TOOLS_PROJECT`. Verification uses these outputs unless
+`BACKEND_IMAGE` or `WEB_IMAGE` explicitly selects another artifact, such as a
+promoted signed digest. Local builds never retag those caller-selected
+deployment references. Container verifiers freeze selected artifacts to
+immutable Docker image IDs before inspecting or starting them, preventing a
+concurrent tag change from switching the tested artifact.
 
 ## `.env` file lookup
 

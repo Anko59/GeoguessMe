@@ -10,7 +10,10 @@ import api, {
     refreshAuthSession,
     userBlocksAPI,
     setAccessToken,
+    exchangeOIDCSession,
 } from './api';
+
+const validSession = { access_token: 'fresh', user: { id: 'player-1', username: 'Explorer' }, expires_in: 900 };
 
 describe('api client', () => {
     it('uses typed block endpoints, preserves 204 and broadcasts only successful changes', async () => {
@@ -88,7 +91,7 @@ describe('api client', () => {
     });
 
     it('refreshes a failed request once and coalesces refresh calls', async () => {
-        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'fresh' } } as never);
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: validSession } as never);
         const adapter = vi.fn().mockResolvedValue({ status: 200, data: { ok: true }, headers: {}, config: {} });
         api.defaults.adapter = adapter;
         setAccessToken(null);
@@ -102,7 +105,7 @@ describe('api client', () => {
     });
 
     it('restores a memory-only token before sending a protected startup request', async () => {
-        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'fresh' } } as never);
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: validSession } as never);
         setAccessToken(null);
 
         const request = await api.interceptors.request.handlers![0]!.fulfilled!({
@@ -127,6 +130,46 @@ describe('api client', () => {
         await expect(refresh).resolves.toBeNull();
         expect(getAccessToken()).toBeNull();
         post.mockRestore();
+    });
+
+    it.each([
+        '<!doctype html><html><div id="root"></div></html>',
+        { access_token: 'fresh' },
+        { access_token: '', user: { id: 'player-1', username: 'Explorer' } },
+        { access_token: 'fresh', user: null },
+    ])('rejects an invalid restored session instead of authenticating with an undefined user: %j', async (data) => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ status: 200, data } as never);
+        setAccessToken('previous');
+        try {
+            await expect(refreshAuthSession()).resolves.toBeNull();
+            expect(getAccessToken()).toBeNull();
+        } finally {
+            post.mockRestore();
+        }
+    });
+
+    it('rejects HTML from an OIDC exchange without replacing the current token', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: '<!doctype html>bundled SPA' } as never);
+        setAccessToken('previous');
+        try {
+            await expect(exchangeOIDCSession()).rejects.toThrow('invalid sign-in response');
+            expect(getAccessToken()).toBe('previous');
+        } finally {
+            post.mockRestore();
+        }
+    });
+
+    it('rejects an HTML API response before a feed component can consume it', () => {
+        const handle = api.interceptors.response.handlers![0]!.fulfilled!;
+        expect(() =>
+            handle({
+                data: '<!doctype html>bundled SPA',
+                headers: { 'content-type': 'text/html; charset=utf-8' },
+                config: { url: '/feed/challenges' },
+            } as never),
+        ).toThrow('web page instead of application data');
+        const media = { data: new Blob(['image']), headers: { 'content-type': 'image/jpeg' }, config: {} };
+        expect(handle(media as never)).toBe(media);
     });
 
     it('returns useful error messages', () => {

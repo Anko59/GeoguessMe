@@ -1,18 +1,5 @@
 'use strict';
 
-// AST values are strings, never expansion queues or recursively nested arrays.
-exports.validateValues = node => {
-  const validate = value => {
-    if (value !== undefined && typeof value !== 'string') {
-      throw new TypeError('Expected AST value to be a string');
-    }
-  };
-  validate(node.value);
-  if (node.nodes) {
-    for (const child of node.nodes) validate(child.value);
-  }
-};
-
 exports.isInteger = num => {
   if (typeof num === 'number') {
     return Number.isInteger(num);

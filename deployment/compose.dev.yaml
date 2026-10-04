@@ -111,7 +111,7 @@ services:
       retries: 30
 
   local-keycloak:
-    image: geoguessme-keycloak:local
+    image: ${KEYCLOAK_IMAGE:-${LOCAL_KEYCLOAK_IMAGE:?Run through Make or set KEYCLOAK_IMAGE}}
     profiles: [social]
     command: ["start-dev", "--import-realm"]
     environment:
@@ -182,7 +182,7 @@ services:
       start_period: 30s
 
   local-keycloak-config:
-    image: geoguessme-keycloak:local
+    image: ${KEYCLOAK_IMAGE:-${LOCAL_KEYCLOAK_IMAGE:?Run through Make or set KEYCLOAK_IMAGE}}
     profiles: [social-config]
     entrypoint: ["/opt/geoguessme/keycloak/apply-realm-config.sh"]
     environment:

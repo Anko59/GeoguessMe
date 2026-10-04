@@ -83,27 +83,25 @@ Use make reset-dev CONFIRM=reset-dev only when deleting development data is
 intentional. make tools-clean removes tool caches and containers without
 touching application volumes.
 
-## Isolated tooling
+Frontend builds and Android synchronization automatically run
+`make prepare-frontend-cache` to repair ownership of the shared Vite
+configuration cache after root-running test containers. The helper rejects cache
+symlinks and changes only that ignored cache, not source files or the whole
+dependency tree.
 
-Concurrent worktrees or jobs must use distinct tooling projects so one job's
-`npm ci` cannot replace dependencies while another is running Playwright. Set
-the same Make variable for bootstrap and every subsequent gate:
+Mutable tool caches are isolated by checkout path, so a second worktree cannot
+replace this checkout's installed dependencies. Run `make bootstrap` when first
+using the checkout-scoped cache. Previous globally named tool volumes are left
+untouched; application, development and production data volumes do not change.
+For concurrent jobs within one checkout, override `GEOGUESSME_TOOLS_PROJECT`
+consistently for bootstrap and all gates. Names use lowercase letters, digits,
+underscores, and hyphens, starting with a letter or digit. Use the same variable
+with `make tools-clean` to remove only the selected tooling project.
 
-```text
-make bootstrap-e2e GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-my-job
-make verify GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-my-job
-```
-
-`GEOGUESSME_TOOLS_PROJECT` defaults to `geoguessme-tools`. Make exports it to
-the E2E runner; both use the selected project's existing named dependency
-volumes. Names must start with a lowercase letter or digit and contain only
-lowercase letters, digits, underscores, and hyphens. Do not override the
-`COMPOSE_TOOLS` shell command to select isolation: the E2E runner does not parse
-that command. This isolates tooling volumes, not application stacks, ports,
-artifacts, or image tags; concurrent live-stack jobs still need distinct test
-projects and ports and must coordinate shared outputs and image builds. To
-delete only the selected tooling project's containers and caches, run
-`make tools-clean` with the same variable.
+Local verification image tags are checkout-scoped too. Rebuild with
+`make build-images`; container verifiers pin the selected image IDs so another
+build cannot silently switch artifacts during inspection. Explicit
+`BACKEND_IMAGE`/`WEB_IMAGE` signed-digest selections still take precedence.
 
 ## Configuration
 

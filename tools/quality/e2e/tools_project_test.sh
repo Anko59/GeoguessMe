@@ -53,10 +53,11 @@ export GEOGUESSME_E2E_PROJECTS=desktop GEOGUESSME_E2E_SPEC='' GEOGUESSME_E2E_SHA
 # Do not inherit the caller's Make command-line overrides into the fixture.
 unset GEOGUESSME_TOOLS_PROJECT MAKEFLAGS MFLAGS MAKEOVERRIDES
 
-for project in geoguessme-tools geoguessme-tools-isolated_42; do
+default_project="geoguessme-tools-$(printf '%s' "$fixture" | cksum | awk '{print $1}')"
+for project in "$default_project" geoguessme-tools-isolated_42; do
     export E2E_DOCKER_TRACE="$fixture/$project.trace"
     args=()
-    if [ "$project" != geoguessme-tools ]; then
+    if [ "$project" != "$default_project" ]; then
         args=("GEOGUESSME_TOOLS_PROJECT=$project")
     fi
     make --no-print-directory -C "$fixture" bootstrap-e2e "${args[@]}"
@@ -65,7 +66,8 @@ for project in geoguessme-tools geoguessme-tools-isolated_42; do
     printf 'bootstrap %s\nbrowser %s\n' "$expected" "$expected" >"$fixture/expected"
     diff -u "$fixture/expected" "$E2E_DOCKER_TRACE"
     # Standalone execution must consume the same existing volume as Make.
-    GEOGUESSME_TOOLS_PROJECT="$project" bash "$fixture/tools/quality/run-e2e.sh"
+    GEOGUESSME_TOOLS_PROJECT="$project" GEOGUESSME_TEST_WEB_PORT=32100 \
+        GEOGUESSME_TEST_MAILPIT_PORT=32101 bash "$fixture/tools/quality/run-e2e.sh"
     printf 'browser %s\n' "$expected" >>"$fixture/expected"
     diff -u "$fixture/expected" "$E2E_DOCKER_TRACE"
     echo "PASS: tools project $project shares the existing bootstrap npm volume"

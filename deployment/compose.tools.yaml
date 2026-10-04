@@ -2,7 +2,7 @@
 #
 # Human-readable versions are next to immutable image digests. Tool services
 # have no application volumes, production env files, or Docker socket access.
-name: geoguessme-tools
+name: ${GEOGUESSME_TOOLS_PROJECT:?Run tooling through Make}
 
 x-workspace: &workspace ./:/workspace:ro
 
@@ -41,6 +41,14 @@ services:
     image: geoguessme/mobile-tools:android-36-maestro-2.10.0
     devices:
       - /dev/kvm:/dev/kvm
+
+  # Opt-in Linux USB access, without privileged mode or access to host adb.
+  mobile-device-tools:
+    extends: mobile-tools
+    profiles: [mobile-device]
+    network_mode: none
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
 
   go-tools:
     <<: *host-tools

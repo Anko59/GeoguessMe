@@ -69,19 +69,20 @@ Private projects are essential: the label checks are not a distributed lock.
 `TOOLS_UID:TOOLS_GID` checkout-owner mapping, preserving owner-only directory
 and file permissions and the read-only workspace mount. It honors
 `GEOGUESSME_TOOLS_PROJECT` and isolates its disposable application resources
-with `GEOGUESSME_LOAD_PROJECT` (default `geoguessme-load`). Root UID mappings
-are rejected before startup. The permission regression compiles the unchanged
-load profile in the actual pinned image with networking disabled; it does not
-run requests or alter the live scenario, defaults, or thresholds.
+with `GEOGUESSME_LOAD_PROJECT` (default includes the tools namespace and PID).
+Root UID mappings are rejected before startup. The permission regression
+compiles the unchanged load profile in the actual pinned image with networking
+disabled; it does not run requests or alter the live scenario, defaults, or
+thresholds.
 
 `make test-npm-security-overrides` verifies the scoped tooling patches in
 [the compatibility ledger](agent-engineering.md#tooling-security-overrides-376).
 It runs before `make test-frontend` and `make test-verified`, covering the
 actual Xcode/Markdownlint APIs and deterministic advisory regression cases.
-`make test-braces-security-backport` covers the explicit local braces security
-backport; `make verify-braces-backport-source` reconstructs its shipped source
-from the integrity-pinned upstream artifact. Both are required by `make audit`
-because npm audit alone cannot assess renamed local source. See
+`make test-braces-security` verifies the canonical local braces security
+backport's installed runtime hashes, nesting bounds, cyclic AST rejection, and
+consumer compatibility. It is required by `make audit` because npm audit alone
+cannot assess maintained local source. See
 [the backport ledger](agent-engineering.md#braces-security-backport).
 
 Reports and traces are written to ignored repository output directories from
@@ -122,12 +123,17 @@ deployment, infrastructure, tools, and Makefile changes also select both suites.
 ## Integration stack
 
 deployment/compose.test.yaml is disposable and uses dedicated database and media
-volumes. GEOGUESSME_TEST_WEB_PORT and GEOGUESSME_TEST_MAILPIT_PORT may be set to
-non-default ports (the defaults are `18080` and `18025` to avoid the development
-stack's `8080` and `8025`). The runner derives one public URL and supplies it to
-PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket origins, and email-link
-assertions. Mailpit is addressed through the separately derived
-MAILPIT_BASE_URL.
+volumes. Make derives a checkout-scoped port block using
+`GEOGUESSME_TEST_PORT_BASE` (default `20000 + (checkout checksum % 3000) * 10`).
+Web, Mailpit, database and Toxiproxy use offsets 0–3; specific
+`GEOGUESSME_TEST_*_PORT` overrides take precedence. Disposable projects include
+the checkout namespace and process ID, so another run cannot reuse or tear down
+this run's data. An occupied port fails closed; for simultaneous runs in the
+same checkout, explicitly choose distinct port blocks. Canonical report
+publication is not parallel-safe within one checkout. The runner derives one
+public URL and supplies it to PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket
+origins, and email-link assertions. Mailpit is addressed through the separately
+derived MAILPIT_BASE_URL.
 
 The suite covers authentication, group boundaries, challenge lifecycle and media
 visibility, transactions, rate limits, storage failures, cleanup retries,
@@ -196,14 +202,14 @@ before removing the stack and preserves the original failure status.
 
 ## Cache and artifact bounds
 
-| Resource              | Scope              | Bound                                                                      |
-| --------------------- | ------------------ | -------------------------------------------------------------------------- |
-| Docker layer cache    | BuildKit           | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
-| Named tool caches     | geoguessme-tools   | Removed by make tools-clean or make prune --include-build-cache            |
-| Project images        | geoguessme* prefix | prune.sh --max-images 50                                                   |
-| Project volumes       | geoguessme* prefix | prune.sh --max-volumes 20 (opt-in)                                         |
-| Workspace artifacts   | repo paths         | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
-| CI workflow artifacts | GitHub Actions     | retention-days: 7                                                          |
+| Resource              | Scope                         | Bound                                                                      |
+| --------------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| Docker layer cache    | BuildKit                      | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
+| Named tool caches     | Checkout-scoped tools project | Removed by make tools-clean or make prune --include-build-cache            |
+| Project images        | geoguessme* prefix            | prune.sh --max-images 50                                                   |
+| Project volumes       | geoguessme* prefix            | prune.sh --max-volumes 20 (opt-in)                                         |
+| Workspace artifacts   | repo paths                    | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
+| CI workflow artifacts | GitHub Actions                | retention-days: 7                                                          |
 
 All cleanup targets are dry-run by default and require explicit CONFIRM before
 execution.

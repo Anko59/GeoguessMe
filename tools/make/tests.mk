@@ -10,13 +10,7 @@ test-unit: test-backend test-frontend test-reconnect-harness test-play-api test-
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
-test-braces-security-backport: ## Verify local braces provenance, recursion bounds and consumer compatibility.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-braces-backport.cjs
-
-verify-braces-backport-source: ## Reproduce the reviewed local backport from the integrity-pinned upstream tarball.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node /workspace/tools/quality/npm/verify-braces-source.cjs
-
-test-npm-security-overrides: test-braces-security-backport ## Verify patched tooling dependencies preserve their consumer APIs.
+test-npm-security-overrides: test-braces-security ## Verify patched tooling dependencies preserve their consumer APIs.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-security-overrides.cjs
 
 test-feed-fixtures: ## Verify feed media settlement, cancellation, and interaction fixtures.
@@ -65,6 +59,18 @@ test-ci-classifier: ## Verify deterministic CI path classification.
 test-e2e-regression: ## Verify E2E safeguards and integration source-ownership isolation.
 	bash tools/quality/test/check-e2e-regression.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/integration-runner/check-integration-runner.sh
+
+test-rehearsal-isolation: ## Verify disposable projects and ports cannot reuse another checkout's fixture.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/rehearsal-isolation/check-rehearsal-isolation.sh
+
+test-local-images: ## Verify local artifact scoping, caller precedence and immutable verification identities.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/local-images/check-local-images.sh
+
+test-tools-namespace: ## Verify tool caches stay checkout-scoped and every helper preserves that namespace.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/tools-namespace/check-tools-namespace.sh
+
+test-braces-security: ## Verify installed brace parser and AST walkers resist stack exhaustion.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/frontend/tooling/dependencies/braces-security.js
 
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh

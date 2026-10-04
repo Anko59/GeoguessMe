@@ -8,20 +8,20 @@ build: build-frontend build-backend ## Build production frontend and backend art
 build-backend: ## Build the backend binary in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && go build -trimpath -o bin/geoguessme .'
 
-build-frontend: ## Build the frontend bundle in Docker.
+build-frontend: prepare-frontend-cache ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
 build-images: build-keycloak-image ## Build production images with normal Docker layer caching.
-	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
-	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
+	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .
+	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
 
 build-keycloak-image: ## Build the digest-pinned Keycloak image.
-	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
+	docker build --pull $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t "$(LOCAL_KEYCLOAK_IMAGE)" deployment/docker/keycloak-patched
 
 clean-build: ## Build production images from scratch without any layer cache.
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t geoguessme-backend:local .
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t geoguessme-web:local .
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t geoguessme-keycloak:local deployment/docker/keycloak-patched
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
+	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) --build-arg GEOGUESSME_REVISION=$(shell git rev-parse HEAD) -f deployment/docker/keycloak-patched/Dockerfile -t "$(LOCAL_KEYCLOAK_IMAGE)" deployment/docker/keycloak-patched
 
 # Final/runtime images audited by `make audit-images` (F-01). The defaults are
 # digest-pinned third-party runtime/deployment images; override with
@@ -46,13 +46,13 @@ AUDIT_IMAGES ?= geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3 \
 	quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
 
 build-sops-image: ## Build the patched, digest-pinned SOPS utility image.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build sops
+	$(COMPOSE_TOOLS) build sops
 
 build-socket-proxy-image: ## Build the PCRE2-patched socket-proxy derivative.
-	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build socket-proxy-tools
+	GEOGUESSME_REVISION=$(shell git rev-parse HEAD) $(COMPOSE_TOOLS) build socket-proxy-tools
 
 build-security-tool-images: build-sops-image build-socket-proxy-image ## Build locally patched security-tool images used by the image audit.
-	docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory . build restic postgres-openssl cloudflared
+	$(COMPOSE_TOOLS) build restic postgres-openssl cloudflared
 
 ifeq ($(strip $(KEYCLOAK_IMAGE)),)
 audit-images: build-security-tool-images build-keycloak-image
@@ -74,18 +74,19 @@ audit-images: ## Scan final/runtime images for FIXED High/Critical CVEs (blockin
 	images="$$images $${SOCKET_PROXY_IMAGE}"; \
 	if [ -n "$${KEYCLOAK_IMAGE:-}" ]; then \
 		images="$$images $${KEYCLOAK_IMAGE}"; \
-	elif docker image inspect geoguessme-keycloak:local >/dev/null 2>&1; then \
-		images="$$images geoguessme-keycloak:local"; \
+	elif docker image inspect "$${LOCAL_KEYCLOAK_IMAGE}" >/dev/null 2>&1; then \
+		images="$$images $${LOCAL_KEYCLOAK_IMAGE}"; \
 	else \
 		echo 'audit-images: error: Keycloak image missing (set KEYCLOAK_IMAGE or build it with `make build-keycloak-image`)' >&2; exit 1; \
 	fi; \
-	if [ -n "$${BACKEND_IMAGE:-}" ] && [ -n "$${WEB_IMAGE:-}" ]; then \
-		images="$$images $${BACKEND_IMAGE} $${WEB_IMAGE}"; \
-	elif docker image inspect geoguessme-backend:local >/dev/null 2>&1; then \
-		images="$$images geoguessme-backend:local geoguessme-web:local"; \
-	else \
-		echo 'audit-images: warning: app images skipped (set BACKEND_IMAGE/WEB_IMAGE or run `make build-images`)' >&2; \
-	fi; \
+	for image in "$${BACKEND_IMAGE:-$${LOCAL_BACKEND_IMAGE}}" "$${WEB_IMAGE:-$${LOCAL_WEB_IMAGE}}"; do \
+		if docker image inspect "$$image" >/dev/null 2>&1 || \
+			{ [ "$$image" != "$${LOCAL_BACKEND_IMAGE}" ] && [ "$$image" != "$${LOCAL_WEB_IMAGE}" ]; }; then \
+			images="$$images $$image"; \
+		else \
+			echo "audit-images: warning: local app image $$image missing (run make build-images)" >&2; \
+		fi; \
+	done; \
 	if docker image inspect geoguessme-restic:local >/dev/null 2>&1; then \
 		images="$$images geoguessme-restic:local"; \
 	fi; \

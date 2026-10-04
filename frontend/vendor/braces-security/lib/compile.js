@@ -5,11 +5,9 @@ const utils = require('./utils');
 const { MAX_DEPTH } = require('./constants');
 
 const compile = (ast, options = {}) => {
-  const requestedMaxDepth = options.maxDepth;
-  const maxDepth = Number.isFinite(requestedMaxDepth) ? Math.min(MAX_DEPTH, requestedMaxDepth) : MAX_DEPTH;
+  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;
 
   const walk = (node, parent = {}, depth = 0) => {
-    utils.validateValues(node);
     if (node.nodes && depth > maxDepth) {
       throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);
     }

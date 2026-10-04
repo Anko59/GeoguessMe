@@ -4,8 +4,19 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "$0")/../../.." && pwd)
 # Aggregate the public Makefile and its responsibility fragments so target
 # recipes remain findable.
-makefile_agg=$(mktemp)
-trap 'rm -f "$makefile_agg"' EXIT
+makefile_agg=$(mktemp /tmp/geoguessme-makefile-aggregate.XXXXXX)
+cache_fixture=''
+cleanup() {
+    if [[ "$makefile_agg" == /tmp/geoguessme-makefile-aggregate.* &&
+        "$(realpath "$makefile_agg")" == "$makefile_agg" ]]; then
+        rm -f -- "$makefile_agg"
+    fi
+    if [[ "$cache_fixture" == /tmp/geoguessme-vite-cache.* && -d "$cache_fixture" &&
+        ! -L "$cache_fixture" && "$(realpath "$cache_fixture")" == "$cache_fixture" ]]; then
+        rm -rf -- "$cache_fixture"
+    fi
+}
+trap cleanup EXIT
 cat "$repo_root"/Makefile "$repo_root"/tools/make/*.mk >"$makefile_agg"
 makefile="$makefile_agg"
 compose_file="$repo_root/deployment/compose.dev.yaml"
@@ -117,6 +128,93 @@ if grep -Fq 'trap cleanup_image_archive EXIT' "$deployment_make" &&
     pass "image-audit archives are cleaned when the audit shell exits"
 else
     fail "audit-images lacks failure-safe image archive cleanup"
+fi
+
+cache_path=/workspace/frontend/node_modules/.vite-temp
+cache_recipe=$(awk '
+    /^prepare-frontend-cache:/ { in_target = 1; next }
+    in_target && /^[^[:space:]]/ { exit }
+    in_target { print }
+' "$makefile")
+if grep -Fq -- 'node-tools' <<<"$cache_recipe" &&
+    grep -Fq -- "-e HOST_UID=\$(TOOLS_UID) -e HOST_GID=\$(TOOLS_GID)" <<<"$cache_recipe" &&
+    grep -Fq -- 'test ! -L /workspace/frontend/node_modules/.vite-temp' <<<"$cache_recipe" &&
+    grep -Fq -- "chown -R \"\$\$HOST_UID:\$\$HOST_GID\" /workspace/frontend/node_modules/.vite-temp" <<<"$cache_recipe"; then
+    pass "frontend cache preparation is Dockerized, narrowly scoped and rejects directory symlinks"
+else
+    fail "frontend cache preparation lacks Docker, invoking-user ownership or the symlink guard"
+fi
+
+for target in build-frontend mobile-init mobile-sync; do
+    if grep -Eq "^$target:.*[[:space:]]prepare-frontend-cache([[:space:]]|$)" "$makefile"; then
+        pass "$target depends on shared frontend cache preparation"
+    else
+        fail "$target can build without preparing the frontend cache"
+    fi
+    recipe=$(awk -v target="$target" '
+        $0 ~ "^" target ":" { in_target = 1; next }
+        in_target && /^[^[:space:]]/ { exit }
+        in_target { print }
+    ' "$makefile")
+    if grep -Fq -- "\$(TOOLS_USER)" <<<"$recipe" && ! grep -Fq -- "$cache_path" <<<"$recipe"; then
+        pass "$target preserves its non-root builder without duplicating cache preparation"
+    else
+        fail "$target runs its builder as root or duplicates cache ownership logic"
+    fi
+done
+
+mobile_plan=$(make --no-print-directory -n mobile-sync)
+if [[ "$(grep -Fc -- "test ! -L $cache_path" <<<"$mobile_plan")" == 1 ]]; then
+    pass "mobile-sync and mobile-init share one cache preparation per Make invocation"
+else
+    fail "mobile target dependency graph duplicates or skips cache preparation"
+fi
+
+# Execute the actual helper script against isolated fixtures, never the shared
+# node_modules volume. Extract just the final sh -ec line from its Make recipe.
+cache_script=$(sed -n "s/^[[:space:]]*sh -ec '\(.*\)'$/\1/p" <<<"$cache_recipe")
+cache_script=${cache_script//\$\$/\$}
+if [[ -z "$cache_script" || "$cache_script" != *"$cache_path"* ]]; then
+    fail "shared frontend cache helper script cannot be exercised"
+else
+    cache_fixture=$(mktemp -d /tmp/geoguessme-vite-cache.XXXXXX)
+    mkdir -p "$cache_fixture/node_modules/unrelated-package" "$cache_fixture/sentinel"
+    modules_owner=$(stat -c '%u:%g' "$cache_fixture/node_modules")
+    sibling_owner=$(stat -c '%u:%g' "$cache_fixture/node_modules/unrelated-package")
+    sentinel_owner=$(stat -c '%u:%g' "$cache_fixture/sentinel")
+    fixture_uid=$(id -u)
+    fixture_gid=$(id -g)
+    if [[ "$EUID" -eq 0 ]]; then
+        fixture_uid=1000
+        fixture_gid=1000
+    fi
+    fixture_cache="$cache_fixture/node_modules/.vite-temp"
+    fixture_script=${cache_script//"$cache_path"/"$fixture_cache"}
+    HOST_UID="$fixture_uid" HOST_GID="$fixture_gid" sh -ec "$fixture_script"
+    if [[ "$(stat -c '%u:%g' "$fixture_cache")" == "$fixture_uid:$fixture_gid" ]]; then
+        pass "shared helper creates a missing Vite cache with invoking-user ownership"
+    else
+        fail "shared helper does not create the Vite cache with correct ownership"
+    fi
+    mkdir -p "$fixture_cache/nested"
+    touch "$fixture_cache/nested/config.mjs"
+    HOST_UID="$fixture_uid" HOST_GID="$fixture_gid" sh -ec "$fixture_script"
+    if [[ "$(stat -c '%u:%g' "$fixture_cache/nested/config.mjs")" == "$fixture_uid:$fixture_gid" &&
+    "$(stat -c '%u:%g' "$cache_fixture/node_modules")" == "$modules_owner" &&
+    "$(stat -c '%u:%g' "$cache_fixture/node_modules/unrelated-package")" == "$sibling_owner" ]]; then
+        pass "shared helper repairs only cache contents, leaving dependencies and their parent untouched"
+    else
+        fail "shared helper misses cache contents or changes broader dependency ownership"
+    fi
+    ln -s "$cache_fixture/sentinel" "$cache_fixture/symlink-cache"
+    symlink_script=${cache_script//"$cache_path"/"$cache_fixture/symlink-cache"}
+    if HOST_UID="$fixture_uid" HOST_GID="$fixture_gid" sh -ec "$symlink_script"; then
+        fail "shared helper accepted a symlink cache directory"
+    elif [[ "$(stat -c '%u:%g' "$cache_fixture/sentinel")" == "$sentinel_owner" ]]; then
+        pass "shared helper rejects a symlink cache without changing its target"
+    else
+        fail "shared helper changed the symlink target before rejecting it"
+    fi
 fi
 
 if [ "$failures" -gt 0 ]; then

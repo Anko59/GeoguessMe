@@ -52,6 +52,11 @@ cat >"$fixture/bin/docker" <<'DOCKER'
 #!/bin/sh
 set -eu
 case "$1" in
+    image)
+        test "$2" = inspect
+        test "$5" = geoguessme-web:local-private
+        printf 'sha256:%064d\n' 1
+        ;;
     network)
         printf 'network %s\n' "$2" >>"$WATCH_CALLS"
         ;;
@@ -103,7 +108,8 @@ for scenario in normal diagnostics-fail teardown-fail; do
     [ "$scenario" != teardown-fail ] || down_fail=1
     status=0
     PATH="$fixture/bin:$PATH" WATCH_DIAGNOSTIC_FAIL="$diagnostic_fail" WATCH_DOWN_FAIL="$down_fail" \
-        sh "$ROOT/deployment/scripts/watch/rehearsal.sh" >"$fixture/$scenario.log" 2>&1 || status=$?
+        WEB_IMAGE=geoguessme-web:local-private GEOGUESSME_TOOLS_PROJECT=geoguessme-private-tools \
+        GEOGUESSME_TEST_PORT_BASE=28000 sh "$ROOT/deployment/scripts/watch/rehearsal.sh" >"$fixture/$scenario.log" 2>&1 || status=$?
     test "$status" -eq 73
     grep -q 'fixture config permission diagnostic' "$fixture/$scenario.log"
     grep -q 'health={"Status":"unhealthy"}' "$fixture/$scenario.log"

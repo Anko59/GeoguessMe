@@ -9,10 +9,19 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
-COMPOSE_IDENTITY := GEOGUESSME_KEYCLOAK_IMAGE=geoguessme-keycloak:local docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
-# Keep Make tooling and the standalone E2E runner on the same dependency volumes.
-GEOGUESSME_TOOLS_PROJECT ?= geoguessme-tools
+COMPOSE_IDENTITY = GEOGUESSME_KEYCLOAK_IMAGE="$(if $(strip $(KEYCLOAK_IMAGE)),$(KEYCLOAK_IMAGE),$(LOCAL_KEYCLOAK_IMAGE))" docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
+# Mutable tool volumes must not mix dependency trees from different checkouts.
+GEOGUESSME_TOOLS_PROJECT ?= geoguessme-tools-$(word 1,$(shell printf '%s' "$(CURDIR)" | cksum))
 export GEOGUESSME_TOOLS_PROJECT
+# Local build tags must not let another checkout replace our test artifacts.
+# Caller-supplied signed production references take precedence in consumers;
+# build targets always write local tags, never those promotion references.
+LOCAL_BACKEND_IMAGE ?= geoguessme-backend:local-$(GEOGUESSME_TOOLS_PROJECT)
+LOCAL_WEB_IMAGE ?= geoguessme-web:local-$(GEOGUESSME_TOOLS_PROJECT)
+LOCAL_KEYCLOAK_IMAGE ?= geoguessme-keycloak:local-$(GEOGUESSME_TOOLS_PROJECT)
+BACKEND_IMAGE ?= $(LOCAL_BACKEND_IMAGE)
+WEB_IMAGE ?= $(LOCAL_WEB_IMAGE)
+export LOCAL_BACKEND_IMAGE LOCAL_WEB_IMAGE LOCAL_KEYCLOAK_IMAGE BACKEND_IMAGE WEB_IMAGE
 COMPOSE_TOOLS := docker compose -p "$${GEOGUESSME_TOOLS_PROJECT}" -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
@@ -24,8 +33,22 @@ TOOLS_USER := --user $(TOOLS_UID):$(TOOLS_GID)
 # Cleanup targets may need to remove artifacts created by older root-running
 # containers. The paths are explicit allowlisted build/test directories.
 ARTIFACTS_USER := --user 0:0
-GEOGUESSME_TEST_WEB_PORT ?= 18080
-GEOGUESSME_TEST_MAILPIT_PORT ?= 18025
+# Checkouts receive separate local fixture port blocks. Occupied ports fail
+# closed; callers can override the base or individual ports for parallel runs.
+GEOGUESSME_TEST_PORT_BASE ?= $(shell printf '%s' "$(CURDIR)" | cksum | awk '{print 20000 + ($$1 % 3000) * 10}')
+# Freeze values before export: recursive shell-derived exports otherwise expand
+# one another while Make constructs a shell environment. Overrides retain value.
+override GEOGUESSME_TEST_PORT_BASE := $(GEOGUESSME_TEST_PORT_BASE)
+GEOGUESSME_TEST_WEB_PORT ?= $(GEOGUESSME_TEST_PORT_BASE)
+override GEOGUESSME_TEST_WEB_PORT := $(GEOGUESSME_TEST_WEB_PORT)
+GEOGUESSME_TEST_MAILPIT_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 1)
+override GEOGUESSME_TEST_MAILPIT_PORT := $(GEOGUESSME_TEST_MAILPIT_PORT)
+GEOGUESSME_TEST_DB_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 2)
+override GEOGUESSME_TEST_DB_PORT := $(GEOGUESSME_TEST_DB_PORT)
+GEOGUESSME_TEST_TOXIPROXY_PORT ?= $(shell expr "$(GEOGUESSME_TEST_PORT_BASE)" + 3)
+override GEOGUESSME_TEST_TOXIPROXY_PORT := $(GEOGUESSME_TEST_TOXIPROXY_PORT)
+export GEOGUESSME_TEST_PORT_BASE GEOGUESSME_TEST_WEB_PORT GEOGUESSME_TEST_MAILPIT_PORT
+export GEOGUESSME_TEST_DB_PORT GEOGUESSME_TEST_TOXIPROXY_PORT
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
 TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
 QA_REPORT_DIR ?= qa-artifacts
@@ -66,7 +89,7 @@ help: ## Show this help.
 bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
 	@# frontend/node_modules is gitignored, so a fresh checkout lacks the host
 	@# mountpoint that the read-only workspace bind mount needs for the
-	@# selected tools project's frontend-node-modules volume. Create the stub so
+	@# checkout-scoped frontend-node-modules named volume. Create the stub so
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy cloudflared terraform
@@ -99,6 +122,13 @@ bootstrap-mobile: ## Prepare only the Node and Android tools needed by mobile E2
 	@mkdir -p frontend/node_modules
 	$(COMPOSE_TOOLS) build mobile-tools node-tools
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
+
+prepare-frontend-cache: ## Prepare the narrow Vite cache for non-root frontend builds.
+	# Root-running tests can create this cache in the shared dependency volume.
+	# Do not change ownership of node_modules or follow a cache directory symlink.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps \
+		-e HOST_UID=$(TOOLS_UID) -e HOST_GID=$(TOOLS_GID) node-tools \
+		sh -ec 'test ! -L /workspace/frontend/node_modules/.vite-temp; mkdir -p /workspace/frontend/node_modules/.vite-temp; chown -R "$$HOST_UID:$$HOST_GID" /workspace/frontend/node_modules/.vite-temp'
 
 hooks-install: ## Configure Git to use the tracked .githooks directory.
 	git config core.hooksPath .githooks
