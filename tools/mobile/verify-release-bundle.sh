@@ -33,6 +33,18 @@ if ! java -jar "$bundletool_jar" validate --bundle "$bundle" >/dev/null; then
     echo "Android App Bundle validation failed: $bundle" >&2
     exit 1
 fi
+# Inspect the shipped assets, not the generated working tree: a test-only
+# server.url would make the Play app depend on adb reverse/localhost.
+if ! config_json=$(unzip -p "$bundle" base/assets/capacitor.config.json) ||
+    ! jq -e '.server.hostname == "app.geoguessme.com" and .server.androidScheme == "https" and
+        (.server | has("url") | not) and (.server | has("cleartext") | not)' <<<"$config_json" >/dev/null; then
+    echo "AAB must contain bundled assets on the dedicated HTTPS native origin (no server.url)" >&2
+    exit 1
+fi
+if ! unzip -p "$bundle" base/assets/public/index.html >/dev/null; then
+    echo "AAB is missing the bundled web entry point" >&2
+    exit 1
+fi
 manifest_xml=$(java -jar "$bundletool_jar" dump manifest --bundle "$bundle")
 
 manifest_attribute() {

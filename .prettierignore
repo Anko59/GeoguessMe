@@ -1,3 +1,4 @@
-# Vendored upstream sources stay byte-for-byte aligned with their pinned commit.
-frontend/vendor/braces/**/*.js
+# Vendored browser runtime and neural-network data are pinned upstream assets.
 frontend/public/vendor/jeeliz/**
+# Reviewed upstream brace-parser backport: preserve executable-source hashes.
+frontend/vendor/braces-security/**/*.js

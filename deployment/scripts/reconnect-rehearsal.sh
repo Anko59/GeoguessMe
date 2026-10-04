@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
 #
 # reconnect-rehearsal — deterministic reconnect/load rehearsal for GeoGuessMe.
 #
@@ -13,9 +15,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
-PROJECT="${GEOGUESSME_RECONNECT_PROJECT:-geoguessme-reconnect-rehearsal}"
-WEB_PORT="${GEOGUESSME_RECONNECT_WEB_PORT:-18082}"
-MAILPIT_PORT="${GEOGUESSME_RECONNECT_MAILPIT_PORT:-18027}"
+PROJECT="${GEOGUESSME_RECONNECT_PROJECT:-geoguessme-reconnect-rehearsal-${GEOGUESSME_TOOLS_PROJECT}-$$}"
+WEB_PORT="${GEOGUESSME_RECONNECT_WEB_PORT:-${GEOGUESSME_TEST_WEB_PORT:?Run through Make}}"
+MAILPIT_PORT="${GEOGUESSME_RECONNECT_MAILPIT_PORT:-${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}}"
 PUBLIC_URL="http://localhost:${WEB_PORT}"
 
 cleanup() {
@@ -34,7 +36,7 @@ echo "=== Reconnect rehearsal: starting test stack ==="
 docker compose -f deployment/compose.test.yaml --project-directory "$REPO" -p "$PROJECT" up -d --wait
 
 echo "=== Reconnect rehearsal: running harness ==="
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$REPO" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$REPO" \
     run -T --rm --no-deps go-tools-write sh -c \
     "cd /workspace/tools/load/reconnect-rehearsal && go run . -base-url 'http://host.docker.internal:${WEB_PORT}'"
 

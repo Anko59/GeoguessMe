@@ -28,6 +28,7 @@ dist/
 /frontend/test-results/
 /frontend/playwright-report/
 /frontend/.playwright-run/
+/frontend/.playwright-run-*/
 /frontend/coverage/
 /qa-artifacts/
 

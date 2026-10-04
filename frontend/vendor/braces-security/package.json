@@ -1,0 +1,22 @@
+{
+  "name": "@geoguessme/braces-security",
+  "version": "3.0.3-geoguessme.1",
+  "private": true,
+  "description": "Reviewed local nesting-depth and cyclic-AST security backport of braces 3.0.3",
+  "type": "commonjs",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=8"
+  },
+  "dependencies": {
+    "fill-range": "^7.1.1"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "LICENSE",
+    "README.md",
+    "provenance.json"
+  ]
+}

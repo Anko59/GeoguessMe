@@ -50,7 +50,7 @@ services:
       retries: 30
 
   migration:
-    image: geoguessme-backend:local
+    image: ${BACKEND_IMAGE:-${LOCAL_BACKEND_IMAGE:?Run through Make or set BACKEND_IMAGE}}
     build:
       context: .
       dockerfile: deployment/docker/backend.Dockerfile
@@ -64,7 +64,7 @@ services:
     restart: "no"
 
   backend:
-    image: geoguessme-backend:local
+    image: ${BACKEND_IMAGE:-${LOCAL_BACKEND_IMAGE:?Run through Make or set BACKEND_IMAGE}}
     build:
       context: .
       dockerfile: deployment/docker/backend.Dockerfile
@@ -109,7 +109,7 @@ services:
       retries: 30
 
   web:
-    image: geoguessme-web:local
+    image: ${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?Run through Make or set WEB_IMAGE}}
     build:
       context: .
       dockerfile: deployment/docker/frontend.Dockerfile
