@@ -21,7 +21,6 @@ cat "$repo_root"/Makefile "$repo_root"/tools/make/*.mk >"$makefile_agg"
 makefile="$makefile_agg"
 compose_file="$repo_root/deployment/compose.dev.yaml"
 dockerignore="$repo_root/.dockerignore"
-deployment_make="$repo_root/tools/make/deployment.mk"
 failures=0
 
 pass() {
@@ -103,13 +102,19 @@ else
     fail "frontend startup does not refresh dependencies after lockfile changes"
 fi
 
-for volume in geoguessme_dev_db geoguessme_dev_minio frontend-node-modules; do
+for volume in geoguessme_dev_db geoguessme_dev_s3_fixture frontend-node-modules; do
     if grep -Fq -- "$volume:" "$compose_file"; then
         pass "$volume remains a named persistent application volume"
     else
         fail "$volume is not declared as a named persistent volume"
     fi
 done
+
+if grep -Fq -- 'geoguessme_dev_minio:' "$compose_file"; then
+    fail "retired MinIO volume must remain outside normal Compose cleanup"
+else
+    pass "retired MinIO volume remains unmanaged and preserved"
+fi
 
 if grep -Fq -- "\$(COMPOSE_DEV) --profile social down -v --remove-orphans" "$makefile"; then
     pass "development reset includes local Keycloak and its identity volume"
@@ -123,8 +128,9 @@ else
     fail "security/image-reports is missing from .dockerignore"
 fi
 
-if grep -Fq 'trap cleanup_image_archive EXIT' "$deployment_make" &&
-    grep -Fq 'cleanup_image_archive()' "$deployment_make"; then
+if grep -Fq 'trap cleanup EXIT' "$repo_root/tools/quality/image-audit/audit.sh" &&
+    grep -Fq 'discard_archive' "$repo_root/tools/quality/image-audit/audit.sh" &&
+    grep -Fq "rm -f -- \"\$ARCHIVE\"" "$repo_root/tools/quality/image-audit/audit.sh"; then
     pass "image-audit archives are cleaned when the audit shell exits"
 else
     fail "audit-images lacks failure-safe image archive cleanup"

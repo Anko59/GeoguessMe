@@ -9,8 +9,8 @@
 #   4. An exception expiring more than 30 days out is rejected.
 #   5. An unapproved exception (approved: false) is rejected.
 #   6. An image/digest mismatch is rejected.
-#   7. Append mode preserves direct-image exceptions while adding base-image
-#      exceptions for a derived image.
+#   7. Legacy append mode preserves exact direct-image exceptions; production
+#      inheritance uses package/version-scoped native policies instead.
 #   8. Multiple exception files are validated and emitted together.
 #   9. The nightly Buildx verification loads local images before image scanning.
 #  10. Fixed SOPS libexpat findings are removed by the patched image, never excepted.
@@ -26,7 +26,11 @@ DIGEST=""
 
 cleanup() {
     if [ -n "$TMP" ]; then
-        rm -rf "$TMP" 2>/dev/null || true
+        case "$TMP" in /tmp/tmp.*) rm -rf -- "$TMP" ;; *)
+            echo 'unexpected regression temporary path' >&2
+            return 1
+            ;;
+        esac
     fi
 }
 trap cleanup EXIT
@@ -58,14 +62,8 @@ validator_output() {
 
 date_utc_days_from_today() {
     local days=$1
-    if date -u -d "$days days" +%F 2>/dev/null; then
-        return
-    fi
-    if [ "$days" -ge 0 ]; then
-        date -u -v+"${days}"d +%F
-    else
-        date -u -v"${days}"d +%F
-    fi
+    local epoch=$(($(date -u +%s) + days * 86400))
+    date -u -d "@$epoch" +%F 2>/dev/null || date -u -r "$epoch" +%F
 }
 
 TMP="$(mktemp -d)"
@@ -247,7 +245,7 @@ else
     fail "image/digest mismatch error message absent"
 fi
 
-# ── Test 7: append base-image exceptions to a derived-image file ────────────
+# ── Test 7: legacy append of exact direct-image exceptions ─────────────────
 echo "--- Test 7: append mode preserves existing entries ---"
 printf '%s\n' 'CVE-2026-DIRECT' >"$ignore"
 if IMAGE_SCAN_EXCEPTIONS="$TMP/valid.yaml" bash "$SCRIPT" --append "$IMAGE" "$ignore" >/dev/null 2>&1; then
@@ -256,7 +254,7 @@ else
     fail "append mode failed"
 fi
 if grep -qx 'CVE-2026-DIRECT' "$ignore" && grep -qx 'CVE-2026-00001' "$ignore"; then
-    pass "append preserves direct entry and adds base entry"
+    pass "append preserves exact direct entries"
 else
     fail "append did not preserve and extend ignorefile"
 fi
@@ -324,7 +322,7 @@ for exception_file in "${exception_files[@]}"; do
 done
 for dockerfile in \
     "$REPO_ROOT/deployment/docker/backend.Dockerfile" \
-    "$REPO_ROOT/deployment/docker/frontend.Dockerfile" \
+    "$REPO_ROOT/deployment/docker/security/caddy-runtime.Dockerfile" \
     "$REPO_ROOT/deployment/docker/restic-tools.Dockerfile" \
     "$REPO_ROOT/deployment/docker/socket-proxy-tools/Dockerfile"; do
     if grep -Fq "pcre2=10.49-r0" "$dockerfile" &&
@@ -334,14 +332,58 @@ for dockerfile in \
         fail "$(basename "$dockerfile") must pin and assert fixed PCRE2"
     fi
 done
-# The Makefile uses doubled dollars to pass the variable through to its shell.
-# shellcheck disable=SC2016
-if grep -Fq 'images="$$images $${SOCKET_PROXY_IMAGE}"' "$REPO_ROOT/tools/make/deployment.mk" &&
-    grep -Fq 'build-socket-proxy-image' "$REPO_ROOT/tools/make/deployment.mk"; then
-    pass 'the exact socket-proxy derivative is built and included in the image audit'
+if grep -Fq 'SOCKET_PROXY_IMAGE' "$REPO_ROOT/tools/make/dependency-images.mk" &&
+    grep -Fq 'image-audit/audit.sh' "$REPO_ROOT/tools/make/dependency-images.mk"; then
+    pass 'the exact socket-proxy derivative remains in the scan-only image audit'
 else
-    fail 'the socket-proxy derivative is not built and scanned by the Make gate'
+    fail 'the socket-proxy derivative is not included in the scan-only gate'
 fi
+
+# ── Test 12: immutable matching and scoped inheritance ─────────────────────
+echo '--- Test 12: strict digest matching and native package/version scopes ---'
+sed 's|postgres:15-alpine|geoguessme/fixture:local|' "$TMP/valid.yaml" >"$TMP/local.yaml"
+new_ref="geoguessme/fixture:local@sha256:$(printf 'b%.0s' {1..64})"
+if run_validator "$TMP/local.yaml" --emit-policy "$new_ref" "$TMP/policy.rego" &&
+    ! grep -q 'input.VulnerabilityID' "$TMP/policy.rego"; then
+    pass 'same geoguessme image name cannot authorize a different digest'
+else
+    fail 'name-only digest exception bypass remains'
+fi
+if run_validator "$TMP/valid.yaml" --emit-policy "$IMAGE" "$TMP/policy.rego" &&
+    grep -Fq 'input.VulnerabilityID == "CVE-2026-00001"' "$TMP/policy.rego"; then
+    pass 'exact final image generates a native policy'
+else
+    fail 'exact final native policy emission failed'
+fi
+if run_validator "$TMP/valid.yaml" --inherit-policy "$IMAGE" "$TMP/policy.rego"; then
+    fail 'unscoped base exception was inherited'
+else
+    pass 'unscoped base exception cannot be inherited'
+fi
+sed '/  owner:/i\  package: pcre2\n  installed_version: 10.48-r0' "$TMP/valid.yaml" >"$TMP/scoped.yaml"
+if run_validator "$TMP/scoped.yaml" --emit-policy "$IMAGE" "$TMP/policy.rego" &&
+    run_validator "$TMP/scoped.yaml" --inherit-policy "$IMAGE" "$TMP/policy.rego" &&
+    grep -Fq 'input.PkgName == "pcre2"' "$TMP/policy.rego" &&
+    grep -Fq 'input.InstalledVersion == "10.48-r0"' "$TMP/policy.rego"; then
+    pass 'native inherited rules require exact package and installed version'
+else
+    fail 'scoped base policy emission failed'
+fi
+if run_validator "$TMP/scoped.yaml" --emit "$IMAGE" "$ignore"; then
+    fail 'scoped exception leaked into global legacy CVE ignorefile'
+else
+    pass 'scoped exceptions cannot become legacy CVE-wide ignores'
+fi
+sed '/  installed_version:/d' "$TMP/scoped.yaml" >"$TMP/partial-scope.yaml"
+if run_validator "$TMP/partial-scope.yaml"; then fail 'partial package scope accepted'; else pass 'partial package scope rejected'; fi
+sed 's/  package: pcre2/  package:/' "$TMP/scoped.yaml" >"$TMP/empty-scope.yaml"
+if run_validator "$TMP/empty-scope.yaml"; then fail 'empty package scope accepted'; else pass 'empty package scope rejected'; fi
+sed 's/  package: pcre2/  package: bad"injection/' "$TMP/scoped.yaml" >"$TMP/unsafe-scope.yaml"
+if run_validator "$TMP/unsafe-scope.yaml"; then fail 'unsafe native-policy string accepted'; else pass 'unsafe native-policy string rejected'; fi
+printf '  owner: duplicate-owner\n' >>"$TMP/valid-second.yaml"
+if run_validator "$TMP/valid-second.yaml"; then fail 'duplicate approval field accepted'; else pass 'duplicate approval field rejected'; fi
+sed 's/expires: .*/expires: 2026-02-30/' "$TMP/valid.yaml" >"$TMP/calendar.yaml"
+if run_validator "$TMP/calendar.yaml"; then fail 'invalid calendar expiry accepted'; else pass 'invalid calendar expiry rejected'; fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""

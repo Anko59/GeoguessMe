@@ -6,7 +6,7 @@ FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea0
 # detection (CGO), database client utilities. Normal format/lint/test/build
 # operations use the smaller go-tools image.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash build-base curl git postgresql-client \
+RUN apk add --no-cache bash build-base curl git jq postgresql-client \
  && git config --system --add safe.directory /workspace
 
 ENV CGO_ENABLED=1 \

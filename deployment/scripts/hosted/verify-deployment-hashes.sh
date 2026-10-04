@@ -125,6 +125,12 @@ for watch_file in Caddyfile vector.yaml victoria-metrics.yaml; do
         "$CONFIG_ROOT/watch/$watch_file" \
         "config/watch/$watch_file"
 done
+# Optional fixture definitions still use this installed, root-owned credential
+# file. Neither a deploy-writable release nor an environment override is trusted.
+compare \
+    "config/s3-fixture/credentials.json" \
+    "$CONFIG_ROOT/s3-fixture/credentials.json" \
+    "config/s3-fixture/credentials.json"
 
 # Host units installed by cloud-init alongside the operator scripts.
 for unit in \

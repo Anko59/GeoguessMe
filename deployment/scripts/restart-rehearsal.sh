@@ -68,10 +68,13 @@ tool_psql() {
         run --rm --no-deps go-security psql "$DB_URL" -v ON_ERROR_STOP=1 "$@"
 }
 
-# Run a command inside the running minio container.
-minio_exec() {
-    docker compose -f "$COMPOSE_FILE" --project-directory "$REPO" -p "$PROJECT" \
-        exec -T minio "$@" 2>/dev/null
+# Use the maintained application S3 SDK in a Dockerized fixture client, rather
+# than depending on a server image bundling an administrative command-line tool.
+s3_fixture() {
+    GEOGUESSME_S3_FIXTURE_NETWORK="${PROJECT}_default" \
+        S3_FIXTURE_ENDPOINT=http://minio:9000 \
+        S3_FIXTURE_ACCESS_KEY=minioadmin S3_FIXTURE_SECRET_KEY=minioadmin \
+        make -s --no-print-directory s3-fixture S3_FIXTURE_COMMAND="$*"
 }
 
 # Poll a check function until it succeeds or the deadline expires.
@@ -113,12 +116,11 @@ poll 120 2 "stack reports ready" check_ready || die "stack did not become ready"
 # ── Phase 2: Seed data ──────────────────────────────────────────────────────
 echo "=== Phase 2: Seed real data ==="
 
-# Create bucket and upload a test object directly into MinIO so we can verify
-# media continuity across restarts.  Use a dedicated alias to avoid colliding
-# with the healthcheck's pre-configured 'local' alias.
-minio_exec mc alias set rehearsal http://localhost:9000 minioadmin minioadmin || true
-minio_exec mc mb rehearsal/geoguessme-test-media || true
-echo -n 'restart-rehearsal-media-object' | minio_exec mc pipe rehearsal/geoguessme-test-media/rehearsal/test-object.dat || true
+# Seed through authenticated S3 operations. Never ignore initialization failures;
+# the fixture must exist before recording persistence assertions.
+s3_fixture ensure geoguessme-test-media || die 'could not create fixture bucket'
+printf '%s' 'restart-rehearsal-media-object' |
+    s3_fixture put geoguessme-test-media rehearsal/test-object.dat - || die 'could not seed S3 object'
 
 # Insert fixture rows via psql.  Use idempotent ON CONFLICT so the seed is
 # safe to re-run against a partially-seeded database.
@@ -179,10 +181,11 @@ pre_users_checksum=$(tool_psql -Atc "SELECT md5(string_agg(id || ':' || username
 pre_constraints=$(tool_psql -Atc "SELECT count(*) FROM pg_constraint WHERE connamespace = 'public'::regnamespace")
 pre_tables=$(tool_psql -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")
 
-# Record MinIO object presence.
-pre_minio_obj=$(minio_exec mc ls rehearsal/geoguessme-test-media/rehearsal/test-object.dat | wc -l)
+# Record authenticated S3 object presence; an absent object is a failed seed.
+s3_fixture head geoguessme-test-media rehearsal/test-object.dat >/dev/null || die 'seeded S3 object missing'
+pre_s3_obj=1
 
-echo "  pre  migrations=$pre_migrations users=$pre_users groups=$pre_groups members=$pre_members photos=$pre_photos guesses=$pre_guesses msgs=$pre_messages views=$pre_views constraints=$pre_constraints tables=$pre_tables checksum=$pre_users_checksum minio_objs=$pre_minio_obj"
+echo "  pre  migrations=$pre_migrations users=$pre_users groups=$pre_groups members=$pre_members photos=$pre_photos guesses=$pre_guesses msgs=$pre_messages views=$pre_views constraints=$pre_constraints tables=$pre_tables checksum=$pre_users_checksum s3_objs=$pre_s3_obj"
 
 # ── Phase 4: Restart all services without deleting volumes ──────────────────
 echo "=== Phase 4: Restart all services ==="
@@ -280,23 +283,19 @@ else
     fail "users checksum mismatch: pre=$pre_users_checksum post=$post_users_checksum"
 fi
 
-# --- 5f: Media continuity (MinIO object survives restart) ---
-# Re-establish mc alias lost across container restart (stored in ephemeral
-# container filesystem, not the /data volume).
-minio_exec mc alias set rehearsal http://localhost:9000 minioadmin minioadmin || true
-post_minio_obj=$(minio_exec mc ls rehearsal/geoguessme-test-media/rehearsal/test-object.dat | wc -l)
-if [ "$post_minio_obj" -ge 1 ]; then
-    pass "MinIO media object survives restart"
+# --- 5f: Media continuity (S3 object survives restart) ---
+if s3_fixture head geoguessme-test-media rehearsal/test-object.dat >/dev/null; then
+    pass "S3 media object survives restart"
 else
-    fail "MinIO media object missing after restart"
+    fail "S3 media object missing after restart"
 fi
 
-# Also verify the object content is intact.
-obj_content=$(minio_exec mc cat rehearsal/geoguessme-test-media/rehearsal/test-object.dat || echo "")
-if [ "$obj_content" = "restart-rehearsal-media-object" ]; then
-    pass "MinIO object content intact"
+# Verify authenticated object bytes as well as presence.
+if obj_content=$(s3_fixture get geoguessme-test-media rehearsal/test-object.dat) &&
+    [ "$obj_content" = "restart-rehearsal-media-object" ]; then
+    pass "S3 object content intact"
 else
-    fail "MinIO object content corrupted or missing"
+    fail "S3 object content corrupted or missing"
 fi
 
 # --- 5g: No runaway deletion jobs ---

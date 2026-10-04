@@ -9,7 +9,7 @@
 COMPOSE_DEV  := docker compose -p geoguessme-dev -f deployment/compose.dev.yaml --project-directory .
 COMPOSE_TEST := docker compose -f deployment/compose.test.yaml --project-directory .
 COMPOSE_PROD := docker compose -p geoguessme-prod -f deployment/compose.production.yaml --project-directory .
-COMPOSE_IDENTITY = GEOGUESSME_KEYCLOAK_IMAGE="$(if $(strip $(KEYCLOAK_IMAGE)),$(KEYCLOAK_IMAGE),$(LOCAL_KEYCLOAK_IMAGE))" docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
+COMPOSE_IDENTITY = GEOGUESSME_KEYCLOAK_IMAGE="$${KEYCLOAK_IMAGE:-$(LOCAL_KEYCLOAK_IMAGE)}" docker compose -p geoguessme-identity -f deployment/compose.identity.yaml --project-directory .
 # Mutable tool volumes must not mix dependency trees from different checkouts.
 GEOGUESSME_TOOLS_PROJECT ?= geoguessme-tools-$(word 1,$(shell printf '%s' "$(CURDIR)" | cksum))
 export GEOGUESSME_TOOLS_PROJECT
@@ -24,6 +24,9 @@ WEB_IMAGE ?= $(LOCAL_WEB_IMAGE)
 export LOCAL_BACKEND_IMAGE LOCAL_WEB_IMAGE LOCAL_KEYCLOAK_IMAGE BACKEND_IMAGE WEB_IMAGE
 COMPOSE_TOOLS := docker compose -p "$${GEOGUESSME_TOOLS_PROJECT}" -f deployment/compose.tools.yaml --project-directory .
 COMPOSE_TOOLS_RUN := $(COMPOSE_TOOLS) run -T
+# Stateful consumers resolve saved bytes at execution time, after preparation.
+# Pure config/status/down commands intentionally do not use this wrapper.
+WITH_SELECTED := bash tools/quality/dependency-images/with-selected.sh
 TERRAFORM = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) terraform terraform
 TERRAFORM_ISOLATED = $(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) -e TF_DATA_DIR=/tmp/geoguessme-terraform -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache terraform sh -ec
 TOOLS_UID := $(shell id -u)
@@ -50,7 +53,7 @@ override GEOGUESSME_TEST_TOXIPROXY_PORT := $(GEOGUESSME_TEST_TOXIPROXY_PORT)
 export GEOGUESSME_TEST_PORT_BASE GEOGUESSME_TEST_WEB_PORT GEOGUESSME_TEST_MAILPIT_PORT
 export GEOGUESSME_TEST_DB_PORT GEOGUESSME_TEST_TOXIPROXY_PORT
 TEST_BASE_URL := http://localhost:$(GEOGUESSME_TEST_WEB_PORT)
-TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT)
+TEST_ENV := GEOGUESSME_TEST_WEB_PORT=$(GEOGUESSME_TEST_WEB_PORT) GEOGUESSME_TEST_MAILPIT_PORT=$(GEOGUESSME_TEST_MAILPIT_PORT) GEOGUESSME_TEST_PUBLIC_URL=$(TEST_BASE_URL) MAILPIT_BASE_URL=http://localhost:$(GEOGUESSME_TEST_MAILPIT_PORT) $(WITH_SELECTED) postgres -- env
 QA_REPORT_DIR ?= qa-artifacts
 # Default QA budget tier: fast (15 min) for routine post-deploy acceptance.
 # Use `make qa-agent-full` before a release PR and `make qa-agent-nightly` for
@@ -86,22 +89,22 @@ ARGS ?=
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
 
-bootstrap: ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
+bootstrap: build-security-tool-images ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
 	@# frontend/node_modules is gitignored, so a fresh checkout lacks the host
 	@# mountpoint that the read-only workspace bind mount needs for the
 	@# checkout-scoped frontend-node-modules named volume. Create the stub so
 	@# the node-tools and playwright services can start on a clean checkout.
 	@mkdir -p frontend/node_modules
-	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy cloudflared terraform
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools terraform
 	$(COMPOSE_TOOLS) pull playwright shellcheck shfmt hadolint actionlint sqlfluff
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 	$(MAKE) hooks-install
 	$(MAKE) hooks-check
 	$(MAKE) tools-self-test
 
-bootstrap-preflight: ## Prepare only the pinned tools consumed by the fast PR gate.
+bootstrap-preflight: prepare-app-runtime ## Prepare only the pinned tools consumed by the fast PR gate.
 	@mkdir -p frontend/node_modules
-	$(COMPOSE_TOOLS) build go-tools go-security node-tools caddy terraform
+	$(COMPOSE_TOOLS) build go-tools go-security node-tools terraform
 	$(COMPOSE_TOOLS) pull shellcheck shfmt hadolint actionlint sqlfluff
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
@@ -142,7 +145,7 @@ hooks-check: ## Verify tracked hooks, Docker prerequisites, and canonical target
 	@grep -q 'make pre-push' .githooks/pre-push
 	@echo "hooks-check PASSED"
 
-tools-self-test: build-sops-image ## Run a short self-test inside each tool image.
+tools-self-test: build-security-tool-images ## Run a short self-test inside each tool image.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'go version && goimports </dev/null >/dev/null && golangci-lint version'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'go version && govulncheck -version && psql --version && gcc --version'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'node --version && npm --version && prettier --version && eslint --version && tsc --version'
@@ -152,29 +155,34 @@ tools-self-test: build-sops-image ## Run a short self-test inside each tool imag
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps hadolint hadolint --version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps actionlint actionlint -version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps sqlfluff sqlfluff --version
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy version
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared version
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy version
+	$(WITH_SELECTED) cloudflared -- $(COMPOSE_TOOLS_RUN) --rm --no-deps cloudflared version
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps terraform terraform version
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
+	$(WITH_SELECTED) sops -- $(COMPOSE_TOOLS_RUN) --rm --no-deps sops sops --version
 	tools/quality/test/check-tool-image-split.sh
 
 tools-clean: ## Remove only project-specific tool containers, networks, and caches.
 	$(COMPOSE_TOOLS) down --volumes --remove-orphans
 
 ##@ Development
-dev-local-state: ## Create ignored local runtime directories used by Compose bind mounts.
+dev-local-state: dev-s3-guard ## Create ignored local runtime directories used by Compose bind mounts.
 	mkdir -p .local/caddy
 
-dev: dev-local-state ## Start the Docker development stack.
-	$(COMPOSE_DEV) up -d --build
+dev: dev-local-state prepare-database-runtime ## Start the Docker development stack.
+	$(WITH_SELECTED) postgres -- $(COMPOSE_DEV) up -d --build
 
 up: dev ## Alias for dev.
 
-dev-social-init: ## Generate the trusted local certificate used by Caddy.
+dev-social-init: dev-s3-guard ## Generate the trusted local certificate used by Caddy.
 	./deployment/caddy/init-local-tls.sh
 
-dev-social: dev-social-init ## Start dev with local HTTPS, Keycloak, and OAuth2 Proxy.
+dev-social: dev-social-init prepare-app-runtime prepare-database-runtime build-keycloak-image ## Start dev with local HTTPS, Keycloak, and OAuth2 Proxy.
 	@set -eu; \
+	POSTGRES_IMAGE=$$(bash tools/quality/dependency-images/selected.sh postgres); \
+	CADDY_RUNTIME_IMAGE=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime); \
+	KEYCLOAK_IMAGE=$$(bash tools/quality/dependency-images/selected.sh keycloak); \
+	IDENTITY_POSTGRES_IMAGE=$$(POSTGRES_IMAGE="$${IDENTITY_POSTGRES_IMAGE:-$$POSTGRES_IMAGE}" bash tools/quality/dependency-images/selected.sh postgres); \
+	export POSTGRES_IMAGE IDENTITY_POSTGRES_IMAGE CADDY_RUNTIME_IMAGE KEYCLOAK_IMAGE; \
 	if [ -n "$${GEOGUESSME_GOOGLE_CLIENT_JSON:-}" ]; then \
 		test -r "$${GEOGUESSME_GOOGLE_CLIENT_JSON}" || { echo 'GEOGUESSME_GOOGLE_CLIENT_JSON is not readable' >&2; exit 2; }; \
 		command -v jq >/dev/null || { echo 'jq is required to read the Google OAuth client JSON' >&2; exit 2; }; \
@@ -213,9 +221,8 @@ identity-config: ## Validate the shared auth.geoguessme.com identity stack.
 	@test -f deployment/env/identity.env || { echo 'deployment/env/identity.env is required'; exit 2; }
 	$(COMPOSE_IDENTITY) config --quiet
 
-identity-up: identity-config build-keycloak-image ## Start shared Keycloak and its database.
-	$(COMPOSE_IDENTITY) up -d --wait keycloak-db keycloak
-	$(COMPOSE_IDENTITY) run --rm --no-deps keycloak-config
+identity-up: identity-config prepare-database-runtime build-keycloak-image ## Start shared Keycloak and its database.
+	$(WITH_SELECTED) postgres keycloak -- sh -ec 'IDENTITY_POSTGRES_IMAGE=$$(POSTGRES_IMAGE="$${IDENTITY_POSTGRES_IMAGE:-$$POSTGRES_IMAGE}" bash tools/quality/dependency-images/selected.sh postgres); export IDENTITY_POSTGRES_IMAGE; $(COMPOSE_IDENTITY) up -d --wait keycloak-db keycloak; $(COMPOSE_IDENTITY) run --rm --no-deps keycloak-config'
 
 identity-down: ## Stop shared Keycloak while retaining its database volume.
 	$(COMPOSE_IDENTITY) down

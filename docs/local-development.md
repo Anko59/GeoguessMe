@@ -12,8 +12,15 @@ make bootstrap
 make dev
 ```
 
-The development stack runs PostgreSQL, MinIO, Mailpit, a Go backend hot-reload
-container, and a Vite frontend container. Named application volumes preserve
+The development stack runs PostgreSQL, a SeaweedFS S3-compatible fixture,
+Mailpit, a Go backend hot-reload container, and a Vite frontend container.
+Retired MinIO data is never mounted into SeaweedFS: an existing legacy volume
+blocks `make dev` until an explicit verified migration. Follow the
+[local S3 migration runbook](runbooks/s3-fixture-migration.md); the old volume
+is left unmanaged so even normal Compose volume cleanup cannot remove it. The S3
+endpoint remains `http://localhost:9000`, with fixture-only credentials
+`minioadmin`/`minioadmin`; the retired MinIO console on port 9001 is removed.
+Hosted R2 configuration is unchanged. Named application volumes preserve
 database, media, and frontend dependency data across make down and make restart.
 The single named frontend dependency volume is reused across rebuilds, so
 repeated make dev invocations do not strand anonymous node_modules volumes.
