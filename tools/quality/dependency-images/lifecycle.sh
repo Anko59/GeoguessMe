@@ -55,7 +55,9 @@ prepare_local() {
     else
         rc=$?
         grep -Eiq 'No such image|No such object' "$TEMP/local.log" || fail "local daemon lookup failed (exit $rc); refusing build"
-        docker build --platform "$DEPENDENCY_PLATFORM" --file "$DEPENDENCY_ROOT/$DOCKERFILE" \
+        # The active daemon builder loads the IID even when CI selects an
+        # isolated docker-container builder for registry/cache outputs.
+        BUILDX_BUILDER="$(docker context show)" docker build --platform "$DEPENDENCY_PLATFORM" --file "$DEPENDENCY_ROOT/$DOCKERFILE" \
             --build-arg "DEPENDENCY_INPUTS=$INPUT_HASH" --label "$DEPENDENCY_INPUT_LABEL=$INPUT_HASH" \
             --iidfile "$TEMP/local-build.id" --tag "$LOCAL_REF" "$DEPENDENCY_ROOT/$CONTEXT" >&2 || fail "local dependency build failed: $COMPONENT"
         built_id=$(<"$TEMP/local-build.id")

@@ -22,7 +22,7 @@ done <"$ROOT/deployment/images/dependencies.tsv"
 unset KEYCLOAK_IMAGE RESTIC_IMAGE SOPS_IMAGE SOCKET_PROXY_IMAGE POSTGRES_IMAGE CLOUDFLARED_IMAGE CADDY_RUNTIME_IMAGE GITHUB_OUTPUT
 export FIXTURE
 export PATH="$TMP/bin:$PATH"
-export TEST_COMPONENT=sops
+export TEST_COMPONENT=sops BUILDX_BUILDER=isolated-cache-builder
 export TEST_DIGEST="sha256:$(printf 'd%.0s' {1..64})"
 export TEST_IMAGE_ID="sha256:$(printf 'c%.0s' {1..64})"
 
@@ -32,6 +32,7 @@ set -euo pipefail
 printf 'docker %s\n' "$*" >>"$TRACE"
 . "$FIXTURE/tools/quality/dependency-images/common.sh"
 load_component "$TEST_COMPONENT"
+if [[ "$1 $2" == 'context show' ]]; then echo fixture-context; exit; fi
 if [[ "$1 $2" == 'image tag' ]]; then
     [[ "$3" == "$TEST_IMAGE_ID" ]] || exit 9
     printf '%s\n' "$3" >"$FAKE_STATE/alias"
@@ -73,6 +74,7 @@ if [[ "$1" == build || "$1 $2" == 'buildx build' ]]; then
         if [[ "${args[i]}" == --metadata-file ]]; then metadata=${args[i+1]}; fi
         if [[ "${args[i]}" == --iidfile ]]; then iidfile=${args[i+1]}; fi
     done
+    [[ "$1" != build || "${BUILDX_BUILDER:-}" == fixture-context ]] || { echo 'local build was not loaded into the active daemon' >&2; exit 9; }
     [[ "$*" == *'--platform linux/amd64'* ]] || exit 9
     [[ "$*" == *"DEPENDENCY_INPUTS=$INPUT_HASH"* ]] || exit 9
     : >"$FAKE_STATE/local-$INPUT_HASH"

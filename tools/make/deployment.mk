@@ -11,10 +11,13 @@ build-backend: ## Build the backend binary in Docker.
 build-frontend: prepare-frontend-cache ## Build the frontend bundle in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend run build
 
+# Local Caddy aliases exist only in the active daemon. Its builder loads outputs
+# automatically and uses daemon caching, not isolated-builder cache exporters.
 build-images: prepare-app-runtime prepare-database-runtime build-keycloak-image ## Build production images with normal Docker layer caching.
 	@set -eu; caddy=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime build); \
-	docker build --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
-	docker build $(DOCKER_BUILD_FLAGS) --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
+	load=$$(if docker buildx version >/dev/null 2>&1; then printf -- '--load'; fi); \
+	docker build $$load --pull $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
+	BUILDX_BUILDER="$$(docker context show)" docker build --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
 
 build-keycloak-image: ## Build the digest-pinned Keycloak image.
 	bash tools/quality/dependency-images/lifecycle.sh prepare-local keycloak
@@ -23,8 +26,9 @@ build-keycloak-image: ## Build the digest-pinned Keycloak image.
 
 clean-build: prepare-app-runtime prepare-database-runtime ## Build production images from scratch without any layer cache.
 	@set -eu; caddy=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime build); \
-	docker build --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
-	docker build --no-cache $(DOCKER_BUILD_FLAGS) --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
+	load=$$(if docker buildx version >/dev/null 2>&1; then printf -- '--load'; fi); \
+	docker build $$load --pull --no-cache $(DOCKER_BUILD_FLAGS) -f deployment/docker/backend.Dockerfile -t "$(LOCAL_BACKEND_IMAGE)" .; \
+	BUILDX_BUILDER="$$(docker context show)" docker build --no-cache --build-arg CADDY_RUNTIME_IMAGE="$$caddy" -f deployment/docker/frontend.Dockerfile -t "$(LOCAL_WEB_IMAGE)" .
 	$(MAKE) build-keycloak-image
 
 compose-validate: ## Validate every Compose file.

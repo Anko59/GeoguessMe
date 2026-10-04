@@ -28,6 +28,8 @@ cat >"$TMP/bin/docker" <<'DOCKER'
 set -euo pipefail
 printf 'docker|%s\n' "$*" >>"${IMAGE_TEST_LOG:?}"
 args=("$@")
+if [[ "$*" == 'context show' ]]; then echo fixture-context; exit 0; fi
+if [[ "$*" == 'buildx version' ]]; then exit 0; fi
 last="${args[${#args[@]} - 1]}"
 family_for() {
     case "$1" in
@@ -94,6 +96,10 @@ if [ "${1:-}" = build ]; then
         if [ "${args[i]}" = -t ]; then tag="${args[i + 1]:-}"; fi
     done
     [[ "$tag" != *@sha256:* ]] || { echo 'attempted to build a promotion digest' >&2; exit 84; }
+    case "$tag" in
+        fixture/backend:*) [[ " $* " == *' --load '* ]] || exit 84 ;;
+        fixture/web:*) [[ "${BUILDX_BUILDER:-}" == fixture-context && "$*" != *'--cache-to'* ]] || exit 84 ;;
+    esac
     printf 'build|%s\n' "$tag" >>"$IMAGE_TEST_LOG"
     exit 0
 fi

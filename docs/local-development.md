@@ -104,6 +104,14 @@ Local verification image tags are checkout-scoped too. Rebuild with
 `make build-images`; container verifiers pin the selected image IDs so another
 build cannot silently switch artifacts during inspection. Explicit
 `BACKEND_IMAGE`/`WEB_IMAGE` signed-digest selections still take precedence.
+Local dependency and frontend image builds use the active Docker context's
+daemon builder so their immutable Caddy aliases and outputs are available
+locally, even when CI selects an isolated Buildx builder. Frontend builds retain
+daemon layer caching rather than the isolated builder's external cache flags;
+backend builds explicitly load their outputs while retaining those flags.
+`make test-mobile` prepares application and dependency images before exporting
+the frozen PostgreSQL selection, and its Compose startup refuses implicit
+rebuilds.
 
 ## Configuration
 

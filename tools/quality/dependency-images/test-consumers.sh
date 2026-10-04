@@ -9,7 +9,7 @@ cleanup() { [[ "$TMP" == /tmp/* && -d "$TMP" && ! -L "$TMP" ]] && rm -rf -- "$TM
 trap cleanup EXIT
 FIXTURE="$TMP/repository"
 mkdir -p "$FIXTURE/tools/make" "$FIXTURE/tools/quality/dependency-images" "$FIXTURE/tools/quality/image-audit" "$FIXTURE/deployment/images" "$FIXTURE/deployment/env" "$FIXTURE/deployment/caddy" "$FIXTURE/deployment/scripts/watch" "$TMP/bin"
-cp "$ROOT/tools/make/"{setup,dependency-images,deployment,quality}.mk "$FIXTURE/tools/make/"
+cp "$ROOT/tools/make/"{setup,dependency-images,deployment,quality,mobile}.mk "$FIXTURE/tools/make/"
 cp "$ROOT/deployment/images/runtime.tsv" "$FIXTURE/deployment/images/"
 cp "$ROOT/tools/quality/dependency-images/with-selected.sh" "$FIXTURE/tools/quality/dependency-images/"
 cat >"$FIXTURE/Makefile" <<'MAKE'
@@ -17,6 +17,7 @@ include tools/make/setup.mk
 include tools/make/dependency-images.mk
 include tools/make/deployment.mk
 include tools/make/quality.mk
+include tools/make/mobile.mk
 dev-s3-guard: ; @true
 consumer-integration: ; @$(TEST_ENV) GEOGUESSME_E2E_PROJECTS=desktop sh -c 'printf "%s\n%s\n" "POSTGRES_IMAGE=$$POSTGRES_IMAGE" "GEOGUESSME_E2E_PROJECTS=$$GEOGUESSME_E2E_PROJECTS"'
 MAKE
@@ -45,6 +46,7 @@ SH
 cat >"$TMP/bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "$*" == 'context show' ]]; then echo fixture-context; exit; fi
 printf 'docker|%s|PG=%s|IDENTITY=%s|KEY=%s|GEOKEY=%s|CADDY=%s|SOPS=%s|CLOUD=%s|SOCKET=%s\n' "$*" "${POSTGRES_IMAGE:-}" "${IDENTITY_POSTGRES_IMAGE:-}" "${KEYCLOAK_IMAGE:-}" "${GEOGUESSME_KEYCLOAK_IMAGE:-}" "${CADDY_RUNTIME_IMAGE:-}" "${SOPS_IMAGE:-}" "${CLOUDFLARED_IMAGE:-}" "${SOCKET_PROXY_IMAGE:-}" >>"$TRACE"
 SH
 cat >"$FIXTURE/tools/quality/image-audit/audit.sh" <<'SH'
@@ -62,6 +64,9 @@ for script in backup-restore-rehearsal restart-rehearsal reconnect-rehearsal mig
     cp "$TMP/bin/docker" "$FIXTURE/deployment/scripts/$script.sh"
 done
 cp "$TMP/bin/docker" "$FIXTURE/deployment/scripts/watch/rehearsal.sh"
+mkdir -p "$FIXTURE/tools/mobile"
+cp "$TMP/bin/docker" "$FIXTURE/tools/mobile/run-e2e.sh"
+chmod +x "$FIXTURE/tools/mobile/run-e2e.sh"
 mkdir -p "$FIXTURE/tools/quality/test"
 cp "$FIXTURE/deployment/caddy/init-local-tls.sh" "$FIXTURE/tools/quality/test/check-tool-image-split.sh"
 chmod +x "$FIXTURE/tools/quality/test/check-tool-image-split.sh"
@@ -119,6 +124,13 @@ for target in down identity-down identity-config status logs; do
     absent "$TRACE" 'prepare|'
 done
 pass 'down, logs, status and pure config remain available without prepared images'
+run test-mobile
+contains "$TRACE" 'prepare|prepare-local caddy-runtime'
+contains "$TRACE" 'prepare|prepare-local postgres'
+contains "$TRACE" "docker||PG=$(id 1)"
+contains "$ROOT/tools/mobile/run-e2e.sh" 'up -d --no-build --wait'
+absent "$ROOT/tools/mobile/run-e2e.sh" 'up -d --build'
+pass 'mobile prepares images and passes frozen PostgreSQL without implicit Compose rebuilds'
 run consumer-integration
 contains "$TMP/output" "POSTGRES_IMAGE=$(id 1)"
 contains "$TMP/output" 'GEOGUESSME_E2E_PROJECTS=desktop'
