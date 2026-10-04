@@ -303,8 +303,8 @@ else
     fail "SOPS derivative does not pin the scanner-reported libexpat fix"
 fi
 
-# ── Test 11: Alpine PCRE2 findings are fixed, not excepted ───────────────────
-echo "--- Test 11: Alpine PCRE2 CVE is not allowlisted ---"
+# ── Test 11: PCRE2 findings are fixed, not excepted ──────────────────────────
+echo "--- Test 11: PCRE2 CVE is not allowlisted ---"
 pcre2_cve=CVE-2026-103111
 exception_files=(
     "$REPO_ROOT/tools/quality/image-scan-exceptions.yaml"
@@ -332,6 +332,13 @@ for dockerfile in \
         fail "$(basename "$dockerfile") must pin and assert fixed PCRE2"
     fi
 done
+if grep -Fq 'libpcre2-8-0=10.42-1+deb12u2' "$sops_dockerfile" &&
+    grep -Fq "dpkg-query -W -f='\${Version}' libpcre2-8-0" "$sops_dockerfile" &&
+    grep -Fq "test \"\$installed_pcre2\" = \"10.42-1+deb12u2\"" "$sops_dockerfile"; then
+    pass 'SOPS derivative pins and asserts fixed Debian PCRE2'
+else
+    fail 'SOPS derivative must pin and assert fixed Debian PCRE2'
+fi
 if grep -Fq 'SOCKET_PROXY_IMAGE' "$REPO_ROOT/tools/make/dependency-images.mk" &&
     grep -Fq 'image-audit/audit.sh' "$REPO_ROOT/tools/make/dependency-images.mk"; then
     pass 'the exact socket-proxy derivative remains in the scan-only image audit'
