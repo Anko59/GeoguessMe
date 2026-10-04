@@ -133,7 +133,7 @@ contains "$DEPLOY" 'make bootstrap-mobile' "dev Android gate prepares the pinned
 contains "$DEPLOY" 'make test-mobile' "dev Android gate runs the canonical journey"
 contains "$DEPLOY" 'path: \.local/mobile/artifacts/' "dev Android failures retain bounded diagnostics"
 contains "$DEPLOY" 'make operational-gate' "dev gate includes operational rehearsals"
-contains "$DEPLOY" 'needs: \[quality, integration, e2e, mobile, operational\]' "dev publishing waits for every gate job"
+contains "$DEPLOY" 'needs: \[dependencies, quality, integration, e2e, mobile, operational\]' "dev publishing waits for verified dependencies and every gate job"
 
 absent "$RELEASE" 'make verify' "production does not repeat the dev gate"
 absent "$RELEASE" 'docker/build-push-action@' "production does not rebuild tested images"

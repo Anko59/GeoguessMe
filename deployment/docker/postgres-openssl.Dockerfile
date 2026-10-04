@@ -15,5 +15,7 @@ RUN apk add --no-cache \
     'openssl>=3.5.8-r0' \
     'libuuid>=2.42.3-r1'
 
-LABEL org.opencontainers.image.base.name="postgres:15-alpine" \
+ARG DEPENDENCY_INPUTS
+LABEL dev.geoguessme.dependency-inputs="${DEPENDENCY_INPUTS}" \
+    org.opencontainers.image.base.name="postgres:15-alpine" \
     org.opencontainers.image.base.digest="sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181"

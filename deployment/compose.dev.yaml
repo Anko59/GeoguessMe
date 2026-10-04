@@ -4,7 +4,7 @@ name: geoguessme-dev
 
 services:
   db:
-    image: postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 # PostgreSQL 15.19
+    image: ${POSTGRES_IMAGE:?Run through Make or supply the audited immutable PostgreSQL image}
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -17,22 +17,53 @@ services:
       timeout: 3s
       retries: 20
 
+  # S3-compatible local fixture. The internal DNS name is retained for clients;
+  # SeaweedFS data MUST NOT reuse the retired MinIO volume format.
   minio:
-    image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # Exact-digest mirror of the MinIO release
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports: ["9000:9000", "9001:9001"]
-    volumes: ["geoguessme_dev_minio:/data"]
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d # SeaweedFS 4.48
+    user: "1000:1000"
+    command:
+      [
+        server,
+        -s3,
+        -dir=/data,
+        -ip=minio,
+        -ip.bind=0.0.0.0,
+        -s3.port=9000,
+        -s3.config=/etc/seaweedfs/s3.json,
+        "-volume.max=${GEOGUESSME_S3_FIXTURE_VOLUME_MAX:-32}",
+        -master.volumeSizeLimitMB=64,
+      ]
+    volumes:
+      - geoguessme_dev_s3_fixture:/data
+      - ./deployment/s3-fixture/credentials.json:/etc/seaweedfs/s3.json:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    tmpfs: [/tmp]
+    ports: ["127.0.0.1:9000:9000"]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "2",
+          "--aws-sigv4",
+          "aws:amz:us-east-1:s3",
+          "--user",
+          "minioadmin:minioadmin",
+          "http://127.0.0.1:9000/",
+        ]
+      interval: 3s
       timeout: 3s
-      retries: 20
+      retries: 30
 
   mailpit:
-    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a # Mailpit 1.30.7
+    image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48 # Mailpit 1.31.4
     ports: ["1025:1025", "8025:8025"]
 
   backend:
@@ -97,7 +128,7 @@ services:
   # External provider credentials can be supplied through the matching shell
   # variables. Native Keycloak email signup/login works without those credentials.
   local-keycloak-db:
-    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+    image: ${IDENTITY_POSTGRES_IMAGE:-${POSTGRES_IMAGE:?Supply the audited immutable PostgreSQL image}}
     profiles: [social]
     environment:
       POSTGRES_USER: keycloak
@@ -243,7 +274,7 @@ services:
       local-keycloak: { condition: service_healthy }
 
   local-caddy:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: ${CADDY_RUNTIME_IMAGE:?Run through Make or supply the audited Caddy runtime}
     profiles: [social]
     ports:
       - "127.0.0.1:80:80"
@@ -267,6 +298,8 @@ services:
 
 volumes:
   geoguessme_dev_db:
-  geoguessme_dev_minio:
+  geoguessme_dev_s3_fixture:
+  # The retired geoguessme_dev_minio volume is deliberately unmanaged: even
+  # `down --volumes` must not remove the source of an unfinished migration.
   geoguessme_dev_keycloak_db:
   frontend-node-modules:

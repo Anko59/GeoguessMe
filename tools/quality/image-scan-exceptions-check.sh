@@ -1,233 +1,200 @@
 #!/usr/bin/env bash
-# Validate committed final-image scan exceptions and emit per-image trivy
-# ignorefiles for `make audit-images`.
-#
-# Usage:
-#   image-scan-exceptions-check.sh                 # validate only (fail fast)
-#   image-scan-exceptions-check.sh --emit REF OUT   # validate, then replace the
-#                                                   # ignorefile with REF matches
-#   image-scan-exceptions-check.sh --append REF OUT # validate, then append REF
-#                                                   # matches to the ignorefile
-#
-# The exception files (the space-separated IMAGE_SCAN_EXCEPTIONS override or
-# the two repository defaults) are YAML lists of records:
-#
-#   - id: CVE-2026-00000
-#     image: postgres:15-alpine@sha256:...
-#     digest: sha256:...
-#     owner: platform@geoguessme.dev
-#     reachable: "one-line rationale"
-#     approved: true
-#     expires: 2026-08-30
-#
-# Enforcement (F-01): only FIXED High/Critical findings may be excepted; every
-# record requires all fields, `approved: true`, a well-formed `sha256:` digest,
-# and an `expires` date that is today or later and at most 30 days away.
+# Validate reviewed image exceptions. No name-only or wildcard digest matching.
+# --emit/--append emit legacy IDs for unscoped exact-final records only.
+# --emit-policy REF OUT creates native Trivy Rego for the exact final image.
+# --inherit-policy BASE OUT appends ONLY exact package/version-scoped base rules.
+# package + installed_version are optional together for exact-final records and
+# mandatory for inheritance. Unchanged base provenance does not authorize a CVE
+# exemption for a replacement package or missing package metadata.
 set -euo pipefail
 
 EXCEPTIONS_INPUT="${IMAGE_SCAN_EXCEPTIONS:-tools/quality/image-scan-exceptions.yaml tools/quality/image-scan-exceptions-keycloak.yaml tools/quality/image-scan-exceptions-oauth2-proxy.yaml tools/quality/image-scan-exceptions-cloudflared.yaml tools/quality/image-scan-exceptions-sops.yaml}"
 read -r -a EXCEPTION_FILES <<<"$EXCEPTIONS_INPUT"
-
-usage() {
-    echo "usage: $0 [--emit|--append IMAGE_REF OUTFILE]" >&2
-    exit 2
-}
-
-MODE=validate
-REF=""
-OUT=""
+MODE=validate REF='' OUT=''
 case "${1:-}" in
-    "") ;;
-    --emit | --append)
-        [ $# -eq 3 ] || usage
-        MODE=${1#--}
-        REF=$2
-        OUT=$3
+    '') [ $# -eq 0 ] || exit 2 ;;
+    --emit | --append | --emit-policy | --inherit-policy)
+        [ $# -eq 3 ] || {
+            echo 'usage: checker [--emit|--append|--emit-policy|--inherit-policy REF OUT]' >&2
+            exit 2
+        }
+        MODE=${1#--} REF=$2 OUT=$3
         ;;
     *)
-        usage
+        echo 'ERROR: unknown exception-checker mode' >&2
+        exit 2
         ;;
 esac
-
-for exception_file in "${EXCEPTION_FILES[@]}"; do
-    [ -f "$exception_file" ] || {
-        echo "ERROR: exceptions file not found: $exception_file" >&2
+for file in "${EXCEPTION_FILES[@]}"; do
+    [ -f "$file" ] || {
+        echo "ERROR: exceptions file not found: $file" >&2
         exit 1
     }
 done
 
-date_utc_days_from_today() {
-    local days=$1
-    if date -u -d "$days days" +%F 2>/dev/null; then
-        return
-    fi
-    if [ "$days" -ge 0 ]; then
-        date -u -v+"${days}"d +%F
-    else
-        date -u -v"${days}"d +%F
-    fi
-}
-
-# Parse the constrained YAML list with awk. Each record is emitted as one
-# tab-separated line in a fixed field order so bash can validate it.
-records=$(
-    awk '
-        /^[[:space:]]*#/ { next }
-        /^[[:space:]]*$/ { next }
-        /^[[:space:]]*-[[:space:]]*id:[[:space:]]+/ {
-            if (rec) emit()
-            rec = 1
-            id = $0; sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", id)
-            sub(/[[:space:]]+$/, "", id)
-            image = ""; digest = ""; owner = ""; reachable = ""; approved = ""; expires = ""
-            next
+# A constrained parser, not general YAML. Unknown/duplicate fields and content
+# outside a record fail closed. Pipes are forbidden because they delimit output.
+records=$(awk '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    /^[[:space:]]*-[[:space:]]*id:[[:space:]]+/ {
+        if (rec) emit()
+        rec = 1; delete f
+        val = $0; sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", val)
+        sub(/[[:space:]]+$/, "", val); f["id"] = val; next
+    }
+    rec && /^[[:space:]]+[a-zA-Z0-9_]+:[[:space:]]*/ {
+        key = $0; sub(/^[[:space:]]+/, "", key); sub(/:.*/, "", key)
+        val = $0; sub(/^[[:space:]]*[a-zA-Z0-9_]+:[[:space:]]*/, "", val)
+        sub(/[[:space:]]+$/, "", val); gsub(/^"|"$/, "", val)
+        if (key !~ /^(image|digest|owner|reachable|approved|expires|package|installed_version)$/ || key in f) {
+            print "ERROR: unknown or duplicate key " key > "/dev/stderr"; bad = 1
         }
-        rec && /^[[:space:]]+[a-zA-Z0-9_]+:[[:space:]]*/ {
-            key = $0; sub(/^[[:space:]]+/, "", key); sub(/:.*/, "", key)
-            val = $0; sub(/^[[:space:]]*[a-zA-Z0-9_]+:[[:space:]]*/, "", val)
-            sub(/[[:space:]]+$/, "", val)
-            gsub(/^"|"$/, "", val)
-            if (key == "image") image = val
-            else if (key == "digest") digest = val
-            else if (key == "owner") owner = val
-            else if (key == "reachable") reachable = val
-            else if (key == "approved") approved = val
-            else if (key == "expires") expires = val
-            else { print "ERROR: unknown key '"key"' in exceptions file" > "/dev/stderr"; bad = 1 }
-            next
+        f[key] = val; next
+    }
+    { print "ERROR: unparsable line: " $0 > "/dev/stderr"; bad = 1 }
+    END { if (rec) emit(); if (bad) exit 1 }
+    function emit(    i, keys, out) {
+        split("id image digest owner reachable approved expires package installed_version", keys, " ")
+        if (("package" in f || "installed_version" in f) && (f["package"] == "" || f["installed_version"] == "")) {
+            print "ERROR: package and installed_version must both be nonempty" > "/dev/stderr"; bad = 1
         }
-        rec { print "ERROR: unparsable line: " $0 > "/dev/stderr"; bad = 1 }
-        { next }
-        END { if (rec) emit(); if (bad) exit 1 }
-        function emit() {
-            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, image, digest, owner, reachable, approved, expires
+        out = ""
+        for (i = 1; i <= 9; i++) {
+            if (f[keys[i]] ~ /[|\t\r]/) { print "ERROR: invalid field separator" > "/dev/stderr"; bad = 1 }
+            out = out (i == 1 ? "" : "|") f[keys[i]]
         }
-    ' "${EXCEPTION_FILES[@]}"
-) || exit 1
+        print out
+    }
+' "${EXCEPTION_FILES[@]}") || exit 1
 
 today=$(date -u +%F)
-max_expiry=$(date_utc_days_from_today 30)
+expiry_epoch=$(($(date -u +%s) + 30 * 86400))
+max_expiry=$(date -u -d "@$expiry_epoch" +%F 2>/dev/null || date -u -r "$expiry_epoch" +%F)
+fail=0 record_count=0
+REF_NAME=${REF%%@sha256:*} REF_DIGEST=''
+case "$REF" in
+    *@sha256:*) REF_DIGEST="sha256:${REF##*@sha256:}" ;;
+    sha256:*) REF_DIGEST=$REF ;;
+    '') ;;
+    *)
+        # Legacy local-tag callers must verify the actual image ID. audit.sh
+        # freezes tags by ID and supplies REF@ID, avoiding a tag-change race.
+        REF_DIGEST=$(docker image inspect --format '{{.Id}}' "$REF" 2>/dev/null || true)
+        ;;
+esac
+if [ "$MODE" != validate ] && ! [[ "$REF_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo 'ERROR: emitted exceptions require an exact digest or existing local image' >&2
+    exit 1
+fi
+case "$MODE" in
+    emit) : >"$OUT" ;;
+    append) touch "$OUT" ;;
+    emit-policy) printf 'package trivy\nimport rego.v1\ndefault ignore := false\n' >"$OUT" ;;
+    inherit-policy)
+        [ -s "$OUT" ] || {
+            echo 'ERROR: inherited policy requires an existing final-image policy' >&2
+            exit 1
+        }
+        ;;
+esac
 
-fail=0
-record_count=0
-
-# validate_record: checks one tab-separated record; emits matching trivy
-# ignorefile lines to OUT when running in emit mode.
 validate_record() {
-    local id=$1 image=$2 digest=$3 owner=$4 reachable=$5 approved=$6 expires=$7
-    local msg="" image_digest=""
-
+    local id=$1 image=$2 digest=$3 owner=$4 reachable=$5 approved=$6 expires=$7 package=$8 version=$9
+    local msg='' calendar match=0
     record_count=$((record_count + 1))
-
-    [ -n "$id" ] || msg="${msg} missing id;"
-    [ -n "$image" ] || msg="${msg} missing image;"
-    [ -n "$digest" ] || msg="${msg} missing digest;"
-    [ -n "$owner" ] || msg="${msg} missing owner;"
-    [ -n "$reachable" ] || msg="${msg} missing reachable;"
-    [ -n "$approved" ] || msg="${msg} missing approved;"
-    [ -n "$expires" ] || msg="${msg} missing expires;"
-
-    [ -n "$msg" ] && {
+    [ -n "$id" ] || msg+=' missing id;'
+    [ -n "$image" ] || msg+=' missing image;'
+    [ -n "$digest" ] || msg+=' missing digest;'
+    [ -n "$owner" ] || msg+=' missing owner;'
+    [ -n "$reachable" ] || msg+=' missing reachable;'
+    [ -n "$approved" ] || msg+=' missing approved;'
+    [ -n "$expires" ] || msg+=' missing expires;'
+    if [ -n "$msg" ]; then
         echo "ERROR: exception '${id:-<unnamed>}':$msg" >&2
         fail=1
         return
-    }
-
-    printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
-        echo "ERROR: exception '$id' has malformed digest: $digest (expected sha256:<64 hex>)" >&2
+    fi
+    if ! [[ "$id" =~ ^(CVE-[0-9]{4}-[0-9]+|GHSA-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+)$ ]]; then
+        echo "ERROR: exception '$id' has malformed id" >&2
         fail=1
-    }
-
+    fi
+    if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        echo "ERROR: exception '$id' has malformed digest" >&2
+        fail=1
+    fi
     case "$image" in
         *@sha256:*)
-            image_digest="sha256:${image##*@sha256:}"
-            [ "$image_digest" = "$digest" ] || {
+            if [ "sha256:${image##*@sha256:}" != "$digest" ]; then
                 echo "ERROR: exception '$id' image digest does not match digest field" >&2
                 fail=1
-            }
+            fi
             ;;
         *)
-            echo "ERROR: exception '$id' image is not digest-pinned: $image" >&2
+            echo "ERROR: exception '$id' image is not digest-pinned" >&2
             fail=1
             ;;
     esac
-
-    [ "$approved" = "true" ] || {
+    if [ "$approved" != true ]; then
         echo "ERROR: exception '$id' is not approved (approved must be true)" >&2
         fail=1
-    }
-
-    case "$expires" in
-        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-        *)
-            echo "ERROR: exception '$id' has malformed expires: $expires (expected YYYY-MM-DD)" >&2
-            fail=1
-            return
-            ;;
-    esac
-    # ISO dates compare lexicographically.
-    [ "$expires" \< "$today" ] && {
+    fi
+    if ! [[ "$expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        echo "ERROR: exception '$id' has malformed expires" >&2
+        fail=1
+        return
+    fi
+    calendar=$(date -u -d "$expires" +%F 2>/dev/null || date -j -u -f '%Y-%m-%d' "$expires" +%F 2>/dev/null || true)
+    if [ "$calendar" != "$expires" ]; then
+        echo "ERROR: exception '$id' has invalid calendar expiry" >&2
+        fail=1
+    fi
+    if [[ "$expires" < "$today" ]]; then
         echo "ERROR: exception '$id' expires in the past: $expires (today $today)" >&2
         fail=1
-    }
-    [ "$expires" \> "$max_expiry" ] && {
+    fi
+    if [[ "$expires" > "$max_expiry" ]]; then
         echo "ERROR: exception '$id' expires more than 30 days out: $expires (max $max_expiry)" >&2
         fail=1
-    }
-
-    if [ "$MODE" = "emit" ] || [ "$MODE" = "append" ]; then
-        local ref_name=${REF%%@sha256:*}
-        local ref_digest=""
-        case "$REF" in
-            *@sha256:*) ref_digest="sha256:${REF##*@sha256:}" ;;
-        esac
-        # Local remediation images (e.g. geoguessme/postgres-openssl) are
-        # audited by tag because a locally built image has no registry digest;
-        # their records pin the exact image-ID digest instead, so a match on
-        # the tag-only reference must verify the ID of the image in the daemon.
-        if [ -z "$ref_digest" ] && docker image inspect "$REF" >/dev/null 2>&1; then
-            ref_digest=$(docker image inspect --format '{{.Id}}' "$REF")
-        fi
-        local match=0
-        [ "$image" = "$REF" ] && match=1
-        if [ "$match" -eq 0 ] && [ -n "$ref_digest" ]; then
-            # Compare on the name portion of both sides so a record written
-            # for a locally built image (image carries its image-ID digest)
-            # matches either a tag-only audit reference or the same reference
-            # with its registry digest. Locally built remediation images
-            # (geoguessme/*) are matched on the image name alone: their
-            # image IDs are nondeterministic (clang stage timestamps,
-            # buildkit metadata), so a strict digest equality makes the
-            # committed exception fail closed on every fresh build and on
-            # every runner. The registry-pinned third-party images continue
-            # to require an exact digest match.
-            local image_name=${image%%@sha256:*}
-            if [ "$image_name" = "$ref_name" ]; then
-                if [ "$digest" = "$ref_digest" ]; then
-                    match=1
-                elif [[ "$image_name" == geoguessme/* ]]; then
-                    match=1
-                fi
-            fi
-        fi
-        if [ "$match" -eq 1 ]; then
-            printf '# exception %s (owner %s, expires %s)\n%s\n' "$id" "$owner" "$expires" "$id" >>"$OUT"
+    fi
+    if [ -n "$package$version" ]; then
+        if ! [[ "$package" =~ ^[A-Za-z0-9_./:@+~-]+$ && "$version" =~ ^[A-Za-z0-9_.:+~-]+$ ]]; then
+            echo "ERROR: exception '$id' requires safe nonempty package and installed_version together" >&2
+            fail=1
         fi
     fi
+    [ "$MODE" != validate ] || return 0
+    [ "${image%%@sha256:*}" = "$REF_NAME" ] && [ "$digest" = "$REF_DIGEST" ] && match=1
+    [ "$match" -eq 1 ] || return 0
+    case "$MODE" in
+        emit | append)
+            if [ -n "$package$version" ]; then
+                echo "ERROR: exception '$id' requires native scoped policy, not legacy ID emission" >&2
+                fail=1
+                return
+            fi
+            printf '# exception %s (owner %s, expires %s)\n%s\n' "$id" "$owner" "$expires" "$id" >>"$OUT"
+            ;;
+        emit-policy | inherit-policy)
+            if [ "$MODE" = inherit-policy ] && [ -z "$package$version" ]; then
+                echo "ERROR: exception '$id' cannot be inherited without package and installed_version" >&2
+                fail=1
+                return
+            fi
+            # Input strings are constrained above; these are native Trivy
+            # predicate rules, not a replacement vulnerability policy engine.
+            printf 'ignore if {\n  input.VulnerabilityID == "%s"\n' "$id" >>"$OUT"
+            if [ -n "$package$version" ]; then
+                printf '  input.PkgName == "%s"\n  input.InstalledVersion == "%s"\n' "$package" "$version" >>"$OUT"
+            fi
+            printf '}\n' >>"$OUT"
+            ;;
+    esac
 }
 
-if [ "$MODE" = "emit" ]; then
-    : >"$OUT"
-elif [ "$MODE" = "append" ]; then
-    touch "$OUT"
-fi
-
 if [ -n "$records" ]; then
-    while IFS="$(printf '\t')" read -r id image digest owner reachable approved expires; do
-        validate_record "$id" "$image" "$digest" "$owner" "$reachable" "$approved" "$expires"
+    while IFS='|' read -r id image digest owner reachable approved expires package version; do
+        validate_record "$id" "$image" "$digest" "$owner" "$reachable" "$approved" "$expires" "$package" "$version"
     done <<<"$records"
 fi
-
 [ "$fail" -eq 0 ] || exit 1
-
 echo "image-scan exceptions OK ($record_count records)"

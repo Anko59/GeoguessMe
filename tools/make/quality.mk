@@ -55,14 +55,14 @@ lint-actions: ## Run actionlint on tracked workflows.
 lint-sql: ## Run SQLFluff against migrations.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 
-lint-caddy: ## Validate and format-check Caddy configuration.
+lint-caddy: prepare-app-runtime ## Validate and format-check Caddy configuration.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh /workspace/tools/quality/test/caddy/check-policy.sh
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/watch/Caddyfile
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/watch/Caddyfile
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy adapt --config /workspace/deployment/caddy/Caddyfile.dev >/dev/null
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile.dev
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/caddy/Caddyfile
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy validate --config /workspace/deployment/watch/Caddyfile
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/watch/Caddyfile
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy adapt --config /workspace/deployment/caddy/Caddyfile.dev >/dev/null
+	$(WITH_SELECTED) caddy-runtime -- $(COMPOSE_TOOLS_RUN) --rm --no-deps caddy caddy fmt --diff /workspace/deployment/caddy/Caddyfile.dev
 
 lint-openapi: ## Validate the split OpenAPI contract with Redocly.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend exec -- redocly lint /workspace/docs/openapi.yaml
@@ -80,18 +80,21 @@ structure-check: ## Enforce tracked-file and directory structure limits.
 type-check: ## Run the TypeScript compiler without emitting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools bash -c 'cd frontend && tsc --noEmit'
 
-audit: test-braces-security ## Run dependency vulnerability audits and patched dependency regressions in Docker.
+audit: test-braces-security test-npm-security-overrides ## Run dependency vulnerability audits and patched dependency regressions in Docker.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && govulncheck ./...'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend audit --audit-level=high
 
-deps-go-security-update: ## Update vulnerable Go security modules and normalize metadata.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get github.com/go-jose/go-jose/v4@v4.1.4 golang.org/x/crypto@v0.54.0 golang.org/x/image@v0.45.0 golang.org/x/text@v0.41.0 && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
+deps-go-security-update: ## Upgrade compatible Go modules; review the graph and run audit before committing.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'cd backend && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go get -u ./... && GOPATH=/tmp/go GOCACHE=/tmp/go-build-cache go mod tidy'
 
 deps-npm-security-update: ## Apply compatible npm security fixes to the frontend lockfile.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache audit fix --package-lock-only
 
 deps-npm-lock: ## Refresh the frontend lockfile after an intentional manifest edit.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) node-tools-write npm --prefix /workspace/frontend --cache /tmp/npm-cache install --package-lock-only --ignore-scripts
+
+deps-npm-ci: ## Install the reviewed frontend lockfile into the checkout-scoped Docker volume.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools sh -c 'npm ci --prefix /workspace/frontend --cache /npm-cache && chown -R $(TOOLS_UID):$(TOOLS_GID) /workspace/frontend/node_modules /npm-cache'
 
 ARCHCHECK := $(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd /workspace/tools/quality/archcheck && go run .'
 
@@ -126,7 +129,7 @@ endif
 HARNESS_GATE := $(if $(filter-out false,$(PREFLIGHT_HARNESS)),$(HARNESS_GATE_TARGETS),)
 
 ##@ Gates
-preflight: structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract test-tools-namespace test-local-images test-rehearsal-isolation test-play-api hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
+preflight: test-local-dependency-from test-s3-fixture verify-s3-upstream test-image-audit test-image-audit-native test-security-workflows test-dependency-images test-image-scan-exceptions-regression structure-check format-check lint openapi-check archcheck $(HARNESS_GATE) test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract test-tools-namespace test-local-images test-rehearsal-isolation test-play-api hosted-contract-test terraform-fmt-check terraform-test type-check audit test-unit compose-validate ## Run the fast local and pull-request gate.
 
 preflight-docs: structure-check format-check lint-docs test-docs-agent-config test-ci-classifier ## Run the documentation-only pull-request gate.
 
@@ -134,9 +137,9 @@ pr-backend: test-integration ## Run backend live-stack checks selected by CI.
 
 pr-frontend: test-e2e-pr ## Run the Chromium E2E checks selected by CI.
 
-quality: structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract test-tools-namespace test-local-images test-rehearsal-isolation test-play-api test-ops-credentials test-dev-workflow-regression test-load-harness-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
+quality: test-local-dependency-from test-s3-fixture test-s3-fixture-race test-s3-fixture-snapshot test-s3-fixture-integration verify-s3-upstream structure-check format-check lint openapi-check archcheck test-structure-regression test-debt-markers-regression test-docs-agent-config test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-ci-classifier test-e2e-regression test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract test-tools-namespace test-local-images test-rehearsal-isolation test-play-api test-ops-credentials test-dev-workflow-regression test-load-harness-regression test-prod-container-verify-regression test-migration-fixture-regression test-image-scan-exceptions-regression test-image-audit test-image-audit-native test-security-workflows test-dependency-images test-artifacts-clean-regression hosted-contract-test terraform-fmt-check terraform-test type-check audit test-verified build-images compose-validate ## Run all local quality gates.
 
-verify: quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal watch-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
+verify: build-security-tool-images quality test-integration test-e2e container-verify prod-container-verify migration-test backup-rehearsal restart-rehearsal reconnect-rehearsal watch-rehearsal test-restart-regression test-artifacts-clean-regression smoke load-test audit-images ## Run the complete release gate, including digest-pinned image scanning (audit-images).
 
 pre-commit: ## Run the strict Dockerized commit gate.
 	tools/quality/pre-commit.sh

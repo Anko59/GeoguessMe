@@ -3,6 +3,37 @@
 All backend configuration is read once at startup via environment variables and
 validated. Never commit a real `.env` or production secret.
 
+## Deployment and fixture tooling
+
+Selected dependency references (`POSTGRES_IMAGE`, `RESTIC_IMAGE`, `SOPS_IMAGE`,
+`SOCKET_PROXY_IMAGE`, `KEYCLOAK_IMAGE`, `CLOUDFLARED_IMAGE`,
+`CADDY_RUNTIME_IMAGE`) are prepared explicitly or resolved as verified immutable
+artifacts; they are not backend credentials. Shared identity can independently
+retain `IDENTITY_POSTGRES_IMAGE`. See the
+[security lifecycle](security-scanning.md) for content keys, adoption and
+cutover. `HOSTED_DEPENDENCY_PROTOCOL_READY=true` is a GitHub deployment
+readiness variable, set only after operator verification of the root-owned
+bundle, not a dotenv backend setting.
+
+Local fixture tooling uses its own `S3_FIXTURE_ENDPOINT`,
+`S3_FIXTURE_ACCESS_KEY`, `S3_FIXTURE_SECRET_KEY`, and `S3_FIXTURE_REGION`
+(default `us-east-1`), never inherited live R2 settings. The Docker network is
+`GEOGUESSME_S3_FIXTURE_NETWORK`. `S3_FIXTURE_COMMAND` supplies simple arguments;
+`S3_FIXTURE_ARGS_JSON` supplies a literal JSON string array for keys or file
+paths containing spaces/special characters. Copy/verify uses separate
+`SOURCE_S3_FIXTURE_*` values. The migration targets force both endpoints to
+loopback. Normal fixture credentials are deliberately local-only
+`minioadmin`/`minioadmin`; customized legacy credentials must be supplied
+privately through the source-prefixed environment. The optional production
+fixture config mount uses `GEOGUESSME_S3_FIXTURE_CONFIG`; hosted helpers force
+the reviewed root-owned config path, preventing an app release from replacing
+that definition. `GEOGUESSME_S3_FIXTURE_VOLUME_MAX` bounds fixture growth
+(default 32 x 64 MiB; integer 1..4096); review disk capacity before raising it
+for a larger import. Keep the same value for migration staging and normal
+development. See the
+[fixture environment example](../deployment/env/s3-fixture.env.example) and
+[migration runbook](runbooks/s3-fixture-migration.md).
+
 ## Variables
 
 | Variable                          | Type     | Default                                        | Applies to | Validation                                                                                                                                                                                                                                                                                        |

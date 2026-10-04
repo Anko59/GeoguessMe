@@ -4,8 +4,7 @@ set -eu
 # This file is sourced; consumers use different subsets of these constants.
 # shellcheck disable=SC2034
 readonly APP_ROOT="${GEOGUESSME_APP_ROOT:-/opt/geoguessme}"
-# Root-owned deployment definitions are deliberately separate from downloaded
-# application releases so a dev deployment cannot alter host mounts or names.
+# Root definitions never come from writable application releases.
 readonly CONFIG_ROOT="${GEOGUESSME_CONFIG_ROOT:-$APP_ROOT/config}"
 # shellcheck disable=SC2034
 readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
@@ -13,22 +12,19 @@ readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
 readonly SECRET_ROOT="${GEOGUESSME_SECRET_ROOT:-/etc/geoguessme}"
 # shellcheck disable=SC2034
 readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
-# This is the exact signed Restic image published and scanned with the
-# currently deployed development revision. Keep the reference immutable; the
-# release workflow scans this exact value before production promotion.
-readonly RESTIC_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
+# Audited legacy pins: retain until both environments adopt utility metadata.
+# Backups select active metadata, never an incoming candidate.
+readonly RESTIC_BOOTSTRAP_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
+readonly POSTGRES_BOOTSTRAP_IMAGE='postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181'
+readonly IDENTITY_POSTGRES_BOOTSTRAP_IMAGE='postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
-# Temporary compatibility for the first staged host cutover only. New workflows
-# pass the signed SOPS digest explicitly; remove this bootstrap pin once both
-# host environments and workflows use that protocol.
+# Legacy SOPS bootstrap only; new workflows supply the signed digest.
 # shellcheck disable=SC2034
 readonly SOPS_BOOTSTRAP_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
 readonly SOPS_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-sops'
 readonly SOCKET_PROXY_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-socket-proxy'
-# Temporary bootstrap references for the staged root-bundle cutover. The first
-# is used by the new Compose definition; the second may still be running on an
-# already-provisioned host before the first signed watch update.
+# Watch cutover: current definition pin, then the previously running pin.
 readonly SOCKET_PROXY_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d'
 readonly SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd'
 
@@ -238,6 +234,105 @@ normalize_oauth2_proxy_cookie_secret() {
     esac
 }
 
+# Only exact project-owned references are admitted by the extended protocol.
+validate_dependency_image_reference() {
+    dependency_candidate=$1 dependency_component=$2 dependency_tag=$3
+    case "$dependency_component" in postgres | restic) ;; *) die 'invalid dependency component' ;; esac
+    case "$dependency_candidate" in
+        "ghcr.io/anko59/geoguessme-${dependency_component}:${dependency_tag}"@sha256:*) ;;
+        *) die "$dependency_component image must use the expected signed development/release reference" ;;
+    esac
+    valid_image_reference "$dependency_candidate" || die "invalid $dependency_component digest"
+}
+
+# Never source writable metadata as shell code or accept duplicate image fields.
+active_metadata_image() (
+    validate_environment "$1"
+    metadata="$STATE_ROOT/releases/$1/current.env"
+    [ ! -L "$metadata" ] || die 'active image metadata must not be a symlink'
+    [ ! -e "$metadata" ] || [ -f "$metadata" ] || die 'active image metadata must be a regular file'
+    [ -f "$metadata" ] || exit 0
+    [ -r "$metadata" ] || die 'active image metadata is not readable'
+    count=$(awk -F= -v key="$2" '$1 == key { count++ } END { print count + 0 }' "$metadata") || exit 1
+    [ "$count" -le 1 ] || die "duplicate $2 in active metadata"
+    sed -n "s/^$2=//p" "$metadata"
+)
+
+verify_dependency_image() (
+    dependency_image=$1 dependency_component=$2
+    dependency_tag=${dependency_image#"ghcr.io/anko59/geoguessme-${dependency_component}:"}
+    dependency_tag=${dependency_tag%%@*}
+    case "$dependency_tag" in
+        dev-*)
+            dependency_revision=${dependency_tag#dev-}
+            dependency_workflow='deploy'
+            dependency_branch='dev'
+            ;;
+        release-*)
+            dependency_revision=${dependency_tag#release-}
+            dependency_workflow='release'
+            dependency_branch='main'
+            ;;
+        *) die 'dependency image must identify its adoption revision' ;;
+    esac
+    valid_release_revision "$dependency_revision" || die 'invalid dependency adoption revision'
+    validate_dependency_image_reference "$dependency_image" "$dependency_component" "$dependency_tag"
+    docker run --rm -v "$HOME/.docker:/root/.docker:ro" "$COSIGN_IMAGE" verify \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp "^https://github\\.com/Anko59/GeoguessMe/\\.github/workflows/${dependency_workflow}\\.yml@refs/heads/${dependency_branch}$" \
+        --annotations "revision=$dependency_revision" "$dependency_image" >/dev/null
+)
+
+# Legacy rollback captures the running image; never guess from a candidate.
+running_postgres_image() (
+    ids=$(docker ps --filter "label=com.docker.compose.project=$1" \
+        --filter "label=com.docker.compose.service=$2" --format '{{.ID}}') || exit 1
+    [ -n "$ids" ] || exit 0
+    set -f
+    # shellcheck disable=SC2086
+    set -- $ids
+    [ "$#" -eq 1 ] || die 'database image selection requires exactly one active container'
+    docker inspect --format '{{.Config.Image}}' "$1"
+)
+
+validate_selected_postgres() {
+    case "$1" in
+        "$POSTGRES_BOOTSTRAP_IMAGE" | "$IDENTITY_POSTGRES_BOOTSTRAP_IMAGE") ;;
+        *) verify_dependency_image "$1" postgres ;;
+    esac
+}
+
+select_postgres_image() (
+    validate_environment "$1"
+    selected=${POSTGRES_IMAGE:-}
+    [ -n "$selected" ] || selected=$(active_metadata_image "$1" POSTGRES_IMAGE) || exit 1
+    [ -n "$selected" ] || selected=$(running_postgres_image "$(environment_project "$1")" postgres) || exit 1
+    # Only fresh legacy bootstrap has neither metadata nor an active container.
+    [ -n "$selected" ] || selected=$POSTGRES_BOOTSTRAP_IMAGE
+    validate_selected_postgres "$selected" || exit 1
+    printf '%s\n' "$selected"
+)
+
+select_identity_postgres_image() (
+    # Identity is shared: a dev application's candidate must never change its DB.
+    selected=${IDENTITY_POSTGRES_IMAGE:-}
+    [ -n "$selected" ] || selected=$(active_metadata_image production IDENTITY_POSTGRES_IMAGE) || exit 1
+    [ -n "$selected" ] || selected=$(running_postgres_image geoguessme-identity keycloak-db) || exit 1
+    [ -n "$selected" ] || selected=$(active_metadata_image production POSTGRES_IMAGE) || exit 1
+    [ -n "$selected" ] || selected=$IDENTITY_POSTGRES_BOOTSTRAP_IMAGE
+    validate_selected_postgres "$selected" || exit 1
+    printf '%s\n' "$selected"
+)
+
+select_restic_image() (
+    validate_environment "$1"
+    # Backup uses active adoption, never the incoming RESTIC_IMAGE.
+    selected=$(active_metadata_image "$1" RESTIC_IMAGE) || exit 1
+    [ -n "$selected" ] || selected=$RESTIC_BOOTSTRAP_IMAGE
+    verify_dependency_image "$selected" restic || exit 1
+    printf '%s\n' "$selected"
+)
+
 release_dir() {
     printf '%s/releases/%s\n' "$APP_ROOT" "$1"
 }
@@ -271,12 +366,15 @@ compose() {
     if oidc_enabled "$env_file"; then
         profiles=social
     fi
-    COMPOSE_PROJECT_NAME=$(environment_project "$environment") \
-    COMPOSE_PROFILES="$profiles" \
-    GEOGUESSME_ENV_FILE="$env_file" \
-    GEOGUESSME_WEB_PORT=$(environment_port "$environment") \
-    BACKEND_IMAGE="$backend" \
-    WEB_IMAGE="$web" \
+    compose_postgres=$(select_postgres_image "$environment") || return 1
+    POSTGRES_IMAGE="$compose_postgres" \
+        COMPOSE_PROJECT_NAME=$(environment_project "$environment") \
+        COMPOSE_PROFILES="$profiles" \
+        GEOGUESSME_ENV_FILE="$env_file" \
+        GEOGUESSME_S3_FIXTURE_CONFIG="$CONFIG_ROOT/s3-fixture/credentials.json" \
+        GEOGUESSME_WEB_PORT=$(environment_port "$environment") \
+        BACKEND_IMAGE="$backend" \
+        WEB_IMAGE="$web" \
         docker compose \
         --project-directory "$release" \
         -f "$CONFIG_ROOT/compose.production.yaml" \
@@ -292,7 +390,9 @@ compose_identity() {
     shift
     env_file=$(identity_env_file)
     [ -f "$env_file" ] || die "missing identity secret file: $env_file"
-    COMPOSE_PROJECT_NAME=geoguessme-identity \
+    identity_postgres=$(select_identity_postgres_image) || return 1
+    POSTGRES_IMAGE="$identity_postgres" \
+        COMPOSE_PROJECT_NAME=geoguessme-identity \
         GEOGUESSME_IDENTITY_ENV_FILE="$env_file" \
         docker compose \
         --project-directory "$release" \
@@ -323,8 +423,9 @@ restic() {
     secret_file=$(environment_env_file "$environment")
     backup_dir="$STATE_ROOT/backups/$environment"
     mkdir -p "$backup_dir"
+    active_restic=$(select_restic_image "$environment") || return 1
     docker run --rm --network host \
         --env-file "$secret_file" \
         -v "$backup_dir:/backup:ro" \
-        "$RESTIC_IMAGE" /usr/bin/restic "$@"
+        "$active_restic" /usr/bin/restic "$@"
 }

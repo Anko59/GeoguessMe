@@ -4,16 +4,17 @@ The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
-Nightly `make verify` builds local application and Keycloak images with Buildx
-`--load` before `make audit-images` scans them, so the image gate inspects the
-artifacts produced by that verification run. The Keycloak base-image pin and its
-narrowly scoped audit exceptions are maintained in the
-[security scanning guide](security-scanning.md). Hosted SOPS and the monitoring
-socket proxy use project-owned, digest-pinned security derivatives; CI scans
-their exact published digests before signing and production promotion never
-rebuilds them. The proxy fixes Alpine PCRE2 without a CVE exception and is
-updated through a separate `watch` command, not the app deploy. Host runtime
-changes follow the staged procedure in the
+Nightly verification resolves existing signed dependency artifacts, then builds
+local application images with Buildx `--load`; the scan-only `make audit-images`
+inspects those exact artifacts and the complete runtime inventory. Dependency
+identity follows reviewed inputs/platform, not application revision: a frontend
+change reuses the shared Caddy runtime. Database, Restic, SOPS and socket-proxy
+selection is aligned with audited digests. Original build provenance remains
+separate from revision-adoption signatures, and promotion does not rebuild.
+Preparation, strict failures and package/version-scoped exceptions are described
+in the [security scanning guide](security-scanning.md). The proxy fixes Alpine
+PCRE2 without a CVE exception and is updated through a separate `watch` command,
+not the app deploy. Host runtime changes follow the staged procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
 The concrete hosted implementation and launch checklist is in the
@@ -81,12 +82,14 @@ infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
 `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
 `GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
 
-Development, integration/E2E, and the optional `local-minio` profile pull the
-MinIO release from the public `quay.io/thanos/minio` mirror. All three pin the
-same release and immutable manifest digest previously used for
-`quay.io/minio/minio`; the mirror serves that exact manifest. Verify the digest
-before changing registries. Registry access failures do not require a data
-migration or volume reset.
+Development, integration/E2E and the optional `local-minio` profile use the same
+immutable official SeaweedFS S3-compatible fixture. The service/DNS name `minio`
+and S3 port 9000 remain compatibility names, not the server implementation. The
+retired MinIO volume format is incompatible: a new volume is used and old
+development data is never reset or mounted into SeaweedFS. Follow the explicit
+[verified migration procedure](runbooks/s3-fixture-migration.md) before starting
+an existing development stack. The old port-9001 MinIO console is removed; no
+unauthenticated replacement admin UI is exposed. Hosted R2 remains unchanged.
 
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure

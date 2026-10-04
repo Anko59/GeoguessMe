@@ -6,6 +6,8 @@
 - id: CVE-2025-59250
   image: quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85
   digest: sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85
+  package: com.microsoft.sqlserver:mssql-jdbc
+  installed_version: 13.2.1
   owner: security-program
   reachable: "the vulnerable Microsoft SQL Server driver is bundled but this deployment uses only PostgreSQL"
   approved: true

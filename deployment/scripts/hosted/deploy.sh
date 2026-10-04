@@ -9,8 +9,11 @@ environment=${1:-}
 validate_environment "$environment"
 backend_image=${2:-}
 web_image=${3:-}
-# Phase-one legacy arities use a digest-pinned upstream bootstrap without this
-# project's CI signature; the final runtime update removes these branches.
+# Keep legacy arities only for the staged root-bundle/workflow cutover. The new
+# protocol adopts exact signed SOPS, PostgreSQL and Restic references together.
+postgres_image=''
+restic_image=''
+dependency_update=false
 case "$environment:$#" in
     dev:4)
         keycloak_image=''
@@ -32,7 +35,23 @@ case "$environment:$#" in
         sops_image=$5
         revision=$6
         ;;
-    *) die 'expected dev BACKEND WEB [SOPS] REVISION or production BACKEND WEB KEYCLOAK [SOPS] REVISION' ;;
+    dev:7)
+        dependency_update=true
+        keycloak_image=''
+        sops_image=$4
+        postgres_image=$5
+        restic_image=$6
+        revision=$7
+        ;;
+    production:8)
+        dependency_update=true
+        keycloak_image=$4
+        sops_image=$5
+        postgres_image=$6
+        restic_image=$7
+        revision=$8
+        ;;
+    *) die 'expected dev BACKEND WEB SOPS POSTGRES RESTIC REVISION or production BACKEND WEB KEYCLOAK SOPS POSTGRES RESTIC REVISION (legacy cutover arities also supported)' ;;
 esac
 
 validate_image_reference "$backend_image" backend
@@ -50,6 +69,10 @@ case "$environment" in
 esac
 if [ "$sops_image" != "$SOPS_BOOTSTRAP_IMAGE" ]; then
     validate_sops_image_reference "$sops_image" "$expected_sops_tag"
+fi
+if [ -n "$postgres_image" ]; then
+    validate_dependency_image_reference "$postgres_image" postgres "$expected_sops_tag"
+    validate_dependency_image_reference "$restic_image" restic "$expected_sops_tag"
 fi
 
 exec 9>"$LOCK_ROOT/geoguessme-deploy.lock"
@@ -98,7 +121,8 @@ temporary_secret=''
 old_secret=''
 secret_replaced=false
 identity_temporary=''
-trap 'rm -f "$temporary_secret" "$identity_temporary"' EXIT INT TERM
+temporary_metadata=''
+trap 'rm -f "$temporary_secret" "$identity_temporary" "$temporary_metadata"' EXIT INT TERM
 if [ -f "$encrypted" ]; then
     temporary_secret=$(mktemp "$SECRET_ROOT/$environment.env.XXXXXX")
     docker run --rm \
@@ -155,6 +179,25 @@ printf '%s' "$registry_token" | docker login ghcr.io \
 verify_image_signature "$backend_image"
 verify_image_signature "$web_image"
 if [ -n "$keycloak_image" ]; then verify_image_signature "$keycloak_image"; fi
+if [ -n "$postgres_image" ]; then
+    verify_image_signature "$postgres_image"
+    verify_image_signature "$restic_image"
+    docker pull "$postgres_image"
+    docker pull "$restic_image"
+fi
+
+# Resolve old state before exporting any candidate. Legacy metadata may omit
+# dependency refs; inspect the actual database and retain the legacy backup pin.
+previous_postgres_image=$(POSTGRES_IMAGE='' select_postgres_image "$environment")
+previous_restic_image=$(select_restic_image "$environment")
+previous_identity_postgres_image=''
+if [ "$oidc_enabled" = true ]; then
+    previous_identity_postgres_image=$(IDENTITY_POSTGRES_IMAGE='' select_identity_postgres_image)
+fi
+[ -n "$postgres_image" ] || postgres_image=$previous_postgres_image
+[ -n "$restic_image" ] || restic_image=$previous_restic_image
+identity_candidate_postgres_image=$previous_identity_postgres_image
+if [ "$dependency_update" = true ]; then identity_candidate_postgres_image=$postgres_image; fi
 
 metadata_dir="$STATE_ROOT/releases/$environment"
 mkdir -p "$metadata_dir" "$APP_ROOT/$environment"
@@ -162,6 +205,11 @@ current="$metadata_dir/current.env"
 previous="$metadata_dir/previous.env"
 if [ -f "$current" ]; then
     cp "$current" "$previous"
+    # Enrich legacy rollback metadata with the actual old references, not the
+    # newly selected candidate. No shell evaluation of metadata is permitted.
+    sed -i '/^POSTGRES_IMAGE=/d; /^RESTIC_IMAGE=/d' "$previous"
+    printf 'POSTGRES_IMAGE=%s\nRESTIC_IMAGE=%s\n' \
+        "$previous_postgres_image" "$previous_restic_image" >>"$previous"
 fi
 previous_keycloak_image=''
 identity_update_started=false
@@ -184,8 +232,13 @@ if [ "$oidc_enabled" = true ] && [ "$environment" = production ] &&
     fi
 fi
 
-if [ -d "$APP_ROOT/$environment/current" ] &&
-    compose "$environment" "$APP_ROOT/$environment/current" ps --status running postgres --quiet | grep -q .; then
+active_database=''
+if [ -d "$APP_ROOT/$environment/current" ]; then
+    active_database=$(POSTGRES_IMAGE=$previous_postgres_image \
+        compose "$environment" "$APP_ROOT/$environment/current" ps --status running postgres --quiet) ||
+        die 'cannot inspect the active database before backup'
+fi
+if [ -n "$active_database" ]; then
     "$SCRIPT_DIR/backup.sh" "$environment" pre-deploy
 else
     printf 'first deployment: no database exists to back up\n'
@@ -213,26 +266,33 @@ rollback() {
                 old_release=$(release_dir "$old_revision")
                 if [ "$environment" = production ] && [ "$oidc_enabled" = true ] &&
                     [ "$identity_update_started" = true ]; then
-                    GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
+                    IDENTITY_POSTGRES_IMAGE=$previous_identity_postgres_image \
+                        GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
                         compose_identity "$old_release" up -d --wait keycloak-db keycloak ||
                         printf 'deployment failed; previous Keycloak image did not restart\n' >&2
-                    GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
+                    IDENTITY_POSTGRES_IMAGE=$previous_identity_postgres_image \
+                        GEOGUESSME_KEYCLOAK_IMAGE=$previous_keycloak_image \
                         compose_identity "$old_release" run --rm --no-deps keycloak-config ||
                         printf 'deployment failed; previous Keycloak realm config did not reconcile\n' >&2
                 fi
                 if oidc_enabled "$secret_file"; then
-                    BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
+                    POSTGRES_IMAGE=$previous_postgres_image RESTIC_IMAGE=$previous_restic_image \
+                        BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
                         compose "$environment" "$old_release" up -d --wait backend oauth2-proxy web postgres || true
                 else
-                    BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
+                    POSTGRES_IMAGE=$previous_postgres_image RESTIC_IMAGE=$previous_restic_image \
+                        BACKEND_IMAGE=$old_backend WEB_IMAGE=$old_web \
                         compose "$environment" "$old_release" up -d --wait backend web postgres || true
                 fi
             fi
+            cp "$previous" "$current" || printf 'deployment failed; previous metadata could not be restored\n' >&2
             printf 'deployment failed; previous images and secrets were restored; database was not restored\n' >&2
         else
+            rm -f "$current"
             printf 'initial deployment failed; candidate secrets were removed; database was not restored\n' >&2
         fi
     fi
+    [ -z "$temporary_metadata" ] || rm -f "$temporary_metadata"
     [ -z "$temporary_secret" ] || rm -f "$temporary_secret"
     [ -z "$identity_temporary" ] || rm -f "$identity_temporary"
     [ -z "$old_secret" ] || rm -f "$old_secret"
@@ -251,6 +311,9 @@ if [ -n "$temporary_secret" ]; then
     secret_replaced=true
 fi
 require_secret_file "$environment"
+POSTGRES_IMAGE=$postgres_image
+RESTIC_IMAGE=$restic_image
+export POSTGRES_IMAGE RESTIC_IMAGE
 
 if [ "$oidc_enabled" = true ]; then
     identity_file=$(identity_env_file)
@@ -260,14 +323,17 @@ if [ "$oidc_enabled" = true ]; then
         chmod 600 "$identity_file"
     fi
     if [ "$environment" = production ] && [ -n "$keycloak_image" ]; then
-        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+        IDENTITY_POSTGRES_IMAGE=$identity_candidate_postgres_image \
+            GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
             compose_identity "$release" pull keycloak keycloak-db
         identity_update_started=true
-        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+        IDENTITY_POSTGRES_IMAGE=$identity_candidate_postgres_image \
+            GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
             compose_identity "$release" up -d --wait keycloak-db keycloak
     fi
     if [ -n "$keycloak_image" ]; then
-        GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
+        IDENTITY_POSTGRES_IMAGE=$identity_candidate_postgres_image \
+            GEOGUESSME_KEYCLOAK_IMAGE=$keycloak_image \
             compose_identity "$release" run --rm --no-deps keycloak-config
     else
         compose_identity "$release" run --rm --no-deps keycloak-config
@@ -290,10 +356,16 @@ curl --fail --silent --show-error --max-time 10 \
     "http://127.0.0.1:$(environment_port "$environment")/health/ready" >/dev/null
 
 umask 077
+temporary_metadata=$(mktemp "$metadata_dir/current.env.XXXXXX")
 {
     printf 'BACKEND_IMAGE=%s\n' "$backend_image"
     printf 'WEB_IMAGE=%s\n' "$web_image"
     printf 'SOPS_IMAGE=%s\n' "$sops_image"
+    printf 'POSTGRES_IMAGE=%s\n' "$postgres_image"
+    printf 'RESTIC_IMAGE=%s\n' "$restic_image"
+    if [ "$environment" = production ] && [ "$oidc_enabled" = true ]; then
+        printf 'IDENTITY_POSTGRES_IMAGE=%s\n' "$identity_candidate_postgres_image"
+    fi
     if [ "$environment" = production ] && [ "$oidc_enabled" = true ] &&
         [ -n "$keycloak_image" ]; then
         printf 'KEYCLOAK_IMAGE=%s\n' "$keycloak_image"
@@ -302,7 +374,9 @@ umask 077
     fi
     printf 'REVISION=%s\n' "$revision"
     printf 'DEPLOYED_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} >"$current"
+} >"$temporary_metadata"
+mv "$temporary_metadata" "$current"
+temporary_metadata=''
 ln -sfn "$release" "$APP_ROOT/$environment/current"
 trap - EXIT INT TERM
 [ -z "$old_secret" ] || rm -f "$old_secret"

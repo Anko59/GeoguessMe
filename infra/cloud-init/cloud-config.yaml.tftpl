@@ -23,71 +23,71 @@ users:
     lock_passwd: true
 
 write_files:
-  - path: /etc/ssh/sshd_config.d/00-geoguessme.conf
-    permissions: "0644"
-    content: |
-      PasswordAuthentication no
-      KbdInteractiveAuthentication no
-      PermitRootLogin no
-      AllowUsers ops deploy
-  - path: /etc/tmpfiles.d/geoguessme.conf
-    permissions: "0644"
-    content: |
-      d /run/lock/geoguessme 0750 deploy deploy -
-  - path: /home/ops/.ssh/authorized_keys
-    owner: ops:ops
-    permissions: "0600"
-    defer: true
-    content: |
-      ${admin_key}
-  - path: /home/deploy/.ssh/authorized_keys
-    owner: deploy:deploy
-    permissions: "0600"
-    defer: true
-    content: |
-      restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
-      restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
-  - path: /etc/docker/daemon.json
-    permissions: "0644"
-    content: |
-      {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
-  - path: /etc/cloudflared/token
-    permissions: "0600"
-    content: |
-      ${tunnel_token}
-  - path: /etc/systemd/system/cloudflared.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=Cloudflare Tunnel
-      After=network-online.target
-      Wants=network-online.target
-      [Service]
-      Type=simple
-      ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/token
-      Restart=always
-      RestartSec=5s
-      NoNewPrivileges=true
-      ProtectSystem=strict
-      ProtectHome=true
-      PrivateTmp=true
-      [Install]
-      WantedBy=multi-user.target
-  - path: /tmp/geoguessme-runtime-bundle
-    owner: root:root
-    permissions: "0600"
-    encoding: gzip+base64
-    content: ${runtime_bundle}
-  - path: /usr/local/sbin/geoguessme-install-runtime-bundle
-    owner: root:root
-    permissions: "0700"
-    encoding: gzip+base64
-    content: ${runtime_installer}
-  - path: /opt/geoguessme/config/runtime-revision
-    owner: root:root
-    permissions: "0444"
-    content: |
-      ${runtime_revision}
+- path: /usr/local/sbin/geoguessme-install-runtime-bundle
+  owner: root:root
+  permissions: "0700"
+  content: |
+    ${indent(4, chomp(runtime_installer))}
+- path: /tmp/geoguessme-runtime-bundle
+  owner: root:root
+  permissions: "0600"
+  content: |
+    ${indent(4, chomp(runtime_bundle))}
+- path: /etc/ssh/sshd_config.d/00-geoguessme.conf
+  permissions: "0644"
+  content: |
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    PermitRootLogin no
+    AllowUsers ops deploy
+- path: /etc/tmpfiles.d/geoguessme.conf
+  permissions: "0644"
+  content: |
+    d /run/lock/geoguessme 0750 deploy deploy -
+- path: /home/ops/.ssh/authorized_keys
+  owner: ops:ops
+  permissions: "0600"
+  defer: true
+  content: |
+    ${admin_key}
+- path: /home/deploy/.ssh/authorized_keys
+  owner: deploy:deploy
+  permissions: "0600"
+  defer: true
+  content: |
+    restrict,command="/opt/geoguessme/bin/forced-command.sh dev" ${dev_ci_key}
+    restrict,command="/opt/geoguessme/bin/forced-command.sh production" ${production_key}
+- path: /etc/docker/daemon.json
+  permissions: "0644"
+  content: |
+    {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
+- path: /etc/cloudflared/token
+  permissions: "0600"
+  content: |
+    ${tunnel_token}
+- path: /etc/systemd/system/cloudflared.service
+  permissions: "0644"
+  content: |
+    [Unit]
+    Description=Cloudflare Tunnel
+    After=network-online.target
+    Wants=network-online.target
+    [Service]
+    Type=simple
+    ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/token
+    Restart=always
+    RestartSec=5s
+    NoNewPrivileges=true
+    ProtectSystem=strict
+    ProtectHome=true
+    PrivateTmp=true
+    [Install]
+    WantedBy=multi-user.target
+- path: /opt/geoguessme/config/runtime-revision
+  owner: root:root
+  permissions: "0444"
+  content: |
+    ${runtime_revision}
 runcmd:
   - [mkdir, -p, /etc/geoguessme/age, /etc/geoguessme/watch-metrics, /opt/geoguessme/bin, /opt/geoguessme/config/watch, /opt/geoguessme/dev, /opt/geoguessme/production, /opt/geoguessme/releases, /var/lib/geoguessme/backups, /var/lib/geoguessme/releases]
   - [/usr/local/sbin/geoguessme-install-runtime-bundle, /tmp/geoguessme-runtime-bundle]
@@ -102,8 +102,8 @@ runcmd:
   - [chmod, "0600", /etc/geoguessme/age/dev.txt, /etc/geoguessme/age/production.txt]
   - [chmod, "0644", /etc/geoguessme/age/dev-recipient.txt, /etc/geoguessme/age/production-recipient.txt]
   - [chown, -R, deploy:deploy, /etc/geoguessme/age]
-  - [sh, -c, "curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.7.2/cloudflared-linux-amd64.deb"]
-  - [sh, -c, "echo '88195157a136199a86977c122a22084dae6907480bbe3640222b7b55834afc3a  /tmp/cloudflared.deb' | sha256sum -c -"]
+  - [sh, -c, "curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/${cloudflared_version}/cloudflared-linux-amd64.deb"]
+  - [sh, -c, "echo '${cloudflared_deb_sha256}  /tmp/cloudflared.deb' | sha256sum -c -"]
   - [dpkg, -i, /tmp/cloudflared.deb]
   - [rm, -f, /tmp/cloudflared.deb]
   - [sh, -c, "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]

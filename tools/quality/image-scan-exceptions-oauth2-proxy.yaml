@@ -8,6 +8,8 @@
 - id: CVE-2026-84304
   image: quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   digest: sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+  package: google.golang.org/grpc
+  installed_version: v1.83.0
   owner: security-program
   reachable: "gRPC is bundled transitively and no gRPC or xDS control-plane listener is configured on the authentication proxy path; v7.15.4 is the newest upstream release"
   approved: true
@@ -15,6 +17,8 @@
 - id: CVE-2026-84445
   image: quay.io/oauth2-proxy/oauth2-proxy@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
   digest: sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+  package: google.golang.org/grpc
+  installed_version: v1.83.0
   owner: security-program
   reachable: "gRPC is bundled transitively and no gRPC or xDS control-plane listener is configured on the authentication proxy path; v7.15.4 is the newest upstream release"
   approved: true

@@ -137,16 +137,19 @@ Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
 
-Each hosted deployment records the selected `SOPS_IMAGE` reference in its
-release metadata. When the project SOPS digest is supplied, the host verifies
-its signature before pulling it; the first monitored runtime cutover temporarily
-retains a digest-pinned upstream bootstrap for legacy command arities. Because
-SOPS must decrypt the environment before GHCR login, the project SOPS package is
-public-pullable and CI checks anonymous access to the exact digest. GHCR creates
-new packages as private, so the package owner must change visibility to public
-after the first push; the image contains only the SOPS utility, not secrets. The
-final runtime bundle removes the bootstrap and requires the signed digest, as
-described in the
+Hosted metadata records adopted SOPS, PostgreSQL and Restic digest references,
+plus the separately captured shared identity database reference. Scheduled
+backups and restore rehearsals resolve the active environment's images and
+verify trusted revision signatures; a new app candidate cannot silently change
+another environment's backup image. Failed deployment restores exact prior image
+selections, not database contents. Legacy bootstrap pins remain only for staged
+root-bundle compatibility; install and verify the reviewed bundle before using
+the utility-aware deployment protocol. Because SOPS must decrypt the environment
+before GHCR login, the project SOPS package is public-pullable and CI checks
+anonymous access to the exact digest. GHCR creates new packages as private, so
+the package owner must change visibility to public after the first push; the
+image contains only the SOPS utility, not secrets. The final runtime bundle
+removes the bootstrap and requires the signed digest, as described in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
 The host also stores an immutable source directory for each deployed revision.
@@ -245,16 +248,16 @@ names and data are unchanged.
 
 1. Starts the full test stack with a dedicated project name
 2. Seeds real fixture data (users, groups, photos, guesses, messages, challenge
-   views) and a MinIO media object
+   views) and an authenticated S3 fixture object
 3. Records pre-restart state: row counts, migration count, data checksums,
-   constraint count, and MinIO object content
+   constraint count, and S3 fixture object content
 4. Stops all services (down without `-v`, preserving named volumes)
 5. Restarts all services (up -d --wait), recreating containers and networks
 6. Polls health/readiness with deadline-based polling (no unconditional sleeps)
 7. Verifies: schema continuity (migrations unchanged, no duplicates), data
-   continuity (row counts and checksums match), media continuity (MinIO object
-   intact, content verified), no runaway deletion jobs, and nominal metrics
-   backlog
+   continuity (row counts and checksums match), media continuity (S3 fixture
+   object intact, content verified), no runaway deletion jobs, and nominal
+   metrics backlog
 8. Cleans up all project resources on exit
 
 The rehearsal is self-contained and uses a unique checkout-scoped
@@ -440,11 +443,13 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 
 ## Incident response
 
-If a local or CI stack fails before startup with `pull access denied` for MinIO,
-check access to the public `quay.io/thanos/minio` mirror and confirm it still
-serves the pinned manifest digest. Compose keeps the original immutable MinIO
-digest; see the [deployment guide](deployment.md). Keep existing volumes intact;
-registry access failures do not require a storage reset.
+Registry or scanner outages are operational failures, not vulnerability success:
+retain the complete reports and retry classification from the
+[security scanning guide](security-scanning.md). Do not rebuild dependencies on
+an authentication failure or lower the gate. Local S3 fixtures now use an
+immutable official SeaweedFS digest; retired MinIO volumes require the explicit
+[verified migration procedure](runbooks/s3-fixture-migration.md), never a reset.
+Hosted R2 remains external and unchanged.
 
 | Scenario          | Response                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |

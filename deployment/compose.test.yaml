@@ -5,7 +5,7 @@
 
 services:
   db:
-    image: postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 # PostgreSQL 15.19
+    image: ${POSTGRES_IMAGE:?Run through Make or supply the audited immutable PostgreSQL image}
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
@@ -18,15 +18,46 @@ services:
       timeout: 3s
       retries: 30
 
+  # S3-compatible local fixture. The internal DNS name is retained for clients;
+  # SeaweedFS data MUST NOT reuse the retired MinIO volume format.
   minio:
-    image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # Exact-digest mirror of the MinIO release
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes: ["geoguessme_test_minio:/data"]
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d # SeaweedFS 4.48
+    user: "1000:1000"
+    command:
+      [
+        server,
+        -s3,
+        -dir=/data,
+        -ip=minio,
+        -ip.bind=0.0.0.0,
+        -s3.port=9000,
+        -s3.config=/etc/seaweedfs/s3.json,
+        "-volume.max=${GEOGUESSME_S3_FIXTURE_VOLUME_MAX:-32}",
+        -master.volumeSizeLimitMB=64,
+      ]
+    volumes:
+      - geoguessme_test_s3_fixture:/data
+      - ./deployment/s3-fixture/credentials.json:/etc/seaweedfs/s3.json:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    tmpfs: [/tmp]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "2",
+          "--aws-sigv4",
+          "aws:amz:us-east-1:s3",
+          "--user",
+          "minioadmin:minioadmin",
+          "http://127.0.0.1:9000/",
+        ]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -41,7 +72,7 @@ services:
       minio: { condition: service_healthy }
 
   mailpit:
-    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a # Mailpit 1.30.7
+    image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48 # Mailpit 1.31.4
     ports: ["${GEOGUESSME_TEST_MAILPIT_PORT:-8025}:8025"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8025/"]
@@ -120,4 +151,4 @@ services:
 
 volumes:
   geoguessme_test_db:
-  geoguessme_test_minio:
+  geoguessme_test_s3_fixture:
