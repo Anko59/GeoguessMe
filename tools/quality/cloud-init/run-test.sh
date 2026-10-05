@@ -43,7 +43,14 @@ done < <(git -C "$ROOT" ls-files -z -- 'infra/terraform/*.tf' 'infra/terraform/.
     'deployment/watch/*' 'deployment/s3-fixture/credentials.json' 'deployment/images/host-tools.json')
 copy_source tools/quality/cloud-init/test-user-data.py "$TEMP/workspace"
 read -r -a build_flags <<<"${DOCKER_BUILD_FLAGS:-}"
-docker build "${build_flags[@]}" --iidfile "$TEMP/image.id" -f "$TEMP/context/tools/quality/cloud-init/Dockerfile" -t geoguessme/cloud-init-tools:local "$TEMP/context"
+if docker buildx version >/dev/null 2>&1; then
+    # The hosted docker-container driver does not load images unless requested.
+    docker buildx build --load "${build_flags[@]}" --iidfile "$TEMP/image.id" \
+        -f "$TEMP/context/tools/quality/cloud-init/Dockerfile" -t geoguessme/cloud-init-tools:local "$TEMP/context"
+else
+    docker build "${build_flags[@]}" --iidfile "$TEMP/image.id" \
+        -f "$TEMP/context/tools/quality/cloud-init/Dockerfile" -t geoguessme/cloud-init-tools:local "$TEMP/context"
+fi
 image=$(<"$TEMP/image.id")
 [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] || {
     echo 'cloud-init-test: invalid tool image ID' >&2

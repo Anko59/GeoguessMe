@@ -27,9 +27,13 @@ printf 'untracked-dotenv-sentinel\n' >"$repo/.env"
 cat >"$TMP/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$1" >>"$CALLS"
-case "$1" in
-    build)
+case "$1:${2:-}" in
+    buildx:version)
+        printf 'buildx-version\n' >>"$CALLS"
+        if [[ "$BUILDX_AVAILABLE" == true ]]; then exit 0; else exit 1; fi
+        ;;
+    build:*)
+        printf 'legacy-build\n' >>"$CALLS"
         shift
         iid=''
         while (($#)); do
@@ -37,12 +41,20 @@ case "$1" in
             shift
         done
         [[ -n "$iid" ]] || exit 61
-        # Docker's IID file need not end with a newline. The mutable tag would
-        # point at different bytes; the wrapper must never inspect that tag.
-        printf '%s' "sha256:$(printf 'a%.0s' {1..64})" >"$iid"
-        printf '%s\n' "${iid%/*}" >"$ALLOCATION"
         ;;
-    run)
+    buildx:build)
+        printf 'buildx-build\n' >>"$CALLS"
+        [[ " $* " == *' --load '* ]] || exit 67
+        shift 2
+        iid=''
+        while (($#)); do
+            if [[ "$1" == --iidfile ]]; then iid=$2; shift; fi
+            shift
+        done
+        [[ -n "$iid" ]] || exit 61
+        ;;
+    run:*)
+        printf 'run\n' >>"$CALLS"
         [[ "${*: -1}" == "sha256:$(printf 'a%.0s' {1..64})" ]] || exit 62
         [[ " $* " == *' --network none '* ]] || exit 63
         workspace="$(<"$ALLOCATION")/workspace"
@@ -56,21 +68,32 @@ case "$1" in
         ;;
     *) exit 66 ;;
 esac
+# Docker's IID file need not end with a newline; never inspect a mutable tag.
+printf '%s' "sha256:$(printf 'a%.0s' {1..64})" >"$iid"
+printf '%s\n' "${iid%/*}" >"$ALLOCATION"
 MOCK
 chmod +x "$TMP/bin/docker"
 export PATH="$TMP/bin:$PATH"
 export CALLS="$TMP/calls" ALLOCATION="$TMP/allocation"
-for SIGNAL in none TERM INT; do
-    export SIGNAL
-    : >"$CALLS"
-    status=0
-    bash "$repo/tools/quality/cloud-init/run-test.sh" >"$TMP/output" 2>&1 || status=$?
-    case "$SIGNAL" in none) expected=0 ;; TERM) expected=143 ;; INT) expected=130 ;; esac
-    [[ "$status" == "$expected" ]] || {
-        printf 'cloud-init runner %s: expected %s, got %s\n' "$SIGNAL" "$expected" "$status" >&2
-        exit 1
-    }
-    [[ "$(<"$CALLS")" == $'build\nrun' ]] || exit 1
-    [[ ! -e "$(<"$ALLOCATION")" ]] || exit 1
+for BUILDX_AVAILABLE in false true; do
+    export BUILDX_AVAILABLE
+    for SIGNAL in none TERM INT; do
+        export SIGNAL
+        : >"$CALLS"
+        status=0
+        bash "$repo/tools/quality/cloud-init/run-test.sh" >"$TMP/output" 2>&1 || status=$?
+        case "$SIGNAL" in none) expected=0 ;; TERM) expected=143 ;; INT) expected=130 ;; esac
+        [[ "$status" == "$expected" ]] || {
+            printf 'cloud-init runner Buildx=%s signal=%s: expected %s, got %s\n' \
+                "$BUILDX_AVAILABLE" "$SIGNAL" "$expected" "$status" >&2
+            exit 1
+        }
+        if [[ "$BUILDX_AVAILABLE" == true ]]; then
+            [[ "$(<"$CALLS")" == $'buildx-version\nbuildx-build\nrun' ]] || exit 1
+        else
+            [[ "$(<"$CALLS")" == $'buildx-version\nlegacy-build\nrun' ]] || exit 1
+        fi
+        [[ ! -e "$(<"$ALLOCATION")" ]] || exit 1
+    done
 done
-printf 'Cloud-init runner immutable IID, private sources, cleanup and cancellation contracts PASS\n'
+printf 'Cloud-init runner Buildx load, immutable IID, private sources, cleanup and cancellation contracts PASS\n'
