@@ -86,13 +86,14 @@ inputs and cannot run locally or on another branch/workflow. It recovers only:
 That publisher pushed the original bytes, then rejected BuildKit's current
 SLSAv1 build-type identifier before scanning/signing. After explicit operator
 approval, dispatch Security on `dev`; no deployment or readiness step is run.
-The operation authenticates the original run/job/log, verifies the exact
-input/index/runtime, original VCS, embedded recipe, upstream and local platform,
-and freshly runs the unchanged native audit on that original index. Only then
-may it add the original `dependency-build=true` input signature under the same
-trusted protected-workflow identity. Already-valid signatures are verified and
-freshly scanned without re-signing. It never rebuilds, aliases or replaces
-bytes.
+The original log's ANSI bytes are captured in the private review file, never
+rendered in a terminal. The operation authenticates the original run/job/log,
+verifies the exact input/index/runtime, original VCS, embedded recipe, upstream
+and local platform, and freshly runs the unchanged native audit on that original
+index. Only then may it add the original `dependency-build=true` input signature
+under the same trusted protected-workflow identity. Already-valid signatures are
+verified and freshly scanned without re-signing. It never rebuilds, aliases or
+replaces bytes.
 
 Network/authentication errors, unavailable original evidence, changed inputs or
 digest, invalid signatures, and failed scans stop recovery. Ordinary publication

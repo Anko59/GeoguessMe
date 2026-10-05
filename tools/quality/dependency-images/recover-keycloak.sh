@@ -37,7 +37,8 @@ jq -e --argjson run "$REVIEWED_RUN" --argjson job "$REVIEWED_JOB" '
     .id == $job and .run_id == $run and .name == "audit-images" and .conclusion == "failure" and
     any(.steps[]; .name == "Explicit dependency preparation (only changed inputs build)" and .conclusion == "failure")
 ' "$TEMP/stdout" >/dev/null || fail 'original publisher job does not match the reviewed failure'
-remote_operation recovery-log gh api "repos/Anko59/GeoguessMe/actions/jobs/$REVIEWED_JOB/logs" || fail 'cannot read original publication log'
+# Preserve original ANSI log bytes only in the private evidence file, never a terminal.
+remote_operation recovery-log gh api --allow-escape-sequences "repos/Anko59/GeoguessMe/actions/jobs/$REVIEWED_JOB/logs" || fail 'cannot read original publication log'
 if ! grep -Fq "pushing manifest for $REMOTE_REF@$REVIEWED_INDEX" "$TEMP/stdout" ||
     ! grep -Fq 'dependency-images: missing BuildKit SLSA provenance: keycloak' "$TEMP/stdout"; then
     fail 'original log does not prove this exact interrupted publication'

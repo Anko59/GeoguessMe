@@ -25,12 +25,16 @@ case "$name" in
                 esac
                 ;;
             *jobs/111553605968/logs)
+                [[ " $* " == *' --allow-escape-sequences '* ]] || {
+                    echo 'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway' >&2
+                    exit 1
+                }
                 [[ "$TEST_CASE" != log-denied ]] || {
                     echo 'HTTP 403 forbidden' >&2
                     exit 1
                 }
                 [[ "$TEST_CASE" != log-digest ]] || index=sha256:wrong
-                printf 'pushing manifest for ghcr.io/anko59/geoguessme-keycloak:dependency-%s@%s\n' "$inputs" "$index"
+                printf '\033[32mpushing manifest for ghcr.io/anko59/geoguessme-keycloak:dependency-%s@%s\033[0m\n' "$inputs" "$index"
                 [[ "$TEST_CASE" == log-failure ]] || echo 'dependency-images: missing BuildKit SLSA provenance: keycloak'
                 ;;
             *jobs/111553605968)
