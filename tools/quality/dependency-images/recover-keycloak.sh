@@ -53,9 +53,10 @@ jq -e --arg runtime "$REVIEWED_RUNTIME" '
     [.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")] |
     length == 1 and .[0].digest == $runtime
 ' "$TEMP/stdout" >/dev/null || fail 'reviewed Keycloak runtime linkage changed'
-remote_operation recovery-provenance docker buildx imagetools inspect "$IMMUTABLE_REF" --format '{{json .Provenance}}' || fail 'cannot read reviewed Keycloak provenance'
+# Reuse the predicate normalized and verified by the shared artifact validator.
+# Buildx returns root SLSA for one runtime and a platform map for multiple runtimes.
 jq -e --arg inputs "$REVIEWED_INPUTS" --arg revision "$REVIEWED_REVISION" --arg base "${FINAL_BASE_DIGEST#sha256:}" '
-    .["linux/amd64"].SLSA as $slsa |
+    . as $slsa |
     $slsa.buildDefinition.externalParameters.request.root.request.args as $args |
     $slsa.buildDefinition.buildType == "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md" and
     $slsa.buildDefinition.externalParameters.configSource.path == "Dockerfile" and
@@ -69,9 +70,9 @@ jq -e --arg inputs "$REVIEWED_INPUTS" --arg revision "$REVIEWED_REVISION" --arg 
     $slsa.runDetails.metadata.buildkit_metadata.vcs.revision == $revision and
     $slsa.runDetails.metadata.buildkit_metadata.vcs.source == "https://github.com/Anko59/GeoguessMe" and
     ([$slsa.runDetails.metadata.buildkit_metadata.source.infos[] | select(.filename == "Dockerfile")] | length) == 1
-' "$TEMP/stdout" >/dev/null || fail 'reviewed Keycloak provenance origin or inputs changed'
-jq -er '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos[] |
-    select(.filename == "Dockerfile") | .data' "$TEMP/stdout" | base64 -d >"$TEMP/Dockerfile" || fail 'cannot decode reviewed Keycloak recipe'
+' <<<"$SLSA_PROVENANCE" >/dev/null || fail 'reviewed Keycloak provenance origin or inputs changed'
+jq -er '.runDetails.metadata.buildkit_metadata.source.infos[] |
+    select(.filename == "Dockerfile") | .data' <<<"$SLSA_PROVENANCE" | base64 -d >"$TEMP/Dockerfile" || fail 'cannot decode reviewed Keycloak recipe'
 cmp "$TEMP/Dockerfile" "$DEPENDENCY_ROOT/$DOCKERFILE" >/dev/null || fail 'reviewed Keycloak embedded recipe changed'
 
 make -C "$DEPENDENCY_ROOT" audit-image-set "IMAGE_AUDIT_REFS=$IMMUTABLE_REF" >&2 || fail 'reviewed Keycloak native audit failed'

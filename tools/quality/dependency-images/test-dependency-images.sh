@@ -99,7 +99,7 @@ if [[ "$1 $2 $3" == 'buildx imagetools inspect' ]]; then
         jq -n --arg child "$child" '{manifests:[
             {digest:$child,platform:{os:"linux",architecture:"amd64"}},
             {digest:"attestation",platform:{os:"unknown",architecture:"unknown"},annotations:{
-                "vnd.docker.reference.type":"attestation-manifest", "vnd.docker.reference.digest":$child}}]}'
+                "vnd.docker.reference.type":"attestation-manifest", "vnd.docker.reference.digest":$child}}]} | if env.FAKE_PROVENANCE == "direct-multi-runtime" then .manifests += [{digest:"other-runtime",platform:{os:"linux",architecture:"arm64"}}] else . end'
         exit
     fi
     if [[ "$*" == *'.Provenance'* ]]; then

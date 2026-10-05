@@ -52,6 +52,7 @@ resolve_remote() {
 
 verify_artifact() {
     local raw provenance
+    SLSA_PROVENANCE=''
     remote_operation "manifest-$COMPONENT" docker buildx imagetools inspect "$IMMUTABLE_REF" --raw || fail 'cannot inspect dependency manifest'
     raw=$(<"$TEMP/stdout")
     jq -e '
@@ -62,14 +63,26 @@ verify_artifact() {
     ' <<<"$raw" >/dev/null || fail "missing AMD64 OCI provenance attestation: $COMPONENT"
     remote_operation "provenance-$COMPONENT" docker buildx imagetools inspect "$IMMUTABLE_REF" --format '{{json .Provenance}}' || fail 'cannot read dependency provenance'
     provenance=$(<"$TEMP/stdout")
+    # Buildx projects a sole runtime directly; platform maps stay explicit.
+    SLSA_PROVENANCE=$(jq -cse --argjson manifest "$raw" '
+        select(length == 1) | .[0] | select(type == "object") |
+        if keys == ["SLSA"] then
+            select(([$manifest.manifests[] |
+                select(.annotations["vnd.docker.reference.type"] != "attestation-manifest")] | length) == 1) |
+            .SLSA
+        elif (has("SLSA") | not) and (.["linux/amd64"] | type) == "object" then
+            .["linux/amd64"].SLSA
+        else empty end |
+        select(type == "object")
+    ' <<<"$provenance") || fail "invalid BuildKit SLSA projection: $COMPONENT"
     jq -e '
-        .["linux/amd64"].SLSA as $slsa |
+        . as $slsa |
         ($slsa | type) == "object" and
         ($slsa.buildType == "https://mobyproject.org/buildkit@v1" or
          (($slsa.buildDefinition | type) == "object" and
           ($slsa.buildDefinition.buildType == "https://mobyproject.org/buildkit@v1" or
            $slsa.buildDefinition.buildType == "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md")))
-    ' <<<"$provenance" >/dev/null || fail "missing BuildKit SLSA provenance: $COMPONENT"
+    ' <<<"$SLSA_PROVENANCE" >/dev/null || fail "missing BuildKit SLSA provenance: $COMPONENT"
     remote_operation "pull-$COMPONENT" docker pull --platform "$DEPENDENCY_PLATFORM" "$IMMUTABLE_REF" || fail 'cannot pull verified dependency artifact'
     verify_local "$IMMUTABLE_REF"
     # Bind local pulled content to the signed index, not merely a mutable tag.

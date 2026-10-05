@@ -49,7 +49,13 @@ sign_line=$(grep -n '^cosign sign ' "$TEST_STATE/trace" | cut -d: -f1)
 verify_line=$(grep -n '^cosign verify ' "$TEST_STATE/trace" | tail -1 | cut -d: -f1)
 [[ "$audit_line" -lt "$sign_line" && "$sign_line" -lt "$verify_line" ]] || fail_test 'audit/sign/verify ordering'
 ! grep -Eq 'docker (build |buildx build |tag |image rm )|imagetools create' "$TEST_STATE/trace" || fail_test 'artifact mutation'
-printf 'recovery exact original audit/sign/verify order OK\n'
+[[ $(grep -c '^docker .*Provenance' "$TEST_STATE/trace") == 2 ]] || fail_test 'recovery redundantly refetched provenance'
+printf 'recovery exact original single-platform audit/sign/verify order OK\n'
+reset_case
+export TEST_PROVENANCE_FILTER='{"linux/amd64":.}'
+bash "$script" >"$TEST_STATE/output" 2>&1 || fail_test 'explicit AMD64 platform-map compatibility'
+[[ $(grep -c '^cosign sign ' "$TEST_STATE/trace") == 1 ]] || fail_test 'mapped provenance sign count'
+printf 'recovery explicit AMD64 platform-map compatibility OK\n'
 reset_case
 touch "$TEST_STATE/signed"
 bash "$script" >"$TEST_STATE/output" 2>&1 || fail_test 'already valid original signature'
@@ -75,28 +81,40 @@ printf '# stale reviewed inputs\n' >>"$OWNED/repo/deployment/docker/keycloak-pat
 TEST_CASE=stale-inputs reject
 [[ ! -s "$TEST_STATE/trace" ]] || fail_test 'stale inputs performed external operation'
 cp "$ROOT/deployment/docker/keycloak-patched/Dockerfile" "$OWNED/repo/deployment/docker/keycloak-patched/"
-for scenario in api-denied run-origin run-workflow run-branch job-origin job-failure log-denied log-digest log-failure registry-denied registry-missing tag-digest attestation-link multiple-runtime runtime-digest local-inputs local-platform local-base repo-digest; do
+for scenario in api-denied run-origin run-workflow run-branch job-origin job-failure log-denied log-digest log-failure registry-denied registry-missing tag-digest attestation-link multiple-runtime direct-multi-runtime runtime-digest local-inputs local-platform local-base repo-digest; do
     reset_case
     export TEST_CASE=$scenario
     reject
     ! grep -q '^make ' "$TEST_STATE/trace" || fail_test "audit preceded $scenario rejection"
 done
 for filter in \
-    '.["linux/amd64"].SLSA.buildDefinition.buildType="https://untrusted.example/buildkit"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:revision"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:source"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["build-arg:DEPENDENCY_INPUTS"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["label:dev.geoguessme.dependency-inputs"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:localdir:context"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:localdir:dockerfile"]="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.externalParameters.configSource.path="wrong"' \
-    '.["linux/amd64"].SLSA.buildDefinition.resolvedDependencies[0].digest.sha256="wrong"' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.vcs.revision="wrong"' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.vcs.source="wrong"' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos=[]' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos += [.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos[0]]' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos[0].data="bm90LXRoZS1yZWNpcGU="' \
-    '.["linux/amd64"].SLSA.runDetails.metadata.buildkit_metadata.source.infos[0].data="invalid!"'; do
+    '. + {"linux/amd64":.}' \
+    '{SLSA1:.SLSA}' \
+    '{"linux/arm64":.}' \
+    '{"linux/amd64":null}' \
+    '.SLSA=null' \
+    '.SLSA=[]' \
+    '.SLSA="invalid"' \
+    '.SLSA={}' \
+    '.SLSA' \
+    'null' \
+    '[]' \
+    '"invalid"' \
+    '.SLSA.buildDefinition.buildType="https://untrusted.example/buildkit"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:revision"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:source"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["build-arg:DEPENDENCY_INPUTS"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["label:dev.geoguessme.dependency-inputs"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:localdir:context"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.request.root.request.args["vcs:localdir:dockerfile"]="wrong"' \
+    '.SLSA.buildDefinition.externalParameters.configSource.path="wrong"' \
+    '(.SLSA.buildDefinition.resolvedDependencies[] | select(.uri | contains("quay.io/keycloak"))).digest.sha256="wrong"' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.vcs.revision="wrong"' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.vcs.source="wrong"' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.source.infos=[]' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.source.infos += [.SLSA.runDetails.metadata.buildkit_metadata.source.infos[0]]' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.source.infos[0].data="bm90LXRoZS1yZWNpcGU="' \
+    '.SLSA.runDetails.metadata.buildkit_metadata.source.infos[0].data="invalid!"'; do
     reset_case
     export TEST_CASE=provenance-mismatch TEST_PROVENANCE_FILTER=$filter
     reject
