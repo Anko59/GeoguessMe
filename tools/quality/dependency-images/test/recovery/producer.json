@@ -1,73 +1,407 @@
 {
-  "linux/amd64": {
-    "SLSA": {
-      "buildDefinition": {
-        "buildType": "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
-        "resolvedDependencies": [
-          {
-            "uri": "pkg:docker/quay.io/keycloak/keycloak@26.7.5?digest=sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85&platform=linux%2Famd64",
-            "digest": {
-              "sha256": "37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"
-            }
-          }
-        ],
-        "externalParameters": {
-          "configSource": {
-            "path": "Dockerfile"
+  "SLSA": {
+    "buildDefinition": {
+      "buildType": "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
+      "externalParameters": {
+        "configSource": {
+          "path": "Dockerfile"
+        },
+        "request": {
+          "args": {
+            "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+            "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689"
           },
-          "request": {
-            "frontend": "dockerfile.v0",
-            "args": {
-              "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
-              "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689"
+          "compatibilityVersion": 30,
+          "frontend": "dockerfile.v0",
+          "locals": [
+            {
+              "name": "context"
             },
-            "locals": [
-              {
-                "name": "context"
-              },
-              {
-                "name": "dockerfile"
-              }
-            ],
-            "root": {
-              "configSource": {
-                "path": "Dockerfile"
-              },
-              "request": {
-                "args": {
-                  "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
-                  "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
-                  "vcs:localdir:context": "deployment/docker/keycloak-patched",
-                  "vcs:localdir:dockerfile": "deployment/docker/keycloak-patched",
-                  "vcs:revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
-                  "vcs:source": "https://github.com/Anko59/GeoguessMe"
-                }
-              }
+            {
+              "name": "dockerfile"
+            }
+          ],
+          "root": {
+            "configSource": {
+              "path": "Dockerfile"
             },
-            "compatibilityVersion": 30
+            "request": {
+              "args": {
+                "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+                "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+                "vcs:localdir:context": "deployment/docker/keycloak-patched",
+                "vcs:localdir:dockerfile": "deployment/docker/keycloak-patched",
+                "vcs:revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+                "vcs:source": "https://github.com/Anko59/GeoguessMe"
+              }
+            }
           }
         }
       },
-      "runDetails": {
-        "metadata": {
-          "buildkit_metadata": {
-            "vcs": {
-              "localdir:context": "deployment/docker/keycloak-patched",
-              "localdir:dockerfile": "deployment/docker/keycloak-patched",
-              "revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
-              "source": "https://github.com/Anko59/GeoguessMe"
+      "internalParameters": {
+        "buildConfig": {
+          "digestMapping": {
+            "sha256:3fbcda23f699e0df7b2fd61166bb174bc36c1ccd1a80a9029d0f45a1b2d19a2f": "step0",
+            "sha256:f9e560c8554d06e3d5edc15b478fb817d28bd6950fef24b4c28c63d35f3c2654": "step1"
+          },
+          "llbDefinition": [
+            {
+              "id": "step0",
+              "op": {
+                "Op": {
+                  "source": {
+                    "identifier": "docker-image://quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"
+                  }
+                },
+                "constraints": {},
+                "platform": {
+                  "Architecture": "amd64",
+                  "OS": "linux"
+                }
+              }
             },
-            "source": {
-              "infos": [
+            {
+              "id": "step1",
+              "inputs": ["step0:0"],
+              "op": {
+                "Op": {}
+              }
+            }
+          ]
+        },
+        "builderPlatform": "linux/amd64",
+        "dockerfileVersion": "1.27.0",
+        "github_actor": "Anko59",
+        "github_actor_id": "25617029",
+        "github_event_name": "push",
+        "github_event_payload": {
+          "after": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+          "base_ref": null,
+          "before": "7951bcb9b8fad6f28ea9bd136c4fb32c16a0c5d2",
+          "commits": [
+            {
+              "author": {
+                "email": "jeancollette138@gmail.com",
+                "name": "Anko59",
+                "username": "Anko59"
+              },
+              "committer": {
+                "email": "noreply@github.com",
+                "name": "GitHub",
+                "username": "web-flow"
+              },
+              "distinct": true,
+              "id": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+              "message": "Reuse signed dependency artifacts and enforce complete immutable image audits (#395)\n\n* fix(android): separate bundled assets from API origin\n\n* fix(android): reject intercepted HTML sessions and add device diagnostics\n\n* fix(android): route OIDC preflights through backend CORS\n\n* fix(tooling): backport braces guards and isolate build caches\n\n* fix(tooling): isolate local images and pin verification artifacts\n\n* fix(testing): isolate disposable fixtures and browser staging\n\n* feat(security): reuse signed dependencies and audit full runtime scope\n\nFreeze runtime consumers to verified immutable dependencies keyed by reviewed build inputs. Publish missing artifacts once, verify provenance and adoption separately, and keep full-scope audits pure and fail closed.\n\nReplace the unsupported local S3 fixture without touching legacy data; add guarded snapshot, migration and recovery contracts. Preserve all 33 cloud-init bundle members with native UTF-8 decoding and the strict provider byte cap.\n\nUpdate narrow digest/package/version exceptions, retire verified obsolete patches, retain Android and braces compatibility fixes, and cover error, cancellation, retag and publication-gate regressions.\n\n* fix(ci): load local artifacts before isolated test consumers\n\n* test(chat): await reaction panel state before asserting focus\n\n* test(e2e): synchronize authorization state and own browser cleanup\n\n* fix(security): pin remediated Debian PCRE2 in SOPS artifact",
+              "timestamp": "2026-10-05T01:04:33+02:00",
+              "tree_id": "d90c59c72e3a7546b1dd9b3028d244cd0e4a99ee",
+              "url": "https://github.com/Anko59/GeoguessMe/commit/a228769dbaf98ce8a5aff7fb0946456f34f8e21b"
+            }
+          ],
+          "compare": "https://github.com/Anko59/GeoguessMe/compare/7951bcb9b8fa...a228769dbaf9",
+          "created": false,
+          "deleted": false,
+          "forced": false,
+          "head_commit": {
+            "author": {
+              "email": "jeancollette138@gmail.com",
+              "name": "Anko59",
+              "username": "Anko59"
+            },
+            "committer": {
+              "email": "noreply@github.com",
+              "name": "GitHub",
+              "username": "web-flow"
+            },
+            "distinct": true,
+            "id": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+            "message": "Reuse signed dependency artifacts and enforce complete immutable image audits (#395)\n\n* fix(android): separate bundled assets from API origin\n\n* fix(android): reject intercepted HTML sessions and add device diagnostics\n\n* fix(android): route OIDC preflights through backend CORS\n\n* fix(tooling): backport braces guards and isolate build caches\n\n* fix(tooling): isolate local images and pin verification artifacts\n\n* fix(testing): isolate disposable fixtures and browser staging\n\n* feat(security): reuse signed dependencies and audit full runtime scope\n\nFreeze runtime consumers to verified immutable dependencies keyed by reviewed build inputs. Publish missing artifacts once, verify provenance and adoption separately, and keep full-scope audits pure and fail closed.\n\nReplace the unsupported local S3 fixture without touching legacy data; add guarded snapshot, migration and recovery contracts. Preserve all 33 cloud-init bundle members with native UTF-8 decoding and the strict provider byte cap.\n\nUpdate narrow digest/package/version exceptions, retire verified obsolete patches, retain Android and braces compatibility fixes, and cover error, cancellation, retag and publication-gate regressions.\n\n* fix(ci): load local artifacts before isolated test consumers\n\n* test(chat): await reaction panel state before asserting focus\n\n* test(e2e): synchronize authorization state and own browser cleanup\n\n* fix(security): pin remediated Debian PCRE2 in SOPS artifact",
+            "timestamp": "2026-10-05T01:04:33+02:00",
+            "tree_id": "d90c59c72e3a7546b1dd9b3028d244cd0e4a99ee",
+            "url": "https://github.com/Anko59/GeoguessMe/commit/a228769dbaf98ce8a5aff7fb0946456f34f8e21b"
+          },
+          "pusher": {
+            "email": "jeancollette138@gmail.com",
+            "name": "Anko59"
+          },
+          "ref": "refs/heads/dev",
+          "repository": {
+            "allow_forking": true,
+            "archive_url": "https://api.github.com/repos/Anko59/GeoguessMe/{archive_format}{/ref}",
+            "archived": false,
+            "assignees_url": "https://api.github.com/repos/Anko59/GeoguessMe/assignees{/user}",
+            "blobs_url": "https://api.github.com/repos/Anko59/GeoguessMe/git/blobs{/sha}",
+            "branches_url": "https://api.github.com/repos/Anko59/GeoguessMe/branches{/branch}",
+            "clone_url": "https://github.com/Anko59/GeoguessMe.git",
+            "collaborators_url": "https://api.github.com/repos/Anko59/GeoguessMe/collaborators{/collaborator}",
+            "comments_url": "https://api.github.com/repos/Anko59/GeoguessMe/comments{/number}",
+            "commits_url": "https://api.github.com/repos/Anko59/GeoguessMe/commits{/sha}",
+            "compare_url": "https://api.github.com/repos/Anko59/GeoguessMe/compare/{base}...{head}",
+            "contents_url": "https://api.github.com/repos/Anko59/GeoguessMe/contents/{+path}",
+            "contributors_url": "https://api.github.com/repos/Anko59/GeoguessMe/contributors",
+            "created_at": 1784465576,
+            "default_branch": "dev",
+            "deployments_url": "https://api.github.com/repos/Anko59/GeoguessMe/deployments",
+            "description": "GeoGuessMe is a real-time multiplayer photo-location guessing game.",
+            "disabled": false,
+            "downloads_url": "https://api.github.com/repos/Anko59/GeoguessMe/downloads",
+            "events_url": "https://api.github.com/repos/Anko59/GeoguessMe/events",
+            "fork": false,
+            "forks": 0,
+            "forks_count": 0,
+            "forks_url": "https://api.github.com/repos/Anko59/GeoguessMe/forks",
+            "full_name": "Anko59/GeoguessMe",
+            "git_commits_url": "https://api.github.com/repos/Anko59/GeoguessMe/git/commits{/sha}",
+            "git_refs_url": "https://api.github.com/repos/Anko59/GeoguessMe/git/refs{/sha}",
+            "git_tags_url": "https://api.github.com/repos/Anko59/GeoguessMe/git/tags{/sha}",
+            "git_url": "git://github.com/Anko59/GeoguessMe.git",
+            "has_discussions": false,
+            "has_downloads": true,
+            "has_issues": true,
+            "has_pages": false,
+            "has_projects": true,
+            "has_pull_requests": true,
+            "has_wiki": true,
+            "homepage": null,
+            "hooks_url": "https://api.github.com/repos/Anko59/GeoguessMe/hooks",
+            "html_url": "https://github.com/Anko59/GeoguessMe",
+            "id": 1305707057,
+            "is_template": false,
+            "issue_comment_url": "https://api.github.com/repos/Anko59/GeoguessMe/issues/comments{/number}",
+            "issue_events_url": "https://api.github.com/repos/Anko59/GeoguessMe/issues/events{/number}",
+            "issues_url": "https://api.github.com/repos/Anko59/GeoguessMe/issues{/number}",
+            "keys_url": "https://api.github.com/repos/Anko59/GeoguessMe/keys{/key_id}",
+            "labels_url": "https://api.github.com/repos/Anko59/GeoguessMe/labels{/name}",
+            "language": "TypeScript",
+            "languages_url": "https://api.github.com/repos/Anko59/GeoguessMe/languages",
+            "license": {
+              "key": "mit",
+              "name": "MIT License",
+              "node_id": "MDc6TGljZW5zZTEz",
+              "spdx_id": "MIT",
+              "url": "https://api.github.com/licenses/mit"
+            },
+            "master_branch": "dev",
+            "merges_url": "https://api.github.com/repos/Anko59/GeoguessMe/merges",
+            "milestones_url": "https://api.github.com/repos/Anko59/GeoguessMe/milestones{/number}",
+            "mirror_url": null,
+            "name": "GeoguessMe",
+            "node_id": "R_kgDOTdOCMQ",
+            "notifications_url": "https://api.github.com/repos/Anko59/GeoguessMe/notifications{?since,all,participating}",
+            "open_issues": 14,
+            "open_issues_count": 14,
+            "owner": {
+              "avatar_url": "https://avatars.githubusercontent.com/u/25617029?v=4",
+              "email": "jeancollette138@gmail.com",
+              "events_url": "https://api.github.com/users/Anko59/events{/privacy}",
+              "followers_url": "https://api.github.com/users/Anko59/followers",
+              "following_url": "https://api.github.com/users/Anko59/following{/other_user}",
+              "gists_url": "https://api.github.com/users/Anko59/gists{/gist_id}",
+              "gravatar_id": "",
+              "html_url": "https://github.com/Anko59",
+              "id": 25617029,
+              "login": "Anko59",
+              "name": "Anko59",
+              "node_id": "MDQ6VXNlcjI1NjE3MDI5",
+              "organizations_url": "https://api.github.com/users/Anko59/orgs",
+              "received_events_url": "https://api.github.com/users/Anko59/received_events",
+              "repos_url": "https://api.github.com/users/Anko59/repos",
+              "site_admin": false,
+              "starred_url": "https://api.github.com/users/Anko59/starred{/owner}{/repo}",
+              "subscriptions_url": "https://api.github.com/users/Anko59/subscriptions",
+              "type": "User",
+              "url": "https://api.github.com/users/Anko59",
+              "user_view_type": "public"
+            },
+            "private": false,
+            "pull_request_creation_policy": "all",
+            "pulls_url": "https://api.github.com/repos/Anko59/GeoguessMe/pulls{/number}",
+            "pushed_at": 1791155073,
+            "releases_url": "https://api.github.com/repos/Anko59/GeoguessMe/releases{/id}",
+            "size": 81468,
+            "ssh_url": "git@github.com:Anko59/GeoguessMe.git",
+            "stargazers": 4,
+            "stargazers_count": 4,
+            "stargazers_url": "https://api.github.com/repos/Anko59/GeoguessMe/stargazers",
+            "statuses_url": "https://api.github.com/repos/Anko59/GeoguessMe/statuses/{sha}",
+            "subscribers_url": "https://api.github.com/repos/Anko59/GeoguessMe/subscribers",
+            "subscription_url": "https://api.github.com/repos/Anko59/GeoguessMe/subscription",
+            "svn_url": "https://github.com/Anko59/GeoguessMe",
+            "tags_url": "https://api.github.com/repos/Anko59/GeoguessMe/tags",
+            "teams_url": "https://api.github.com/repos/Anko59/GeoguessMe/teams",
+            "topics": [],
+            "trees_url": "https://api.github.com/repos/Anko59/GeoguessMe/git/trees{/sha}",
+            "updated_at": "2026-10-04T20:08:40Z",
+            "url": "https://api.github.com/repos/Anko59/GeoguessMe",
+            "visibility": "public",
+            "watchers": 4,
+            "watchers_count": 4,
+            "web_commit_signoff_required": false
+          },
+          "sender": {
+            "avatar_url": "https://avatars.githubusercontent.com/u/25617029?v=4",
+            "events_url": "https://api.github.com/users/Anko59/events{/privacy}",
+            "followers_url": "https://api.github.com/users/Anko59/followers",
+            "following_url": "https://api.github.com/users/Anko59/following{/other_user}",
+            "gists_url": "https://api.github.com/users/Anko59/gists{/gist_id}",
+            "gravatar_id": "",
+            "html_url": "https://github.com/Anko59",
+            "id": 25617029,
+            "login": "Anko59",
+            "node_id": "MDQ6VXNlcjI1NjE3MDI5",
+            "organizations_url": "https://api.github.com/users/Anko59/orgs",
+            "received_events_url": "https://api.github.com/users/Anko59/received_events",
+            "repos_url": "https://api.github.com/users/Anko59/repos",
+            "site_admin": false,
+            "starred_url": "https://api.github.com/users/Anko59/starred{/owner}{/repo}",
+            "subscriptions_url": "https://api.github.com/users/Anko59/subscriptions",
+            "type": "User",
+            "url": "https://api.github.com/users/Anko59",
+            "user_view_type": "public"
+          }
+        },
+        "github_job": "audit-images",
+        "github_ref": "refs/heads/dev",
+        "github_ref_name": "dev",
+        "github_ref_protected": "true",
+        "github_ref_type": "branch",
+        "github_repository": "Anko59/GeoguessMe",
+        "github_repository_id": "1305707057",
+        "github_repository_owner": "Anko59",
+        "github_repository_owner_id": "25617029",
+        "github_run_attempt": "1",
+        "github_run_id": "37242418190",
+        "github_run_number": "1033",
+        "github_runner_arch": "X64",
+        "github_runner_environment": "github-hosted",
+        "github_runner_image_os": "ubuntu24",
+        "github_runner_image_version": "20260927.320.1",
+        "github_runner_name": "GitHub Actions 1000012204",
+        "github_runner_os": "Linux",
+        "github_runner_tracking_id": "github_dffdff80-b318-4524-901a-2842ac01ed84",
+        "github_server_url": "https://github.com",
+        "github_triggering_actor": "Anko59",
+        "github_workflow": "Security",
+        "github_workflow_ref": "Anko59/GeoguessMe/.github/workflows/security.yml@refs/heads/dev",
+        "github_workflow_sha": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b"
+      },
+      "resolvedDependencies": [
+        {
+          "digest": {
+            "sha256": "ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9"
+          },
+          "uri": "pkg:docker/docker/buildkit-syft-scanner@stable-1?platform=linux%2Famd64"
+        },
+        {
+          "digest": {
+            "sha256": "37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"
+          },
+          "uri": "pkg:docker/quay.io/keycloak/keycloak@26.7.5?digest=sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85\u0026platform=linux%2Famd64"
+        }
+      ]
+    },
+    "runDetails": {
+      "builder": {
+        "id": ""
+      },
+      "metadata": {
+        "buildkit_completeness": {
+          "request": true,
+          "resolvedDependencies": false
+        },
+        "buildkit_metadata": {
+          "layers": {
+            "step0:0": [
+              [
                 {
-                  "filename": "Dockerfile",
-                  "language": "Dockerfile",
-                  "data": "RlJPTSBxdWF5LmlvL2tleWNsb2FrL2tleWNsb2FrOjI2LjcuNUBzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NQoKTEFCRUwgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UubmFtZT0icXVheS5pby9rZXljbG9hay9rZXljbG9hazoyNi43LjUiIFwKICAgICAgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UuZGlnZXN0PSJzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NSIgXAogICAgICBvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UuZGVzY3JpcHRpb249IktleWNsb2FrIDI2LjcuNSIKCkFSRyBERVBFTkRFTkNZX0lOUFVUUwpMQUJFTCBkZXYuZ2VvZ3Vlc3NtZS5kZXBlbmRlbmN5LWlucHV0cz0iJHtERVBFTkRFTkNZX0lOUFVUU30iCgpVU0VSIDEwMDAK"
+                  "digest": "sha256:227bdb4b45058da1675bf0a24f32008ae252fdc129e4d3e77da0f8374ea658a8",
+                  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                  "size": 7253694
+                },
+                {
+                  "digest": "sha256:7b990cac69b4276de83c2e2f1906e86bf03ee46428f52c3a8c617d39d71837bd",
+                  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                  "size": 84350048
+                },
+                {
+                  "digest": "sha256:ab0d2ceff68ec8805bdf5a7e2e46cfb5b23d04232a13a429ed543751f0aa9498",
+                  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                  "size": 173184359
+                },
+                {
+                  "digest": "sha256:a20d861de2b7516fa0943cedf279f6a43b5d92742b4135922a1f19c141fa5208",
+                  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                  "size": 550
                 }
               ]
+            ]
+          },
+          "source": {
+            "infos": [
+              {
+                "data": "RlJPTSBxdWF5LmlvL2tleWNsb2FrL2tleWNsb2FrOjI2LjcuNUBzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NQoKTEFCRUwgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UubmFtZT0icXVheS5pby9rZXljbG9hay9rZXljbG9hazoyNi43LjUiIFwKICAgICAgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UuZGlnZXN0PSJzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NSIgXAogICAgICBvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UuZGVzY3JpcHRpb249IktleWNsb2FrIDI2LjcuNSIKCkFSRyBERVBFTkRFTkNZX0lOUFVUUwpMQUJFTCBkZXYuZ2VvZ3Vlc3NtZS5kZXBlbmRlbmN5LWlucHV0cz0iJHtERVBFTkRFTkNZX0lOUFVUU30iCgpVU0VSIDEwMDAK",
+                "digestMapping": {
+                  "sha256:02d2a675ed03ba39fb56928815714e832e600fe2ba67fd6bc13cfa9eebbf21e4": "step1",
+                  "sha256:3564b31aa93e3b88318262bf49e2808ed59b05c9b3fcc7a5aaa4254685005745": "step0"
+                },
+                "filename": "Dockerfile",
+                "language": "Dockerfile",
+                "llbDefinition": [
+                  {
+                    "id": "step0",
+                    "op": {
+                      "Op": {
+                        "source": {
+                          "attrs": {
+                            "local.differ": "none",
+                            "local.followpaths": "[\"Dockerfile\",\"Dockerfile.dockerignore\",\"dockerfile\"]",
+                            "local.sharedkeyhint": "dockerfile"
+                          },
+                          "identifier": "local://dockerfile"
+                        }
+                      },
+                      "constraints": {}
+                    }
+                  },
+                  {
+                    "id": "step1",
+                    "inputs": ["step0:0"],
+                    "op": {
+                      "Op": {}
+                    }
+                  }
+                ]
+              }
+            ],
+            "locations": {
+              "step0": {
+                "locations": [
+                  {
+                    "ranges": [
+                      {
+                        "end": {
+                          "line": 1
+                        },
+                        "start": {
+                          "line": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
             }
+          },
+          "vcs": {
+            "localdir:context": "deployment/docker/keycloak-patched",
+            "localdir:dockerfile": "deployment/docker/keycloak-patched",
+            "revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+            "source": "https://github.com/Anko59/GeoguessMe"
           }
-        }
+        },
+        "finishedOn": "2026-10-04T23:05:12.632423091Z",
+        "invocationId": "kvxo9ze3w0rarvzg6u33bwmll",
+        "startedOn": "2026-10-04T23:04:59.735994726Z"
       }
     }
   }

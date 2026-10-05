@@ -69,6 +69,7 @@ case "$name" in
                 case "$TEST_CASE" in
                     attestation-link) jq '.manifests[1].annotations["vnd.docker.reference.digest"]="wrong"' "$TEST_STATE/index.json" ;;
                     multiple-runtime) jq '.manifests += [.manifests[0]]' "$TEST_STATE/index.json" ;;
+                    direct-multi-runtime) jq '.manifests += [{digest:"other-runtime",platform:{os:"linux",architecture:"arm64"}}]' "$TEST_STATE/index.json" ;;
                     *) jq '.' "$TEST_STATE/index.json" ;;
                 esac
                 ;;

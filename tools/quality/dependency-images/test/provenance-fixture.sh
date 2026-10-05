@@ -37,7 +37,8 @@ jq -n --arg inputs "${1:?}" --arg base "${2:?}" --arg mode "$mode" \
     }}} |
     if $mode == "legacy" then .["linux/amd64"].SLSA = {buildType: $legacy}
     elif $mode == "legacy-nested" then .["linux/amd64"].SLSA.buildDefinition.buildType = $legacy
-    elif $mode == "modern" then .
+    elif $mode == "direct-legacy" then .["linux/amd64"].SLSA = {buildType: $legacy}
+    elif (["modern", "mapped-modern", "direct-multi-runtime", "ambiguous", "ambiguous-null", "root-null", "root-string", "mapped-null", "mapped-nonobject", "wrong-arch", "slsa1", "arbitrary-root", "direct-extra"] | index($mode)) != null then .
     elif $mode == "unknown-url" then .["linux/amd64"].SLSA.buildDefinition.buildType = "https://example.invalid/buildkit"
     elif $mode == "modern-suffix" then .["linux/amd64"].SLSA.buildDefinition.buildType += "?unreviewed=1"
     elif $mode == "root-modern" then .["linux/amd64"].SLSA = {buildType: $modern}
@@ -48,4 +49,16 @@ jq -n --arg inputs "${1:?}" --arg base "${2:?}" --arg mode "$mode" \
     elif $mode == "type-array" then .["linux/amd64"].SLSA.buildDefinition.buildType = [$modern]
     elif $mode == "missing-definition" then del(.["linux/amd64"].SLSA.buildDefinition)
     else error("unsupported fake provenance case: " + $mode)
-    end'
+    end |
+    if (["legacy", "legacy-nested", "mapped-modern"] | index($mode)) != null then .
+    elif $mode == "ambiguous" then . + {SLSA: .["linux/amd64"].SLSA}
+    elif $mode == "ambiguous-null" then . + {SLSA: null}
+    elif $mode == "root-null" then {SLSA: null}
+    elif $mode == "root-string" then {SLSA: "invalid"}
+    elif $mode == "mapped-null" then {"linux/amd64": {SLSA: null}}
+    elif $mode == "mapped-nonobject" then {"linux/amd64": []}
+    elif $mode == "wrong-arch" then {"linux/arm64": .["linux/amd64"]}
+    elif $mode == "slsa1" then {SLSA1: .["linux/amd64"].SLSA}
+    elif $mode == "arbitrary-root" then .["linux/amd64"].SLSA
+    elif $mode == "direct-extra" then .["linux/amd64"] + {unexpected: true}
+    else .["linux/amd64"] end'

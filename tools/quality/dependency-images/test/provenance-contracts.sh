@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sourced by the lifecycle regression after its private fake environment exists.
 : "${TRACE:?}" "${TEST_DIGEST:?}" "${ENV_FILE:?}" "${FAKE_STATE:?}"
-for provenance in legacy legacy-nested modern; do
+for provenance in legacy legacy-nested mapped-modern modern direct-legacy; do
     new_case
     export FAKE_REGISTRY=missing FAKE_PROVENANCE=$provenance
     run_ok publish sops
@@ -20,12 +20,16 @@ for provenance in legacy legacy-nested modern; do
     assert grep -q "@$TEST_DIGEST" "$ENV_FILE"
     pass "$provenance publication preserves build, provenance, audit, sign and verification ordering"
 done
-for provenance in unknown-url modern-suffix root-modern empty malformed definition-array slsa-array type-array missing-definition malformed-json; do
+for provenance in unknown-url modern-suffix root-modern empty malformed definition-array slsa-array type-array missing-definition malformed-json direct-multi-runtime ambiguous ambiguous-null root-null root-string mapped-null mapped-nonobject wrong-arch slsa1 arbitrary-root direct-extra; do
     new_case
     export FAKE_REGISTRY=missing FAKE_PROVENANCE=$provenance
     run_fail publish sops
     assert test "$(grep -c '^docker buildx build ' "$TRACE")" = 1
-    assert grep -q 'missing BuildKit SLSA provenance' "$FAKE_STATE/log"
+    case "$provenance" in
+        slsa-array | malformed-json | direct-multi-runtime | ambiguous | ambiguous-null | root-null | root-string | mapped-null | mapped-nonobject | wrong-arch | slsa1 | arbitrary-root | direct-extra) diagnostic='invalid BuildKit SLSA projection' ;;
+        *) diagnostic='missing BuildKit SLSA provenance' ;;
+    esac
+    assert grep -Fq "$diagnostic" "$FAKE_STATE/log"
     assert test ! -f "$FAKE_STATE/scanned"
     assert test ! -f "$FAKE_STATE/signed"
     assert test ! -f "$ENV_FILE"
