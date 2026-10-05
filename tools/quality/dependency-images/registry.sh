@@ -66,7 +66,9 @@ verify_artifact() {
         .["linux/amd64"].SLSA as $slsa |
         ($slsa | type) == "object" and
         ($slsa.buildType == "https://mobyproject.org/buildkit@v1" or
-         $slsa.buildDefinition.buildType == "https://mobyproject.org/buildkit@v1")
+         (($slsa.buildDefinition | type) == "object" and
+          ($slsa.buildDefinition.buildType == "https://mobyproject.org/buildkit@v1" or
+           $slsa.buildDefinition.buildType == "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md")))
     ' <<<"$provenance" >/dev/null || fail "missing BuildKit SLSA provenance: $COMPONENT"
     remote_operation "pull-$COMPONENT" docker pull --platform "$DEPENDENCY_PLATFORM" "$IMMUTABLE_REF" || fail 'cannot pull verified dependency artifact'
     verify_local "$IMMUTABLE_REF"

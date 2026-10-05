@@ -55,6 +55,14 @@ publish-security-images: ## Build, scan, sign and publish only missing content-k
 resolve-security-images: ## Resolve and verify already-published dependency digests; never build.
 	bash tools/quality/dependency-images/lifecycle.sh resolve
 
+recover-reviewed-keycloak: ## Recover only the explicitly reviewed interrupted Keycloak publication in protected CI.
+	bash tools/quality/dependency-images/recover-keycloak.sh
+
+test-security-workflows: test-reviewed-keycloak-recovery
+
+test-reviewed-keycloak-recovery: ## Verify exact-origin recovery guards, audit-before-sign ordering, and idempotency without registry writes.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test/recovery/test-recovery.sh
+
 audit-image-set: ## Scan an explicitly supplied immutable image set with complete aggregate reporting.
 	bash tools/quality/image-audit/audit.sh
 

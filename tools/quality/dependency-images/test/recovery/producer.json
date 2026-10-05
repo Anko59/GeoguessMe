@@ -1,0 +1,74 @@
+{
+  "linux/amd64": {
+    "SLSA": {
+      "buildDefinition": {
+        "buildType": "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
+        "resolvedDependencies": [
+          {
+            "uri": "pkg:docker/quay.io/keycloak/keycloak@26.7.5?digest=sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85&platform=linux%2Famd64",
+            "digest": {
+              "sha256": "37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"
+            }
+          }
+        ],
+        "externalParameters": {
+          "configSource": {
+            "path": "Dockerfile"
+          },
+          "request": {
+            "frontend": "dockerfile.v0",
+            "args": {
+              "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+              "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689"
+            },
+            "locals": [
+              {
+                "name": "context"
+              },
+              {
+                "name": "dockerfile"
+              }
+            ],
+            "root": {
+              "configSource": {
+                "path": "Dockerfile"
+              },
+              "request": {
+                "args": {
+                  "build-arg:DEPENDENCY_INPUTS": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+                  "label:dev.geoguessme.dependency-inputs": "cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689",
+                  "vcs:localdir:context": "deployment/docker/keycloak-patched",
+                  "vcs:localdir:dockerfile": "deployment/docker/keycloak-patched",
+                  "vcs:revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+                  "vcs:source": "https://github.com/Anko59/GeoguessMe"
+                }
+              }
+            },
+            "compatibilityVersion": 30
+          }
+        }
+      },
+      "runDetails": {
+        "metadata": {
+          "buildkit_metadata": {
+            "vcs": {
+              "localdir:context": "deployment/docker/keycloak-patched",
+              "localdir:dockerfile": "deployment/docker/keycloak-patched",
+              "revision": "a228769dbaf98ce8a5aff7fb0946456f34f8e21b",
+              "source": "https://github.com/Anko59/GeoguessMe"
+            },
+            "source": {
+              "infos": [
+                {
+                  "filename": "Dockerfile",
+                  "language": "Dockerfile",
+                  "data": "RlJPTSBxdWF5LmlvL2tleWNsb2FrL2tleWNsb2FrOjI2LjcuNUBzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NQoKTEFCRUwgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UubmFtZT0icXVheS5pby9rZXljbG9hay9rZXljbG9hazoyNi43LjUiIFwKICAgICAgb3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UuZGlnZXN0PSJzaGEyNTY6MzdkYmFmNmYwNzIyYzllYzI0NjMzNWYzNmUxZWY4YjJlNmNiOTYwZjdjMjdlMGQ4YzYxNTEyMWEzZDQ3NWE4NSIgXAogICAgICBvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UuZGVzY3JpcHRpb249IktleWNsb2FrIDI2LjcuNSIKCkFSRyBERVBFTkRFTkNZX0lOUFVUUwpMQUJFTCBkZXYuZ2VvZ3Vlc3NtZS5kZXBlbmRlbmN5LWlucHV0cz0iJHtERVBFTkRFTkNZX0lOUFVUU30iCgpVU0VSIDEwMDAK"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
