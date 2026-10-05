@@ -346,6 +346,24 @@ else
     fail 'the socket-proxy derivative is not included in the scan-only gate'
 fi
 
+# Fixed Debian Perl findings must be remediated in the SOPS image.
+for cve in CVE-2026-13221 CVE-2026-42496 CVE-2026-8376 CVE-2026-42497 CVE-2026-48962 CVE-2026-57432 CVE-2026-57433; do
+    for exception_file in "${exception_files[@]}"; do
+        if grep -Fq "$cve" "$exception_file"; then
+            fail "$cve must be remediated, not excepted"
+        else
+            pass "$cve is absent from $(basename "$exception_file")"
+        fi
+    done
+done
+if grep -Fq 'perl-base=5.36.0-7+deb12u4' "$sops_dockerfile" &&
+    grep -Fq "dpkg-query -W -f='\${Version}' perl-base" "$sops_dockerfile" &&
+    grep -Fq "test \"\$installed_perl\" = \"5.36.0-7+deb12u4\"" "$sops_dockerfile"; then
+    pass 'SOPS derivative pins and asserts fixed Debian Perl'
+else
+    fail 'SOPS derivative must pin and assert fixed Debian Perl'
+fi
+
 # ── Test 12: immutable matching and scoped inheritance ─────────────────────
 echo '--- Test 12: strict digest matching and native package/version scopes ---'
 sed 's|postgres:15-alpine|geoguessme/fixture:local|' "$TMP/valid.yaml" >"$TMP/local.yaml"
