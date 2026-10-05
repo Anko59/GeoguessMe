@@ -54,6 +54,20 @@ printf '%s\n' '-- Namespace fixture: never executed against a database.' \
 cat >"$TMP/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
+case "${1:-}" in
+    ps) [ ! -f "$NAMESPACE_STARTED" ] || echo fixture-backend; exit 0 ;;
+    image) echo sha256:fixture; exit 0 ;;
+    inspect)
+        case "$3" in
+            *working_dir*) printf '%s\n' "$NAMESPACE_ROOT" ;;
+            '{{.Id}} {{.Image}}') echo 'fixture-backend sha256:fixture' ;;
+            '{{.Image}}') echo sha256:fixture ;;
+            *org.opencontainers.image.revision*) echo '<no value>' ;;
+            *) exit 85 ;;
+        esac
+        exit 0
+        ;;
+esac
 [ "${1:-}" = compose ] || { echo "unexpected Docker command" >&2; exit 85; }
 args=("$@")
 project=""
@@ -83,9 +97,12 @@ if "$tools"; then
     exit 86
 fi
 printf 'app|%s\n' "$project" >>"${NAMESPACE_LOG:?}"
+if [[ " $* " == *' up '* ]]; then : >"$NAMESPACE_STARTED"; fi
+if [[ " $* " == *' ps -q backend '* ]]; then echo fixture-backend; fi
 exit 0
 DOCKER
-chmod +x "$TMP/bin/docker"
+printf '#!/bin/sh\nprintf "1111111111111111111111111111111111111111\\n"\n' >"$TMP/bin/git"
+chmod +x "$TMP/bin/docker" "$TMP/bin/git"
 export PATH="$TMP/bin:$PATH" NAMESPACE_LOG="$TMP/docker.log"
 
 # Loading the real shared Make fragment ensures the test exercises the default
@@ -150,7 +167,10 @@ run_helper() (
     case "$helper" in
         deployment/scripts/smoke-test.sh | deployment/scripts/wait-for-health.sh) shell="sh" ;;
     esac
-    export NAMESPACE_HELPER="$helper"
+    export NAMESPACE_HELPER="$helper" NAMESPACE_ROOT="$TMP/fixture"
+    export NAMESPACE_STARTED="$TMP/started-$helper-$mode"
+    mkdir -p "$(dirname "$NAMESPACE_STARTED")"
+    export BACKEND_IMAGE=geoguessme-backend:local-private TOOLS_UID=1000 TOOLS_GID=1000
     export GEOGUESSME_TEST_PORT_BASE=32100 GEOGUESSME_TEST_WEB_PORT=32100 GEOGUESSME_TEST_MAILPIT_PORT=32101
     export GEOGUESSME_TEST_DB_PORT=32102 GEOGUESSME_TEST_TOXIPROXY_PORT=32103
     case "$mode" in
@@ -196,8 +216,16 @@ for helper in "${helpers[@]}"; do
     # proves the command-array/string boundaries do not split an exported value.
     : >"$NAMESPACE_LOG"
     run_helper "$helper" quoted >"$TMP/output" 2>&1 && fail "$helper unexpectedly completed fake tools"
-    grep -Fxq 'tools|geoguessme-tools-literal space' "$NAMESPACE_LOG" ||
-        fail "$helper does not preserve one project argument"
+    case "$helper" in
+        tools/quality/run-e2e.sh | tools/quality/run-integration.sh)
+            [ ! -s "$NAMESPACE_LOG" ] || fail "$helper touched Docker with an invalid project"
+            grep -q 'must match' "$TMP/output" || fail "$helper failed for the wrong reason"
+            ;;
+        *)
+            grep -Fxq 'tools|geoguessme-tools-literal space' "$NAMESPACE_LOG" ||
+                fail "$helper does not preserve one project argument"
+            ;;
+    esac
     if grep -Fq 'incorrect tool project' "$TMP/output"; then fail "$helper split its project argument"; fi
     echo "PASS: $helper requires and propagates the tool namespace"
 done

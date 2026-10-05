@@ -1,10 +1,9 @@
 #!/bin/sh
 set -eu
 
-# This file is sourced; consumers use different subsets of these constants.
+# Runtime contracts: docs/runbooks/runtime-hardening.md and hosted-deployment.md.
 # shellcheck disable=SC2034
 readonly APP_ROOT="${GEOGUESSME_APP_ROOT:-/opt/geoguessme}"
-# Root definitions never come from writable application releases.
 readonly CONFIG_ROOT="${GEOGUESSME_CONFIG_ROOT:-$APP_ROOT/config}"
 # shellcheck disable=SC2034
 readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
@@ -12,21 +11,35 @@ readonly STATE_ROOT="${GEOGUESSME_STATE_ROOT:-/var/lib/geoguessme}"
 readonly SECRET_ROOT="${GEOGUESSME_SECRET_ROOT:-/etc/geoguessme}"
 # shellcheck disable=SC2034
 readonly LOCK_ROOT="${GEOGUESSME_LOCK_ROOT:-/run/lock/geoguessme}"
-# Audited legacy pins: retain until both environments adopt utility metadata.
-# Backups select active metadata, never an incoming candidate.
 readonly RESTIC_BOOTSTRAP_IMAGE='ghcr.io/anko59/geoguessme-restic:dev-2d9434ac0a74367a240b1e877212396757cdc031@sha256:6e06ec8b56c6ecd24887411ae1f93e4f3b4adde82712a945f3c59f864f6a088a'
 readonly POSTGRES_BOOTSTRAP_IMAGE='postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181'
 readonly IDENTITY_POSTGRES_BOOTSTRAP_IMAGE='postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f'
 # shellcheck disable=SC2034
 readonly COSIGN_IMAGE='ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca'
-# Legacy SOPS bootstrap only; new workflows supply the signed digest.
 # shellcheck disable=SC2034
 readonly SOPS_BOOTSTRAP_IMAGE='ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea'
 readonly SOPS_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-sops'
 readonly SOCKET_PROXY_IMAGE_REPOSITORY='ghcr.io/anko59/geoguessme-socket-proxy'
-# Watch cutover: current definition pin, then the previously running pin.
 readonly SOCKET_PROXY_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:3.4.6@sha256:0357c479cc98e863917d1cd8b10e83d35a50ca46a0788f5a192bf792c3b7100d'
 readonly SOCKET_PROXY_PREVIOUS_BOOTSTRAP_IMAGE='lscr.io/linuxserver/socket-proxy:latest@sha256:7f932344a3a66a2a54a34001e8e78e60ec14dcd9c522e74a5b6420ac9db18afd'
+
+prepare_public_configs() (
+    public_root=$(CDPATH='' cd -- "$1" && pwd -P) || exit 1
+    public_dir="$public_root/deployment/oauth2-proxy"
+    for directory in "$public_root/deployment" "$public_dir"; do
+        if [ ! -d "$directory" ] || [ -L "$directory" ]; then
+            echo 'Public config preparation requires regular checkout directories' >&2
+            exit 1
+        fi
+    done
+    for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+        if [ ! -f "$public_dir/$name" ] || [ -L "$public_dir/$name" ]; then
+            echo "Public config preparation requires regular non-symlink $name" >&2
+            exit 1
+        fi
+    done
+    chmod 0644 "$public_dir/oauth2-proxy.cfg" "$public_dir/oauth2-proxy-alpha.yaml"
+)
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -221,8 +234,6 @@ normalize_oauth2_proxy_cookie_secret() {
 
     case "$normalized_decoded_bytes" in
         16 | 24 | 32)
-            # oauth2-proxy accepts URL-safe Base64. Converting the alphabet
-            # preserves the decoded key while supporting legacy standard Base64.
             sed -i '/^OAUTH2_PROXY_COOKIE_SECRET=/y@+/@-_@' "$normalized_env_file"
             ;;
         *)
@@ -234,7 +245,6 @@ normalize_oauth2_proxy_cookie_secret() {
     esac
 }
 
-# Only exact project-owned references are admitted by the extended protocol.
 validate_dependency_image_reference() {
     dependency_candidate=$1 dependency_component=$2 dependency_tag=$3
     case "$dependency_component" in postgres | restic) ;; *) die 'invalid dependency component' ;; esac
@@ -245,7 +255,6 @@ validate_dependency_image_reference() {
     valid_image_reference "$dependency_candidate" || die "invalid $dependency_component digest"
 }
 
-# Never source writable metadata as shell code or accept duplicate image fields.
 active_metadata_image() (
     validate_environment "$1"
     metadata="$STATE_ROOT/releases/$1/current.env"
@@ -283,7 +292,6 @@ verify_dependency_image() (
         --annotations "revision=$dependency_revision" "$dependency_image" >/dev/null
 )
 
-# Legacy rollback captures the running image; never guess from a candidate.
 running_postgres_image() (
     ids=$(docker ps --filter "label=com.docker.compose.project=$1" \
         --filter "label=com.docker.compose.service=$2" --format '{{.ID}}') || exit 1
@@ -307,14 +315,12 @@ select_postgres_image() (
     selected=${POSTGRES_IMAGE:-}
     [ -n "$selected" ] || selected=$(active_metadata_image "$1" POSTGRES_IMAGE) || exit 1
     [ -n "$selected" ] || selected=$(running_postgres_image "$(environment_project "$1")" postgres) || exit 1
-    # Only fresh legacy bootstrap has neither metadata nor an active container.
     [ -n "$selected" ] || selected=$POSTGRES_BOOTSTRAP_IMAGE
     validate_selected_postgres "$selected" || exit 1
     printf '%s\n' "$selected"
 )
 
 select_identity_postgres_image() (
-    # Identity is shared: a dev application's candidate must never change its DB.
     selected=${IDENTITY_POSTGRES_IMAGE:-}
     [ -n "$selected" ] || selected=$(active_metadata_image production IDENTITY_POSTGRES_IMAGE) || exit 1
     [ -n "$selected" ] || selected=$(running_postgres_image geoguessme-identity keycloak-db) || exit 1
@@ -326,7 +332,6 @@ select_identity_postgres_image() (
 
 select_restic_image() (
     validate_environment "$1"
-    # Backup uses active adoption, never the incoming RESTIC_IMAGE.
     selected=$(active_metadata_image "$1" RESTIC_IMAGE) || exit 1
     [ -n "$selected" ] || selected=$RESTIC_BOOTSTRAP_IMAGE
     verify_dependency_image "$selected" restic || exit 1

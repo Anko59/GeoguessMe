@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+# Runtime contracts: docs/runbooks/runtime-hardening.md and hosted-deployment.md.
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck source=deployment/scripts/hosted/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -9,8 +10,6 @@ environment=${1:-}
 validate_environment "$environment"
 backend_image=${2:-}
 web_image=${3:-}
-# Keep legacy arities only for the staged root-bundle/workflow cutover. The new
-# protocol adopts exact signed SOPS, PostgreSQL and Restic references together.
 postgres_image=''
 restic_image=''
 dependency_update=false
@@ -115,6 +114,8 @@ if [ ! -d "$release" ]; then
     trap - EXIT INT TERM
 fi
 
+prepare_public_configs "$release"
+
 encrypted="$release/deployment/secrets/$environment.env.enc"
 secret_file=$(environment_env_file "$environment")
 temporary_secret=''
@@ -186,8 +187,6 @@ if [ -n "$postgres_image" ]; then
     docker pull "$restic_image"
 fi
 
-# Resolve old state before exporting any candidate. Legacy metadata may omit
-# dependency refs; inspect the actual database and retain the legacy backup pin.
 previous_postgres_image=$(POSTGRES_IMAGE='' select_postgres_image "$environment")
 previous_restic_image=$(select_restic_image "$environment")
 previous_identity_postgres_image=''
@@ -205,8 +204,6 @@ current="$metadata_dir/current.env"
 previous="$metadata_dir/previous.env"
 if [ -f "$current" ]; then
     cp "$current" "$previous"
-    # Enrich legacy rollback metadata with the actual old references, not the
-    # newly selected candidate. No shell evaluation of metadata is permitted.
     sed -i '/^POSTGRES_IMAGE=/d; /^RESTIC_IMAGE=/d' "$previous"
     printf 'POSTGRES_IMAGE=%s\nRESTIC_IMAGE=%s\n' \
         "$previous_postgres_image" "$previous_restic_image" >>"$previous"

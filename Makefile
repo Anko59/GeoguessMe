@@ -30,7 +30,7 @@ include tools/make/openapi-contract.mk
 	format format-check fmt fmt-check mod-tidy lint lint-go lint-frontend lint-dead-code lint-debt-markers lint-css lint-docs \
 	lint-shell lint-docker lint-actions lint-sql lint-caddy lint-openapi check-e2e-style \
 	structure-check type-check archcheck \
-	test-unit test-backend test-frontend test-reconnect-harness test-play-api test-race test-verified test-structure-regression test-debt-markers-regression \
+	test-unit test-backend test-frontend test-feed-fixtures test-npm-security-overrides test-braces-security-backport verify-braces-backport-source test-reconnect-harness test-play-api test-race test-verified test-structure-regression test-debt-markers-regression \
 	test-makefile-fragments-regression test-archcheck-regression test-ci-retention-regression test-cache-status-regression \
 	test-ci-classifier test-e2e-regression test-dev-workflow-regression test-load-harness-regression test-restart-regression test-qa-agent test-qa-mailbox-live qa-agent qa-agent-fast qa-agent-full qa-agent-nightly qa-browser-mcp \
 	test-migration-fixture-regression test-image-scan-exceptions-regression test-integration test-e2e test-e2e-pr test-e2e-ui test-e2e-repeat test-all \
@@ -38,7 +38,7 @@ include tools/make/openapi-contract.mk
 	test-rehearsal-isolation test-local-images test-tools-namespace test-braces-security test-mobile-release-contract test-mobile-sdk-contract test-mobile-device-contract mobile-device-list mobile-device-install mobile-device-logs \
 	test-prune-regression test-disk-cleanup-regression test-prod-container-verify-regression \
 	test-artifacts-clean-regression test-build-caching test-docs-agent-config coverage \
-	prepare-frontend-cache bootstrap-security-tools format-security validate-s3-fixture-config s3-fixture s3-fixture-host test-s3-fixture test-s3-fixture-race test-s3-fixture-snapshot test-s3-fixture-integration format-s3-fixture s3-fixture-stage s3-fixture-stage-down verify-s3-upstream dev-s3-stage dev-s3-stage-stop dev-s3-recovery-source dev-s3-recovery-source-stop dev-s3-migrate dev-s3-guard prepare-app-runtime prepare-database-runtime publish-security-images resolve-security-images audit-image-set test-image-audit test-image-audit-native test-security-workflows test-dependency-images test-local-dependency-from test-npm-security-overrides deps-npm-ci audit deps-go-security-update deps-npm-security-update deps-npm-lock \
+	prepare-frontend-cache bootstrap-security-tools format-security validate-s3-fixture-config s3-fixture s3-fixture-host test-s3-fixture test-s3-fixture-race test-s3-fixture-snapshot test-s3-fixture-integration format-s3-fixture s3-fixture-stage s3-fixture-stage-down verify-s3-upstream dev-s3-stage dev-s3-stage-stop dev-s3-recovery-source dev-s3-recovery-source-stop dev-s3-migrate dev-s3-guard prepare-app-runtime prepare-database-runtime publish-security-images resolve-security-images recover-reviewed-keycloak test-reviewed-keycloak-recovery audit-image-set test-image-audit test-image-audit-native test-security-workflows test-dependency-images test-local-dependency-from test-npm-security-overrides deps-npm-ci audit deps-go-security-update deps-npm-security-update deps-npm-lock \
 	build build-backend build-frontend build-images build-keycloak-image clean-build build-sops-image build-socket-proxy-image build-security-tool-images audit-images \
 	migrate-up migrate-status migration-new db-backup db-restore \
 	backup-rehearsal restart-rehearsal reconnect-rehearsal migration-test load-test operational-gate \

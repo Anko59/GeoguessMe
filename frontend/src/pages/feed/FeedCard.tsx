@@ -106,10 +106,12 @@ export default function FeedCard({
     post,
     onUpdate,
     onRemove,
+    onRefreshPost,
 }: {
     post: PublicChallenge;
     onUpdate: (post: Partial<PublicChallenge> & { id: string }) => void;
     onRemove: (id: string) => void;
+    onRefreshPost: (id: string) => Promise<void>;
 }) {
     const commentsID = useId();
     const playButton = useRef<HTMLButtonElement>(null);
@@ -135,7 +137,10 @@ export default function FeedCard({
     async function remove() {
         if (await actions.remove()) onRemove(post.id);
     }
-    const markResolved = useCallback(() => onUpdate({ id: post.id, resolved: true }), [onUpdate, post.id]);
+    const markResolved = useCallback(() => {
+        onUpdate({ id: post.id, resolved: true });
+        void onRefreshPost(post.id);
+    }, [onUpdate, onRefreshPost, post.id]);
     function openChallenge() {
         setPlaying(true);
     }

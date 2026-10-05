@@ -27,7 +27,11 @@ prod_restic="ghcr.io/anko59/geoguessme-restic:release-$old@sha256:$digest"
 sops="ghcr.io/anko59/geoguessme-sops:dev-$new@sha256:$digest"
 app="ghcr.io/anko59/geoguessme-backend:dev-$new@sha256:$digest"
 web="ghcr.io/anko59/geoguessme-web:dev-$new@sha256:$digest"
-mkdir -p "$TMP/app/releases/$old" "$TMP/app/releases/$new" "$TMP/app/dev"
+mkdir -p "$TMP/app/releases/$old" "$TMP/app/releases/$new/deployment/oauth2-proxy" "$TMP/app/dev"
+for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+    printf 'public fixture\n' >"$TMP/app/releases/$new/deployment/oauth2-proxy/$name"
+    chmod 600 "$TMP/app/releases/$new/deployment/oauth2-proxy/$name"
+done
 printf '%s\n' "$old" >"$TMP/app/config/runtime-revision"
 ln -s "$TMP/app/releases/$old" "$TMP/app/dev/current"
 printf 'GHCR_USERNAME=fixture\nGHCR_TOKEN=fixture\n' >"$TMP/secrets/dev.env"
@@ -115,6 +119,11 @@ run_deploy "$new_pg" >"$TMP/result" 2>&1 || {
     sed -n '1,80p' "$TMP/result" >&2
     fail 'valid adoption failed'
 }
+for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+    public="$TMP/app/releases/$new/deployment/oauth2-proxy/$name"
+    [ "$(stat -c '%a' "$public")" = 644 ] || fail 'public config permissions were not normalized'
+    [ "$(cat "$public")" = 'public fixture' ] || fail 'public config bytes changed'
+done
 grep -Fxq "POSTGRES_IMAGE=$new_pg" "$metadata" || fail 'database candidate not persisted'
 grep -Fxq "RESTIC_IMAGE=$new_restic" "$metadata" || fail 'Restic candidate not persisted'
 grep -Fxq "SOPS_IMAGE=$sops" "$metadata" || fail 'SOPS candidate not persisted'

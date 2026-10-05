@@ -121,6 +121,23 @@ describe('leaderboardCache', () => {
         expect(getCachedLeaderboard('user-50', 'group-a', 'week', 'total')).toEqual([]);
     });
 
+    it('does not let stale in-flight responses repopulate a cleared cache', async () => {
+        let resolve!: (value: { data: [] }) => void;
+        mocks.get.mockReturnValueOnce(
+            new Promise((done) => {
+                resolve = done;
+            }),
+        );
+        const stale = refreshLeaderboard('user-a', 'group-a', 'week', 'total');
+        clearLeaderboardCache();
+        resolve({ data: [] });
+        await stale;
+        expect(getCachedLeaderboard('user-a', 'group-a', 'week', 'total')).toBeUndefined();
+        mocks.get.mockResolvedValueOnce({ data: [] });
+        await refreshLeaderboard('user-a', 'group-a', 'week', 'total');
+        expect(mocks.get).toHaveBeenCalledTimes(2);
+    });
+
     it('clearLeaderboardCache drops every entry and in-flight request', async () => {
         mocks.get.mockResolvedValue({ data: [] });
         await refreshLeaderboard('user-a', 'group-a', 'week', 'total');

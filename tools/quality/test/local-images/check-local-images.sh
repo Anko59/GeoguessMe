@@ -142,6 +142,11 @@ MAKE
 chmod +x "$TMP/bin/docker" "$TMP/bin/make"
 export PATH="$TMP/bin:$PATH"
 
+# Consumers may normalize public configuration permissions. Exercise real helpers
+# on a writable copied checkout, never mutate the read-only source mount.
+consumer_root="$TMP/consumer"
+mkdir -p "$consumer_root"
+cp -R "$ROOT/deployment" "$consumer_root/deployment"
 consumers=(deployment/scripts/container-verify.sh deployment/scripts/prod-container-verify.sh deployment/scripts/watch/rehearsal.sh)
 for helper in "${consumers[@]}"; do
     if grep -Eq 'geoguessme-(backend|web):local' "$ROOT/$helper"; then fail "$helper retains a common image fallback"; fi
@@ -165,7 +170,7 @@ for helper in "${consumers[@]}"; do
         status=0
         "${scope[@]}" GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-image-fixture GEOGUESSME_TEST_PORT_BASE=32100 \
             IMAGE_TEST_MODE=consumer IMAGE_CONSUMER="$consumer" IMAGE_TEST_STATE="$state" \
-            EXPECTED_BACKEND="$backend_ref" EXPECTED_WEB="$web_ref" bash "$ROOT/$helper" >"$TMP/output" 2>&1 || status=$?
+            EXPECTED_BACKEND="$backend_ref" EXPECTED_WEB="$web_ref" bash "$consumer_root/$helper" >"$TMP/output" 2>&1 || status=$?
         expected_status=86
         [ "$helper" != deployment/scripts/container-verify.sh ] || expected_status=0
         if [ "$status" -ne "$expected_status" ]; then
@@ -178,7 +183,7 @@ for helper in "${consumers[@]}"; do
     : >"$IMAGE_TEST_LOG"
     if env -u BACKEND_IMAGE -u WEB_IMAGE -u LOCAL_BACKEND_IMAGE -u LOCAL_WEB_IMAGE \
         GEOGUESSME_TOOLS_PROJECT=geoguessme-tools-image-fixture GEOGUESSME_TEST_PORT_BASE=32100 \
-        IMAGE_TEST_MODE=consumer bash "$ROOT/$helper" >"$TMP/output" 2>&1; then
+        IMAGE_TEST_MODE=consumer bash "$consumer_root/$helper" >"$TMP/output" 2>&1; then
         fail "$helper accepted undefined scoped image references"
     fi
     [ ! -s "$IMAGE_TEST_LOG" ] || fail "$helper contacted Docker before rejecting undefined local refs"

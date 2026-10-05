@@ -12,6 +12,13 @@ mkdir -p "$FIXTURE/tools/make" "$FIXTURE/tools/quality/dependency-images" "$FIXT
 cp "$ROOT/tools/make/"{setup,dependency-images,deployment,quality,mobile}.mk "$FIXTURE/tools/make/"
 cp "$ROOT/deployment/images/runtime.tsv" "$FIXTURE/deployment/images/"
 cp "$ROOT/tools/quality/dependency-images/with-selected.sh" "$FIXTURE/tools/quality/dependency-images/"
+mkdir -p "$FIXTURE/deployment/oauth2-proxy" "$FIXTURE/deployment/scripts/hosted"
+cp "$ROOT/deployment/oauth2-proxy/prepare-public-configs.sh" "$FIXTURE/deployment/oauth2-proxy/"
+cp "$ROOT/deployment/scripts/hosted/common.sh" "$FIXTURE/deployment/scripts/hosted/"
+for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+    printf 'public fixture\n' >"$FIXTURE/deployment/oauth2-proxy/$name"
+    chmod 600 "$FIXTURE/deployment/oauth2-proxy/$name"
+done
 cat >"$FIXTURE/Makefile" <<'MAKE'
 include tools/make/setup.mk
 include tools/make/dependency-images.mk
@@ -112,7 +119,13 @@ for target in dev dev-social identity-up; do
         contains "$TRACE" "IDENTITY=$(id 1)"
         contains "$TRACE" "KEY=$(id 2)"
     fi
-    if [[ "$target" == dev-social ]]; then contains "$TRACE" "CADDY=$(id 3)"; fi
+    if [[ "$target" == dev-social ]]; then
+        contains "$TRACE" "CADDY=$(id 3)"
+        for name in oauth2-proxy.cfg oauth2-proxy-alpha.yaml; do
+            [[ "$(stat -c '%a' "$FIXTURE/deployment/oauth2-proxy/$name")" == 644 ]] ||
+                fail 'dev-social did not normalize public config permissions'
+        done
+    fi
     pass "$target starts only frozen prepared database and social runtime bytes"
 done
 FAIL_COMPONENT=postgres run_fail dev

@@ -101,6 +101,7 @@ prod-legacy-identity-provision: prod-config prepare-database-runtime ## Provisio
 	$(WITH_SELECTED) postgres -- $(COMPOSE_PROD) run --rm migration legacy-identity-migration apply --confirm
 
 prod-up: prod-config prepare-database-runtime ## Start the production stack.
+	bash deployment/oauth2-proxy/prepare-public-configs.sh
 	@set -eu; POSTGRES_IMAGE=$$(bash tools/quality/dependency-images/selected.sh postgres); export POSTGRES_IMAGE; \
 	if grep -Eq '^OIDC_ENABLED=(true|1)$$' deployment/env/production.env; then \
 		$(COMPOSE_PROD) --profile social up -d; \
@@ -127,6 +128,7 @@ hosted-contract-test: ## Verify deployment ordering, isolation, locking, rollbac
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-hash-contracts.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/prune-releases.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools /workspace/deployment/scripts/hosted/test/runtime-bundle.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh /workspace/deployment/scripts/watch/test-rehearsal.sh
 
 watch-config: ## Validate the isolated monitoring Compose topology with example secrets.
 	WEB_IMAGE=example.invalid/geoguessme-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb GEOGUESSME_WATCH_AGENT_ENV=$(abspath deployment/env/watch-agent.env.example) GEOGUESSME_WATCH_METRICS_DIR=$(abspath deployment/env) docker compose -f deployment/compose.watch.yaml --project-directory deployment config --quiet

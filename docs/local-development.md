@@ -100,6 +100,11 @@ Mutable tool caches are isolated by checkout path, so a second worktree cannot
 replace this checkout's installed dependencies. Run `make bootstrap` when first
 using the checkout-scoped cache. Previous globally named tool volumes are left
 untouched; application, development and production data volumes do not change.
+For concurrent jobs within one checkout, override `GEOGUESSME_TOOLS_PROJECT`
+consistently for bootstrap and all gates. Names use lowercase letters, digits,
+underscores, and hyphens, starting with a letter or digit. Use the same variable
+with `make tools-clean` to remove only the selected tooling project.
+
 Local verification image tags are checkout-scoped too. Rebuild with
 `make build-images`; container verifiers pin the selected image IDs so another
 build cannot silently switch artifacts during inspection. Explicit

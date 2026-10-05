@@ -352,6 +352,7 @@ func mediaURL(photo *models.Photo, result bool) string {
 // enforces the never-received / window-still-open rule and starts the window
 // at the first full delivery.
 func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	if r.Method != http.MethodGet {
 		MethodNotAllowed(w)
 		return
@@ -365,7 +366,7 @@ func (a *GameAPI) ServeChallengeMedia(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "missing_photo_id", "Photo ID is required")
 		return
 	}
-	photo, err := a.groups.Photo(r.Context(), photoID)
+	photo, err := a.groups.PhotoForViewer(r.Context(), photoID, GetUserIDFromContext(r))
 	if err != nil || photo == nil {
 		WriteError(w, http.StatusNotFound, "not_found", "Media not found")
 		return

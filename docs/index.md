@@ -38,6 +38,8 @@ and submit one server-timed guess.
   reactions, feature actions, lens picker, and leaderboard medals
 - [Authentication](authentication.md) — access/refresh tokens, verification,
   account deletion
+- [Player blocking](user-blocking.md) — symmetric visibility, retained identity,
+  personal controls, and rollout
 - [API reference](api.md) — endpoint conventions, error format, rate limits
 - [OpenAPI specification](openapi.yaml) — machine-readable API contract
 - [Testing](testing.md) — unit, integration, E2E, CI equivalence

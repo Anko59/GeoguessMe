@@ -162,10 +162,12 @@ assert_contains "$HOST_INSTALLER" '"$digest" "$temporary/cloudflared.deb" | sha2
 assert_contains "$ROOT/infra/terraform/main.tf" 'jsondecode(file("${path.module}/../../deployment/images/host-tools.json"))'
 assert_contains "$ROOT/infra/terraform/main.tf" 'cloudflared_version    = local.host_tool_pins.cloudflared.version'
 assert_contains "$ROOT/infra/terraform/main.tf" 'cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256'
-assert_contains "$HOST_TEMPLATE" 'releases/download/${cloudflared_version}/cloudflared-linux-amd64.deb'
-assert_contains "$HOST_TEMPLATE" "\${cloudflared_deb_sha256}  /tmp/cloudflared.deb' | sha256sum -c -"
-[ "$(line_of "$HOST_TEMPLATE" 'sha256sum -c -')" -lt \
-    "$(line_of "$HOST_TEMPLATE" '\[dpkg, -i, /tmp/cloudflared.deb\]')" ] || fail 'host bootstrap installs before checksum verification'
+HOST_BOOTSTRAP="$ROOT/infra/cloud-init/bootstrap-host.sh"
+assert_contains "$HOST_TEMPLATE" '[/usr/local/sbin/geoguessme-bootstrap-host, "${cloudflared_version}", "${cloudflared_deb_sha256}"]'
+assert_contains "$HOST_BOOTSTRAP" 'releases/download/${cloudflared_version}/cloudflared-linux-amd64.deb'
+assert_contains "$HOST_BOOTSTRAP" 'printf '\''%s  /tmp/cloudflared.deb\n'\'' "$cloudflared_deb_sha256" | sha256sum -c -'
+[ "$(line_of "$HOST_BOOTSTRAP" 'sha256sum -c -')" -lt \
+    "$(line_of "$HOST_BOOTSTRAP" 'dpkg -i /tmp/cloudflared.deb')" ] || fail 'host bootstrap installs before checksum verification'
 for host_workflow in "$ROOT/.github/workflows/deploy.yml" "$ROOT/.github/workflows/release.yml"; do
     assert_contains "$host_workflow" 'run: bash tools/quality/dependency-images/install-host-tool.sh'
     awk '

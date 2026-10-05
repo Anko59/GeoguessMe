@@ -70,6 +70,37 @@ Remediate vulnerable inputs to create a new reviewed key; any recovery of an
 interrupted clean publication requires explicit review of its exact digest,
 provenance and scan. Registry failures never cause automatic replacement.
 
+### Reviewed one-time Keycloak publication recovery
+
+The manually dispatched **Security** workflow on protected `dev` has one finite
+recovery operation, `make recover-reviewed-keycloak`. It accepts no artifact
+inputs and cannot run locally or on another branch/workflow. It recovers only:
+
+- Input key: `cb1dd9163b630bbda840ba2906310e4b402f55e69bc81b4bc4c8f95c26511689`.
+- Original index:
+  `sha256:f3b02924f109607058d1238eab1c06ec7fdc9f6151beb5252ec765f3fe5060f3`.
+- Original producer revision: `a228769dbaf98ce8a5aff7fb0946456f34f8e21b`.
+- Original
+  [Security publisher run and job](https://github.com/Anko59/GeoguessMe/actions/runs/37242418190/job/111553605968).
+
+That publisher pushed the original bytes, then rejected BuildKit's current
+SLSAv1 build-type identifier before scanning/signing. After explicit operator
+approval, dispatch Security on `dev`; no deployment or readiness step is run.
+The operation authenticates the original run/job/log, verifies the exact
+input/index/runtime, original VCS, embedded recipe, upstream and local platform,
+and freshly runs the unchanged native audit on that original index. Only then
+may it add the original `dependency-build=true` input signature under the same
+trusted protected-workflow identity. Already-valid signatures are verified and
+freshly scanned without re-signing. It never rebuilds, aliases or replaces
+bytes.
+
+Network/authentication errors, unavailable original evidence, changed inputs or
+digest, invalid signatures, and failed scans stop recovery. Ordinary publication
+still refuses all unsigned existing tags. Review and retire this dedicated job,
+script and target after this incident; do not repurpose its constants for other
+artifacts. `make test-reviewed-keycloak-recovery` tests the bounded exception
+without credentials or registry writes.
+
 ## Required audit inventory
 
 The [runtime inventory](../deployment/images/runtime.tsv) retains monitoring,

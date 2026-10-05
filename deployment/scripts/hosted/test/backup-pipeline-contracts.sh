@@ -262,6 +262,9 @@ valid_image_reference() { return 0; }
 require_secret_file() { :; }
 flock() { :; }
 prune_releases() { :; }
+# Public-config permissions have their own real-helper regression; this fixture
+# isolates backup/restore pipelines and does not mount OAuth templates.
+prepare_public_configs() { :; }
 release_dir() { printf '%s/releases/%s\n' "$APP_ROOT" "$1"; }
 environment_env_file() { printf '%s/%s.env\n' "$SECRET_ROOT" "$1"; }
 environment_port() { printf '8082\n'; }

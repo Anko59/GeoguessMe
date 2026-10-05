@@ -177,6 +177,7 @@ dev-social-init: dev-s3-guard ## Generate the trusted local certificate used by 
 	./deployment/caddy/init-local-tls.sh
 
 dev-social: dev-social-init prepare-app-runtime prepare-database-runtime build-keycloak-image ## Start dev with local HTTPS, Keycloak, and OAuth2 Proxy.
+	bash deployment/oauth2-proxy/prepare-public-configs.sh
 	@set -eu; \
 	POSTGRES_IMAGE=$$(bash tools/quality/dependency-images/selected.sh postgres); \
 	CADDY_RUNTIME_IMAGE=$$(bash tools/quality/dependency-images/selected.sh caddy-runtime); \

@@ -1,6 +1,9 @@
 package chat
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // ReactionUsage is the number of times a reaction has been selected in a
 // group. It is used to order the reaction picker by the group's actual usage.
@@ -23,7 +26,7 @@ func (r *Repository) SetMessageReaction(ctx context.Context, messageID, userID, 
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO message_reactions(message_id, user_id, reaction)
 		SELECT $1, $2, $3
-		WHERE EXISTS (SELECT 1 FROM messages WHERE id = $1)
+		WHERE EXISTS (SELECT 1 FROM messages m WHERE id = $1 AND `+messageVisibility("$2")+`)
 		ON CONFLICT (message_id, user_id, reaction) DO NOTHING`, messageID, userID, reaction)
 	return err
 }
@@ -35,20 +38,26 @@ func (r *Repository) DeleteMessageReaction(ctx context.Context, messageID, userI
 	if reaction == "" {
 		return ErrInvalidReaction
 	}
-	_, err := r.pool.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND reaction = $3`, messageID, userID, reaction)
+	_, err := r.pool.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND reaction = $3 AND EXISTS (SELECT 1 FROM messages m WHERE m.id = $1 AND `+messageVisibility("$2")+`)`, messageID, userID, reaction)
 	return err
 }
 
 // ReactionUsageForGroup returns reaction counts across the complete group
 // history, ordered by popularity and then key for deterministic ties.
-func (r *Repository) ReactionUsageForGroup(ctx context.Context, groupID string) ([]ReactionUsage, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *Repository) ReactionUsageForGroup(ctx context.Context, groupID string, viewers ...string) ([]ReactionUsage, error) {
+	query := `
 		SELECT mr.reaction, COUNT(*)::INTEGER
 		FROM message_reactions mr
 		JOIN messages m ON m.id = mr.message_id
 		WHERE m.group_id = $1
 		GROUP BY mr.reaction
-		ORDER BY COUNT(*) DESC, mr.reaction ASC`, groupID)
+		ORDER BY COUNT(*) DESC, mr.reaction ASC`
+	query = strings.Join(strings.Fields(query), " ")
+	query, args := viewerMessageQuery(query, []any{groupID}, viewers...)
+	if len(args) > 1 {
+		query = strings.Replace(query, " GROUP BY", " AND "+strings.ReplaceAll(messageVisibility("$2"), "m.user_id", "mr.user_id")+" GROUP BY", 1)
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

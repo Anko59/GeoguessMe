@@ -35,6 +35,34 @@ setup and re-checks it at least annually.
 | 7   | Optional social sign-in        | Third-party account linking                    | Provider identifier, basic profile claim                                                   | Players                        | (b) contract (user-initiated) | Until unlinking or account deletion          | Keycloak, upstream identity provider |
 | 8   | Legal compliance               | Respond to valid requests, defend claims       | Request-specific data                                                                      | Any                            | (c) legal obligation / (f)    | Per legal requirement                        | Authorities on valid request         |
 
+## Player blocking preferences
+
+`user_blocks` stores the blocking account ID, target account ID, and creation
+time. Its purpose is user-requested interaction safety (Art. 6(1)(b), providing
+the requested service). Preferences remain until the owner unblocks or either
+account is deleted; both foreign keys cascade on account deletion. Only the
+owner's authenticated management endpoint returns their preferences and the
+target's minimal identity. The target cannot query who blocked them. Include
+owned preferences in access/portability exports; no notice text or reason is
+collected for a block.
+
+Either direction hides the pair's chat, reactions, comments, challenge entries,
+profiles, avatar/media access and new message/challenge push deliveries from one
+another. Membership and persisted score/Elo leaderboards are unchanged; a block
+is not group removal, score erasure, or anonymity from other group members.
+Blocking cannot recall bytes or notifications already delivered. A legal content
+notice remains reportable using a known target ID, without disclosing its
+content. Operational review and reports are independent of personal preferences.
+See [the API contract](api.md#player-blocking) for visibility and rollout.
+
+The current notice intake covers private group messages and player profiles
+sharing a group. A public-feed author who shares no group with the reporter does
+not yet have an in-app notice affordance. This is a remaining moderation scope
+item in [issue #307](https://github.com/Anko59/GeoguessMe/issues/307), not a
+claim that all public-feed content can be reported through the existing
+endpoints. The privacy mailbox remains the documented operator contact in the
+meantime.
+
 ## Processor and vendor matrix
 
 | Vendor                                       | Role                                                | Data location                              | Safeguard                                                       | DPA status expected              |
@@ -81,6 +109,48 @@ The application and database run in the EU. Transfers outside the EEA rely on:
    extend by two further months — inform the requester within the first month.
 5. **Closure.** Record the outcome; for refusals, state the reason and the right
    to complain to the CNIL.
+
+## Content report review
+
+The operator is responsible for reviewing incoming notices. The authenticated
+in-app report form accepts a reason and optional context, persists the notice in
+`content_reports`, and sends a metadata-only notification (receipt ID, no report
+text or target details) to the existing privacy mailbox listed in the
+[accountability snapshot](#accountability-snapshot). This privacy contact is
+established; the dedicated abuse mailbox is not yet confirmed. The alert is a
+convenience, not the source of truth: mail delivery failures are logged, and
+operators must inspect the durable queue daily. Confirmation of a dedicated
+abuse mailbox and its routing remains tracked in
+[issue #302](https://github.com/Anko59/GeoguessMe/issues/302).
+
+1. Check the `content_reports` rows with `status = 'open'`, ordered by
+   `created_at, id`, at least once each day. Treat imminent danger and clearly
+   illegal content as urgent; acknowledge notices within 24 hours and aim to
+   decide ordinary notices within 7 days. Record delayed cases and the reason.
+2. Review the reported target using the stored `target_kind`, `target_id`, and
+   `reported_user_id` with access restricted to authorized moderators. If the
+   source was deleted, do not assume its content can still be retrieved; use the
+   reporter's context and other lawful evidence. Avoid copying private group
+   messages into email or third-party systems. Log the evidence considered and
+   decision in the restricted moderation case record.
+3. Mark `status` as `reviewed`, then `actioned` or `dismissed` with
+   `reviewed_at`. Apply any removals through the existing authorized content
+   lifecycle. Notify the reporter and affected player of the decision and
+   reasons through their verified contact channels when available, with
+   redactions needed for safety. Provide the appeal path through the privacy
+   contact; independently review appeals and record the result. Do not treat an
+   automatic report as a determination of illegality.
+4. Restrict database and case-record access to the operator's moderation role.
+   Account deletion cascades reporter-linked rows; deleted messages clear their
+   foreign key while preserving the target ID. Retain cases only for the lawful
+   period needed to handle the notice, appeal or legal hold; purge on expiry,
+   documenting the deletion in the case log. Review this retention against the
+   privacy policy before launch.
+
+The current implementation provides notice intake, not a moderator dashboard or
+user blocking; those remaining capabilities are tracked in
+[issue #307](https://github.com/Anko59/GeoguessMe/issues/307) and must not be
+advertised as available until implemented.
 
 ## Breach response
 

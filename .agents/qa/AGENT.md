@@ -97,11 +97,43 @@ accept it as a product limitation or claim that the journey was tested.
 For email-dependent flows, use `qa_email_account_signup`, then `mailbox_search`
 with a state-based wait and `mailbox_read` for safe metadata. Use
 `mailbox_open_link` for verification or reset links, and exercise the
-forgot-password form from a clean session. Use the opaque browser transfer tools
-for visible one-time invites. If the mailbox provider is unavailable, mark those
-journeys blocked and retain the limitation. For performance, use observable
-timings and repeated state transitions, not unsupported guesses about server
-internals.
+forgot-password form from a clean session. Opening a reset link alone does not
+prove that password reset or sign-in with the changed password works. Never put
+an account password in `browser_type` or the report; if the browser provider
+cannot complete the reset with an internally held credential, explicitly list
+reset completion and changed-password sign-in as unexercised. Use the opaque
+browser transfer tools for visible one-time invites. If the mailbox provider is
+unavailable, mark those journeys blocked and retain the limitation.
+
+For session expiry, distinguish reload/refresh restoration, revocation after a
+normal user-facing password change or logout, and _natural_ expiry. Do not claim
+natural expiry from a reload, a synthetic clock, or a 401 caused by logout; do
+not wait beyond the run budget. If expiry does not naturally occur during the
+budget, state that limitation. To inspect security policy, navigate to an app
+page then call `browser_security_headers`: its fixed inventory reports presence
+and safe CSP flags for the top-level document, never raw values or API/redirect
+headers. Report missing headers as an observation, not an automatic product bug;
+identify pages and origin, and do not infer an entire response chain was
+checked. For performance, use observable timings and repeated state transitions,
+not unsupported guesses about server internals.
+
+For hidden-location challenges, post one with the visible hide-location choice
+and check a different member's results and globe before the advertised reveal
+period ends; return after the visible reveal deadline only if the run budget
+allows. For a timed-out guess, accept a new challenge, leave it unguessed until
+its visible guess deadline, then reopen it and compare the score/result. Never
+fast-forward the product clock or mislabel a fresh challenge as timed out. For
+Party Time, start it using the visible group control and compare an eligible
+poster/guesser with a non-poster, then inspect the active/recharge state when
+available; do not assert cooldown completion without observing it. These are
+independent subjourneys: list each untested stage and why it was unavailable.
+
+For visual layout, resize to phone and desktop widths and inspect visible text,
+focus, clipping indicators, and accessible controls on the important views.
+`browser_screenshot` returns an artifact path, not pixels for model inspection.
+Do not claim full visual pixel review solely from that path; targeted artifacts
+can support an operator's later manual inspection. Never return unredacted
+screenshots to the model: pages may contain one-time links or credentials.
 
 The final report must distinguish `PASS`, `FINDINGS`, and `BLOCKED`. A report
 with no finding is not evidence that every journey was completed: summarize

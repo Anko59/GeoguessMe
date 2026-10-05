@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type {
     APIErrorBody,
+    BlockedUsersPage,
     AuthResponse,
     PublicChallenge,
     PublicFeedPage,
@@ -16,14 +17,18 @@ import type {
     GroupInbox,
     ChallengePublication,
 } from './types';
+import { notifyBlockVisibilityChanged } from './utils/blockVisibility';
 import { apiBaseURL } from './platform/endpoints';
+import type { components } from './types/openapi.generated';
 
 let accessToken: string | null = null;
+let tokenVersion = 0;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
 let oidcExchangePromise: Promise<AuthResponse> | null = null;
 
 export const setAccessToken = (token: string | null): void => {
     accessToken = token;
+    tokenVersion += 1;
 };
 
 export const getAccessToken = (): string | null => accessToken;
@@ -71,15 +76,17 @@ function decodedAuthResponse(value: unknown): AuthResponse {
 
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
+        const version = tokenVersion;
         refreshPromise = axios
             .post<AuthResponse>(`${apiBaseURL}/auth/refresh`, undefined, { withCredentials: true })
             .then((response) => {
+                if (version !== tokenVersion) return null;
                 const auth = decodedAuthResponse(response.data);
                 setAccessToken(auth.access_token);
                 return auth;
             })
             .catch(() => {
-                setAccessToken(null);
+                if (version === tokenVersion) setAccessToken(null);
                 return null;
             })
             .finally(() => {
@@ -246,6 +253,32 @@ export const groupsAPI = {
     inbox: async (signal?: AbortSignal) => (await api.get<GroupInbox[]>('/user/groups/inbox', { signal })).data,
     markRead: async (groupID: string, signal?: AbortSignal) => {
         await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
+    },
+};
+
+type ReportRequest = components['schemas']['ReportRequest'];
+type ReportReceipt = components['schemas']['ReportReceipt'];
+
+export const moderationAPI = {
+    report: async (
+        kind: 'messages' | 'users',
+        targetID: string,
+        notice: ReportRequest,
+        signal?: AbortSignal,
+    ): Promise<ReportReceipt> =>
+        (await api.post<ReportReceipt>(`/${kind}/${encodeURIComponent(targetID)}/report`, notice, { signal })).data,
+};
+
+export const userBlocksAPI = {
+    list: async (signal?: AbortSignal): Promise<BlockedUsersPage> =>
+        (await api.get<BlockedUsersPage>('/users/blocks', { signal })).data,
+    block: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.post(`/users/${encodeURIComponent(userID)}/block`, undefined, { signal });
+        notifyBlockVisibilityChanged();
+    },
+    unblock: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.delete(`/users/${encodeURIComponent(userID)}/block`, { signal });
+        notifyBlockVisibilityChanged();
     },
 };
 

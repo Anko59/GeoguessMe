@@ -23,12 +23,28 @@ chmod +x "$TMP/fixture/deployment/scripts/wait-for-health.sh"
 cat >"$TMP/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
+case "$1" in
+    ps) [ ! -f "$RUNNER_TRACE.started" ] || echo fixture-backend; exit 0 ;;
+    image) echo sha256:fixture; exit 0 ;;
+    inspect)
+        case "$3" in
+            *working_dir*) printf '%s\n' "$RUNNER_ROOT" ;;
+            '{{.Id}} {{.Image}}') echo 'fixture-backend sha256:fixture' ;;
+            '{{.Image}}') echo sha256:fixture ;;
+            *org.opencontainers.image.revision*) echo '<no value>' ;;
+            *) exit 90 ;;
+        esac
+        exit 0
+        ;;
+esac
 args=("$@")
 project=""
 for ((i = 0; i < ${#args[@]}; i++)); do
     [ "${args[i]}" != -p ] || project="${args[i + 1]:-}"
 done
 if [[ "$*" == *compose.test.yaml* ]]; then
+    if [[ " $* " == *' up '* ]]; then : >"$RUNNER_TRACE.started"; fi
+    if [[ " $* " == *' ps -q backend '* ]]; then echo fixture-backend; fi
     printf 'app|%s|%s|%s|%s|%s\n' "$project" "${GEOGUESSME_TEST_WEB_PORT:-}" \
         "${GEOGUESSME_TEST_MAILPIT_PORT:-}" "${GEOGUESSME_TEST_DB_PORT:-}" \
         "${GEOGUESSME_TEST_TOXIPROXY_PORT:-}" >>"${RUNNER_TRACE:?}"
@@ -38,11 +54,13 @@ fi
 printf 'tools|%s\n' "$project" >>"${RUNNER_TRACE:?}"
 exit 23
 DOCKER
-chmod +x "$TMP/bin/docker"
+printf '#!/bin/sh\nprintf "1111111111111111111111111111111111111111\\n"\n' >"$TMP/bin/git"
+chmod +x "$TMP/bin/docker" "$TMP/bin/git"
 run_case() {
     local helper="$1" namespace="$2" override="$3" trace="$4" status=0
     env -u GEOGUESSME_TEST_PROJECT -u GEOGUESSME_TEST_PUBLIC_URL \
-        PATH="$TMP/bin:$PATH" RUNNER_TRACE="$trace" GEOGUESSME_TOOLS_PROJECT="$namespace" \
+        PATH="$TMP/bin:$PATH" RUNNER_TRACE="$trace" RUNNER_ROOT="$TMP/fixture" \
+        BACKEND_IMAGE=geoguessme-backend:local-private GEOGUESSME_TOOLS_PROJECT="$namespace" \
         GEOGUESSME_TEST_PROJECT="$override" GEOGUESSME_TEST_WEB_PORT=32100 \
         GEOGUESSME_TEST_MAILPIT_PORT=32101 GEOGUESSME_TEST_DB_PORT=32102 \
         GEOGUESSME_TEST_TOXIPROXY_PORT=32103 GEOGUESSME_TEST_PORT_BASE=32100 \

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+if [[ ! "${GEOGUESSME_TOOLS_PROJECT:-}" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+    echo 'GEOGUESSME_TOOLS_PROJECT must match [a-z0-9][a-z0-9_-]*; Run through Make' >&2
+    exit 2
+fi
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"

@@ -11,6 +11,7 @@
 #   7. Validates production compose
 #   8. Uses explicit test-only environment values (no production credentials)
 #   9. Rejects a backend executable that does not match its image architecture
+#  10. Effective Compose ports replace inherited bindings; failed up cleans up
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/deployment/scripts/prod-container-verify.sh"
@@ -300,8 +301,11 @@ else
     fail "production compose file not found for image reference check"
 fi
 
-# ── Test 16: OIDC preflight policy and authentication boundary ───────────────
-echo "--- Test 16: OIDC session CORS and auth boundary ---"
+# shellcheck source=tools/quality/test/prod-container-verify/lifecycle-regression.sh
+source "$(dirname "$0")/prod-container-verify/lifecycle-regression.sh"
+
+# ── Test 17: OIDC preflight policy and authentication boundary ───────────────
+echo "--- Test 17: OIDC session CORS and auth boundary ---"
 if grep -Fq 'ALLOWED_ORIGINS=__PUBLIC_URL__,https://app.geoguessme.com' "$SCRIPT"; then
     pass "fixture allowlist includes the native origin"
 else

@@ -231,7 +231,13 @@ test('explores group challenges on Earth without revealing an unplayed location'
         expect(await pinOverlayHasInkAt(pinOverlay, 20, 20)).toBe(false);
         await captureGlobe(uploader, testInfo, 'overview');
         if (mobile) {
-            const sheet = globe.getByRole('button', { name: 'Expand geochallenge list' });
+            const sheet = globe.locator('.globe-sheet-grabber');
+            await sheet.click();
+            await expect(sheet).toHaveAttribute('aria-expanded', 'true');
+            await expect(globe.locator('.globe-challenge-list button')).toBeVisible();
+            await sheet.focus();
+            await uploader.keyboard.press('Enter');
+            await expect(sheet).toHaveAttribute('aria-expanded', 'false');
             await sheet.dispatchEvent('pointerdown', { clientY: 600, pointerId: 1, pointerType: 'touch' });
             await sheet.dispatchEvent('pointermove', { clientY: 520, pointerId: 1, pointerType: 'touch' });
             await sheet.dispatchEvent('pointerup', { clientY: 520, pointerId: 1, pointerType: 'touch' });

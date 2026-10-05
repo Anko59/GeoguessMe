@@ -12,6 +12,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
+bash "$REPO/deployment/oauth2-proxy/prepare-public-configs.sh" "$REPO"
 
 backend_image="${BACKEND_IMAGE:-${LOCAL_BACKEND_IMAGE:?Run through Make or set BACKEND_IMAGE}}"
 web_image="${WEB_IMAGE:-${LOCAL_WEB_IMAGE:?Run through Make or set WEB_IMAGE}}"
@@ -164,15 +165,16 @@ sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TMPDIR/production.env" >"$TMPDIR/producti
 mv "$TMPDIR/production.env.rendered" "$TMPDIR/production.env"
 
 # Compose override: redirect env_file to the temp file for every service and
-# override the web port to avoid host port conflicts.
+# replace (not merge) the inherited web bindings with one loopback-only port.
+# Compose 2.24.4+ supports !override; ordinary ports lists append distinct tuples.
 cat >"$TMPDIR/override.yaml" <<YAMLEOF
 services:
   migration:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   backend:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   oauth2-proxy:
@@ -188,42 +190,70 @@ services:
       - --skip-auth-strip-headers=false
       - --cookie-secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       - --redirect-url=https://localhost/oauth2/callback
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   web:
     ports: !override ["127.0.0.1:${WEB_PORT}:80"]
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: false
   db:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   minio:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: true
   smtp:
-    env_file:
+    env_file: !override
       - path: ${TMPDIR}/production.env
         required: false
 YAMLEOF
 
 cleanup_stack() {
-    set +e
+    local status=$?
+    local cleanup_status=0
     BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
         COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
         docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
-        --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans 2>/dev/null
-    rm -rf "$TMPDIR"
+        --project-directory "$REPO" -p "$PROJECT" down -v --remove-orphans || cleanup_status=$?
+    if [ "$cleanup_status" -ne 0 ]; then
+        echo "FAIL: teardown of managed project $PROJECT failed (exit $cleanup_status)" >&2
+    fi
+    if ! rm -rf "${TMPDIR:?}"; then
+        echo "FAIL: removing verification temporary files failed" >&2
+        cleanup_status=1
+    fi
+    # Cleanup must not mask a verification failure, or turn success into a
+    # passing gate when managed resources could not be removed.
+    if [ "$status" -eq 0 ]; then status=$cleanup_status; fi
+    exit "$status"
 }
 trap 'cleanup_stack' EXIT
 
-BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
-    COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
-    docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
-    --project-directory "$REPO" -p "$PROJECT" up -d --wait
+# Every service's env_file is replaced above: diagnostics are restricted to
+# this managed project with fake fixture values, never an operator's secrets.
+fixture_compose() {
+    BACKEND_IMAGE="$backend_image" WEB_IMAGE="$web_image" \
+        COMPOSE_PROFILES="local-db,local-minio,local-smtp,social" \
+        docker compose -f deployment/compose.production.yaml -f "$TMPDIR/override.yaml" \
+        --project-directory "$REPO" -p "$PROJECT" "$@"
+}
+
+fixture_compose up -d --wait || {
+    status=$?
+    echo "FAIL: startup of managed fixture project $PROJECT failed (exit $status)" >&2
+    fixture_compose ps --all || echo 'FAIL: fixture status diagnostic failed' >&2
+    fixture_compose logs --no-color --tail 100 || echo 'FAIL: fixture logs diagnostic failed' >&2
+    ids=$(fixture_compose ps -aq) || ids=""
+    for id in $ids; do
+        docker inspect --format '{{.Name}} status={{.State.Status}} health={{json .State.Health}}' "$id" ||
+            echo 'FAIL: fixture health diagnostic failed' >&2
+    done
+    exit "$status"
+}
 
 # ---------------------------------------------------------------------------
 # Phase 4: Effective runtime hardening

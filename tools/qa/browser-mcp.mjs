@@ -10,6 +10,7 @@ import { writeQaReport } from "./report.mjs";
 import { CoverageTracker } from "./coverage.mjs";
 import { tools } from "./browser/tool-definitions.mjs";
 import { clickAndWaitForNavigation } from "./navigation.mjs";
+import { inspectDocumentResponse } from "./security-headers.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -238,6 +239,18 @@ async function call(name, args) {
     const { page } = sessionFor(args);
     const result = await probe(page);
     coverage.capabilitiesObserved(result);
+    return result;
+  }
+  if (name === "browser_security_headers") {
+    const { page } = sessionFor(args);
+    // A fresh top-level navigation yields the actual document response, rather
+    // than mistaking an API call or an asset's headers for the page's policy.
+    if (new URL(page.url()).origin !== baseUrl.origin) throw new Error("Navigate to the QA application before inspecting document headers");
+    const response = await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    if (!response) throw new Error("No top-level document response was available");
+    const result = await inspectDocumentResponse(response, page, baseUrl);
+    if (!result) throw new Error("No same-origin top-level document response was available");
+    coverage.action("browser_reload", args);
     return result;
   }
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {

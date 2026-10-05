@@ -66,6 +66,7 @@ locals {
     [for content in local.runtime_bundle_files : "${length(base64encode(content)) / 4 * 3 - length(regexall("=", base64encode(content)))}\n"],
     local.runtime_bundle_files,
   ))
+  host_bootstrap    = file("${path.module}/../cloud-init/bootstrap-host.sh")
   runtime_installer = file("${path.module}/../cloud-init/install-runtime-bundle.sh")
   runtime_cloud_config_template = templatefile("${path.module}/../cloud-init/cloud-config.yaml.tftpl", {
     admin_key              = var.admin_ssh_public_key
@@ -75,6 +76,7 @@ locals {
     tunnel_token           = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
     runtime_bundle         = local.runtime_bundle
     runtime_installer      = local.runtime_installer
+    host_bootstrap         = local.host_bootstrap
     cloudflared_version    = local.host_tool_pins.cloudflared.version
     cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256
   })

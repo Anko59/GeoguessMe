@@ -37,6 +37,7 @@ FAKE_INPUTS = {
 }
 BUNDLE_PATH = "/tmp/geoguessme-runtime-bundle"
 INSTALLER_PATH = "/usr/local/sbin/geoguessme-install-runtime-bundle"
+BOOTSTRAP_PATH = "/usr/local/sbin/geoguessme-bootstrap-host"
 
 
 def terraform_environment(directory):
@@ -204,7 +205,7 @@ def inspect_config(config, rendered, members):
         {"name": "deploy", "groups": ["docker"], "shell": "/bin/sh", "lock_passwd": True},
     ]
     files = {entry["path"]: entry for entry in config["write_files"]}
-    assert len(files) == len(config["write_files"]) == 10
+    assert len(files) == len(config["write_files"]) == 11
     assert files["/etc/ssh/sshd_config.d/00-geoguessme.conf"]["content"] == (
         "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers ops deploy\n"
     )
@@ -222,11 +223,11 @@ def inspect_config(config, rendered, members):
     assert files["/opt/geoguessme/config/runtime-revision"]["content"] == "b" * 40 + "\n"
     pins = json.loads((ROOT / "deployment/images/host-tools.json").read_text())["cloudflared"]
     commands = config["runcmd"]
-    assert ["sh", "-c", "curl -fsSLo /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/" + pins["version"] + "/cloudflared-linux-amd64.deb"] in commands
-    assert ["sh", "-c", "echo '" + pins["debSha256"] + "  /tmp/cloudflared.deb' | sha256sum -c -"] in commands
-    assert [INSTALLER_PATH, BUNDLE_PATH] in commands
-    assert ["rm", "-f", INSTALLER_PATH, BUNDLE_PATH] in commands
-    assert ["ufw", "--force", "enable"] in commands
+    assert commands == [[BOOTSTRAP_PATH, pins["version"], pins["debSha256"]]]
+    bootstrap_entry = files[BOOTSTRAP_PATH]
+    assert bootstrap_entry["content"].encode("utf-8") == (ROOT / "infra/cloud-init/bootstrap-host.sh").read_bytes()
+    assert bootstrap_entry["owner"] == "root:root" and bootstrap_entry["permissions"] == "0700"
+    assert "encoding" not in bootstrap_entry, "Nested bootstrap compression is forbidden"
     assert config["final_message"] == "GeoGuessMe host bootstrap complete"
     bundle_entry, installer_entry = files[BUNDLE_PATH], files[INSTALLER_PATH]
     for entry, mode in [(bundle_entry, "0600"), (installer_entry, "0700")]:

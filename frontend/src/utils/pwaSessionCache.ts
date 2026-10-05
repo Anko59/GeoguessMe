@@ -85,6 +85,20 @@ export function saveCachedMessages(userID: string | undefined, groupID: string |
     }
 }
 
+export function clearBlockVisibilityHints(): void {
+    const store = localStore();
+    if (!store) return;
+    try {
+        store.removeItem(SESSION_KEY);
+        for (let index = store.length - 1; index >= 0; index -= 1) {
+            const key = store.key(index);
+            if (key?.startsWith(MESSAGES_KEY_PREFIX)) store.removeItem(key);
+        }
+    } catch {
+        // Optional storage can be unavailable even after obtaining its handle.
+    }
+}
+
 export function clearCachedSession(): void {
     const store = localStore();
     if (!store) return;

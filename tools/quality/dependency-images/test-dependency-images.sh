@@ -10,6 +10,7 @@ trap cleanup EXIT
 FIXTURE="$TMP/repository"
 mkdir -p "$FIXTURE/tools/quality/dependency-images" "$FIXTURE/tools/quality/image-audit" "$FIXTURE/deployment/images" "$TMP/bin"
 cp "$ROOT/tools/quality/dependency-images/"*.sh "$FIXTURE/tools/quality/dependency-images/"
+cp -R "$ROOT/tools/quality/dependency-images/test" "$FIXTURE/tools/quality/dependency-images/"
 cp "$ROOT/tools/quality/image-audit/retry.sh" "$FIXTURE/tools/quality/image-audit/"
 cp "$ROOT/deployment/images/dependencies.tsv" "$FIXTURE/deployment/images/"
 cp "$ROOT/.dockerignore" "$FIXTURE/.dockerignore"
@@ -102,9 +103,7 @@ if [[ "$1 $2 $3" == 'buildx imagetools inspect' ]]; then
         exit
     fi
     if [[ "$*" == *'.Provenance'* ]]; then
-        if [[ "${FAKE_PROVENANCE:-}" == missing-slsa ]]; then echo '{}'; else
-            echo '{"linux/amd64":{"SLSA":{"buildType":"https://mobyproject.org/buildkit@v1"}}}'
-        fi
+        bash "$FIXTURE/tools/quality/dependency-images/test/provenance-fixture.sh" "$INPUT_HASH" "$FINAL_BASE_DIGEST"
         exit
     fi
     case "${FAKE_REGISTRY:-existing}" in
@@ -401,6 +400,8 @@ export FAKE_REGISTRY=missing FAKE_PROVENANCE=absent
 run_fail publish sops
 assert test "$(grep -Ec '^cosign sign ' "$TRACE")" = 0
 pass 'new artifact requires provenance before signing'
+# shellcheck source=tools/quality/dependency-images/test/provenance-contracts.sh
+. "$ROOT/tools/quality/dependency-images/test/provenance-contracts.sh"
 
 new_case
 export GITHUB_OUTPUT="$FAKE_STATE/github-output"

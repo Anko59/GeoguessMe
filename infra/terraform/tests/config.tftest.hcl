@@ -132,6 +132,7 @@ run "hosted_mocked_bootstrap" {
         tunnel_token           = "mock-tunnel-token"
         runtime_bundle         = local.runtime_bundle
         runtime_installer      = local.runtime_installer
+        host_bootstrap         = local.host_bootstrap
         cloudflared_version    = local.host_tool_pins.cloudflared.version
         cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256
       }) &&
@@ -152,6 +153,10 @@ run "hosted_mocked_bootstrap" {
       length([for entry in yamldecode(local.runtime_cloud_config).write_files : entry if
         entry.path == "/usr/local/sbin/geoguessme-install-runtime-bundle" &&
         entry.content == local.runtime_installer && !can(entry.encoding)
+      ]) == 1 &&
+      length([for entry in yamldecode(local.runtime_cloud_config).write_files : entry if
+        entry.path == "/usr/local/sbin/geoguessme-bootstrap-host" &&
+        entry.content == local.host_bootstrap && !can(entry.encoding)
       ]) == 1
     )
     error_message = "Cloud-config must preserve all 33 framed UTF-8 members and the raw installer as exact literal contents, without nested compression."
@@ -223,14 +228,14 @@ run "hosted_mocked_bootstrap" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf") &&
       length(regexall("defer: true", file("../cloud-init/cloud-config.yaml.tftpl"))) == 2 &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-backup@dev.timer") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "ufw allow in on lo to any") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "chown -R deploy:deploy /etc/geoguessme/age") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "geoguessme-backup@dev.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "geoguessme-watch-health.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "watch-refresh-metrics-token") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemctl enable --now") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.production.yaml") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.watch.yaml")
     )

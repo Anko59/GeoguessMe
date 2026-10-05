@@ -293,7 +293,11 @@ once (see the Object URL cleanup invariant above).
 The shared `createObjectUrlStore` (`frontend/src/utils/objectUrlCache.ts`) is
 used only by caches with identical lifecycle semantics (avatar and group
 photos); data caches with different lifetimes (leaderboard, PWA session) must
-not use it.
+not use it. `BlockVisibilityBoundary` owns block-change invalidation: it clears
+all four caches and remounts route content for local and same-origin cross-tab
+signals. Blob stores revoke cached URLs and reject in-flight generations;
+leaderboard responses from earlier generations cannot repopulate its cache. See
+[Player blocking](user-blocking.md) for the browser-storage fallback.
 
 ## Compatibility ledger
 
@@ -315,6 +319,38 @@ deployed and left its rollback window. Forward catch-up uses the opaque
 `stable_cursor` anchor plus the `cursor` parameter. The staged rollout is
 documented in [deployment.md](deployment.md). No temporary application
 compatibility entries remain.
+
+### Tooling security overrides (#376)
+
+`frontend/package.json` scopes patched `uuid@11.1.1` to `xcode` and
+`js-yaml@5.4.2` to `markdownlint-cli`, retaining `js-yaml@4.3.2` for v4
+consumers. `xcode@3.0.1` uses only CommonJS `require("uuid").v4()` with no
+arguments; v11 retains that export and UUID string format. Markdownlint CLI uses
+only CommonJS `load(text)`; the v5.3/v5.4 AST, custom-tag, and dumper changes do
+not affect that call. The v4/v5 split preserves Redocly and Cosmiconfig's
+existing YAML schemas.
+
+`make test-npm-security-overrides` exercises consumer-relative resolution, Xcode
+project ID generation/collision retry and writer/parser round trips, UUID buffer
+bounds, YAML configuration and merge limits, and Markdownlint CLI success/error
+exits. It runs with both frontend unit and verified coverage suites. Remove each
+override when its parent dependency accepts the patched version and the same
+contracts pass without it. These are dependency fixes, not audit exceptions or
+threshold changes.
+
+### Braces security backport
+
+The canonical maintained backport is
+[`frontend/vendor/braces-security`](../frontend/vendor/braces-security/README.md).
+Its provenance pins the original artifact, reviewed upstream patch, and shipped
+runtime hashes. The frontend and transitive consumers install that same package
+with `install-links=true`; both frontend Dockerfiles copy it before
+installation. `make test-braces-security` verifies installed runtime integrity,
+nesting and cyclic-AST bounds, and consumer compatibility, and remains mandatory
+in `make audit` and the scoped security-override tests. Registry audit
+thresholds are unchanged. Remove the local dependency, override, Docker copy
+steps, and special tests only after a compatible patched upstream release passes
+the same contracts.
 
 ### Hosted restore semantic completeness
 

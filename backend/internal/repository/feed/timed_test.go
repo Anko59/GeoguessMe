@@ -2,6 +2,7 @@ package feed
 
 import (
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -82,7 +83,7 @@ func TestTimedResultsIncludeSelectedPinAndHideTimeoutCoordinates(t *testing.T) {
 	mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs("owner", "post").WillReturnRows(
 		pgxmock.NewRows([]string{"user_id", "lat", "long"}).AddRow("owner", 48.8, 2.3),
 	)
-	mock.ExpectQuery("SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score").WithArgs("post").WillReturnRows(
+	mock.ExpectQuery("SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score").WithArgs("post", "owner").WillReturnRows(
 		pgxmock.NewRows([]string{"id", "user_id", "username", "avatar", "lat", "long", "score", "distance", "timed_out", "created_at", "pin_key", "pin_name", "pin_image"}).
 			AddRow("guess-1", "viewer", "Explorer", "avatar.png", 47.0, 3.0, 4000, 200000.0, false, now, "north-star", "North Star", "/map-pins/north-star.svg").
 			AddRow("guess-2", "other", "Cartographer", "avatar2.png", 0.0, 0.0, 0, 0.0, true, now, "", "", ""),
@@ -96,5 +97,14 @@ func TestTimedResultsIncludeSelectedPinAndHideTimeoutCoordinates(t *testing.T) {
 	}
 	if !result.Guesses[1].TimedOut || result.Guesses[1].Lat != nil || result.Guesses[1].Long != nil || result.Guesses[1].Distance != nil {
 		t.Fatalf("timeout coordinates leaked: %+v", result.Guesses[1])
+	}
+}
+
+func TestDeliveryAcknowledgementUsesViewerForVisibility(t *testing.T) {
+	r, mock := mockRepository(t)
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`WHERE v.challenge_id=\$2 AND v.user_id=\$1.*`+regexp.QuoteMeta(challengeVisibility)).WithArgs("viewer", "post", now, int64(10), int64(120)).WillReturnError(pgx.ErrNoRows)
+	if _, err := r.MarkTimedMediaDelivered(t.Context(), "post", "viewer", 10*time.Second, 2*time.Minute, now); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("blocked acknowledgement = %v", err)
 	}
 }

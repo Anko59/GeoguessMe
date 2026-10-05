@@ -163,4 +163,6 @@ expected_hash=$(sha256sum "$fixture" | cut -d' ' -f1)
 [ "$(tail -1 "$manifest")" = "$expected_hash  config/s3-fixture/credentials.json" ] ||
     fail 'UTF-8 fixture bytes do not match the installed manifest'
 
+sh "$ROOT/deployment/scripts/hosted/test/bootstrap-host.sh"
+
 printf 'runtime bundle tests passed (33 members, UTF-8, ownership, and five whole-runtime corruption cases)\n'
