@@ -330,13 +330,25 @@ only CommonJS `load(text)`; the v5.3/v5.4 AST, custom-tag, and dumper changes do
 not affect that call. The v4/v5 split preserves Redocly and Cosmiconfig's
 existing YAML schemas.
 
+The nightly audit also requires scoped `smol-toml@1.9.0` for Markdownlint CLI
+and `katex@0.18.2` for `micromark-extension-math`. The CLI retains its CommonJS
+`parse(text)` configuration API; the math extension retains `renderToString`
+with untrusted rendering by default. These patches address
+[quadratic TOML key parsing](https://github.com/advisories/GHSA-r4xh-jqrq-34v2)
+and
+[inherited KaTeX trust settings](https://github.com/advisories/GHSA-238p-pmpm-9mq7).
+Compatible lockfile updates also patch Knip's TOML parser and
+[source-map-js indexed offsets](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)
+without overrides.
+
 `make test-npm-security-overrides` exercises consumer-relative resolution, Xcode
 project ID generation/collision retry and writer/parser round trips, UUID buffer
-bounds, YAML configuration and merge limits, and Markdownlint CLI success/error
-exits. It runs with both frontend unit and verified coverage suites. Remove each
-override when its parent dependency accepts the patched version and the same
-contracts pass without it. These are dependency fixes, not audit exceptions or
-threshold changes.
+bounds, YAML configuration and merge limits, TOML consumer configuration, KaTeX
+trust restrictions and math rendering, indexed source-map offset validation, and
+Markdownlint CLI success/error exits. It runs with both frontend unit and
+verified coverage suites. Remove each override when its parent dependency
+accepts the patched version and the same contracts pass without it. These are
+dependency fixes, not audit exceptions or threshold changes.
 
 ### Braces security backport
 

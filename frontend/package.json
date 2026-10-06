@@ -68,7 +68,11 @@
     "braces": "file:vendor/braces-security",
     "js-yaml@^4.0.0": "4.3.2",
     "markdownlint-cli": {
-      "js-yaml": "5.4.2"
+      "js-yaml": "5.4.2",
+      "smol-toml": "1.9.0"
+    },
+    "micromark-extension-math": {
+      "katex": "0.18.2"
     },
     "xcode": {
       "uuid": "11.1.1"
