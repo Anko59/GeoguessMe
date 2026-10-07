@@ -56,6 +56,36 @@ describe('Public feed', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('shows the submitting player above the timed photo', async () => {
+        const viewExpiresAt = new Date(Date.now() + 8000).toISOString();
+        mocks.acceptTimed.mockResolvedValueOnce({
+            challenge_id: 'post-1',
+            media_url: '/api/v1/feed/challenges/post-1/timed-media',
+            media_type: 'image/jpeg',
+            accepted_at: new Date().toISOString(),
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: new Date(Date.now() + 128000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        mocks.timedMediaDelivered.mockResolvedValueOnce({
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: new Date(Date.now() + 128000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        await renderFeed();
+        await userEvent.click(screen.getByRole('button', { name: 'Play challenge' }));
+        await settleFeedMedia();
+
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge photo' });
+        expect(within(dialog).getByText('Posted by')).toBeInTheDocument();
+        expect(within(dialog).getByText('Explorer')).toBeInTheDocument();
+        expect(dialog.querySelector('.challenge-poster__avatar img')).toHaveAttribute('src', '/avatars/avatar.png');
+    });
+
     it('reveals an unsolved card after its timed-out guess is persisted', async () => {
         vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
         const startedAt = Date.now();
