@@ -385,6 +385,18 @@ land together; retain the isolated restore and release evidence required by the
 
 ## Residual risks
 
+- The October 9, 2026 `dev` Security image audit reports newly fixed Go
+  vulnerabilities in upstream Beszel/agent, VictoriaLogs/Metrics, OAuth2 Proxy,
+  SeaweedFS, Mailpit, Cloudflared, SOPS, and PostgreSQL's `gosu` helper. The
+  application/toolchain repair updates existing application, Caddy, and Restic
+  builds; it does not add third-party image recipes or claim those other
+  findings are remediated. Review affected functionality and deployment exposure
+  individually before deciding between an upstream update, a mitigation, a
+  reviewed time-bounded exception, or an exceptional source rebuild. Preserve
+  complete scan evidence and the existing gate until that policy decision is
+  explicitly reviewed. Many existing exception records expire on October 11,
+  2026; reassessment must not silently extend them.
+
 - The Cloudflared security-tool build
   (`deployment/docker/cloudflared-tools.Dockerfile`) pins an AMD64 runtime and
   copies x86 library paths, but its Debian package stage follows the host's

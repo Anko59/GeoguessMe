@@ -1,5 +1,10 @@
 # Operations
 
+Go compiler security updates require aligned application/tooling pins and new
+Caddy/Restic artifacts before nightly resolution. Audit application modules and
+deployment binaries separately; see
+[image security scanning](security-scanning.md).
+
 ## Health endpoints
 
 | Endpoint        | Expected status | Checks                                                                               |

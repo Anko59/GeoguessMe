@@ -378,7 +378,7 @@ assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'org.opencontainers.image.base.name=
 assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
 assert_contains "$CADDY_RUNTIME_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
 assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
-assert_contains "$RESTIC_DOCKERFILE" 'go get golang.org/x/net@v0.58.0'
+assert_contains "$RESTIC_DOCKERFILE" 'go get golang.org/x/net@v0.60.0'
 assert_not_contains "$RESTIC_DOCKERFILE" '-replace='
 assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
 assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"'

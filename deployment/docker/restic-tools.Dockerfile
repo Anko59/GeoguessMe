@@ -4,13 +4,13 @@
 # Select the reviewed fixed module graph explicitly, rather than version-specific
 # replacements that silently become inactive. Retire this when upstream ships
 # a verified compatible artifact carrying the fixes.
-FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS restic-build
+FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS restic-build
 
 RUN apk add --no-cache git=2.54.0-r0
 WORKDIR /src
 RUN git clone --depth 1 --branch v0.19.1 https://github.com/restic/restic.git /src \
     && test "$(git rev-parse HEAD)" = 6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf \
-    && go get golang.org/x/net@v0.58.0 golang.org/x/text@v0.42.0 \
+    && go get golang.org/x/net@v0.60.0 golang.org/x/text@v0.42.0 \
         google.golang.org/grpc@v1.83.2 golang.org/x/crypto@v0.57.0 \
     && go mod tidy \
     && go run build.go --output /out/restic

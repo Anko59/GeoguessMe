@@ -76,7 +76,7 @@ ports=$(docker ps --filter publish=9000 --format '{{.ID}}') || fail 'cannot chec
 [[ -z "$ports" ]] || fail 'stop the existing container publishing local S3 port 9000 first'
 containers=$(docker ps -a --format '{{.Names}}') || fail 'cannot check recovery container names'
 ! printf '%s\n' "$containers" | grep -Fxq "$READER_NAME" || fail 'review the existing reader; no container will be replaced'
-tool_image=$(docker image inspect --format '{{.Id}}' geoguessme/go-tools:1.26.6) || fail 'run make build-go-tools before recovery'
+tool_image=$(docker image inspect --format '{{.Id}}' geoguessme/go-tools:1.26.9) || fail 'run make build-go-tools before recovery'
 [[ "$tool_image" =~ ^sha256:[0-9a-f]{64}$ ]] || fail 'snapshot tool must resolve to an immutable local image ID'
 uid=${TOOLS_UID:-$(id -u)}
 gid=${TOOLS_GID:-$(id -g)}

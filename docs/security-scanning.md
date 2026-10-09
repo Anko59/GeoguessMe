@@ -139,6 +139,14 @@ cloud-init does not update them because Terraform intentionally ignores
 
 ## Temporary patches and removal conditions
 
+Application, Caddy, Restic, and Dockerized Go tooling use the digest-pinned Go
+1.26.9 compiler. Keep the backend toolchain directive, tool image tags, and
+fixture recovery helpers aligned when updating it. The backend and Restic module
+graphs also require `golang.org/x/net` 0.60.0 for the October 2026 HTTP security
+fixes. Validate compiler/module updates with `make audit`; final image scans
+remain required because upstream deployment binaries carry independent Go
+toolchains.
+
 | Component    | Temporary change                                                                          | Removal condition                                                                         |
 | ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Caddy        | Released 2.11.7 build and OS package refresh in a reusable runtime                        | A compatible official digest passes the same final scan and configuration/rehearsal tests |

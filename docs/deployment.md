@@ -21,6 +21,10 @@ PCRE2 without a CVE exception and is updated through a separate `watch` command,
 not the app deploy. Host runtime changes follow the staged procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
+The application, Caddy, and Restic builds use Go 1.26.9 for the October 2026
+security fixes. Publish their changed dependency input keys before resolving
+nightly artifacts; reuse and promotion continue to require exact signed digests.
+
 Both frontend Dockerfiles include the reviewed local braces security backport
 before npm installs dependencies. Keep the vendor source in the build context; a
 manifest/lockfile-only copy is insufficient for this file dependency.

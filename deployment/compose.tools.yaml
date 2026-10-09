@@ -55,7 +55,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.26.6
+    image: geoguessme/go-tools:1.26.9
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -91,7 +91,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.26.6
+    image: geoguessme/go-tools:1.26.9
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -295,7 +295,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-security.Dockerfile
-    image: geoguessme/go-security:1.26.6
+    image: geoguessme/go-security:1.26.9
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -304,7 +304,7 @@ services:
 
   go-security-write:
     <<: *host-tools
-    image: geoguessme/go-security:1.26.6
+    image: geoguessme/go-security:1.26.9
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
