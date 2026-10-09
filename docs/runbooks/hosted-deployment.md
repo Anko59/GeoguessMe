@@ -254,8 +254,10 @@ Keycloak uses the pinned upstream 26.7.5 runtime in its provenance wrapper,
 without the retired FreeMarker jar replacement. The pure, scan-only audit covers
 all 17 required images (eight pinned runtime entries, seven dependencies and the
 two application artifacts), including inactive optional fixtures. It blocks
-unexcepted fixed High/Critical findings and fails closed on incomplete coverage;
-this change adds no weaker exceptions. See the
+known-exploited or confirmed-exposure findings at any severity, including those
+without fixes, and fails closed on incomplete coverage. Other findings remain
+visible advisories; upstream binaries/packages are not rebuilt for CVE churn.
+Application source gates remain strict. See the
 [security scanning guide](../security-scanning.md) for evidence and preparation.
 
 Development deploys run realm reconciliation without restarting the shared

@@ -15,15 +15,17 @@ identity follows reviewed inputs/platform, not application revision: a frontend
 change reuses the shared Caddy runtime. Database, Restic, SOPS and socket-proxy
 selection is aligned with audited digests. Original build provenance remains
 separate from revision-adoption signatures, and promotion does not rebuild.
-Preparation, strict failures and package/version-scoped exceptions are described
-in the [security scanning guide](security-scanning.md). The proxy fixes Alpine
-PCRE2 without a CVE exception and is updated through a separate `watch` command,
-not the app deploy. Host runtime changes follow the staged procedure in the
+Preparation, strict failures and exploitation-based release decisions are
+described in the [security scanning guide](security-scanning.md). The proxy
+fixes Alpine PCRE2 without a CVE exception and is updated through a separate
+`watch` command, not the app deploy. Host runtime changes follow the staged
+procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
-The application, Caddy, and Restic builds use Go 1.26.9 for the October 2026
-security fixes. Publish their changed dependency input keys before resolving
-nightly artifacts; reuse and promotion continue to require exact signed digests.
+Application/tooling builds use Go 1.26.9 for the October security fixes. Caddy
+and Restic consume official upstream releases without source rebuilding. Publish
+changed envelope input keys before resolving nightly artifacts; reuse and
+promotion continue to require exact signed digests.
 
 Both frontend Dockerfiles include the reviewed local braces security backport
 before npm installs dependencies. Keep the vendor source in the build context; a

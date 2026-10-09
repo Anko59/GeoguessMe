@@ -1,5 +1,23 @@
 version: 2
 updates:
+  - package-ecosystem: docker
+    directories:
+      - /deployment/docker
+      - /deployment/docker/security
+      - /deployment/docker/tools
+      - /deployment/docker/keycloak-patched
+      - /deployment/docker/sops-tools
+      - /deployment/docker/socket-proxy-tools
+    target-branch: dev
+    open-pull-requests-limit: 1
+    schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      container-releases:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: gomod
     directory: /backend
     target-branch: dev

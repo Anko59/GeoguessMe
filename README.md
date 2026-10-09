@@ -180,9 +180,11 @@ flows.
 - Dependency images are reused by reviewed input hash, not application revision.
   Merges freshly scan exact runtime digests before signing revision adoption;
   production promotes those exact bytes without rebuilding.
-- `make audit-images` is scan-only and reports the entire required inventory.
-  See [image security scanning](docs/security-scanning.md) for explicit
-  preparation targets, strict failures, and the staged host cutover.
+- `make audit-images` scans the entire required inventory. Known exploitation
+  and confirmed deployment exposure block; other upstream CVEs remain visible
+  advisories. Application source dependency checks remain strict. See
+  [image security scanning](docs/security-scanning.md) for explicit preparation
+  targets, strict failures, and the staged host cutover.
 
 See [Contributing](CONTRIBUTING.md), [Testing](docs/testing.md), and the
 [hosted deployment runbook](docs/runbooks/hosted-deployment.md) before working

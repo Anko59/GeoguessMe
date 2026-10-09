@@ -2,7 +2,6 @@
 # Run through make test-image-audit, in the pinned Bash tooling container.
 set -euo pipefail
 SOURCE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH='' cd -- "$SOURCE/../../.." && pwd)
 TMP=$(mktemp -d)
 cleanup() {
     case "$TMP" in /tmp/tmp.*) rm -rf -- "$TMP" ;; *)
@@ -13,8 +12,8 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/repo/tools/quality/image-audit" "$TMP/state"
-cp "$SOURCE/audit.sh" "$SOURCE/retry.sh" "$TMP/repo/tools/quality/image-audit/"
-cp "$ROOT/tools/quality/image-scan-exceptions-check.sh" "$TMP/repo/tools/quality/"
+cp "$SOURCE/audit.sh" "$SOURCE/retry.sh" "$SOURCE/risk-policy.sh" "$TMP/repo/tools/quality/image-audit/"
+cp "$SOURCE/blocking-cves.tsv" "$TMP/repo/tools/quality/image-audit/"
 cp "$SOURCE/fake-docker.sh" "$TMP/bin/fake-docker-real"
 # Assert the bind source exists and is caller-owned before Docker can create it.
 cat >"$TMP/bin/docker" <<'DOCKER'
@@ -150,7 +149,7 @@ assert count_is java 4
 assert test ! -e "$FAKE_STATE/scan"
 assert grep -q INCOMPLETE-database security/image-reports/summary.tsv
 
-# Scoped base exceptions preserve unchanged packages, not upgraded ones.
+# Legacy advisory exceptions cannot suppress known exploitation.
 reset inheritance
 expiry=$(date -u -d "@$(($(date -u +%s) + 7 * 86400))" +%F)
 cat >"$IMAGE_SCAN_EXCEPTIONS" <<EOF
@@ -164,14 +163,12 @@ cat >"$IMAGE_SCAN_EXCEPTIONS" <<EOF
   approved: true
   expires: $expiry
 EOF
-run 0 'high:local'
-assert grep -q 'input.PkgName == "pcre2"' security/image-reports/high_local/policy.rego
+run 1 'high:local'
 assert grep -q CVE-2026-103111 security/image-reports/high_local/report.json
 sed -i 's/10.48-r0/10.49-r0/' "$IMAGE_SCAN_EXCEPTIONS"
 run 1 'high:local'
 sed -i '/package:/d; /installed_version:/d' "$IMAGE_SCAN_EXCEPTIONS"
-run 2 'high:local'
-assert grep -q 'cannot be inherited' "$TMP/output"
+run 1 'high:local'
 assert test -s security/image-reports/high_local/report.json
 # Content dedup cannot lend one exact reference's approval to another alias.
 reset full
@@ -188,8 +185,8 @@ cat >"$IMAGE_SCAN_EXCEPTIONS" <<EOF
 EOF
 run 1 'high:local alias:local'
 assert count_is scan 1
-assert count_is gate 2
-assert grep -Eq 'high:local.*OK$' security/image-reports/summary.tsv
+assert count_is gate 1
+assert grep -Eq 'high:local.*VULNERABLE$' security/image-reports/summary.tsv
 assert grep -Eq 'alias:local.*VULNERABLE$' security/image-reports/summary.tsv
 # Stale files cannot make a missing ref look scanned in a subsequent run.
 reset full
@@ -197,6 +194,15 @@ run 0 'clean:local'
 printf 'old success\n' >security/image-reports/absent_local_report.json
 run 2 'absent:local clean:local'
 assert test ! -e security/image-reports/absent_local/report.json
+reset advisory
+run 0 'high:local'
+assert grep -Eq 'high:local.*ADVISORY$' security/image-reports/summary.tsv
+assert grep -q CVE-2026-103111 security/image-reports/high_local/report.json
+reset exploited-unfixed
+run 1 'unfixed:local'
+reset kevfailed
+run 2 'high:local clean:local'
+assert test ! -e "$FAKE_STATE/scan"
 # Retry-After budgets and unexpected permanent errors are fail-closed.
 # shellcheck source=tools/quality/image-audit/retry.sh
 . "$SOURCE/retry.sh"

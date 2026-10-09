@@ -59,6 +59,8 @@ prepare_local() {
         # isolated docker-container builder for registry/cache outputs.
         BUILDX_BUILDER="$(docker context show)" docker build --platform "$DEPENDENCY_PLATFORM" --file "$DEPENDENCY_ROOT/$DOCKERFILE" \
             --build-arg "DEPENDENCY_INPUTS=$INPUT_HASH" --label "$DEPENDENCY_INPUT_LABEL=$INPUT_HASH" \
+            --label "org.opencontainers.image.base.name=$FINAL_BASE_NAME" \
+            --label "org.opencontainers.image.base.digest=$FINAL_BASE_DIGEST" \
             --iidfile "$TEMP/local-build.id" --tag "$LOCAL_REF" "$DEPENDENCY_ROOT/$CONTEXT" >&2 || fail "local dependency build failed: $COMPONENT"
         built_id=$(<"$TEMP/local-build.id")
         valid_digest "$built_id" || fail 'local build did not return an immutable image ID'

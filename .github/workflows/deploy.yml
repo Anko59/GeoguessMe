@@ -48,6 +48,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - run: make bootstrap-security-tools
       - name: Publish changed dependency inputs or verify existing digests
         id: dependencies
         run: make publish-security-images
@@ -321,6 +322,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - run: make bootstrap-security-tools
       - name: Resolve registry names
         id: names
         run: |
@@ -435,7 +437,12 @@ jobs:
           path: |
             security/image-reports/**/report.json
             security/image-reports/**/sbom.spdx.json
-            security/image-reports/**/status.txt
+            security/image-reports/**/gate.txt
+            security/image-reports/**/policy.rego
+            security/image-reports/summary.tsv
+            security/image-reports/db-snapshot.json
+            security/image-reports/kev.json
+            security/image-reports/kev.sha256
           retention-days: 7
           if-no-files-found: ignore
 

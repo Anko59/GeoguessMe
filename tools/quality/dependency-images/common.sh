@@ -55,6 +55,13 @@ load_component() {
     IFS=$'\t' read -r COMPONENT DOCKERFILE CONTEXT EXTRA_INPUTS unexpected <<<"$row"
     [[ -n "$DOCKERFILE" && -n "$CONTEXT" && -n "$EXTRA_INPUTS" && -z "$unexpected" ]] || fail 'invalid dependency manifest row'
     reviewed_file "$DOCKERFILE"
+    # Dependency publications adapt metadata/runtime settings only. A new
+    # compiler advisory must never silently turn us into an upstream maintainer.
+    awk '
+        toupper($1) == "FROM" {bases++}
+        toupper($1) ~ /^(RUN|COPY|ADD|ONBUILD)(\[|$)/ {bad=1}
+        END {exit bad || bases != 1}
+    ' "$DEPENDENCY_ROOT/$DOCKERFILE" || fail "dependency must remain an upstream publication envelope: $COMPONENT"
     [[ "$CONTEXT" == . || ("$CONTEXT" != /* && "$CONTEXT" != *'..'*) ]] || fail 'invalid build context'
     [[ -d "$DEPENDENCY_ROOT/$CONTEXT" && ! -L "$DEPENDENCY_ROOT/$CONTEXT" ]] || fail 'missing or symlinked build context'
     [[ "$(realpath "$DEPENDENCY_ROOT/$CONTEXT")" == "$(realpath "$DEPENDENCY_ROOT")" ||

@@ -86,4 +86,7 @@ jobs:
             security/image-reports/**/gate.txt
             security/image-reports/summary.tsv
             security/image-reports/db-snapshot.json
+            security/image-reports/kev.json
+            security/image-reports/kev.sha256
+            security/image-reports/**/policy.rego
             security/image-reports/**/*.log

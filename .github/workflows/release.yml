@@ -310,6 +310,7 @@ jobs:
           WEB_DIGEST: ${{ steps.digests.outputs.web }}
           KEYCLOAK_DIGEST: ${{ steps.digests.outputs.keycloak }}
         run: tools/quality/ci/promote-application-images.sh
+      - run: make bootstrap-security-tools
       - name: Scan the complete runtime inventory and exact promoted digests
         env:
           BACKEND_IMAGE: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
@@ -327,9 +328,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: image-scan-promote-${{ github.sha }}
-          path: |
-            security/image-reports/**/report.json
-            security/image-reports/**/sbom.spdx.json
+          path: security/image-reports/
           retention-days: 7
           if-no-files-found: ignore
       - name: Sign promoted digests for production
