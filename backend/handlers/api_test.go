@@ -87,7 +87,7 @@ func (validationStore) Stat(context.Context, string) (int64, error)             
 func (validationStore) Health(context.Context) error                                { return nil }
 
 func requestWithUser(method, target, body, userID string) *http.Request {
-	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))
+	request := httptest.NewRequestWithContext(context.Background(), method, target, bytes.NewBufferString(body))
 	return request.WithContext(context.WithValue(request.Context(), userIDKey, userID))
 }
 
@@ -232,7 +232,7 @@ func TestTicketAndUnauthorizedMiddlewareBranches(t *testing.T) {
 
 	// A nil hub makes the WebSocket endpoint report chat unavailable. The hub
 	// is an injected dependency, not a swappable global.
-	requireStatus(t, newChatAPI(t, mock, mustTestStore(t), nil).HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
+	requireStatus(t, newChatAPI(t, mock, mustTestStore(t), nil).HandleChat, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil), http.StatusServiceUnavailable)
 }
 
 func TestGroupNotificationSettings(t *testing.T) {

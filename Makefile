@@ -1,4 +1,5 @@
 .DEFAULT_GOAL := help
+.PHONY: migrate-go-lint-config
 
 # GeoGuessMe quality harness.
 #

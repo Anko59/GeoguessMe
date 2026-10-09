@@ -58,7 +58,7 @@ func uploadWithAudience(t *testing.T, caption, lat, audience string, groupIDs []
 	if err := form.Close(); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest("POST", "/api/v1/feed/challenges", &body)
+	r := httptest.NewRequestWithContext(context.Background(), "POST", "/api/v1/feed/challenges", &body)
 	r.Header.Set("Content-Type", form.FormDataContentType())
 	return r.WithContext(handlers.WithUserID(r.Context(), "viewer"))
 }

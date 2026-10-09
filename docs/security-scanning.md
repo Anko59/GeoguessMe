@@ -188,11 +188,12 @@ cloud-init does not update them because Terraform intentionally ignores
 
 ## Application tooling and temporary source patches
 
-Application and Dockerized Go tooling use the pinned Go 1.26.9 compiler; keep
-backend toolchain directives, tool tags, and fixture helpers aligned. The
-backend requires `golang.org/x/net` 0.60.0 for the October HTTP fixes. Upstream
-image compilers are vendor inputs, not reasons to add project-owned source
-builds.
+Application and Dockerized Go tooling use the pinned Go 1.27.2 compiler and
+GolangCI-Lint v2.14.0, Goimports v0.50.0, and Govulncheck v1.8.0 with Go 1.27
+export-data support; keep backend toolchain directives, tool tags, and fixture
+helpers aligned. The backend requires `golang.org/x/net` 0.60.0 for the October
+HTTP fixes. Upstream image compilers are vendor inputs, not reasons to add
+project-owned source builds.
 
 Scoped npm overrides preserve YAML v4/v5 and CommonJS UUID compatibility.
 `make test-npm-security-overrides` verifies installed consumers; `make audit`
@@ -278,3 +279,9 @@ digest verification and no build calls during scanning. Deployment/gate changes
 also require `make preflight` and complete `make verify` on the exact revision,
 including operational rehearsals. Source security gates remain strict; image
 release decisions follow the explicit exploitation policy above.
+
+The v2 analyzer configuration preserves the v1 analyzer set and its standard
+exclusion presets. Staticcheck `SA*` and Gosimple `S*` checks remain enabled;
+Stylecheck and quick-fix analyzers were not enabled in v1. The obsolete nested
+`linters-settings` field never configured the v1 tool. New analyzer upgrades use
+`make migrate-go-lint-config`; review its output and retain the gate timeout.

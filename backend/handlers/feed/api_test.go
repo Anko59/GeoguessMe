@@ -39,7 +39,7 @@ func mockAPI(t *testing.T) (*API, pgxmock.PgxPoolIface) {
 }
 
 func request(method, body string) *http.Request {
-	r := httptest.NewRequest(method, "/", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(context.Background(), method, "/", strings.NewReader(body))
 	r.SetPathValue("id", testID)
 	return r.WithContext(handlers.WithUserID(r.Context(), "viewer"))
 }
