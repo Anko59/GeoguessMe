@@ -46,15 +46,21 @@ Other viewers' resolution state is independent.
 Each player gets one immutable guess per public post. Repeated submissions
 return the first result, including concurrent submissions. Timed results show
 the distance, the actual point, and the time-adjusted score from 0 to 5000 in a
-map-ready response. Exact challenge and guess coordinates are returned only
-after the owner, a resolved viewer, or an expired timed session is authorized to
-see results. Once a challenge has multiple guesses, every guess is available in
-score order with a stable rank and a signed all-time Elo delta. The delta is
-replayed from the same combined private/public history as the global ladder; a
-single guess still has no Elo comparison. Public score totals remain separate
-from private group challenge leaderboards and profile progression. Authors
-cannot guess their own posts. Feed and comment payloads never contain answer
-coordinates.
+map-ready response. With **Hide my location**, non-authors receive no actual
+coordinates until `LOCATION_HIDE_DURATION` (48 hours by default) has elapsed.
+Timed and legacy guess responses include `location_hidden` and
+`location_reveals_at` instead. Other players' guess coordinates and distances
+are omitted while hidden; the viewer retains their own guess and distance. The
+author can see the location, and reveal occurs at the exact deadline. The shared
+results view shows the hiding notice and only eligible map markers. Exact
+challenge and guess coordinates are returned only after the owner, a resolved
+viewer, or an expired timed session is authorized to see results. Once a
+challenge has multiple guesses, every guess is available in score order with a
+stable rank and a signed all-time Elo delta. The delta is replayed from the same
+combined private/public history as the global ladder; a single guess still has
+no Elo comparison. Public score totals remain separate from private group
+challenge leaderboards and profile progression. Authors cannot guess their own
+posts. Feed and comment payloads never contain answer coordinates.
 
 ## Reactions and comments
 

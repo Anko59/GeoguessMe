@@ -1,4 +1,4 @@
-import { actionSchema, pageSchema, tool } from "../mcp-schemas.mjs";
+import { actionSchema, dialogActionSchema, pageSchema, tool } from "../mcp-schemas.mjs";
 
 export const tools = [
   tool("session_create", "Create an isolated browser session.", {
@@ -38,7 +38,7 @@ export const tools = [
   }),
   tool("browser_capabilities", "Probe the granted synthetic camera and location services with a fixed safe check.", pageSchema()),
   tool("browser_security_headers", "Reload the current same-origin page and inspect only fixed document security-header presence and safe policy flags; never return raw header values, cookies, or nonce material.", pageSchema()),
-  tool("browser_click", "Click one visible control selected by role, label, text, or placeholder.", actionSchema()),
+  tool("browser_click", "Click one visible control selected by role, label, text, or placeholder. Use dialog_action: accept to confirm its next native confirmation; otherwise it is dismissed and reported.", actionSchema()),
   tool("browser_type", "Fill one visible text control selected by role, label, text, or placeholder.", {
     ...actionSchema(),
     required: ["session_id", "target", "text"],
@@ -56,7 +56,7 @@ export const tools = [
   tool("browser_key", "Send a keyboard key to the active tab.", {
     type: "object",
     required: ["session_id", "key"],
-    properties: { session_id: { type: "string" }, tab_id: { type: "string" }, key: { type: "string" } },
+    properties: { session_id: { type: "string" }, tab_id: { type: "string" }, key: { type: "string" }, dialog_action: dialogActionSchema() },
   }),
   tool("browser_reload", "Reload the active tab.", pageSchema()),
   tool("browser_back", "Go back in the active tab history.", pageSchema()),
