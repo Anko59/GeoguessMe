@@ -78,6 +78,7 @@ test-image-audit: ## Verify scan-only blocking, complete reporting, and transien
 
 test-security-workflows: ## Verify scan-before-sign, immutable promotion, publication serialization, and runtime adoption.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-workflow-contracts.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/ci/test-registry-cache.sh
 
 test-image-audit-native: ## Verify native exploitation blocking, advisories, unfixed findings, and aliases.
 	bash tools/quality/image-audit/test-native-policy.sh
