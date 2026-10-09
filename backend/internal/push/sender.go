@@ -150,7 +150,11 @@ func (s *Sender) vapidJWT(endpoint string) (string, error) {
 		Sub string `json:"sub"`
 	}{Aud: origin, Exp: exp, Sub: s.subject}
 	header := map[string]string{"alg": "ES256", "typ": "JWT"}
-	token, err := signES256JWT(s.keys.signer(), header, claims)
+	signer, err := s.keys.signer()
+	if err != nil {
+		return "", fmt.Errorf("invalid VAPID signing key: %w", err)
+	}
+	token, err := signES256JWT(signer, header, claims)
 	if err != nil {
 		return "", err
 	}

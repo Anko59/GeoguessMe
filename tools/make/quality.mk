@@ -28,6 +28,9 @@ format-check: ## Check formatting without rewriting files.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) sqlfluff sqlfluff lint --config backend/.sqlfluff --dialect postgres backend/internal/database/migrations
 	git ls-files -z '*.sh' | xargs -0 -r $(COMPOSE_TOOLS_RUN) --rm --no-deps shfmt shfmt -d -i 4 -ci
 
+migrate-go-lint-config: ## Migrate the Go analyzer configuration with the pinned Dockerized tool.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps $(TOOLS_USER) go-tools-write sh -c 'golangci-lint migrate --config backend/.golangci.yml && rm backend/.golangci.bck.yml'
+
 lint-go: ## Run strict Go analyzers.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && golangci-lint run ./...'
 

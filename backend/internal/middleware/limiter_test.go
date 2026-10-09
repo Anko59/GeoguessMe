@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,7 @@ func testIdentityHandler(t *testing.T, p Policy) func(identity, ip string) *http
 		w.WriteHeader(http.StatusOK)
 	}))
 	return func(identity, ip string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", nil)
 		req.RemoteAddr = ip + ":1234"
 		req.Header.Set("X-Test-Identity", identity)
 		rr := httptest.NewRecorder()
@@ -48,7 +49,7 @@ func testUserHandler(t *testing.T, p Policy) func(user, ip string) *httptest.Res
 		w.WriteHeader(http.StatusOK)
 	}))
 	return func(user, ip string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/push/subscribe", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/push/subscribe", nil)
 		req.RemoteAddr = ip + ":1234"
 		req.Header.Set("X-Test-User", user)
 		rr := httptest.NewRecorder()
@@ -346,7 +347,7 @@ func TestPolicyMiddlewareBodyIdentityAndUserBuckets(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	do := func(body, user string) int {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/push/subscribe", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/push/subscribe", strings.NewReader(body))
 		req.RemoteAddr = "192.0.2.5:1234"
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Test-User", user)
@@ -380,7 +381,7 @@ func TestPolicyMiddlewareIdentityOverride(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	do := func(override string) int {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify/request", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/verify/request", nil)
 		req.RemoteAddr = "192.0.2.6:1234"
 		req.Header.Set("X-Identity-Override", override)
 		rr := httptest.NewRecorder()
@@ -404,7 +405,7 @@ func TestPolicyMiddlewareRouteBucketUsesMatchedPattern(t *testing.T) {
 
 	do := func(path string) int {
 		rr := httptest.NewRecorder()
-		mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		mux.ServeHTTP(rr, httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil))
 		return rr.Code
 	}
 	require.Equal(t, http.StatusOK, do("/one"))
@@ -423,7 +424,7 @@ func TestPolicyMiddlewareRouteBucketIsolatedByAuthenticatedUser(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	do := func(user string) int {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/feed", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/feed", nil)
 		req.RemoteAddr = "192.0.2.10:1234"
 		req.Header.Set("X-Test-User", user)
 		req.Pattern = "GET /api/v1/feed"
@@ -438,25 +439,25 @@ func TestPolicyMiddlewareRouteBucketIsolatedByAuthenticatedUser(t *testing.T) {
 }
 
 func TestExtractIdentityExported(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"  Alice  ","password":"x"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"  Alice  ","password":"x"}`))
 	req.Header.Set("Content-Type", "application/json")
 	require.Equal(t, "alice", ExtractIdentity(req))
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/forgot", strings.NewReader(`{"email":" Bob@Example.COM "}`))
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/password/forgot", strings.NewReader(`{"email":" Bob@Example.COM "}`))
 	req2.Header.Set("Content-Type", "application/json")
 	require.Equal(t, "bob@example.com", ExtractIdentity(req2))
 
 	// Non-JSON bodies carry no identity; the wrapper returns the empty string.
-	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader("username=alice"))
+	req3 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", strings.NewReader("username=alice"))
 	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	require.Equal(t, "", ExtractIdentity(req3))
 
-	req4 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	req4 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/verify", nil)
 	require.Equal(t, "", ExtractIdentity(req4))
 
 	// Non-string sibling fields must not disable identity extraction: the
 	// signup payload carries a boolean age flag next to the username.
-	req5 := httptest.NewRequest(
+	req5 := httptest.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/api/v1/auth/signup",
 		strings.NewReader(`{"username":"  Carol  ","password":"x","age_attested":true}`),
@@ -465,7 +466,7 @@ func TestExtractIdentityExported(t *testing.T) {
 	require.Equal(t, "carol", ExtractIdentity(req5))
 
 	// A non-string identity field itself extracts as empty.
-	req6 := httptest.NewRequest(
+	req6 := httptest.NewRequestWithContext(context.Background(),
 		http.MethodPost,
 		"/api/v1/auth/login",
 		strings.NewReader(`{"username":42,"password":"x"}`),

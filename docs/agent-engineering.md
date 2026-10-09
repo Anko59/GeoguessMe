@@ -383,6 +383,16 @@ this entry only when that implementation and its focused hosted restore tests
 land together; retain the isolated restore and release evidence required by the
 [hosted runbook](runbooks/hosted-deployment.md#dev-acceptance-and-production-launch).
 
+### Optional Go analyzer families
+
+**Owner: Quality/backend.** The Go 1.27 migration preserves the v1 analyzer set:
+Staticcheck `SA*`, Gosimple `S*`, and the existing context/error analyzers.
+Stylecheck and quick-fix families remain outside that set. An exploratory scan
+found capitalized internal errors in feed/Keycloak, boolean simplifications in
+ELO/push egress, and redundant deadline-wrapper selectors in email. Defer these
+to a separately reviewed analyzer-policy change; error-message edits can affect
+public contracts. The migration adds no individual finding suppression.
+
 ## Residual risks
 
 - The operator authorized exploitation-based image prioritization on October

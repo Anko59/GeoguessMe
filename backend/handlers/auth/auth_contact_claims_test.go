@@ -5,6 +5,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,7 @@ func TestSignupDoesNotRevealVerifiedEmail(t *testing.T) {
 	api := newAuthAPI(t, mock, nil)
 	mock.ExpectQuery("SELECT .*FROM users WHERE username").WithArgs("alice").WillReturnRows(handlerUserRows(existing))
 	usernameRecorder := httptest.NewRecorder()
-	api.Signup(usernameRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(signupBody)))
+	api.Signup(usernameRecorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(signupBody)))
 	if usernameRecorder.Code != http.StatusConflict {
 		t.Fatalf("duplicate username status = %d (%s)", usernameRecorder.Code, usernameRecorder.Body.String())
 	}
@@ -48,7 +49,7 @@ func TestSignupDoesNotRevealVerifiedEmail(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	emailRecorder := httptest.NewRecorder()
-	api.Signup(emailRecorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"bob","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
+	api.Signup(emailRecorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"bob","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 	if emailRecorder.Code != http.StatusOK {
 		t.Fatalf("verified email claim status = %d (%s)", emailRecorder.Code, emailRecorder.Body.String())
 	}
@@ -66,7 +67,7 @@ func TestSignupAllowsNoRecoveryEmail(t *testing.T) {
 	// No verification token is issued without a contact claim.
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"emailfree","password":"StrongPassword123","age_attested":true}`)))
+	api.Signup(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"emailfree","password":"StrongPassword123","age_attested":true}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("email-free signup status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -90,7 +91,7 @@ func TestSignupMapsInsertFailures(t *testing.T) {
 				WithArgs(pgxmock.AnyArg(), "alice", "alice@example.test", "alice@example.test", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 				WillReturnError(test.insertErr)
 			recorder := httptest.NewRecorder()
-			api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
+			api.Signup(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("signup status = %d (%s), want %d", recorder.Code, recorder.Body.String(), test.wantStatus)
 			}
@@ -109,7 +110,7 @@ func TestVerifyEmailClaimConflictIsGeneric(t *testing.T) {
 	mock.ExpectQuery("SELECT pending_email, pending_email_normalized FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"pending_email", "pending_email_normalized"}).AddRow("taken@example.test", "taken@example.test"))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("taken@example.test", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	recorder := httptest.NewRecorder()
-	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"conflict-token"}`)))
+	api.VerifyEmail(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"conflict-token"}`)))
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("claim conflict status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -129,7 +130,7 @@ func TestVerifyEmailNothingToPromoteIsIdempotent(t *testing.T) {
 	mock.ExpectQuery("SELECT email_normalized FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"email_normalized"}).AddRow("alice@example.test"))
 	mock.ExpectCommit()
 	recorder := httptest.NewRecorder()
-	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"already-verified-token"}`)))
+	api.VerifyEmail(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"already-verified-token"}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("nothing-to-promote verify status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -143,7 +144,7 @@ func TestVerifyEmailDatabaseFailureIsInternal(t *testing.T) {
 		WillReturnError(&pgconn.PgError{Code: "08006"})
 	mock.ExpectRollback()
 	recorder := httptest.NewRecorder()
-	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
+	api.VerifyEmail(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("verification outage status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -166,7 +167,7 @@ func TestForgotPasswordRecoveryByEmailState(t *testing.T) {
 		mock.ExpectExec("INSERT INTO password_reset_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
-		api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
+		api.ForgotPassword(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
 		if recorder.Code != http.StatusAccepted {
 			t.Fatalf("verified recovery status = %d", recorder.Code)
 		}
@@ -183,7 +184,7 @@ func TestForgotPasswordRecoveryByEmailState(t *testing.T) {
 		mock.ExpectExec("INSERT INTO email_verification_tokens").WithArgs(pgxmock.AnyArg(), pending.ID, pgxmock.AnyArg(), "alice@example.test", pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectCommit()
 		recorder := httptest.NewRecorder()
-		api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
+		api.ForgotPassword(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
 		if recorder.Code != http.StatusAccepted {
 			t.Fatalf("pending recovery status = %d", recorder.Code)
 		}
@@ -195,7 +196,7 @@ func TestForgotPasswordRecoveryByEmailState(t *testing.T) {
 		mock.ExpectQuery("SELECT .*FROM users WHERE email_normalized").WithArgs("nobody@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 		mock.ExpectQuery("pending_email_normalized").WithArgs("nobody@example.test").WillReturnRows(pgxmock.NewRows(userColumnsForQuery()))
 		recorder := httptest.NewRecorder()
-		api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"nobody@example.test"}`)))
+		api.ForgotPassword(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"email":"nobody@example.test"}`)))
 		if recorder.Code != http.StatusAccepted {
 			t.Fatalf("unknown recovery status = %d", recorder.Code)
 		}
