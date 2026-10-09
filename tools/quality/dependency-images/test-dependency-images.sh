@@ -78,6 +78,8 @@ if [[ "$1" == build || "$1 $2" == 'buildx build' ]]; then
     [[ "$1" != build || "${BUILDX_BUILDER:-}" == fixture-context ]] || { echo 'local build was not loaded into the active daemon' >&2; exit 9; }
     [[ "$*" == *'--platform linux/amd64'* ]] || exit 9
     [[ "$*" == *"DEPENDENCY_INPUTS=$INPUT_HASH"* ]] || exit 9
+    [[ "$*" == *"--label org.opencontainers.image.base.name=$FINAL_BASE_NAME"* ]] || exit 9
+    [[ "$*" == *"--label org.opencontainers.image.base.digest=$FINAL_BASE_DIGEST"* ]] || exit 9
     : >"$FAKE_STATE/local-$INPUT_HASH"
     printf '%s\n' "$INPUT_HASH" >"$FAKE_STATE/image-hash"
     if [[ -n "$iidfile" ]]; then printf '%s\n' "$TEST_IMAGE_ID" >"$iidfile"; fi
@@ -151,7 +153,7 @@ cat >"$TMP/bin/make" <<'FAKE'
 set -euo pipefail
 printf 'make %s\n' "$*" >>"$TRACE"
 [[ "$*" == *'audit-image-set'* && "$*" == *"IMAGE_AUDIT_REFS="*@"$TEST_DIGEST"* ]] || exit 9
-[[ "${FAKE_SCAN:-}" != vulnerability ]] || { echo 'fixed HIGH vulnerability' >&2; exit 42; }
+[[ "${FAKE_SCAN:-}" != vulnerability ]] || { echo 'known-exploited vulnerability' >&2; exit 42; }
 : >"$FAKE_STATE/scanned"
 FAKE
 cat >"$TMP/bin/sleep" <<'FAKE'
@@ -465,30 +467,22 @@ assert test ! -s "$GITHUB_OUTPUT"
 pass 'adoption rejects a changed manifest digest before signing or publishing output'
 unset KEYCLOAK_IMAGE RESTIC_IMAGE SOPS_IMAGE SOCKET_PROXY_IMAGE POSTGRES_IMAGE CLOUDFLARED_IMAGE CADDY_RUNTIME_IMAGE GITHUB_OUTPUT
 
-# Review additional context files explicitly rather than hashing whole context.
+# Vendor envelopes may not grow package patches or source rebuilds.
 new_case
-printf 'reviewed helper\n' >"$FIXTURE/deployment/docker/sops-tools/helper.txt"
-sed -i 's|sops\tdeployment/docker/sops-tools/Dockerfile\tdeployment/docker/sops-tools\t-|sops\tdeployment/docker/sops-tools/Dockerfile\tdeployment/docker/sops-tools\tdeployment/docker/sops-tools/helper.txt|' "$FIXTURE/deployment/images/dependencies.tsv"
-printf '\nCOPY helper.txt /opt/helper.txt\n' >>"$FIXTURE/deployment/docker/sops-tools/Dockerfile"
-previous=$(ref)
-printf 'changed helper\n' >>"$FIXTURE/deployment/docker/sops-tools/helper.txt"
-assert test "$previous" != "$(ref)"
-pass 'manifest-listed copied extra inputs change dependency identity'
-printf 'COPY unlisted.txt /opt/unlisted.txt\n' >>"$FIXTURE/deployment/docker/sops-tools/Dockerfile"
-if ref >"$FAKE_STATE/output" 2>"$FAKE_STATE/log"; then
-    echo 'FAIL: unlisted context source accepted' >&2
-    exit 1
-fi
-sed -i '$d' "$FIXTURE/deployment/docker/sops-tools/Dockerfile"
-pass 'unlisted context source rejected even when other inputs were reviewed'
-printf 'COPY --from=unreviewed:latest /source /target\n' >>"$FIXTURE/deployment/docker/sops-tools/Dockerfile"
-if ref >"$FAKE_STATE/output" 2>"$FAKE_STATE/log"; then
-    echo 'FAIL: unpinned external COPY accepted' >&2
-    exit 1
-fi
-sed -i '$d' "$FIXTURE/deployment/docker/sops-tools/Dockerfile"
-pass 'external COPY must reference an explicitly pinned reviewed stage'
-printf '\nFROM floating:latest\n' >>"$FIXTURE/deployment/docker/sops-tools/Dockerfile"
+original="$FIXTURE/deployment/docker/sops-tools/Dockerfile"
+cp "$original" "$TMP/envelope"
+for instruction in 'RUN apk upgrade' 'COPY helper.txt /opt/helper.txt' 'ADD helper.txt /opt/helper.txt' 'ONBUILD RUN true' 'FROM pinned:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; do
+    cp "$TMP/envelope" "$original"
+    printf '\n%s\n' "$instruction" >>"$original"
+    if ref >"$FAKE_STATE/output" 2>"$FAKE_STATE/log"; then
+        echo "FAIL: upstream ownership escaped through $instruction" >&2
+        exit 1
+    fi
+    assert test ! -s "$TRACE"
+    pass "vendor envelope rejects $instruction before external operations"
+done
+cp "$TMP/envelope" "$original"
+printf '\nFROM floating:latest\n' >>"$original"
 if ref >"$FAKE_STATE/output" 2>"$FAKE_STATE/log"; then
     echo 'FAIL: unpinned base accepted' >&2
     exit 1

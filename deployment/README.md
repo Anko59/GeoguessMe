@@ -152,14 +152,17 @@ and rerun the dev workflow. CI verifies anonymous access to the exact digest
 before deployment.
 
 Development merges first prepare or resolve seven content-keyed dependency
-artifacts. The gate jobs reuse those exact signed digests; ordinary application
-changes do not rebuild Caddy or other unchanged dependencies. After the complete
-gate, publication scans the entire runtime inventory and both exact app digests
-before adding revision-adoption signatures and deployment. `make audit-images`
-itself is scan-only; explicit preparation and failure semantics are documented
-in the [security scanning guide](../docs/security-scanning.md). The
-local/disposable S3 fixture is now SeaweedFS, not retired MinIO; hosted R2 is
-unchanged. Preserve existing development data through the
+artifacts containing upstream binaries without project source/package patches.
+The gate jobs reuse those exact signed digests. After the complete gate,
+publication scans the entire runtime inventory and both exact app digests before
+adding revision-adoption signatures and deployment. Known exploitation and
+confirmed exposure block; remaining CVEs are retained advisories, not a
+requirement to rebuild vendor code. Application source gates stay strict.
+`make audit-images` itself is scan-only; explicit preparation and failure
+semantics are documented in the
+[security scanning guide](../docs/security-scanning.md). The local/disposable S3
+fixture is now SeaweedFS, not retired MinIO; hosted R2 is unchanged. Preserve
+existing development data through the
 [S3 migration runbook](../docs/runbooks/s3-fixture-migration.md). A release PR
 may come only from a repository `release/*` branch whose tree exactly equals the
 successfully deployed `dev` tree. Basing that short-lived branch on `main`

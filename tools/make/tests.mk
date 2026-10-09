@@ -73,12 +73,13 @@ test-braces-security: ## Verify installed brace parser and AST walkers resist st
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/frontend/tooling/dependencies/braces-security.js
 
 test-image-audit: ## Verify scan-only blocking, complete reporting, and transient-failure handling.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/image-audit/test-risk-policy.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/image-audit/test-image-audit.sh
 
 test-security-workflows: ## Verify scan-before-sign, immutable promotion, publication serialization, and runtime adoption.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-workflow-contracts.sh
 
-test-image-audit-native: ## Verify real pinned Trivy blocks fixed High/Critical fixture findings.
+test-image-audit-native: ## Verify native exploitation blocking, advisories, unfixed findings, and aliases.
 	bash tools/quality/image-audit/test-native-policy.sh
 
 test-local-dependency-from: ## Prove local Docker builds consume frozen dependency bytes, not a competing mutable tag.
@@ -107,8 +108,7 @@ test-restart-regression: ## Run restart-rehearsal regression tests.
 test-migration-fixture-regression: ## Run migration fixture regression tests.
 	bash tools/quality/test/check-migration-fixture-regression.sh
 
-test-image-scan-exceptions-regression: ## Run image-scan exceptions regression tests.
-	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/image-scan-exceptions/test-image-scan-exceptions-regression.sh
+test-image-scan-exceptions-regression: test-image-audit ## Compatibility alias for the replacement risk-policy regressions.
 
 test-integration: build-images ## Run the isolated integration stack and tests in Docker.
 	$(TEST_ENV) tools/quality/run-integration.sh

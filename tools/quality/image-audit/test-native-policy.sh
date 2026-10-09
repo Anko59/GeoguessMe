@@ -51,44 +51,22 @@ expect 0 docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.too
 expect 0 docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory . \
     run -T --rm --no-deps --user "$TOOLS_UID:$TOOLS_GID" --entrypoint /bin/sh trivy \
     -ec 'probe=$(mktemp /tmp/trivy-cache/.native-policy.XXXXXXXX); case "$probe" in /tmp/trivy-cache/.native-policy.????????) ;; *) exit 2 ;; esac; printf "writable\n" >"$probe"; rm -f -- "${probe:?}"'
-checker=tools/quality/image-scan-exceptions-check.sh
-ref="fixture:base@sha256:$(printf 'a%.0s' {1..64})"
-expiry_epoch=$(($(date -u +%s) + 7 * 86400))
-expiry=$(date -u -d "@$expiry_epoch" +%F 2>/dev/null || date -u -r "$expiry_epoch" +%F)
-printf '# no reviewed exceptions\n' >"$TMP/exceptions.yaml"
-export IMAGE_SCAN_EXCEPTIONS="$TMP/exceptions.yaml"
-bash "$checker" --emit-policy "$ref" "$TMP/policy.rego"
 policy="/workspace/${TMP#"$ROOT/"}/policy.rego"
-for fixture in fixed-high fixed-critical; do
-    expect 42 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
-        --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/$fixture.json"
-done
-cat >"$TMP/exceptions.yaml" <<EOF
-- id: CVE-2026-103111
-  image: $ref
-  digest: sha256:$(printf 'a%.0s' {1..64})
-  package: pcre2
-  installed_version: 10.48-r0
-  owner: regression-fixture
-  reachable: native fixed High filtering test only
-  approved: true
-  expires: $expiry
-EOF
-bash "$checker" --emit-policy "$ref" "$TMP/policy.rego"
+printf '{"vulnerabilities":[{"cveID":"CVE-2021-44228"}]}\n' >"$TMP/kev.json"
+docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory . \
+    run -T --rm --no-deps --user "$TOOLS_UID:$TOOLS_GID" go-security \
+    bash /workspace/tools/quality/image-audit/risk-policy.sh emit "/workspace/${TMP#"$ROOT/"}/kev.json" >"$TMP/policy.rego"
 expect 0 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
     --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/fixed-high.json"
-# Same CVE, different package version must NOT inherit an old package exception.
-sed 's/10.48-r0/10.49-r0/' tools/quality/image-audit/fixed-high.json >"$TMP/changed.json"
-expect 42 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
-    --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/changed.json"
-sed 's/"PkgName": "pcre2"/"PkgName": "different-package"/' tools/quality/image-audit/fixed-high.json >"$TMP/changed.json"
-expect 42 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
-    --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/changed.json"
-# Missing package metadata must not fall back to a CVE-wide exemption.
-sed '/"PkgName":/d; /"InstalledVersion":/d' tools/quality/image-audit/fixed-high.json >"$TMP/changed.json"
-expect 42 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
-    --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/changed.json"
-# A reviewed High exception cannot suppress a distinct Critical vulnerability.
 expect 42 trivy convert --severity HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
     --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/fixed-critical.json"
-echo "native Trivy policy/isolation/cache regression tests PASSED ($CHECKS checks)"
+# Known exploitation blocks even at LOW severity with no published fix.
+sed 's/"Severity": "CRITICAL"/"Severity": "LOW"/; s/"FixedVersion": "[^"]*"/"FixedVersion": ""/' \
+    tools/quality/image-audit/fixed-critical.json >"$TMP/known-unfixed.json"
+expect 42 trivy convert --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
+    --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/known-unfixed.json"
+sed 's/"VulnerabilityID": "CVE-2021-44228"/"VulnerabilityID": "GHSA-fixture", "VendorIDs": ["CVE-2021-44228"]/' \
+    tools/quality/image-audit/fixed-critical.json >"$TMP/known-alias.json"
+expect 42 trivy convert --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
+    --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/known-alias.json"
+echo "native exploitation policy tests PASSED ($CHECKS total checks)"

@@ -105,6 +105,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - run: make bootstrap-security-tools
       - name: Explicit dependency preparation (only changed inputs build)
         if: github.event_name == 'push' && github.ref_name == 'dev'
         run: make publish-security-images

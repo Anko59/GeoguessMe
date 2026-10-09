@@ -1,5 +1,10 @@
 # Operations
 
+Go compiler updates align application/tooling pins. Upstream binaries stay
+vendor-managed; complete image scans block known exploitation and confirmed
+deployment exposure, while retaining other findings as advisories. See
+[image security scanning](security-scanning.md).
+
 ## Health endpoints
 
 | Endpoint        | Expected status | Checks                                                                               |

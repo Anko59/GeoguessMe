@@ -37,8 +37,9 @@ assert_contains "$ROOT/.github/workflows/release.yml" '"deploy $BACKEND $WEB $KE
 assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/sops-tools/Dockerfile'
 assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/postgres-openssl.Dockerfile'
 assert_contains "$ROOT/deployment/images/dependencies.tsv" 'deployment/docker/restic-tools.Dockerfile'
-assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'libexpat1=2.5.0-1+deb12u4'
-assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'org.opencontainers.image.source="https://github.com/Anko59/GeoguessMe"'
+assert_contains "$ROOT/deployment/docker/sops-tools/Dockerfile" 'FROM ghcr.io/getsops/sops:'
+assert_contains "$ROOT/tools/quality/dependency-images/registry.sh" '--label "org.opencontainers.image.base.name=$FINAL_BASE_NAME"'
+assert_contains "$ROOT/tools/quality/dependency-images/registry.sh" '--label "org.opencontainers.image.base.digest=$FINAL_BASE_DIGEST"'
 assert_contains "$DEPLOY" 'validate_sops_image_reference "$sops_image"'
 assert_contains "$DEPLOY" 'verify_image_signature "$sops_image"'
 assert_contains "$DEPLOY" 'docker pull "$sops_image"'
@@ -77,10 +78,8 @@ assert_contains "$ROOT/.github/workflows/release.yml" 'socket_proxy=${{ steps.so
 assert_contains "$ROOT/tools/quality/ci/promote-socket-proxy-image.sh" 'cosign verify'
 assert_contains "$ROOT/tools/quality/ci/promote-socket-proxy-image.sh" 'docker buildx imagetools create --tag "$release_tag" "$source_image"'
 assert_contains "$ROOT/tools/quality/ci/promote-socket-proxy-image.sh" '[[ "$promoted_digest" == "$digest" ]]'
-assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'FROM quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
-assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'org.opencontainers.image.base.digest="sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85"'
+assert_contains "$ROOT/deployment/docker/keycloak-patched/Dockerfile" 'FROM quay.io/keycloak/keycloak:'
 assert_contains "$ROOT/deployment/compose.identity.yaml" 'quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
-assert_contains "$ROOT/tools/quality/image-scan-exceptions-keycloak.yaml" 'image: quay.io/keycloak/keycloak:26.7.5@sha256:37dbaf6f0722c9ec246335f36e1ef8b2e6cb960f7c27e0d8c615121a3d475a85'
 
 assert_forced_command_arity() {
     workflow=$1 expected_count=$2

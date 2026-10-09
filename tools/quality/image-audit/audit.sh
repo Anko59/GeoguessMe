@@ -2,8 +2,8 @@
 # Pure full-scope image audit: no build, mutable-registry fallback or skipped ref.
 # IMAGE_AUDIT_REFS: whitespace-separated immutable registry refs, existing local
 # explicit tags, or existing sha256:image IDs. Platform defaults to linux/amd64.
-# Exit 1: fixed HIGH/CRITICAL findings. Exit 2: policy/incomplete operations (also
-# when findings coexist). Raw JSON remains complete; exceptions affect gate only.
+# Exit 1: known-exploited findings, including unfixed/low-severity findings.
+# Exit 2: policy/incomplete operations. Other findings remain visible advisories.
 set -euo pipefail
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/../../.." && pwd)
@@ -63,7 +63,7 @@ SUMMARY="$REPORT_ROOT/summary.tsv"
     exit 2
 }
 printf 'reference\timage_id\tplatform\tresult\n' >"$SUMMARY"
-POLICY=0 INCOMPLETE=0 FINDINGS=0
+POLICY=0 INCOMPLETE=0 FINDINGS=0 ADVISORIES=0
 record() {
     local ref=$1 id=$2 status=$3
     printf '%s\t%s\t%s\t%s\n' "$ref" "$id" "$PLATFORM" "$status" >>"$SUMMARY"
@@ -72,12 +72,19 @@ record() {
         POLICY*) POLICY=$((POLICY + 1)) ;;
         INCOMPLETE*) INCOMPLETE=$((INCOMPLETE + 1)) ;;
         VULNERABLE) FINDINGS=$((FINDINGS + 1)) ;;
+        ADVISORY) ADVISORIES=$((ADVISORIES + 1)) ;;
     esac
 }
 trivy() {
     docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory . \
         run -T --rm --no-deps --user "$TOOLS_UID:$TOOLS_GID" trivy \
         trivy --config /dev/null "$@"
+}
+risk_policy() {
+    docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory . \
+        run -T --rm --no-deps --user "$TOOLS_UID:$TOOLS_GID" \
+        --volume "$REPORT_ROOT:/workspace/security/image-reports" go-security \
+        bash /workspace/tools/quality/image-audit/risk-policy.sh "$@"
 }
 # Keep DB updates outside the image loop; scans use this exact snapshot. The
 # host lock prevents concurrent audits from replacing it during a scan.
@@ -91,9 +98,10 @@ fi
 if ! trivy version --format json >"$REPORT_ROOT/db-snapshot.json" 2>"$REPORT_ROOT/db-version.log"; then
     DB_OK=0
 fi
-EXCEPTIONS_OK=1
-if ! bash tools/quality/image-scan-exceptions-check.sh; then
-    EXCEPTIONS_OK=0
+if ! run_with_retry 'known exploitation catalog' "$REPORT_ROOT/kev-update.log" \
+    risk_policy prepare /workspace/security/image-reports ||
+    ! risk_policy emit /workspace/security/image-reports/kev.json >"$REPORT_ROOT/risk-policy.rego"; then
+    DB_OK=0
 fi
 # Content scans are deduplicated by immutable config digest and actual platform.
 # Gate results are also keyed by exact generated policy, so aliases cannot widen
@@ -144,14 +152,8 @@ for ref in "${REFS[@]}"; do
         continue
     fi
     printf '%s\n' "$details" >"$dir/resolved.txt"
-    exception_ref=$ref
-    if ((pinned == 0)) && [[ "$ref" != sha256:* ]]; then exception_ref="$ref@$id"; fi
-    policy_ok=$EXCEPTIONS_OK
-    if ! bash tools/quality/image-scan-exceptions-check.sh --emit-policy "$exception_ref" "$dir/policy.rego"; then
-        policy_ok=0
-    fi
-    # Validate provenance labels when present, and inherit only unchanged
-    # package/version findings from that exact reviewed base digest.
+    policy_ok=1
+    # Provenance remains checked independently of vulnerability prioritization.
     base=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.base.name"}}|{{index .Config.Labels "org.opencontainers.image.base.digest"}}' "$id") || {
         record "$ref" "$id" INCOMPLETE-base-inspect
         continue
@@ -162,14 +164,13 @@ for ref in "${REFS[@]}"; do
     if [ -n "$base_name$base_digest" ]; then
         if ! [[ "$base_name" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ && "$base_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             policy_ok=0
-        elif ! bash tools/quality/image-scan-exceptions-check.sh --inherit-policy "$base_name@$base_digest" "$dir/policy.rego"; then
-            policy_ok=0
         fi
     fi
     if ((DB_OK == 0)); then
         record "$ref" "$id" INCOMPLETE-database
         continue
     fi
+    cp "$REPORT_ROOT/risk-policy.rego" "$dir/policy.rego"
     key="$id/$actual"
     if [ -n "${CONTENT_DIR[$key]:-}" ]; then
         source_dir=${CONTENT_DIR[$key]}
@@ -184,7 +185,7 @@ for ref in "${REFS[@]}"; do
             input="/workspace/${ARCHIVE#"$ROOT/"}"
             if run_with_retry "scan $ref" "$dir/scan.log" trivy image \
                 --skip-db-update --skip-java-db-update --scanners vuln \
-                --severity HIGH,CRITICAL --exit-code 0 --ignorefile /dev/null \
+                --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 0 --ignorefile /dev/null \
                 --format json --output "/workspace/${dir#"$ROOT/"}/report.json" --input "$input"; then
                 if trivy convert --ignorefile /dev/null --format spdx-json \
                     --output "/workspace/${dir#"$ROOT/"}/sbom.spdx.json" \
@@ -202,32 +203,22 @@ for ref in "${REFS[@]}"; do
     fi
     if ((policy_ok == 0)); then
         discard_archive
-        record "$ref" "$id" POLICY-exceptions-or-provenance
+        record "$ref" "$id" POLICY-provenance
         continue
     fi
     policy_hash=$(sha256sum "$dir/policy.rego" | cut -d ' ' -f1)
     gate_key="$key/$policy_hash"
     if [ -z "${GATE_RESULT[$gate_key]:-}" ]; then
-        # convert lacks --ignore-unfixed in pinned Trivy 0.73. Use its native
-        # image filter rather than reimplementing fixed/severity semantics.
-        archive_ok=1
-        if [ -z "$ARCHIVE" ]; then
-            ARCHIVE=$(mktemp "$REPORT_ROOT/.image.XXXXXXXX")
-            docker save "$id" -o "$ARCHIVE" || archive_ok=0
-        fi
         result='INCOMPLETE-gate'
-        if ((archive_ok)); then
-            input="/workspace/${ARCHIVE#"$ROOT/"}"
-            if run_with_retry "gate $ref" "$dir/gate.log" trivy image \
-                --skip-db-update --skip-java-db-update --scanners vuln \
-                --severity HIGH,CRITICAL --ignore-unfixed --exit-code 42 \
-                --ignorefile /dev/null --ignore-policy "/workspace/${dir#"$ROOT/"}/policy.rego" \
-                --format table --output "/workspace/${dir#"$ROOT/"}/gate.txt" --input "$input"; then
-                result=OK
-            else
-                rc=$?
-                if ((rc == 42)); then result=VULNERABLE; else result="INCOMPLETE-gate-$RETRY_KIND"; fi
-            fi
+        if trivy convert \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 \
+            --ignorefile /dev/null --ignore-policy "/workspace/${dir#"$ROOT/"}/policy.rego" \
+            --format table --output "/workspace/${dir#"$ROOT/"}/gate.txt" \
+            "/workspace/${dir#"$ROOT/"}/report.json" >"$dir/gate.log" 2>&1; then
+            if result=$(risk_policy classify "/workspace/${dir#"$ROOT/"}/report.json"); then :; else result='INCOMPLETE-classification'; fi
+        else
+            rc=$?
+            if ((rc == 42)); then result=VULNERABLE; else result='INCOMPLETE-gate'; fi
         fi
         GATE_RESULT[$gate_key]=$result
     fi
@@ -236,6 +227,6 @@ for ref in "${REFS[@]}"; do
     [ ! -s "$dir/gate.txt" ] || cat "$dir/gate.txt"
 done
 cat "$SUMMARY"
-echo "image-audit: aggregate: $FINDINGS vulnerable, $POLICY policy failures, $INCOMPLETE incomplete"
+echo "image-audit: aggregate: $FINDINGS vulnerable (known exploited), $ADVISORIES advisory, $POLICY policy failures, $INCOMPLETE incomplete"
 ((POLICY == 0 && INCOMPLETE == 0)) || exit 2
 ((FINDINGS == 0)) || exit 1

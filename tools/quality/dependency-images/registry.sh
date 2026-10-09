@@ -113,6 +113,8 @@ publish_missing() {
     remote_operation "build-$COMPONENT" docker buildx build \
         --platform "$DEPENDENCY_PLATFORM" --file "$DEPENDENCY_ROOT/$DOCKERFILE" \
         --build-arg "DEPENDENCY_INPUTS=$INPUT_HASH" --label "$DEPENDENCY_INPUT_LABEL=$INPUT_HASH" \
+        --label "org.opencontainers.image.base.name=$FINAL_BASE_NAME" \
+        --label "org.opencontainers.image.base.digest=$FINAL_BASE_DIGEST" \
         --tag "$REMOTE_REF" --push --sbom=true --provenance=mode=max \
         --metadata-file "$metadata" "$DEPENDENCY_ROOT/$CONTEXT" || fail "dependency publication failed: $COMPONENT"
     REGISTRY_DIGEST=$(jq -er '.["containerimage.digest"]' "$metadata") || fail 'build returned no immutable digest'

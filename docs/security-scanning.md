@@ -1,10 +1,59 @@
 # Image security scanning
 
-Every final/runtime image that GeoGuessMe ships is scanned for known
-vulnerabilities by [Trivy](https://trivy.dev) through `make audit-images`. The
-gate is deterministic: it fails on **fixed** High/Critical findings (a fix is
-available in a newer release) and merely reports unfixed High/Critical findings,
-which cannot be remediated by bumping a version.
+Every required image is scanned by [Trivy](https://trivy.dev), including all
+severities and findings without a published fix. Scanning remains mandatory;
+prioritization decides which findings block delivery.
+
+## Security decisions and ownership
+
+The operator authorized this policy on October 9, 2026 after repeated upstream
+compiler advisories consumed the development/release workflow. A scanner's
+“fixed version” identifies a package fix, not an available compatible vendor
+image. Automatically rebuilding vendors turned release lag into project
+maintenance without establishing deployment exploitability.
+
+- `make audit` keeps the strict application source/dependency gate: called Go
+  vulnerabilities and high-severity npm findings block, with reviewed backport
+  regressions retained.
+- `make audit-images` blocks any finding in the fresh
+  [CISA Known Exploited Vulnerabilities catalogue](https://www.cisa.gov/known-exploited-vulnerabilities-catalog),
+  regardless of severity or whether a fix is available. Confirmed deployment
+  exposures outside CISA are additive blockers in
+  [blocking-cves.tsv](../tools/quality/image-audit/blocking-cves.tsv), with an
+  accountable owner and evidence. No exclusion can suppress these blockers.
+- Other runtime findings remain `ADVISORY`, with complete JSON and SPDX
+  evidence. This explicitly accepts residual vendor risk; absence from CISA is
+  not evidence of safety, non-reachability, or a completed exploitability
+  review. A passing gate means the defined release criteria passed, not zero
+  CVEs.
+- Unknown image identity, missing artifacts, incomplete scans, invalid policy,
+  and unavailable/stale exploit data still block with exit 2.
+
+The catalogue is fetched from CISA's fixed HTTPS endpoint for each audit,
+checked for valid/unique CVEs, matching count, and a release date within 30
+days, then frozen and hashed alongside the Trivy database snapshot. No cached
+feed or caller-selected endpoint can substitute for a failed refresh. CISA can
+lag new exploitation; the additive exposure blocklist covers confirmed
+actionable findings before catalogue inclusion.
+
+Upstream owns third-party binaries and OS packages. Adopt compatible upstream
+releases through the ordinary tested PR flow. The Docker Dependabot group checks
+all image recipe directories weekly and opens one compatible-update PR; majors
+require separate review. The runtime TSV inventory and host-tool pins remain
+explicit reviewed inputs because Dependabot does not update arbitrary TSV/JSON.
+No vulnerability-only source rebuild or OS package transplant is part of the
+normal response. If an actionable finding has no vendor fix, mitigate exposure
+or disable the affected optional service; a custom fork requires an explicit
+product decision with an owner and retirement plan.
+
+The seven existing content-keyed publications are signed deployment envelopes,
+not maintained source forks. Caddy/Restic now use official released binaries;
+SOPS, Cloudflared, PostgreSQL and socket-proxy retain upstream package contents.
+Keycloak retains its runtime-user setting; Restic clears its upstream entrypoint
+to preserve the existing explicit-command interface used by backups. No new
+envelope is required merely because another vendor ships an older Go compiler.
+Original artifact identity, signatures, and exact-digest promotion remain
+unchanged.
 
 ## JavaScript dependency backports
 
@@ -124,7 +173,7 @@ Nightly verification resolves existing dependency artifacts, then builds/tests
 application images and scans the complete set.
 
 All application and identity database topologies use the selected
-`POSTGRES_IMAGE`, not an unpatched upstream substitute. The shared identity
+`POSTGRES_IMAGE`, not an unreviewed mutable substitute. The shared identity
 stack can retain its independently deployed `IDENTITY_POSTGRES_IMAGE` until
 production adopts the new digest. Hosted metadata records database and Restic
 refs; backups and restore rehearsals select the active environment's artifacts.
@@ -137,42 +186,33 @@ packages. Existing hosts require the operator cutover described below; changing
 cloud-init does not update them because Terraform intentionally ignores
 `user_data` drift.
 
-## Temporary patches and removal conditions
+## Application tooling and temporary source patches
 
-| Component    | Temporary change                                                                          | Removal condition                                                                         |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Caddy        | Released 2.11.7 build and OS package refresh in a reusable runtime                        | A compatible official digest passes the same final scan and configuration/rehearsal tests |
-| Terraform    | Official 1.16.5 binary with PCRE2 10.49-r0 only; no source rebuild                        | A verified upstream digest includes the package fix                                       |
-| Cloudflared  | Official 2026.9.3 binary with Debian OpenSSL deb13u3 payload and genuine package metadata | A verified upstream image carries the fixes                                               |
-| SOPS         | Official 3.13.3 binary with pinned libexpat deb12u4, PCRE2 deb12u2, and Perl deb12u4      | A verified upstream digest carries the package fix                                        |
-| Socket-proxy | Pinned upstream entrypoint/binary with PCRE2 10.49-r0                                     | A verified upstream digest passes the same scan and proxy contracts                       |
-| Restic       | Asserted 0.19.1 source commit and explicitly upgraded module graph                        | A compatible official artifact passes scans and backup/restore rehearsals                 |
-| PostgreSQL   | Compatible 15.x base with OpenSSL/libuuid refresh                                         | A verified compatible official digest plus unchanged entrypoint/data contracts            |
-| Keycloak     | Upstream 26.7.5 provenance wrapper, no JAR surgery                                        | No security patch remains; wrapper preserves the existing signed deployment contract      |
+Application and Dockerized Go tooling use the pinned Go 1.26.9 compiler; keep
+backend toolchain directives, tool tags, and fixture helpers aligned. The
+backend requires `golang.org/x/net` 0.60.0 for the October HTTP fixes. Upstream
+image compilers are vendor inputs, not reasons to add project-owned source
+builds.
 
-Terraform remains an operator tool outside the runtime default inventory;
-`make terraform-test` proves functionality, not security. Its small derivative
-addresses the separately observed fixed PCRE2 finding rather than adopting the
-known-vulnerable raw replacement image.
-
-Scoped npm overrides preserve YAML v4/v5 consumer contracts and CommonJS UUID
-compatibility. `make test-npm-security-overrides` checks the installed
-consumers; `make audit` includes it and the braces regressions. Go updates use
-compatible upstream upgrades rather than replaying historical version requests
-that could downgrade the current graph. Review module changes before committing.
+Scoped npm overrides preserve YAML v4/v5 and CommonJS UUID compatibility.
+`make test-npm-security-overrides` verifies installed consumers; `make audit`
+includes those and the braces regressions. These are application dependency
+contracts, independent of runtime image prioritization. The Terraform operator
+image's existing PCRE2 refresh is outside the shipped runtime inventory; retire
+it on a compatible upstream refresh, without expanding that patch mechanism.
 
 ## Blocking semantics and operational errors
 
 One audit prepares a single vulnerability/Java database snapshot, freezes image
 identity and platform, and scans **every required image before failing**. Raw
-High/Critical JSON includes fixed, unfixed and approved findings. Native Trivy
-conversion generates SPDX; the blocking pass uses `--ignore-unfixed` and the
-native reviewed exception policy. Content and gate results are deduplicated
-without allowing one reference's exception to authorize another reference.
+JSON includes every severity, fixed and unfixed findings. Native Trivy
+conversion generates SPDX and applies the reviewed exploitation policy to the
+exact frozen report, without rescanning or silently changing databases. Content
+and gate results are deduplicated by immutable identity and policy hash.
 
-- Exit **0**: every required image completed and no unexcepted fixed
-  High/Critical finding remains.
-- Exit **1**: genuine fixed High/Critical findings.
+- Exit **0**: all required images completed; no known-exploited or confirmed
+  deployment-exposure blocker remains. Advisory findings can still be present.
+- Exit **1**: blocking exploitation/exposure findings, including unfixed ones.
 - Exit **2**: policy failure or incomplete scan. Findings already collected
   remain visible; incomplete coverage is never success.
 
@@ -192,20 +232,12 @@ reports include `summary.tsv`, `db-snapshot.json`, and per-reference
 identity. Generated reports are gitignored. CI uploads evidence even on failure,
 with seven-day retention.
 
-## Exceptions
+## Retired exception mechanism
 
-Existing reviewed exceptions retain owners, rationale, approval and expiry; this
-lifecycle change adds no advisory suppression or expiry extension. The
-[validator](../tools/quality/image-scan-exceptions-check.sh) requires exact
-image/digest agreement and rejects unknown/duplicate fields or invalid approvals
-and dates. Local image names no longer bypass digest matching.
-
-An inherited exception requires **both** `package` and `installed_version` in
-addition to its exact pinned base, identifier, owner, rationale, approval and
-expiry. Native Trivy Rego matches all three finding fields. Upgraded packages,
-changed versions, missing metadata, and unrelated packages cannot inherit the
-exception. Unscoped inheritance fails closed. Full reports retain every excepted
-finding. Exceptions are not added just to make an update pass.
+The severity-based image CVE exceptions and their expiry-renewal machinery are
+removed. Known-exploited and confirmed-exposure findings cannot be excepted. The
+old `make test-image-scan-exceptions-regression` name remains a compatibility
+alias for the replacement risk-policy tests, rather than an expiration gate.
 
 ## Operator cutover and rollback
 
@@ -229,7 +261,7 @@ host metadata. Rollback preserves prior database and identity refs rather than
 assuming application and identity databases used the same old image.
 
 Legacy command arities and bootstrap pins remain only for staged compatibility;
-they are not evidence that a live host has adopted the patched dependencies.
+they are not evidence that a live host has adopted the selected dependencies.
 Confirm both environments, the independent watch stack, scheduled backups and
 host Cloudflared installation before removing that compatibility. Do not deploy
 this protocol to an old root bundle or describe repository-only tests as live
@@ -238,11 +270,11 @@ cutover evidence.
 ## Validation
 
 Run `make test-image-audit`, `make test-image-audit-native`,
-`make test-image-scan-exceptions-regression`, `make test-dependency-images`, and
-`make hosted-contract-test`. Native Trivy fixtures prove fixed High/Critical
-blocking and package/version-scoped exceptions without relying on a registry
-outage. Behavioral transport fixtures prove retries, complete reporting,
-missing-artifact failure, digest verification and no build calls during
-scanning. Deployment/gate changes also require `make preflight` and complete
-`make verify` on the exact revision, including operational rehearsals. No
-vulnerability gate is disabled to accept a new dependency artifact.
+`make test-dependency-images`, and `make hosted-contract-test`. Native Trivy
+fixtures prove exploitation blocking, advisory retention, and
+unfixed/low-severity blockers without relying on a registry outage. Behavioral
+transport fixtures prove retries, complete reporting, missing-artifact failure,
+digest verification and no build calls during scanning. Deployment/gate changes
+also require `make preflight` and complete `make verify` on the exact revision,
+including operational rehearsals. Source security gates remain strict; image
+release decisions follow the explicit exploitation policy above.

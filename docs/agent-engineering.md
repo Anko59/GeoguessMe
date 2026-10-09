@@ -385,6 +385,15 @@ land together; retain the isolated restore and release evidence required by the
 
 ## Residual risks
 
+- The operator authorized exploitation-based image prioritization on October
+  9, 2026. All findings remain visible; non-blocking upstream advisories are
+  accepted vendor risk, not claims of safety or remediation. CISA can lag new
+  exploitation; confirmed deployment exposures must enter the additive
+  blocklist. Application source gates remain strict. Caddy/Restic source
+  rebuilds, vendor package surgery, and the 55 recurring CVE exceptions are
+  retired. See the
+  [security policy](security-scanning.md#security-decisions-and-ownership).
+
 - The Cloudflared security-tool build
   (`deployment/docker/cloudflared-tools.Dockerfile`) pins an AMD64 runtime and
   copies x86 library paths, but its Debian package stage follows the host's

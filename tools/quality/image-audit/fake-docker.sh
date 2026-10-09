@@ -98,6 +98,26 @@ if [ "$1" != compose ]; then
     echo 'unexpected Docker command (including any build)' >&2
     exit 9
 fi
+if [[ " $* " == *' go-security bash '* ]]; then
+    while [ "$1" != go-security ]; do shift; done
+    shift 3
+    mode=$1 path=${2/#\/workspace/$FAKE_ROOT}
+    case "$mode" in
+        prepare)
+            [ "${FAKE_SCENARIO:-}" != kevfailed ] || {
+                echo 'invalid KEV catalog' >&2
+                exit 1
+            }
+            printf '{"vulnerabilities":[{"cveID":"CVE-2021-44228"}' >"$path/kev.json"
+            if [ "${FAKE_SCENARIO:-}" != advisory ]; then printf ',{"cveID":"CVE-2026-103111"}' >>"$path/kev.json"; fi
+            if [ "${FAKE_SCENARIO:-}" = exploited-unfixed ]; then printf ',{"cveID":"CVE-2026-99999"}' >>"$path/kev.json"; fi
+            printf ']}\n' >>"$path/kev.json"
+            ;;
+        emit | classify) bash "$FAKE_ROOT/tools/quality/image-audit/risk-policy.sh" "$mode" "$path" ;;
+        *) exit 9 ;;
+    esac
+    exit 0
+fi
 # Skip Compose options to the actual binary invocation.
 while [ "$1" != trivy ]; do shift; done
 shift
@@ -136,26 +156,27 @@ if [ "$command" = version ]; then
     exit 0
 fi
 output=${output/#\/workspace/$FAKE_ROOT}
-if [ "$command" = convert ]; then
+if [ "$command" = convert ] && ((gate == 0)); then
     printf '{"spdxVersion":"SPDX-2.3","packages":[]}\n' >"$output"
     count sbom
     exit 0
 fi
-[[ " $* " == *' --skip-db-update '* && " $* " == *' --skip-java-db-update '* ]] || exit 9
-input=${input/#\/workspace/$FAKE_ROOT}
-read -r id <"$input"
+if [ "$command" = image ]; then
+    [[ " $* " == *' --skip-db-update '* && " $* " == *' --skip-java-db-update '* ]] || exit 9
+fi
+if ((gate)); then
+    report=${!#}
+    report=${report/#\/workspace/$FAKE_ROOT}
+    id=$(jq -r '.Results[]?.Vulnerabilities[]?.VulnerabilityID' "$report" | head -1)
+else
+    input=${input/#\/workspace/$FAKE_ROOT}
+    read -r id <"$input"
+fi
 if ((gate)); then
     count gate
     printf 'native fixture gate %s\n' "$id" >"$output"
     policy=${policy/#\/workspace/$FAKE_ROOT}
-    if [[ "$id" == sha256:b* ]]; then exit 42; fi
-    if [[ "$id" == sha256:a* ]]; then
-        # The actual pinned-native-policy regression separately checks filtering.
-        if grep -Fq 'input.VulnerabilityID == "CVE-2026-103111"' "$policy" &&
-            grep -Fq 'input.PkgName == "pcre2"' "$policy" &&
-            grep -Fq 'input.InstalledVersion == "10.48-r0"' "$policy"; then exit 0; fi
-        exit 42
-    fi
+    if [ -n "$id" ] && grep -Fq "\"$id\"" "$policy"; then exit 42; fi
     exit 0
 fi
 count scan

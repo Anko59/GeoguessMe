@@ -371,18 +371,12 @@ assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
 CADDY_RUNTIME_DOCKERFILE="$ROOT/deployment/docker/security/caddy-runtime.Dockerfile"
 assert_contains "$FRONTEND_DOCKERFILE" 'FROM ${CADDY_RUNTIME_IMAGE}'
 assert_contains "$ROOT/deployment/docker/caddy-tools.Dockerfile" 'FROM ${CADDY_RUNTIME_IMAGE}'
-assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4'
-assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'xcaddy build v2.11.7 --output /usr/bin/caddy'
-assert_not_contains "$CADDY_RUNTIME_DOCKERFILE" '--replace'
-assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
-assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
-assert_contains "$CADDY_RUNTIME_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
-assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
-assert_contains "$RESTIC_DOCKERFILE" 'go get golang.org/x/net@v0.58.0'
-assert_not_contains "$RESTIC_DOCKERFILE" '-replace='
-assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
-assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"'
-assert_contains "$RESTIC_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
+assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'FROM caddy:'
+assert_contains "$RESTIC_DOCKERFILE" 'FROM restic/restic:'
+for envelope in "$CADDY_RUNTIME_DOCKERFILE" "$RESTIC_DOCKERFILE"; do
+    assert_not_contains "$envelope" 'RUN '
+    assert_not_contains "$envelope" 'COPY '
+done
 assert_contains "$COMMON" 'active_restic=$(select_restic_image "$environment") || return 1'
 assert_contains "$COMMON" '"$active_restic" /usr/bin/restic "$@"'
 assert_contains "$COMMON" 'selected=$(active_metadata_image "$1" RESTIC_IMAGE) || exit 1'

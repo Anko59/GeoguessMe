@@ -28,7 +28,7 @@ printf 'fixture-snapshot-bytes\n' >"$TEMP/source/private/contents"
 chmod 700 "$TEMP/source" "$TEMP/source/private" "$TEMP/output"
 chmod 600 "$TEMP/source/private/contents"
 [[ $(stat -c '%u:%g:%a' "$TEMP/output") == "$uid:$gid:700" ]] || fail 'output is not genuinely operator-owned 0700'
-tool_image=$(docker image inspect --format '{{.Id}}' geoguessme/go-tools:1.26.6) || fail 'build the pinned Go tools image first'
+tool_image=$(docker image inspect --format '{{.Id}}' geoguessme/go-tools:1.26.9) || fail 'build the pinned Go tools image first'
 [[ "$tool_image" =~ ^sha256:[0-9a-f]{64}$ ]] || fail 'snapshot runner did not resolve to an immutable local image ID'
 source_mount="type=bind,src=$TEMP/source,dst=/source,readonly"
 # Exact shared production command, not a mocked or permissive duplicate.
