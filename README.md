@@ -35,7 +35,8 @@ with its Capacitor Android distribution. A browser or PWA installation remains
 fully supported; native installation is optional. The
 [public feed](docs/public-feed.md) lets signed-in players publish photo
 challenges for the community. Photos stay blurred until you complete a guess;
-leave a heart reaction or join the comments after discovering a place.
+leave a heart reaction or join the comments after discovering a place. The
+location-hiding option also applies to public results until its reveal deadline.
 
 ## 🎥 See it in action
 

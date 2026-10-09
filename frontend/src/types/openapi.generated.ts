@@ -360,7 +360,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Read your completed guess and the answer */
+        /** Read your completed guess and the answer when location privacy permits */
         get: operations['getPublicGuess'];
         put?: never;
         /**
@@ -1508,7 +1508,7 @@ export interface components {
             /** Format: double */
             long?: number;
             score: number;
-            /** @description Distance in meters; omitted for timeouts. */
+            /** @description Distance in meters; omitted for timeouts or other players while the location is hidden. */
             distance?: number;
             timed_out: boolean;
             /** Format: date-time */
@@ -1517,10 +1517,20 @@ export interface components {
         PublicTimedResults: {
             /** Format: uuid */
             challenge_id: string;
-            /** Format: double */
-            actual_lat: number;
-            /** Format: double */
-            actual_long: number;
+            /**
+             * Format: double
+             * @description Omitted while the poster hides the location from this viewer.
+             */
+            actual_lat?: number;
+            /**
+             * Format: double
+             * @description Omitted while the poster hides the location from this viewer.
+             */
+            actual_long?: number;
+            /** @description True while the timed location privacy window is active for this viewer. */
+            location_hidden?: boolean;
+            /** Format: date-time */
+            location_reveals_at?: string;
             guesses: components['schemas']['PublicTimedResultGuess'][];
             /** Format: date-time */
             server_time: string;
@@ -1531,8 +1541,14 @@ export interface components {
             distance: number;
             lat: number;
             long: number;
-            actual_lat: number;
-            actual_long: number;
+            /** @description Omitted while the poster hides the location from this viewer. */
+            actual_lat?: number;
+            /** @description Omitted while the poster hides the location from this viewer. */
+            actual_long?: number;
+            /** @description True while the timed location privacy window is active for this viewer. */
+            location_hidden?: boolean;
+            /** Format: date-time */
+            location_reveals_at?: string;
         };
         PublicFeedResult: {
             rank: number;
@@ -1542,8 +1558,8 @@ export interface components {
             avatar: string;
             map_pin?: components['schemas']['MapPin'];
             score: number;
-            /** @description Distance in meters. */
-            distance: number;
+            /** @description Distance in meters; omitted for other players while the location is hidden. */
+            distance?: number;
             /** @description Signed all-time Elo change caused by this challenge in the global history replay. */
             elo_delta: number;
             is_viewer: boolean;

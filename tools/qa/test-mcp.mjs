@@ -9,6 +9,14 @@ const pageServer = createServer((request, response) => {
   response.setHeader("X-Frame-Options", "DENY");
   response.setHeader("Set-Cookie", "session=private-value; HttpOnly");
   const pathname = new URL(request.url || "/", "http://qa-contract.test").pathname;
+  if (pathname === "/dialogs") {
+    response.end(`<!doctype html><title>Native dialogs</title><main><button id="confirm">Confirm action</button><button id="prompt">Credential prompt</button><button id="double">Double confirmation</button><output id="state" role="status">ready</output></main><script nonce="private-value">
+document.querySelector('#confirm').addEventListener('click', () => { document.querySelector('#state').textContent = confirm('Confirm https://qa-contract.test/?invite=private-confirm-token') ? 'accepted' : 'dismissed'; });
+document.querySelector('#prompt').addEventListener('click', () => { document.querySelector('#state').textContent = prompt('Credential input', 'private-prompt-default') === null ? 'prompt dismissed' : 'prompt accepted'; });
+document.querySelector('#double').addEventListener('click', () => { document.querySelector('#state').textContent = confirm('First confirmation') && confirm('Second confirmation') ? 'twice accepted' : 'second dismissed'; });
+</script>`);
+    return;
+  }
   if (pathname === "/forgot-password") {
     response.end(`<!doctype html><title>QA MCP contract</title><main><h1>Reset password</h1><label>Email <input aria-label="Email"></label><button>Send reset link</button></main>`);
     return;
@@ -67,6 +75,8 @@ try {
   child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const listed = await request(2, "tools/list");
   const names = new Set(listed.tools.map((entry) => entry.name));
+  const clickSchema = listed.tools.find((entry) => entry.name === "browser_click").inputSchema;
+  if (!clickSchema.properties.target.properties.role || !clickSchema.properties.dialog_action.enum.includes("accept")) throw new Error("semantic target or confirmation contract is missing from tool discovery");
   for (const required of ["session_create", "qa_account_login", "qa_email_account_signup", "browser_observe", "browser_screenshot", "browser_security_headers", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
@@ -105,6 +115,22 @@ try {
   if (!capabilities.structuredContent?.camera?.usable || !capabilities.structuredContent?.geolocation?.usable) {
     throw new Error("synthetic camera/location capability probe failed");
   }
+  await request(20, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: `${pageUrl}/dialogs` } });
+  const confirmArgs = { session_id: sessionId, target: { role: "button", name: "Confirm action" } };
+  const dismissed = await request(21, "tools/call", { name: "browser_click", arguments: confirmArgs });
+  if (dismissed.structuredContent?.dialog?.action !== "dismissed" || !dismissed.structuredContent.visible_text.includes("dismissed")) throw new Error("default confirmation was not dismissed and reported");
+  const accepted = await request(22, "tools/call", { name: "browser_click", arguments: { ...confirmArgs, dialog_action: "accept" } });
+  if (accepted.structuredContent?.dialog?.action !== "accepted" || !accepted.structuredContent.visible_text.includes("accepted")) throw new Error("explicit confirmation did not complete");
+  if (JSON.stringify(accepted).includes("private-confirm-token")) throw new Error("confirmation metadata leaked a tokenized link");
+  const invalid = await request(23, "tools/call", { name: "browser_click", arguments: { ...confirmArgs, dialog_action: "accept-all" } });
+  if (!invalid.isError) throw new Error("invalid dialog choice was accepted");
+  const prompt = await request(24, "tools/call", { name: "browser_click", arguments: { session_id: sessionId, target: { role: "button", name: "Credential prompt" }, dialog_action: "accept" } });
+  if (prompt.structuredContent?.dialog?.action !== "dismissed" || !prompt.structuredContent.visible_text.includes("prompt dismissed") || JSON.stringify(prompt).includes("private-prompt-default")) throw new Error("credential prompt was accepted or leaked its default value");
+  const doubled = await request(26, "tools/call", { name: "browser_click", arguments: { session_id: sessionId, target: { role: "button", name: "Double confirmation" }, dialog_action: "accept" } });
+  if (!doubled.structuredContent?.visible_text.includes("second dismissed")) throw new Error("one action accepted more than one confirmation");
+  const keyboardConfirmed = await request(27, "tools/call", { name: "browser_key", arguments: { session_id: sessionId, key: "Enter", dialog_action: "accept" } });
+  if (keyboardConfirmed.structuredContent?.dialog?.action !== "accepted" || !keyboardConfirmed.structuredContent.visible_text.includes("second dismissed")) throw new Error("keyboard confirmation did not complete exactly one choice");
+  await request(25, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const loggedIn = await request(11, "tools/call", { name: "qa_account_login", arguments: { session_id: sessionId, account_role: "owner" } });
   if (!loggedIn.structuredContent?.authenticated || loggedIn.structuredContent.account_role !== "owner") {
     throw new Error("qa_account_login contract failed");

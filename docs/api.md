@@ -231,6 +231,14 @@ Posts and comments use a descending `(created_at, id)` cursor; `limit` defaults
 to 20 and accepts 1–50. Read [public feed behavior and rollout](public-feed.md)
 for visibility and retention.
 
+Public results honor `hide_location` using the same configured reveal window and
+author exception as group results. Before reveal, `actual_lat` and `actual_long`
+are omitted and timed/legacy guess responses carry `location_hidden: true` and
+`location_reveals_at`. Timed peer guesses omit coordinates and distances; legacy
+ranked results omit peer distances. The viewer's own guess and distance remain
+available. Clients must treat these coordinate/distance fields as optional,
+including on reload.
+
 | Method      | Path                                                | Description                                                                                                                                        |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET         | `/api/v1/feed`                                      | Newest public challenges; `cursor` and `limit`                                                                                                     |
