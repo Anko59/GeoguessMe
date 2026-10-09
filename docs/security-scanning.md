@@ -283,5 +283,6 @@ release decisions follow the explicit exploitation policy above.
 The v2 analyzer configuration preserves the v1 analyzer set and its standard
 exclusion presets. Staticcheck `SA*` and Gosimple `S*` checks remain enabled;
 Stylecheck and quick-fix analyzers were not enabled in v1. The obsolete nested
-`linters-settings` field never configured the v1 tool. New analyzer upgrades use
-`make migrate-go-lint-config`; review its output and retain the gate timeout.
+`linters-settings` field never configured the v1 tool. Use
+`make migrate-go-lint-config` for reviewed v1-to-v2 configurations; review its
+output and retain the gate timeout.
