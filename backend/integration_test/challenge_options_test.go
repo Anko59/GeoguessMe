@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"geoguessme/internal/models"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -132,4 +133,69 @@ func fetchGroupMessages(t *testing.T, bearer, groupID string) []struct {
 	}
 	require.NoError(t, json.Unmarshal(data, &page))
 	return page.Items
+}
+
+func TestPublicLocationPrivacyAcrossTimedAndLegacyReads(t *testing.T) {
+	owner := signup(t, unique("ppowner"), unique("ppowner")+"@example.test", "StrongPassword123")
+	viewer := signup(t, unique("ppview"), unique("ppview")+"@example.test", "StrongPassword123")
+	peer := signup(t, unique("pppeer"), unique("pppeer")+"@example.test", "StrongPassword123")
+	id := uploadPublicPhotoWithPrivacy(t, owner.access, true)
+	path := "/api/v1/feed/challenges/" + id
+	for _, player := range []tokenPair{viewer, peer} {
+		resp, data := doJSON(t, http.MethodPost, path+"/guess", map[string]float64{"lat": 1, "long": 2}, player.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+		require.NotContains(t, string(data), "actual_lat")
+		require.Contains(t, string(data), `"location_hidden":true`)
+	}
+	resp, data := doJSON(t, http.MethodGet, path+"/guess", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NotContains(t, string(data), "actual_lat")
+	resp, data = doJSON(t, http.MethodGet, path+"/timed-results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(data))
+	require.NotContains(t, string(data), "actual_lat")
+	var result models.PublicTimedResults
+	require.NoError(t, json.Unmarshal(data, &result))
+	require.True(t, result.LocationHidden)
+	require.NotNil(t, result.LocationRevealsAt)
+	require.Len(t, result.Guesses, 2)
+	for _, guess := range result.Guesses {
+		if guess.UserID == viewer.userID {
+			require.NotNil(t, guess.Lat)
+			require.NotNil(t, guess.Distance)
+		} else {
+			require.Nil(t, guess.Lat)
+			require.Nil(t, guess.Long)
+			require.Nil(t, guess.Distance)
+		}
+	}
+	resp, data = doJSON(t, http.MethodGet, path+"/results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var legacy []models.PublicFeedResult
+	require.NoError(t, json.Unmarshal(data, &legacy))
+	require.Len(t, legacy, 2)
+	for _, guess := range legacy {
+		if guess.IsViewer {
+			require.NotNil(t, guess.Distance)
+		} else {
+			require.Nil(t, guess.Distance)
+		}
+	}
+	resp, data = doJSON(t, http.MethodGet, path+"/timed-results", nil, owner.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), "actual_lat")
+	_, err := testDB(t).Exec(t.Context(), `UPDATE public_challenges SET created_at=clock_timestamp()-interval '49 hours' WHERE id=$1`, id)
+	require.NoError(t, err)
+	resp, data = doJSON(t, http.MethodGet, path+"/timed-results", nil, viewer.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	result = models.PublicTimedResults{}
+	require.NoError(t, json.Unmarshal(data, &result))
+	require.False(t, result.LocationHidden)
+	require.Nil(t, result.LocationRevealsAt)
+	require.NotNil(t, result.ActualLat)
+	require.InDelta(t, 48.8, *result.ActualLat, 0.000001)
+	require.NotContains(t, string(data), "location_hidden")
+	for _, guess := range result.Guesses {
+		require.NotNil(t, guess.Lat)
+		require.NotNil(t, guess.Distance)
+	}
 }

@@ -68,6 +68,8 @@ function normalizeResults(
         group_id: 'feed',
         actual_lat: data.actual_lat,
         actual_long: data.actual_long,
+        location_hidden: data.location_hidden,
+        location_reveals_at: data.location_reveals_at,
         guesses: data.guesses.map((guess) => ({
             id: guess.id,
             photo_id: id,

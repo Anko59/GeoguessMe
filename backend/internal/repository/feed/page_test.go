@@ -105,7 +105,7 @@ func TestBlockedPublicChallengeUnavailableAcrossContentPaths(t *testing.T) {
 			case "media":
 				_, err = r.Media(t.Context(), "blocked", "viewer", now)
 			case "guess":
-				_, err = r.Guess(t.Context(), "blocked", "viewer", 0, 0)
+				_, err = r.Guess(t.Context(), "blocked", "viewer", 0, 0, now, 48*time.Hour)
 			case "comment":
 				_, err = r.Comment(t.Context(), "blocked", "viewer", "hello")
 			case "comments":
@@ -119,7 +119,7 @@ func TestBlockedPublicChallengeUnavailableAcrossContentPaths(t *testing.T) {
 			case "timeout":
 				_, _, err = r.TimedTimeout(t.Context(), "blocked", "viewer", now)
 			case "results":
-				_, err = r.TimedResults(t.Context(), "blocked", "viewer", now)
+				_, err = r.TimedResults(t.Context(), "blocked", "viewer", now, 48*time.Hour)
 			}
 			if !errors.Is(err, ErrNotFound) {
 				t.Fatalf("blocked %s error = %v", operation, err)

@@ -243,7 +243,7 @@ func (a *API) Guess(w http.ResponseWriter, r *http.Request) {
 	}
 	id, user := r.PathValue("id"), handlers.GetUserIDFromContext(r)
 	if r.Method == http.MethodGet {
-		result, err := a.repo.Result(r.Context(), id, user)
+		result, err := a.repo.Result(r.Context(), id, user, a.clock(), a.cfg.LocationHide)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -263,11 +263,12 @@ func (a *API) Guess(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, 400, "invalid_coordinates", "Choose a valid location")
 		return
 	}
-	result, err := a.repo.Guess(r.Context(), id, user, *req.Lat, *req.Long)
+	result, err := a.repo.Guess(r.Context(), id, user, *req.Lat, *req.Long, a.clock(), a.cfg.LocationHide)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "private, no-store")
 	handlers.WriteJSON(w, 200, result)
 }
 
@@ -279,7 +280,7 @@ func (a *API) Results(w http.ResponseWriter, r *http.Request) {
 	if !validID(w, r) {
 		return
 	}
-	results, err := a.repo.Results(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r))
+	results, err := a.repo.Results(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r), a.clock(), a.cfg.LocationHide)
 	if err != nil {
 		writeError(w, err)
 		return
