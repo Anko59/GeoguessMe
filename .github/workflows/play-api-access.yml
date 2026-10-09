@@ -25,6 +25,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - run: make ci-registry-cache
       - name: Validate OIDC configuration
         env:
           PLAY_WIF_PROVIDER: ${{ vars.PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER }}

@@ -89,6 +89,9 @@ ARGS ?=
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5) }' $(MAKEFILE_LIST)
 
+ci-registry-cache: ## Configure public Docker Hub caching on an empty ephemeral GitHub runner only.
+	bash tools/quality/ci/registry-cache.sh
+
 bootstrap: build-security-tool-images ## Build/pull pinned tools, fill locked caches, install hooks, and self-test.
 	@# frontend/node_modules is gitignored, so a fresh checkout lacks the host
 	@# mountpoint that the read-only workspace bind mount needs for the
