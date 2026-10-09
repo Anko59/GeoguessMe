@@ -1,0 +1,59 @@
+/* The submitting-player badge on the viewing view. It sits in the top-left
+   corner (safe-area aware) while the private photo counts down, over both
+   photos and videos. */
+.challenge-poster {
+    position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
+    left: max(1rem, env(safe-area-inset-left));
+    max-width: min(calc(100% - 2rem), 16rem);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.85rem 0.3rem 0.35rem;
+    color: var(--surface);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+}
+
+.challenge-poster__avatar {
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    display: flex;
+    overflow: hidden;
+    background: var(--surface-brand);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 50%;
+}
+
+.challenge-poster__avatar img,
+.challenge-poster__avatar .avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.challenge-poster__text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.challenge-poster__label {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.66rem;
+    font-weight: 600;
+}
+
+.challenge-poster__name {
+    overflow: hidden;
+    font-size: 0.88rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

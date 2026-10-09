@@ -150,6 +150,7 @@ function FeedResultsRoute({ id }: { id: string }) {
                         id={post.id}
                         isOwner={post.is_owner}
                         openResultsDirectly={post.is_owner || post.resolved}
+                        poster={{ userId: post.user_id, username: post.username, avatar: post.avatar }}
                         restoreFocus={() => {}}
                         onClose={() => navigate('/feed')}
                         onResolved={markResolved}

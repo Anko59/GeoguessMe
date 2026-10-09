@@ -261,6 +261,7 @@ export default function FeedCard({
                     id={post.id}
                     isOwner={post.is_owner}
                     openResultsDirectly={revealed}
+                    poster={{ userId: post.user_id, username: post.username, avatar: post.avatar }}
                     restoreFocus={restorePlayFocus}
                     onClose={() => setPlaying(false)}
                     onResolved={markResolved}
