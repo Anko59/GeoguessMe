@@ -241,5 +241,16 @@ before removing the stack and preserves the original failure status.
 | Workspace artifacts   | repo paths                    | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
 | CI workflow artifacts | GitHub Actions                | retention-days: 7                                                          |
 
+Hosted CI configures the Docker daemon and isolated Buildx builders to try
+Google's public `mirror.gcr.io` cache before Docker Hub. Image names and
+committed digests remain unchanged; cache misses fall back to Docker Hub and
+failures still stop the gate. `make ci-registry-cache` is restricted to empty
+ephemeral GitHub-hosted Linux runners and preserves other daemon configuration.
+Local and production Docker configuration is unaffected. The shared setup action
+preserves each job's existing BuildKit cache bound. See
+[Docker registry mirror configuration](https://docs.docker.com/build/buildkit/configure/#registry-mirror)
+and
+[Google's public cache contract](https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images).
+
 All cleanup targets are dry-run by default and require explicit CONFIRM before
 execution.
