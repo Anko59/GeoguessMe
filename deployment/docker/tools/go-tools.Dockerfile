@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Go 1.26.9-alpine (immutable index digest: cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0)
+# Go 1.27.0-alpine (immutable index digest: 4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc)
 FROM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
 
 # Lightweight operations tooling: formatting, linting, testing, building.
