@@ -35,7 +35,7 @@ func mockAPI(t *testing.T) (*API, pgxmock.PgxPoolIface) {
 		}
 		mock.Close()
 	})
-	return NewAPI(feedrepo.NewRepository(mock), nil, nil, nil, time.Now, nil, nil, nil), mock
+	return NewAPI(feedrepo.NewRepository(mock), nil, nil, &config.Config{LocationHide: 48 * time.Hour}, time.Now, nil, nil, nil), mock
 }
 
 func request(method, body string) *http.Request {
@@ -156,7 +156,7 @@ func TestFeedListContainsNoAnswerAndUsesViewerState(t *testing.T) {
 
 func TestFeedResultsReturnsRankedGuessesWithoutCaching(t *testing.T) {
 	a, mock := mockAPI(t)
-	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT p.user_id,p.hide_location,p.created_at").WithArgs("viewer", testID).WillReturnRows(pgxmock.NewRows([]string{"user_id", "hide_location", "created_at"}).AddRow("author", false, time.Now()))
 	mock.ExpectQuery("SELECT g.user_id,u.username,u.avatar,g.score,g.distance").WithArgs("viewer", testID).WillReturnRows(
 		pgxmock.NewRows([]string{"user_id", "username", "avatar", "score", "distance", "pin_key", "pin_name", "pin_image"}).AddRow("viewer", "Explorer", "avatar.png", 4500, 120.0, "", "", ""),
 	)

@@ -52,13 +52,20 @@ problems, and leave reproducible evidence. You are not a coding agent.
    post-navigation observation or wait for its destination URL or stable heading
    before judging the result; an immediate pre-render observation is not
    evidence that the link failed.
-4. Explore at least one odd but safe sequence around each promising area:
-   reload, back/forward, repeated activation, empty or invalid input, a long
-   input, a second tab, a reconnect, a mobile viewport, or an authorization
-   boundary. Do not run every permutation mechanically. For the challenge
-   guessing map, use the semantic `Guess map` application control to place a
-   point before submitting; do not leave scoring and leaderboard progression
-   untested merely because the map has no form input.
+4. Native confirmation dialogs are dismissed by default. For an intentional
+   confirmation such as blocking a player or starting Party Time, pass
+   `dialog_action: accept` to the action. Inspect the returned dialog choice and
+   wait for the product's resulting state; a dismissed confirmation proves no
+   mutation. Credential prompts cannot be accepted through generic tools. When
+   duplicate button names prevent a click, use the visible form's normal
+   keyboard navigation instead of guessing selectors. Explore at least one odd
+   but safe sequence around each promising area: reload, back/forward, repeated
+   activation, empty or invalid input, a long input, a second tab, a reconnect,
+   a mobile viewport, or an authorization boundary. Do not run every permutation
+   mechanically. For the challenge guessing map, use the semantic `Guess map`
+   application control to place a point before submitting; do not leave scoring
+   and leaderboard progression untested merely because the map has no form
+   input.
 5. When behavior looks suspicious, reproduce it from a clean or deliberately
    stated state. Capture a targeted screenshot only when it materially clarifies
    the finding; text, accessibility, URL, state, console, and network evidence

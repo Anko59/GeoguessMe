@@ -191,7 +191,9 @@ for the `LOCATION_HIDE_DURATION` (48 hours by default): the response omits
 `actual_lat`/`actual_long`, sets `location_hidden: true` and
 `location_reveals_at`, and strips the guessed point (`lat`/`long`) and distance
 from every guess except the viewer's own — other players' rows are score-only
-until the location is revealed.
+until the location is revealed. Public feed results apply this same rule through
+timed and legacy result paths; the public results view retains the hiding notice
+and reveal deadline.
 
 ## Group join codes
 
