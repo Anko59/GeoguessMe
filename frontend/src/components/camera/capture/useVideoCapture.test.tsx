@@ -7,13 +7,16 @@ interface FakeRecorder {
     state: RecordingState;
     ondataavailable: ((event: BlobEvent) => void) | null;
     onstop: ((event: Event) => void) | null;
+    onerror: ((event: Event) => void) | null;
     start: () => void;
     stop: () => void;
 }
 
 const recorder: { current: FakeRecorder | undefined } = { current: undefined };
 
-function installRecorder() {
+function installRecorder(
+    mode: 'success' | 'empty' | 'too-big' | 'start-failure' | 'constructor-failure' | 'delayed' = 'success',
+) {
     recorder.current = undefined;
     vi.stubGlobal(
         'MediaRecorder',
@@ -22,18 +25,26 @@ function installRecorder() {
             state: RecordingState = 'inactive';
             ondataavailable: ((event: BlobEvent) => void) | null = null;
             onstop: ((event: Event) => void) | null = null;
+            onerror: ((event: Event) => void) | null = null;
             static isTypeSupported = () => true;
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             constructor(_stream: MediaStream, _options: MediaRecorderOptions) {
+                if (mode === 'constructor-failure') throw new Error('constructor failed');
                 this.stream = _stream;
                 recorder.current = this as unknown as FakeRecorder;
             }
             start() {
+                if (mode === 'start-failure') throw new Error('start failed');
                 this.state = 'recording';
             }
             stop() {
                 this.state = 'inactive';
-                this.ondataavailable?.({ data: new Blob(['clip'], { type: 'video/webm' }) } as BlobEvent);
+                if (mode === 'delayed') return;
+                const data = new Blob(
+                    mode === 'empty' ? [] : [mode === 'too-big' ? new Uint8Array(10 * 1024 * 1024 + 1) : 'clip'],
+                    { type: 'video/webm' },
+                );
+                this.ondataavailable?.({ data } as BlobEvent);
                 this.onstop?.(new Event('stop'));
             }
         },
@@ -102,6 +113,96 @@ afterEach(() => {
 });
 
 describe('useVideoCapture', () => {
+    it.each(['empty', 'too-big', 'error', 'start-failure', 'constructor-failure', 'unmount'] as const)(
+        'releases microphone, mirrored tracks, and animation frames once on %s, not preview tracks',
+        async (outcome) => {
+            installRecorder(outcome === 'error' || outcome === 'unmount' ? 'delayed' : outcome);
+            installMediaStream();
+            const videoStop = vi.fn();
+            const audioStop = vi.fn();
+            const canvasStop = vi.fn();
+            const createObjectURL = vi.fn();
+            vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+            vi.stubGlobal('navigator', {
+                mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(makeStream([{ stop: audioStop }], 'audio')) },
+            });
+            Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
+                configurable: true,
+                value: () => makeStream([{ stop: canvasStop, requestFrame: vi.fn() }], 'video'),
+            });
+            vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+            vi.stubGlobal(
+                'requestAnimationFrame',
+                vi.fn(() => 42),
+            );
+            const cancelAnimationFrame = vi.fn();
+            vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+            const onComplete = vi.fn();
+            const { unmount } = render(
+                <Harness
+                    videoStream={makeStream([{ stop: videoStop }], 'video')}
+                    stillPressed
+                    onComplete={onComplete}
+                    mirror
+                    videoElement={{} as HTMLVideoElement}
+                />,
+            );
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'start' }));
+            });
+            if (outcome === 'unmount') {
+                unmount();
+            } else if (outcome === 'error') {
+                act(() => recorder.current?.onerror?.(new Event('error')));
+            } else if (outcome !== 'start-failure' && outcome !== 'constructor-failure') {
+                fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+            }
+            if (outcome === 'unmount' || outcome === 'error') {
+                act(() => {
+                    recorder.current?.ondataavailable?.({ data: new Blob(['late']) } as BlobEvent);
+                    recorder.current?.onstop?.(new Event('stop'));
+                });
+            }
+            expect(audioStop).toHaveBeenCalledTimes(1);
+            expect(canvasStop).toHaveBeenCalledTimes(1);
+            expect(cancelAnimationFrame).toHaveBeenCalledExactlyOnceWith(42);
+            expect(videoStop).not.toHaveBeenCalled();
+            expect(onComplete).not.toHaveBeenCalled();
+            expect(createObjectURL).not.toHaveBeenCalled();
+            unmount();
+            expect(audioStop).toHaveBeenCalledTimes(1);
+            expect(canvasStop).toHaveBeenCalledTimes(1);
+        },
+    );
+
+    it('releases a microphone granted after unmount and never starts a recorder', async () => {
+        installRecorder();
+        installMediaStream();
+        const audioStop = vi.fn();
+        const videoStop = vi.fn();
+        let grant!: (stream: MediaStream) => void;
+        vi.stubGlobal('navigator', {
+            mediaDevices: {
+                getUserMedia: vi.fn(
+                    () =>
+                        new Promise<MediaStream>((resolve) => {
+                            grant = resolve;
+                        }),
+                ),
+            },
+        });
+        const onComplete = vi.fn();
+        const { unmount } = render(
+            <Harness videoStream={makeStream([{ stop: videoStop }], 'video')} stillPressed onComplete={onComplete} />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'start' }));
+        unmount();
+        await act(async () => grant(makeStream([{ stop: audioStop }], 'audio')));
+        expect(audioStop).toHaveBeenCalledTimes(1);
+        expect(videoStop).not.toHaveBeenCalled();
+        expect(recorder.current).toBeUndefined();
+        expect(onComplete).not.toHaveBeenCalled();
+    });
     it('requests only the microphone and records without touching the camera stream', async () => {
         installRecorder();
         installMediaStream();

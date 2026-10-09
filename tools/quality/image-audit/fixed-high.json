@@ -1,0 +1,24 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "fixture/high",
+  "ArtifactType": "container_image",
+  "Metadata": { "OS": { "Family": "alpine", "Name": "3.24" } },
+  "Results": [
+    {
+      "Target": "fixture/high (alpine 3.24)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-103111",
+          "PkgName": "pcre2",
+          "InstalledVersion": "10.48-r0",
+          "FixedVersion": "10.49-r0",
+          "Status": "fixed",
+          "Severity": "HIGH",
+          "Title": "PCRE2 fixed High regression fixture"
+        }
+      ]
+    }
+  ]
+}

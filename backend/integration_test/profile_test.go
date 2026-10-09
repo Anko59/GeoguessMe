@@ -101,6 +101,35 @@ func TestProfileFeedLeaderboardExcludesOwner(t *testing.T) {
 	require.ElementsMatch(t, []string{first.userID, second.userID}, ids)
 }
 
+func TestProfileCountsPersistedZeroPointPublicGuesses(t *testing.T) {
+	owner := signup(t, unique("zero-owner"), unique("zero-owner")+"@example.test", "StrongPassword123")
+	player := signup(t, unique("zero-player"), unique("zero-player")+"@example.test", "StrongPassword123")
+	for range 2 {
+		id := uploadPublicPhoto(t, owner.access)
+		resp, data := doJSON(t, http.MethodPost, "/api/v1/feed/challenges/"+id+"/guess", map[string]float64{"lat": -48.8, "long": -177.7}, player.access, nil)
+		require.Equalf(t, http.StatusOK, resp.StatusCode, "guess: %s", data)
+		var guess struct {
+			Score int `json:"score"`
+		}
+		require.NoError(t, json.Unmarshal(data, &guess))
+		require.Zero(t, guess.Score)
+	}
+
+	for _, path := range []string{"/api/v1/auth/profile", "/api/v1/user/profile/" + player.userID} {
+		resp, data := doJSON(t, http.MethodGet, path, nil, player.access, nil)
+		require.Equalf(t, http.StatusOK, resp.StatusCode, "profile: %s", data)
+		var profile struct {
+			TotalPoints  int     `json:"total_points"`
+			GuessCount   int     `json:"guess_count"`
+			AverageScore float64 `json:"average_score"`
+		}
+		require.NoError(t, json.Unmarshal(data, &profile))
+		require.Equal(t, 2, profile.GuessCount)
+		require.Zero(t, profile.TotalPoints)
+		require.Zero(t, profile.AverageScore)
+	}
+}
+
 // TestVerificationTokenIsBoundToPendingEmail proves a token issued for one
 // pending claim cannot promote a replacement claim entered later.
 func TestVerificationTokenIsBoundToPendingEmail(t *testing.T) {

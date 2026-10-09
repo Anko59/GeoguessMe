@@ -58,72 +58,96 @@ async function signupWithToken(context: BrowserContext): Promise<{ page: Page; t
     return { page, token: body.access_token };
 }
 
+/** Close independent contexts together, including their failure-trace collection. */
+async function closeContexts(contexts: BrowserContext[]): Promise<void> {
+    const results = await Promise.allSettled(contexts.map((context) => context.close()));
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length)
+        throw new AggregateError(
+            failures.map((result) => result.reason),
+            'Browser context cleanup failed',
+        );
+}
+
 /** Build a scenario: owner uploads, guesser accepts and guesses. */
 async function createResultScenario(browser: Browser, contextOptions: BrowserContextOptions): Promise<ResultScenario> {
     const options = cameraOptions(contextOptions);
-    const uploaderContext = await newAuthContext(browser, options);
-    const guesserContext = await newAuthContext(browser, options);
-    await installDeterministicCamera(uploaderContext);
-    await installDeterministicGeolocation(uploaderContext);
+    const contexts: BrowserContext[] = [];
+    try {
+        const uploaderContext = await newAuthContext(browser, options);
+        contexts.push(uploaderContext);
+        const guesserContext = await newAuthContext(browser, options);
+        contexts.push(guesserContext);
+        await installDeterministicCamera(uploaderContext);
+        await installDeterministicGeolocation(uploaderContext);
 
-    const { page: uploader, token: uploaderToken } = await signupWithToken(uploaderContext);
-    const { page: guesser, token: guesserToken } = await signupWithToken(guesserContext);
+        const { page: uploader, token: uploaderToken } = await signupWithToken(uploaderContext);
+        const { page: guesser, token: guesserToken } = await signupWithToken(guesserContext);
 
-    await uploader.goto('/group/create');
-    await uploader.getByPlaceholder('Group Name').fill(uniqueGroup());
-    await uploader.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
-    await uploader.waitForURL(/\/group\/[0-9a-f-]{36}$/);
-    const groupId = uploader.url().split('/group/')[1];
+        await uploader.goto('/group/create');
+        await uploader.getByPlaceholder('Group Name').fill(uniqueGroup());
+        await uploader.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
+        await uploader.waitForURL(/\/group\/[0-9a-f-]{36}$/);
+        const groupId = uploader.url().split('/group/')[1];
 
-    await uploader.getByRole('button', { name: 'Open group settings' }).click();
-    const inviteUrl = await createInviteFromSettings(uploader);
-    await uploader.getByRole('button', { name: 'Close settings' }).click();
+        await uploader.getByRole('button', { name: 'Open group settings' }).click();
+        const inviteUrl = await createInviteFromSettings(uploader);
+        await uploader.getByRole('button', { name: 'Close settings' }).click();
 
-    await joinGroupViaInvite(guesser, inviteUrl, groupId);
+        await joinGroupViaInvite(guesser, inviteUrl, groupId);
 
-    await uploader.goto('/group/' + groupId);
-    await guesser.goto('/group/' + groupId);
-    await expectConnected(uploader);
-    await expectConnected(guesser);
+        await uploader.goto('/group/' + groupId);
+        await guesser.goto('/group/' + groupId);
+        await expectConnected(uploader);
+        await expectConnected(guesser);
 
-    // Upload photo.
-    await uploader.getByRole('button', { name: 'Camera' }).click();
-    await expect(uploader.locator('.capture-button')).toBeVisible();
-    await uploader.locator('.capture-button').click();
-    await expect(uploader.locator('.preview-image')).toBeVisible();
-    const uploadResponsePromise = uploader.waitForResponse(
-        (r) => r.url().endsWith('/api/v1/photo/upload') && r.request().method() === 'POST',
-    );
-    await uploader.getByRole('button', { name: /Send/ }).click();
-    const uploadResponse = await uploadResponsePromise;
-    expect(uploadResponse.status()).toBe(201);
-    const photoId = ((await uploadResponse.json()) as { id: string }).id;
+        // Upload photo.
+        await uploader.getByRole('button', { name: 'Camera' }).click();
+        await expect(uploader.locator('.capture-button')).toBeVisible();
+        await uploader.locator('.capture-button').click();
+        await expect(uploader.locator('.preview-image')).toBeVisible();
+        const uploadResponsePromise = uploader.waitForResponse(
+            (r) => r.url().endsWith('/api/v1/photo/upload') && r.request().method() === 'POST',
+        );
+        await uploader.getByRole('button', { name: /Send/ }).click();
+        const uploadResponse = await uploadResponsePromise;
+        expect(uploadResponse.status()).toBe(201);
+        const photoId = ((await uploadResponse.json()) as { id: string }).id;
 
-    // Guesser accepts, waits for viewing window, and submits a guess.
-    const challenge = guesser.locator('.photo-challenge[data-photo-id="' + photoId + '"]');
-    const acceptResponsePromise = guesser.waitForResponse(
-        (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/accept') && r.request().method() === 'POST',
-    );
-    const mediaResponsePromise = guesser.waitForResponse(
-        (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/media') && r.request().method() === 'GET',
-    );
-    await challenge.locator('.start-challenge-btn').click();
-    const acceptResponse = await acceptResponsePromise;
-    expect(acceptResponse.status()).toBe(200);
-    const mediaResponse = await mediaResponsePromise;
-    expect(mediaResponse.status()).toBe(200);
+        // Guesser accepts, waits for viewing window, and submits a guess.
+        const challenge = guesser.locator('.photo-challenge[data-photo-id="' + photoId + '"]');
+        const acceptResponsePromise = guesser.waitForResponse(
+            (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/accept') && r.request().method() === 'POST',
+        );
+        const mediaResponsePromise = guesser.waitForResponse(
+            (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/media') && r.request().method() === 'GET',
+        );
+        await challenge.locator('.start-challenge-btn').click();
+        const acceptResponse = await acceptResponsePromise;
+        expect(acceptResponse.status()).toBe(200);
+        const mediaResponse = await mediaResponsePromise;
+        expect(mediaResponse.status()).toBe(200);
 
-    await expect(guesser.locator('.photo-view')).toBeVisible();
-    await expect(guesser.locator('.guessing-view')).toBeVisible();
-    await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
-    const guessResponsePromise = guesser.waitForResponse(
-        (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/guess') && r.request().method() === 'POST',
-    );
-    await guesser.getByRole('button', { name: /Submit guess/ }).click();
-    const guessResponse = await guessResponsePromise;
-    expect(guessResponse.status()).toBe(201);
+        // Authorization setup awaits the stable guessing phase; the one-second
+        // photo view is independently asserted by the dedicated challenge journey.
+        await expect(guesser.locator('.guessing-view')).toBeVisible();
+        await guesser.locator('.leaflet-container').click({ position: { x: 200, y: 150 } });
+        const guessResponsePromise = guesser.waitForResponse(
+            (r) => r.url().endsWith('/api/v1/challenges/' + photoId + '/guess') && r.request().method() === 'POST',
+        );
+        await guesser.getByRole('button', { name: /Submit guess/ }).click();
+        const guessResponse = await guessResponsePromise;
+        expect(guessResponse.status()).toBe(201);
 
-    return { uploader, guesser, uploaderContext, guesserContext, photoId, groupId, uploaderToken, guesserToken };
+        return { uploader, guesser, uploaderContext, guesserContext, photoId, groupId, uploaderToken, guesserToken };
+    } catch (error) {
+        try {
+            await closeContexts(contexts);
+        } catch (cleanupError) {
+            throw new AggregateError([error, cleanupError], 'Challenge setup and cleanup failed');
+        }
+        throw error;
+    }
 }
 
 /** Fetch an API path via page.evaluate, optionally with a Bearer token.
@@ -182,8 +206,7 @@ test.describe('Challenge result authorization', () => {
             expect(data.media_available).toBe(true);
             expect(typeof data.media_url).toBe('string');
         } finally {
-            await scenario.uploaderContext.close();
-            await scenario.guesserContext.close();
+            await closeContexts([scenario.uploaderContext, scenario.guesserContext]);
         }
     });
 
@@ -206,39 +229,36 @@ test.describe('Challenge result authorization', () => {
             expect(typeof guesses[0].score).toBe('number');
             expect(data.media_available).toBe(true);
         } finally {
-            await scenario.uploaderContext.close();
-            await scenario.guesserContext.close();
+            await closeContexts([scenario.uploaderContext, scenario.guesserContext]);
         }
     });
 
     test('unauthenticated visitor gets 401', async ({ browser, contextOptions }) => {
         const scenario = await createResultScenario(browser, contextOptions);
+        const contexts = [scenario.uploaderContext, scenario.guesserContext];
         try {
             const { photoId } = scenario;
             const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
 
             // Create an unauthenticated context.
             const unauthContext = await browser.newContext({ baseURL: base });
+            contexts.push(unauthContext);
             const unauthPage = await unauthContext.newPage();
-            try {
-                // Navigate to a public page so the page has an origin for relative fetch.
-                await unauthPage.goto('/login');
-                await unauthPage.waitForSelector('#login-username', { state: 'visible' });
+            // Navigate to a public page so the page has an origin for relative fetch.
+            await unauthPage.goto('/login');
+            await unauthPage.waitForSelector('#login-username', { state: 'visible' });
 
-                const path = '/api/v1/challenges/' + photoId + '/results';
-                const { status } = await apiFetch(unauthPage, path);
-                expect(status).toBe(401);
-            } finally {
-                await unauthContext.close();
-            }
+            const path = '/api/v1/challenges/' + photoId + '/results';
+            const { status } = await apiFetch(unauthPage, path);
+            expect(status).toBe(401);
         } finally {
-            await scenario.uploaderContext.close();
-            await scenario.guesserContext.close();
+            await closeContexts(contexts);
         }
     });
 
     test('unrelated authenticated user gets 403', async ({ browser, contextOptions }) => {
         const scenario = await createResultScenario(browser, contextOptions);
+        const contexts = [scenario.uploaderContext, scenario.guesserContext];
         try {
             const { photoId } = scenario;
             const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
@@ -248,34 +268,34 @@ test.describe('Challenge result authorization', () => {
                 ...cameraOptions(contextOptions),
                 baseURL: base,
             });
+            contexts.push(thirdContext);
             const { page: thirdPage, token: thirdToken } = await signupWithToken(thirdContext);
-            try {
-                const path = '/api/v1/challenges/' + photoId + '/results';
-                const { status } = await apiFetch(thirdPage, path, thirdToken);
-                expect(status).toBe(403);
-            } finally {
-                await thirdContext.close();
-            }
+            const path = '/api/v1/challenges/' + photoId + '/results';
+            const { status } = await apiFetch(thirdPage, path, thirdToken);
+            expect(status).toBe(403);
         } finally {
-            await scenario.uploaderContext.close();
-            await scenario.guesserContext.close();
+            await closeContexts(contexts);
         }
     });
 
     test('in-group non-guesser gets 403 before TTL expiry', async ({ browser, contextOptions }) => {
         const base = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
         const options = cameraOptions(contextOptions);
-        const uploaderContext = await newAuthContext(browser, options);
-        const guesserContext = await newAuthContext(browser, options);
-        const thirdContext = await browser.newContext({ ...options, baseURL: base });
-        await installDeterministicCamera(uploaderContext);
-        await installDeterministicGeolocation(uploaderContext);
-
-        const { page: uploader, token: uploaderToken } = await signupWithToken(uploaderContext);
-        const { page: guesser, token: guesserToken } = await signupWithToken(guesserContext);
-        const { page: thirdPage, token: thirdToken } = await signupWithToken(thirdContext);
-
+        const contexts: BrowserContext[] = [];
         try {
+            const uploaderContext = await newAuthContext(browser, options);
+            contexts.push(uploaderContext);
+            const guesserContext = await newAuthContext(browser, options);
+            contexts.push(guesserContext);
+            const thirdContext = await browser.newContext({ ...options, baseURL: base });
+            contexts.push(thirdContext);
+            await installDeterministicCamera(uploaderContext);
+            await installDeterministicGeolocation(uploaderContext);
+
+            const { page: uploader, token: uploaderToken } = await signupWithToken(uploaderContext);
+            const { page: guesser, token: guesserToken } = await signupWithToken(guesserContext);
+            const { page: thirdPage, token: thirdToken } = await signupWithToken(thirdContext);
+
             await uploader.goto('/group/create');
             await uploader.getByPlaceholder('Group Name').fill(uniqueGroup());
             await uploader.locator('form.join-form').getByRole('button', { name: 'Create Group' }).click();
@@ -349,9 +369,7 @@ test.describe('Challenge result authorization', () => {
             const { status: thirdAfterStatus } = await apiFetch(thirdPage, path, thirdToken);
             expect(thirdAfterStatus).toBe(403);
         } finally {
-            await uploaderContext.close();
-            await guesserContext.close();
-            await thirdContext.close();
+            await closeContexts(contexts);
         }
     });
 });

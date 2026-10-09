@@ -107,7 +107,7 @@ export default function Login({ existingAccountMode = false }: { existingAccount
                 </form>
                 <p className="auth-footer">
                     <Link to="/forgot-password" className="auth-link">
-                        Forgot your username or password?
+                        Forgot your direct-login username or password?
                     </Link>
                 </p>
                 {activeOIDCConfig?.enabled && (

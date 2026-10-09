@@ -101,8 +101,10 @@ outside ordinary shell history:
   service-account email invited in Play Console). The workflow exchanges
   GitHub's OIDC identity for a short-lived access token and passes it to the
   Dockerized client through `PLAY_ACCESS_TOKEN`.
-- Set `PLAY_RELEASE_TRACK` and optional `PLAY_RELEASE_STATUS` on
-  `play-publishing`; status defaults to `completed`. Restrict that GitHub
+- Set `PLAY_RELEASE_TRACK` to `internal` (or a closed-test track) and optional
+  `PLAY_RELEASE_STATUS` on `play-publishing`; status defaults to `completed`.
+  Release CI rejects `production` so a tester can validate the exact AAB on a
+  physical device before explicit Play Console promotion. Restrict that GitHub
   environment to the `main` branch and ensure Google's WIF provider and service
   account trust its environment-scoped GitHub OIDC identity. Android signing
   uses the separate `production` environment's `MOBILE_UPLOAD_KEYSTORE_BASE64`,
@@ -268,9 +270,12 @@ smoke testing. The agent should:
    notes;
 4. validate and commit the edit;
 5. read back the track and bundle, then obtain the tester opt-in link; and
-6. verify installation, sign-in, refresh, camera/location permissions, chat,
-   challenge upload, guess submission, logout, and account deletion on a real
-   Android device when possible.
+6. install through the tester opt-in link on a physical Android device (not a
+   local debug APK); cold-start twice, leave and resume, then verify sign-in,
+   refresh, camera/location permissions, chat, challenge upload, guess
+   submission, logout, and account deletion. Record the device/WebView versions,
+   installed version code, AAB manifest digest, and acceptance evidence. Do not
+   promote without this check.
 
 Internal testing is distributed by URL and is not a public production release.
 It is also the right place to detect a bad upload key, an incorrect API origin,

@@ -1,6 +1,4 @@
-# Independent monitoring topology for the shared hosted VM. This project is
-# intentionally separate from the application deployment projects: releasing
-# the game must not recreate or remove monitoring state.
+# Independent monitoring: application releases must never recreate its state.
 name: geoguessme-watch
 
 x-defaults: &defaults
@@ -11,10 +9,7 @@ x-defaults: &defaults
 services:
   gateway:
     <<: *defaults
-    # WEB_IMAGE is the exact digest of the already patched and scanned
-    # production web artifact. Reusing that Caddy runtime avoids introducing a
-    # second vulnerable gateway image while this remains an independent
-    # Compose project and lifecycle.
+    # Reuse the signed/scanned production web digest; keep a separate lifecycle.
     image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable production web image}
     ports:
       - "127.0.0.1:${GEOGUESSME_WATCH_PORT:-8084}:80"

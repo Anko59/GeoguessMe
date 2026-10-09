@@ -126,6 +126,10 @@ jobs:
             echo 'Missing play-publishing variable PLAY_RELEASE_TRACK.' >&2
             exit 1
           }
+          if [[ "$PLAY_TRACK" == production ]]; then
+            echo 'Automatic Play publication must first go to an internal or closed-test track; promote only after device acceptance.' >&2
+            exit 1
+          fi
           [[ "$PLAY_WIF_PROVIDER" == projects/*/locations/global/workloadIdentityPools/*/providers/* ]] || {
             echo 'PLAY_GCP_WORKLOAD_IDENTITY_PROVIDER is not a Google WIF provider resource.' >&2
             exit 1
@@ -167,6 +171,10 @@ jobs:
       keycloak: ${{ steps.refs.outputs.keycloak }}
       sops: ${{ steps.refs.outputs.sops }}
       socket_proxy: ${{ steps.refs.outputs.socket_proxy }}
+      caddy_runtime: ${{ steps.refs.outputs.caddy_runtime }}
+      cloudflared: ${{ steps.refs.outputs.cloudflared }}
+      restic: ${{ steps.refs.outputs.restic }}
+      postgres: ${{ steps.refs.outputs.postgres }}
       tag: ${{ steps.source.outputs.tag }}
     steps:
       - name: Check out release commit
@@ -287,6 +295,9 @@ jobs:
           done
           tools/quality/ci/promote-sops-image.sh "$DEV_SHA"
           tools/quality/ci/promote-socket-proxy-image.sh "$DEV_SHA"
+          for component in postgres restic cloudflared caddy-runtime; do
+            bash tools/quality/dependency-images/promote.sh "$component" "$DEV_SHA"
+          done
       - name: Promote verified application manifests without rebuilding
         env:
           BACKEND_SOURCE: ${{ steps.names.outputs.backend_source }}@${{ steps.digests.outputs.backend }}
@@ -299,50 +310,27 @@ jobs:
           WEB_DIGEST: ${{ steps.digests.outputs.web }}
           KEYCLOAK_DIGEST: ${{ steps.digests.outputs.keycloak }}
         run: tools/quality/ci/promote-application-images.sh
-      - name: Scan exact promoted digest (fixed High/Critical gate)
+      - run: make bootstrap-security-tools
+      - name: Scan the complete runtime inventory and exact promoted digests
         env:
-          BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
-          WEB: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
-          KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
-          SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
-          SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          RESTIC_IMAGE=$(sed -n "s/^readonly RESTIC_IMAGE='\(.*\)'/\1/p" deployment/scripts/hosted/common.sh)
-          [[ "$RESTIC_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]
-          export RESTIC_IMAGE
-          docker pull "$BACKEND"
-          docker pull "$WEB"
-          docker pull "$KEYCLOAK"
-          docker pull "$SOPS"
-          docker pull "$RESTIC_IMAGE"
-          docker pull "$SOCKET_PROXY"
-          docker tag "$BACKEND" geoguessme-backend:local
-          docker tag "$WEB" geoguessme-web:local
-          export KEYCLOAK_IMAGE="$KEYCLOAK"
-          export SOPS_IMAGE="$SOPS"
-          export SOCKET_PROXY_IMAGE="$SOCKET_PROXY"
-          make audit-images AUDIT_IMAGES=
-          test -s security/image-reports/geoguessme-backend_local/report.json
-          test -s security/image-reports/geoguessme-web_local/report.json
-          keycloak_safe=$(printf '%s' "$KEYCLOAK" | tr '/:@' '___')
-          test -s "security/image-reports/$keycloak_safe/report.json"
-          restic_safe=$(printf '%s' "$RESTIC_IMAGE" | tr '/:@' '___')
-          test -s "security/image-reports/$restic_safe/report.json"
-          sops_safe=$(printf '%s' "$SOPS" | tr '/:@' '___')
-          test -s "security/image-reports/$sops_safe/report.json"
-          socket_proxy_safe=$(printf '%s' "$SOCKET_PROXY" | tr '/:@' '___')
-          test -s "security/image-reports/$socket_proxy_safe/report.json"
+          BACKEND_IMAGE: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
+          WEB_IMAGE: ${{ steps.names.outputs.web_release }}@${{ steps.digests.outputs.web }}
+          KEYCLOAK_IMAGE: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
+          SOPS_IMAGE: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
+          SOCKET_PROXY_IMAGE: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
+          POSTGRES_IMAGE: ${{ steps.sops-promotion.outputs.postgres }}
+          RESTIC_IMAGE: ${{ steps.sops-promotion.outputs.restic }}
+          CLOUDFLARED_IMAGE: ${{ steps.sops-promotion.outputs.cloudflared }}
+          CADDY_RUNTIME_IMAGE: ${{ steps.sops-promotion.outputs.caddy_runtime }}
+        run: make audit-images
       - name: Upload image-scan reports and SBOMs
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: image-scan-promote-${{ github.sha }}
-          path: |
-            security/image-reports/**/report.json
-            security/image-reports/**/sbom.spdx.json
+          path: security/image-reports/
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
       - name: Sign promoted digests for production
         env:
           BACKEND: ${{ steps.names.outputs.backend_release }}@${{ steps.digests.outputs.backend }}
@@ -350,8 +338,12 @@ jobs:
           KEYCLOAK: ${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
           SOPS: ${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
           SOCKET_PROXY: ${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
+          POSTGRES: ${{ steps.sops-promotion.outputs.postgres }}
+          RESTIC: ${{ steps.sops-promotion.outputs.restic }}
+          CLOUDFLARED: ${{ steps.sops-promotion.outputs.cloudflared }}
+          CADDY_RUNTIME: ${{ steps.sops-promotion.outputs.caddy_runtime }}
         run: |
-          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$SOPS" "$SOCKET_PROXY"; do
+          for image in "$BACKEND" "$WEB" "$KEYCLOAK" "$SOPS" "$SOCKET_PROXY" "$POSTGRES" "$RESTIC" "$CLOUDFLARED" "$CADDY_RUNTIME"; do
             cosign sign --yes -a "revision=$GITHUB_SHA" "$image"
           done
       - name: Export immutable references
@@ -363,6 +355,10 @@ jobs:
             echo "keycloak=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}"
             echo "sops=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}"
             echo "socket_proxy=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}"
+            echo "postgres=${{ steps.sops-promotion.outputs.postgres }}"
+            echo "restic=${{ steps.sops-promotion.outputs.restic }}"
+            echo "cloudflared=${{ steps.sops-promotion.outputs.cloudflared }}"
+            echo "caddy_runtime=${{ steps.sops-promotion.outputs.caddy_runtime }}"
           } >> "$GITHUB_OUTPUT"
       - name: Download verified Android release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -388,10 +384,11 @@ jobs:
             KEYCLOAK_IMAGE=${{ steps.names.outputs.keycloak_release }}@${{ steps.digests.outputs.keycloak }}
             SOPS_IMAGE=${{ steps.sops-promotion.outputs.image }}@${{ steps.sops-promotion.outputs.digest }}
             SOCKET_PROXY_IMAGE=${{ steps.sops-promotion.outputs.socket_proxy_image }}@${{ steps.sops-promotion.outputs.socket_proxy_digest }}
+            POSTGRES_IMAGE=${{ steps.sops-promotion.outputs.postgres }}
+            RESTIC_IMAGE=${{ steps.sops-promotion.outputs.restic }}
+            CLOUDFLARED_IMAGE=${{ steps.sops-promotion.outputs.cloudflared }}
+            CADDY_RUNTIME_IMAGE=${{ steps.sops-promotion.outputs.caddy_runtime }}
             ```
-
-            Hosted backup and restore use the digest-pinned Restic reference
-            committed in `deployment/scripts/hosted/common.sh`.
 
   deploy:
     name: Deploy production digest
@@ -403,13 +400,15 @@ jobs:
       group: geoguessme-host-deployment
       cancel-in-progress: false
     steps:
-      - name: Install pinned cloudflared
-        run: |
-          curl -fsSLo cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.8.0/cloudflared-linux-amd64.deb
-          echo '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb' | sha256sum -c -
-          sudo dpkg -i cloudflared.deb
+      - name: Require verified operator runtime cutover
+        env:
+          PROTOCOL_READY: ${{ vars.HOSTED_DEPENDENCY_PROTOCOL_READY }}
+        run: '[ "$PROTOCOL_READY" = true ] || { echo "Install and verify the reviewed utility-aware root runtime bundle first." >&2; exit 1; }'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install checksum-verified Cloudflared
+        run: bash tools/quality/dependency-images/install-host-tool.sh
       - name: Deploy through Cloudflare Access
-        # Keep five-field until both hosts are compatible; Phase 2 adds SOPS.
+        # Requires the reviewed root-owned utility-aware runtime bundle.
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
@@ -417,6 +416,9 @@ jobs:
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           BACKEND: ${{ needs.promote.outputs.backend }}
           WEB: ${{ needs.promote.outputs.web }}
+          SOPS: ${{ needs.promote.outputs.sops }}
+          POSTGRES: ${{ needs.promote.outputs.postgres }}
+          RESTIC: ${{ needs.promote.outputs.restic }}
           KEYCLOAK: ${{ needs.promote.outputs.keycloak }}
         run: |
           install -d -m 0700 ~/.ssh
@@ -426,7 +428,7 @@ jobs:
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes \
             -o ProxyCommand='cloudflared access ssh --hostname %h' \
             deploy@deploy-prod.geoguessme.com \
-            "deploy $BACKEND $WEB $KEYCLOAK $GITHUB_SHA"
+            "deploy $BACKEND $WEB $KEYCLOAK $SOPS $POSTGRES $RESTIC $GITHUB_SHA"
 
   play-publish:
     name: Publish verified Android bundle to Play
@@ -447,6 +449,9 @@ jobs:
         with:
           name: android-release-${{ github.sha }}
           path: android-release
+      - name: Require deployed native API origin
+        run: |
+          test "$(curl --silent --show-error --max-time 15 --output /dev/null --write-out '%{http_code}' -X OPTIONS https://geoguessme.com/api/v1/auth/oidc/config -H 'Origin: https://app.geoguessme.com' -H 'Access-Control-Request-Method: GET')" = 200
       - name: Verify artifact provenance before publication
         env:
           RELEASE_SHA: ${{ github.sha }}

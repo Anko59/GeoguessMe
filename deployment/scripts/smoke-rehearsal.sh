@@ -3,9 +3,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
-PROJECT="${GEOGUESSME_SMOKE_PROJECT:-geoguessme-smoke-rehearsal}"
-WEB_PORT="${GEOGUESSME_SMOKE_WEB_PORT:-18082}"
-MAILPIT_PORT="${GEOGUESSME_SMOKE_MAILPIT_PORT:-18027}"
+PROJECT="${GEOGUESSME_SMOKE_PROJECT:-geoguessme-smoke-rehearsal-${GEOGUESSME_TOOLS_PROJECT:?Run through Make}-$$}"
+WEB_PORT="${GEOGUESSME_SMOKE_WEB_PORT:-${GEOGUESSME_TEST_WEB_PORT:?Run through Make}}"
+MAILPIT_PORT="${GEOGUESSME_SMOKE_MAILPIT_PORT:-${GEOGUESSME_TEST_MAILPIT_PORT:?Run through Make}}"
 PUBLIC_URL="http://localhost:${WEB_PORT}"
 
 cleanup() {

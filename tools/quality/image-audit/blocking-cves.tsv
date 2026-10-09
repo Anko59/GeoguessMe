@@ -1,0 +1,3 @@
+# CVE<TAB>owner<TAB>confirmed deployment exposure or exploitation evidence
+# Add confirmed actionable findings here even before CISA includes them.
+# This is an additive blocklist, never an exception or severity override.

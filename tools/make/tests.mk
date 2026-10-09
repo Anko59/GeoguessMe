@@ -10,7 +10,13 @@ test-unit: test-backend test-frontend test-reconnect-harness test-play-api test-
 test-backend: ## Run Go unit tests, excluding live integration tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools sh -c 'cd backend && go test $$(go list ./... | grep -v /integration_test)'
 
-test-frontend: ## Run frontend unit tests.
+test-npm-security-overrides: test-braces-security ## Verify patched tooling dependencies preserve their consumer APIs.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/tools/quality/npm/test-security-overrides.cjs
+
+test-feed-fixtures: ## Verify feed media settlement, cancellation, and interaction fixtures.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run src/pages/feed/test
+
+test-frontend: test-npm-security-overrides ## Run frontend unit tests.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools npm --prefix /workspace/frontend test -- --run
 
 test-reconnect-harness: ## Run reconnect rehearsal harness unit tests.
@@ -26,7 +32,7 @@ test-race: ## Run Go unit tests with the race detector.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security sh -c 'cd backend && go test -race $$(go list ./... | grep -v /integration_test)'
 
 
-test-verified: ## Run unit tests once with race detection and coverage thresholds.
+test-verified: test-npm-security-overrides ## Run unit tests once with race detection and coverage thresholds.
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash -c 'set -o pipefail; cd backend && go test -race -coverprofile=/tmp/backend-coverage.out $$(go list ./... | grep -v /integration_test) 2>&1 | tee /tmp/backend-test-output.txt && go tool cover -func=/tmp/backend-coverage.out | tee -a /tmp/backend-test-output.txt && /workspace/tools/quality/coverage-threshold < /tmp/backend-test-output.txt'
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools-write npm --prefix /workspace/frontend test -- --run --coverage
 
@@ -50,8 +56,37 @@ test-cache-status-regression: ## Run cache-status regression tests.
 test-ci-classifier: ## Verify deterministic CI path classification.
 	bash tools/quality/ci/test-classify-changes.sh
 
-test-e2e-regression: ## Verify E2E artifact, argument, and browser-selection safeguards.
+test-e2e-regression: ## Verify E2E safeguards and integration source-ownership isolation.
 	bash tools/quality/test/check-e2e-regression.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/integration-runner/check-integration-runner.sh
+
+test-rehearsal-isolation: ## Verify disposable projects and ports cannot reuse another checkout's fixture.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/rehearsal-isolation/check-rehearsal-isolation.sh
+
+test-local-images: ## Verify local artifact scoping, caller precedence and immutable verification identities.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/local-images/check-local-images.sh
+
+test-tools-namespace: ## Verify tool caches stay checkout-scoped and every helper preserves that namespace.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/test/tools-namespace/check-tools-namespace.sh
+
+test-braces-security: ## Verify installed brace parser and AST walkers resist stack exhaustion.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps node-tools node --test /workspace/frontend/tooling/dependencies/braces-security.js
+
+test-image-audit: ## Verify scan-only blocking, complete reporting, and transient-failure handling.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/image-audit/test-risk-policy.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/image-audit/test-image-audit.sh
+
+test-security-workflows: ## Verify scan-before-sign, immutable promotion, publication serialization, and runtime adoption.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-workflow-contracts.sh
+
+test-image-audit-native: ## Verify native exploitation blocking, advisories, unfixed findings, and aliases.
+	bash tools/quality/image-audit/test-native-policy.sh
+
+test-local-dependency-from: ## Prove local Docker builds consume frozen dependency bytes, not a competing mutable tag.
+	bash tools/quality/dependency-images/test-local-from.sh
+
+test-dependency-images: ## Verify immutable dependency identities and trust-preserving artifact reuse.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-security bash /workspace/tools/quality/dependency-images/test-dependency-images.sh
 
 test-mobile-release-contract: ## Verify Android release bundle inspection and provenance safeguards.
 	bash tools/mobile/test-release-bundle-contract.sh
@@ -62,8 +97,10 @@ test-mobile-sdk-contract: ## Verify Android's build SDK and Maestro runtime SDK 
 test-dev-workflow-regression: ## Verify dev rebuilds reuse bounded dependency storage.
 	bash tools/quality/test/check-dev-workflow-regression.sh
 
-test-load-harness-regression: ## Verify the k6 load profile attests age on every signup.
+test-load-harness-regression: ## Verify signup attestation and isolated nonroot k6 ownership/lifecycle.
 	bash tools/quality/test/load-harness/check-load-attestation.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/load-harness/check-load-runner.sh
+	bash tools/quality/test/load-harness/check-k6-permissions.sh
 
 test-restart-regression: ## Run restart-rehearsal regression tests.
 	bash tools/quality/test/check-restart-regression.sh && bash tools/quality/test/check-restart-regression.sh --determinism
@@ -71,8 +108,7 @@ test-restart-regression: ## Run restart-rehearsal regression tests.
 test-migration-fixture-regression: ## Run migration fixture regression tests.
 	bash tools/quality/test/check-migration-fixture-regression.sh
 
-test-image-scan-exceptions-regression: ## Run image-scan exceptions regression tests.
-	bash tools/quality/test/image-scan-exceptions/test-image-scan-exceptions-regression.sh
+test-image-scan-exceptions-regression: test-image-audit ## Compatibility alias for the replacement risk-policy regressions.
 
 test-integration: build-images ## Run the isolated integration stack and tests in Docker.
 	$(TEST_ENV) tools/quality/run-integration.sh
@@ -87,13 +123,14 @@ test-e2e-ui: build-images ## Run Playwright UI mode in Docker.
 	$(TEST_ENV) GEOGUESSME_TEST_PROJECT=geoguessme-e2e-ui tools/quality/run-e2e.sh --ui
 
 test-qa-agent: ## Validate the provider-neutral QA contract and MCP lifecycle in Docker.
-	bash tools/qa/test-agent.sh
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright bash /workspace/tools/qa/test-agent.sh
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser-mcp.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/browser/tool-definitions.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/email-account.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-account-pool.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-email-account.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-coverage.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-security-headers.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mcp.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mailbox.mjs
 
@@ -147,6 +184,7 @@ test-disk-cleanup-regression: ## Run disk-cleanup.sh regression tests.
 	bash tools/quality/test/check-disk-cleanup-regression.sh
 
 test-prod-container-verify-regression: ## Run prod-container-verify.sh regression tests.
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps go-tools bash /workspace/tools/quality/test/prod-container-verify/check-public-config-permissions.sh
 	bash tools/quality/test/check-prod-container-verify-regression.sh
 
 test-artifacts-clean-regression: ## Verify artifacts-clean target structure and safety.

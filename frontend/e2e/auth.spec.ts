@@ -50,6 +50,22 @@ test.describe('Authentication', () => {
         await expect(page.locator('#login-username')).toBeVisible();
     });
 
+    test('logout in another tab unmounts an open protected settings page', async ({ page, context }) => {
+        await signupViaUI(page);
+        await page.goto('/settings');
+        await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+        const secondTab = await context.newPage();
+        await secondTab.goto('/settings');
+        await expect(secondTab.getByRole('heading', { name: 'Settings' })).toBeVisible();
+        await secondTab.locator('.logout-btn').click();
+
+        await expect(page).toHaveURL(/\/login/);
+        await expect(page.getByRole('heading', { name: 'Settings' })).not.toBeVisible();
+        await page.goto('/groups');
+        await expect(page).toHaveURL(/\/login/);
+    });
+
     test('invalid login credentials show error', async ({ page }) => {
         await page.goto('/login');
         const submit = page.locator('button.btn-primary[type="submit"]');

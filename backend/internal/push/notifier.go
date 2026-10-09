@@ -32,29 +32,33 @@ type Deps struct {
 // triggering request is never blocked by slow or unreachable push services.
 // It implements the handlers.PushNotifier interface structurally.
 type Service struct {
-	store       Store
-	deliver     Deliverer
-	keys        *KeyPair
-	cfg         *config.Config
-	guard       *EndpointGuard
-	logger      *slog.Logger
-	jobs        chan fanoutJob
-	wg          sync.WaitGroup
-	stopOnce    sync.Once
-	stopCh      chan struct{}
-	enqueueMu   sync.RWMutex
-	stopping    bool
-	metrics     *serviceMetrics
-	hostSems    map[string]chan struct{}
-	overflowSem chan struct{}
-	hostSemsMu  sync.Mutex
+	// FilterDelivery reauthorizes a queued sender/recipient pair and serializes
+	// its delivery with privacy preference commits. Set before Start.
+	FilterDelivery func(context.Context, string, string, func())
+	store          Store
+	deliver        Deliverer
+	keys           *KeyPair
+	cfg            *config.Config
+	guard          *EndpointGuard
+	logger         *slog.Logger
+	jobs           chan fanoutJob
+	wg             sync.WaitGroup
+	stopOnce       sync.Once
+	stopCh         chan struct{}
+	enqueueMu      sync.RWMutex
+	stopping       bool
+	metrics        *serviceMetrics
+	hostSems       map[string]chan struct{}
+	overflowSem    chan struct{}
+	hostSemsMu     sync.Mutex
 }
 
 type fanoutJob struct {
-	userIDs []string
-	payload []byte
-	reason  string
-	groupID string
+	senderID string
+	userIDs  []string
+	payload  []byte
+	reason   string
+	groupID  string
 }
 
 // NewService constructs a notification service. Call Start to launch workers
@@ -299,11 +303,29 @@ func (s *Service) deliverJob(ctx context.Context, job fanoutJob) {
 		return
 	}
 	for i := range subs {
-		s.deliverOne(ctx, &subs[i], job.payload)
+		s.deliverSubscription(ctx, job, &subs[i])
+	}
+}
+
+func (s *Service) deliverSubscription(ctx context.Context, job fanoutJob, sub *Subscription) {
+	// Authorization and delivery share one budget, even when the privacy
+	// filter invokes a closure rather than passing its check context to it.
+	ctx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
+	defer cancel()
+	deliver := func() { s.deliverOne(ctx, sub, job.payload) }
+	if s.FilterDelivery != nil && job.senderID != "" {
+		s.FilterDelivery(ctx, job.senderID, sub.UserID, deliver)
+	} else {
+		deliver()
 	}
 }
 
 func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []byte) {
+	// Bound the entire privacy-protected lifecycle, including semaphore waits
+	// and database housekeeping after network delivery. A stalled touch/delete
+	// must not hold the preference barrier beyond the delivery budget.
+	ctx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
+	defer cancel()
 	host := endpointHost(sub.Endpoint)
 	// Cap concurrent sends to one push-service host (PUSH_DELIVERY_PER_HOST)
 	// across the global worker pool. Waiting on the slot honours ctx so a
@@ -317,10 +339,11 @@ func (s *Service) deliverOne(ctx context.Context, sub *Subscription, payload []b
 			return
 		}
 	}
-	sendCtx, cancel := context.WithTimeout(ctx, s.deliveryTimeout())
-	defer cancel()
+	if ctx.Err() != nil {
+		return
+	}
 	started := time.Now()
-	err := s.deliver.Send(sendCtx, sub, payload)
+	err := s.deliver.Send(ctx, sub, payload)
 	s.metrics.deliveries.Add(1)
 	s.metrics.observeDuration(time.Since(started).Seconds())
 	if err != nil {
@@ -356,7 +379,7 @@ func (s *Service) NotifyNewChallenge(ctx context.Context, groupID, excludeUserID
 		return
 	}
 	payload := newPayload("New challenge", uploader+" posted a new challenge in "+groupName, groupURL(groupID), "challenge:"+photoID)
-	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_challenge", groupID: groupID})
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_challenge", groupID: groupID, senderID: excludeUserID})
 }
 
 // NotifyNewMessage alerts a group about a new chat message from a member.
@@ -370,7 +393,7 @@ func (s *Service) NotifyNewMessage(ctx context.Context, groupID, senderUserID, c
 	}
 	body := sender + ": " + truncate(strings.TrimSpace(content), 140)
 	payload := newPayload(groupName, body, groupURL(groupID), "chat:"+groupID)
-	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_message", groupID: groupID})
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "new_message", groupID: groupID, senderID: senderUserID})
 }
 
 // NotifyPartyStarted alerts a group that one of its members started Party
@@ -396,7 +419,7 @@ func (s *Service) NotifyPartyStarted(ctx context.Context, groupID, excludeUserID
 	}
 	body := starterUsername + " started Party Time in " + groupName + "! Post a challenge to double your points."
 	payload := newPayload("Party Time!", body, groupURL(groupID), "party:"+groupID)
-	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "party_started", groupID: groupID})
+	s.enqueue(fanoutJob{userIDs: targetIDs(targets), payload: payload, reason: "party_started", groupID: groupID, senderID: excludeUserID})
 }
 
 func (s *Service) resolveChallenge(ctx context.Context, groupID, excludeUserID, photoID string) (targets []NotificationTarget, groupName, uploader string) {

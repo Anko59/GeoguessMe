@@ -14,6 +14,9 @@ ready → accepted → viewing window → guessable → expired → removed
 3. **viewing window** — The media is available at
    `GET /api/v1/challenges/{photoID}/media` only during this window. The window
    is bounded by `PHOTO_VIEW_WINDOW` and `CHALLENGE_TTL` (whichever is shorter).
+   While the photo counts down, the app shows a small "Posted by" badge with the
+   submitting player's avatar in the top-left corner, for group chat and public
+   feed challenges alike.
 4. **guessable** — After the viewing window expires, the member may submit one
    guess via `POST /api/v1/challenges/{photoID}/guess`. Guessing is time-boxed:
    the guess must be submitted by `guess_expires_at` (view end + `GUESS_WINDOW`,

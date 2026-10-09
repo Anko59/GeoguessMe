@@ -1,30 +1,11 @@
-# Production stack. Images are referenced by immutable tags supplied through the
-# environment; there is no implicit "latest" so deploys are reproducible.
-# PostgreSQL, SMTP, and S3 are external by default. Optional local-service
-# profiles (local-db, local-minio, local-smtp) exist only for staging/restore
-# exercises and are not enabled by a normal deploy.
-#
-# Required environment:
-#   BACKEND_IMAGE   e.g. ghcr.io/org/geoguessme-backend:1.2.3
-#   WEB_IMAGE       e.g. ghcr.io/org/geoguessme-web:1.2.3
-#   DATABASE_URL    external Postgres (sslmode=require)
-#   S3_*            external private S3-compatible bucket
-#   SMTP_*          external authenticated SMTP (starttls or tls)
-# Provide secrets via deployment/env/production.env (git-ignored).
-#
-# Runtime hardening: every service drops all Linux capabilities, disables
-# privilege escalation (no-new-privileges), and runs under a per-service
-# process (PID) limit. Filesystems are read-only where the service supports it;
-# writable state lives in explicit volumes and tmpfs mounts. Services are
-# segmented onto named networks so the public gateway (web) can reach only the
-# backend, and data services are reachable only from the application tier.
-# Per-service cap_add entries document the minimal capability each image needs
-# (e.g. Caddy needs NET_BIND_SERVICE to bind the unprivileged-owner :80 port;
-# PostgreSQL needs the standard ownership/drop-privilege set for its data
-# directory). These directives require a compatibility rehearsal before
-# production apply: make restart-rehearsal, make prod-container-verify, and
-# the smoke rehearsals. Apply to production only after a rehearsal proves
-# compatibility (the plan requires: where rehearsals prove compatibility).
+# Production: supply signed BACKEND_IMAGE/WEB_IMAGE digests, DATABASE_URL, S3_*
+# and SMTP_* through the ignored production env file; see deployment/README.md.
+# PostgreSQL, S3 and SMTP are external unless their staging-only local-* profile
+# is explicitly enabled. Hosted R2 is unchanged by the local S3 fixture.
+# Services drop capabilities, deny escalation and bound PIDs; state uses explicit
+# volumes/tmpfs and isolated tiers. Only documented per-image capabilities return.
+# Before production changes, run restart-rehearsal, prod-container-verify and
+# smoke rehearsals; canonical hardening and recovery details: docs/operations.md.
 
 name: ${COMPOSE_PROJECT_NAME:-geoguessme-prod}
 
@@ -69,11 +50,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # The in-process media-processing worker bounds each ffprobe/ffmpeg child to
-    # 1 CPU / 512 MiB / 128 PIDs / 60s via rlimits (see mediaprocessing). This
-    # container hosts the Go server plus one bounded transcode, so the ceiling
-    # sits above the per-job backstop. Worker temp files (quarantine download +
-    # transcode output) live on the /tmp tmpfs above the read-only root.
+    # Server plus one transcode: child rlimits are 1 CPU/512 MiB/128 PIDs/60s.
+    # Quarantine and transcode scratch live on /tmp, not the read-only root.
     deploy:
       resources:
         limits:
@@ -122,9 +100,7 @@ services:
       - "/config:uid=1000,gid=1000,mode=0755"
     user: "1000:1000"
     cap_drop: ["ALL"]
-    # Caddy runs as UID 1000 and listens on :80, which is below the
-    # unprivileged-port boundary; NET_BIND_SERVICE is the minimal capability
-    # required for that bind after dropping the Docker default set.
+    # UID 1000 needs only NET_BIND_SERVICE for :80.
     cap_add: ["NET_BIND_SERVICE"]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 128
@@ -146,7 +122,7 @@ services:
 
   # --- Optional local services for staging/restore exercises ---------------
   db:
-    image: postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 # PostgreSQL 15.19
+    image: ${POSTGRES_IMAGE:?Run through Make or supply the audited immutable PostgreSQL image}
     profiles: [local-db]
     env_file:
       - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
@@ -154,10 +130,7 @@ services:
     volumes: ["geoguessme_prod_db:/var/lib/postgresql/data"]
     read_only: true
     tmpfs: ["/tmp", "/var/run/postgresql"]
-    # The official entrypoint runs as root and drops to postgres: it must chown
-    # and re-stat the data directory and create the Unix socket, so keep the
-    # minimal ownership/drop-privilege capabilities. Do NOT set user here; the
-    # image manages its own uid/gid and the entrypoint requires root to chown.
+    # Leave user unset: entrypoint starts root, owns data/socket, then drops UID.
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     security_opt: ["no-new-privileges:true"]
@@ -169,32 +142,57 @@ services:
       timeout: 3s
       retries: 30
 
+  # S3-compatible local fixture. The internal DNS name is retained for clients;
+  # SeaweedFS data MUST NOT reuse the retired MinIO volume format.
   minio:
-    image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # Exact-digest mirror of the MinIO release
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d # SeaweedFS 4.48
     profiles: [local-minio]
-    command: server /data --console-address ":9001"
-    env_file:
-      - path: env/production.env
-        required: false
-    volumes: ["geoguessme_prod_minio:/data"]
-    # Staging-only fixture. Data lives in the /data volume and MinIO keeps
-    # configuration under its home, so the root filesystem stays writable;
-    # capabilities, privilege escalation, process count, and network placement
-    # are still hardened. Read-only would require a writable tmpfs for the
-    # config home and is not needed for a disposable rehearsal fixture.
-    cap_drop: ["ALL"]
-    security_opt: ["no-new-privileges:true"]
+    user: "1000:1000"
+    command:
+      [
+        server,
+        -s3,
+        -dir=/data,
+        -ip=minio,
+        -ip.bind=0.0.0.0,
+        -s3.port=9000,
+        -s3.config=/etc/seaweedfs/s3.json,
+        "-volume.max=${GEOGUESSME_S3_FIXTURE_VOLUME_MAX:-32}",
+        -master.volumeSizeLimitMB=64,
+      ]
+    volumes:
+      - geoguessme_prod_s3_fixture:/data
+      - ${GEOGUESSME_S3_FIXTURE_CONFIG:-./deployment/s3-fixture/credentials.json}:/etc/seaweedfs/s3.json:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     pids_limit: 128
-    tmpfs: ["/tmp"]
+    tmpfs: [/tmp]
     networks: [app]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "2",
+          "--aws-sigv4",
+          "aws:amz:us-east-1:s3",
+          "--user",
+          "minioadmin:minioadmin",
+          "http://127.0.0.1:9000/",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
 
   smtp:
-    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a # Mailpit 1.30.7
+    image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48 # Mailpit 1.31.4
     profiles: [local-smtp]
     ports: ["${GEOGUESSME_PROD_VERIFY_SMTP_PORT:-8025}:8025"]
-    # Staging-only fixture; Mailpit keeps messages in memory. Capabilities,
-    # privilege escalation, and process count are hardened; /tmp is writable
-    # scratch. The SMTP listener (1025) and web UI (8025) are unprivileged.
+    # Staging-only, in-memory mail; scratch /tmp, unprivileged SMTP1025/UI8025.
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 128
@@ -210,4 +208,4 @@ networks:
 
 volumes:
   geoguessme_prod_db:
-  geoguessme_prod_minio:
+  geoguessme_prod_s3_fixture:

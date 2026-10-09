@@ -4,6 +4,8 @@
 # Usage: smoke-test.sh [BASE_URL]   (default http://localhost)
 set -eu
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 base="${1:-http://localhost}"
 case "$base" in
     http://localhost*) container_base="http://host.docker.internal${base#http://localhost}" ;;
@@ -13,7 +15,7 @@ case "$base" in
     *) container_base="$base" ;;
 esac
 
-docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory "$(pwd)" \
+docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory "$(pwd)" \
     run --rm --no-deps go-tools bash -c '
         set -eu
         base="$1"

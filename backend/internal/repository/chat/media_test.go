@@ -37,7 +37,7 @@ func TestChatMediaMessagePersistenceAndLookup(t *testing.T) {
 	replyAsset := &models.ChatMedia{ID: "media-2", GroupID: "group-1", UserID: "user-1", StorageKey: "chat-media/reply", MIMEType: "video/webm", ByteSize: 24, CreatedAt: now}
 	replyMessage := &models.Message{ID: "message-2", GroupID: "group-1", UserID: "user-1", Username: "alice", Avatar: "avatar.png", ReplyToID: &replyID, Content: "reply with a video", CreatedAt: now}
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(replyID, replyMessage.GroupID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(replyID, replyMessage.GroupID, replyMessage.UserID).WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectExec("INSERT INTO chat_media").WithArgs(replyAsset.ID, replyAsset.GroupID, replyAsset.UserID, replyAsset.StorageKey, replyAsset.MIMEType, replyAsset.ByteSize, replyAsset.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectExec("INSERT INTO messages").WithArgs(replyMessage.ID, replyMessage.GroupID, replyMessage.UserID, replyAsset.ID, replyMessage.ReplyToID, replyMessage.Content, replyMessage.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()

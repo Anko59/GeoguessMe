@@ -1,5 +1,10 @@
 # Operations
 
+Go compiler updates align application/tooling pins. Upstream binaries stay
+vendor-managed; complete image scans block known exploitation and confirmed
+deployment exposure, while retaining other findings as advisories. See
+[image security scanning](security-scanning.md).
+
 ## Health endpoints
 
 | Endpoint        | Expected status | Checks                                                                               |
@@ -18,6 +23,29 @@ curl -s -o /dev/null -w '%{http_code}' http://localhost/health/ready
 # Direct to backend
 curl -s -o /dev/null -w '%{http_code}' http://backend:8080/health/ready
 ```
+
+`make prod-container-verify` replaces every service's environment-file list with
+its generated fake fixture. If startup fails, it prints only that managed
+project's status, bounded logs, and container health state before teardown,
+preserving the startup exit code. It never dumps container environment values or
+collects logs from another running project.
+
+A failed `make load-test` emits bounded status/log diagnostics only for its
+fake-environment application project before teardown. It preserves startup or k6
+failure status if teardown also fails, and a teardown failure cannot report a
+passing load run. UID `0` mappings are rejected before starting a stack.
+
+If integration reports an ownership or identity mismatch, its selected project
+is left untouched: do not follow it with an unconditional Compose `down`.
+Inspect only public ownership/image metadata and coordinate with the other
+worktree's owner. Select a fresh private project and ports before a new gate; a
+mixed-source run is a failed gate, not valid application test evidence.
+
+Host provisioning executes the root-owned bootstrap with reviewed host-tool pins
+only after checking its required tools, and stops on runtime extraction or
+Cloudflared integrity errors. The bootstrap remains available for failure
+diagnosis; it is removed after successful setup. Do not print generated age
+private keys or tunnel tokens while investigating cloud-init failures.
 
 ## Metrics
 
@@ -78,7 +106,20 @@ separately signed image; update it only with the forced `watch` protocol after
 the exact artifact passes the dev gate. Never pass its image through the app
 `deploy` command or update the shared production monitor from dev CI.
 
+A failed `make watch-rehearsal` prints only its managed fixture project's
+bounded logs, service status, and health state before teardown. Environment-file
+mounts are replaced with fake values; container environments and peer-project
+logs are never dumped. Startup failures remain failures even if diagnostics or
+cleanup also fail, and a failed teardown cannot produce a passing rehearsal.
+
 ## Logging
+
+For an Android white screen, preserve the failure screenshot and device logcat
+before rerunning the emulator; see the
+[Android troubleshooting procedure](troubleshooting.md#android-white-screen-or-missing-sign-in-options).
+The mobile debug APK used by the localhost Maestro journey is not the bundled
+release artifact. Do not publish full logcat because it may contain private
+account or device data.
 
 The group globe reads `/api/v1/group/challenges` in pages. Read failures emit
 `load group challenge map` with the group ID and database error; coordinates are
@@ -130,16 +171,19 @@ Production database restore is always an explicitly approved manual operation;
 deployment rollback changes image digests only. See the
 [hosted deployment runbook](runbooks/hosted-deployment.md).
 
-Each hosted deployment records the selected `SOPS_IMAGE` reference in its
-release metadata. When the project SOPS digest is supplied, the host verifies
-its signature before pulling it; the first monitored runtime cutover temporarily
-retains a digest-pinned upstream bootstrap for legacy command arities. Because
-SOPS must decrypt the environment before GHCR login, the project SOPS package is
-public-pullable and CI checks anonymous access to the exact digest. GHCR creates
-new packages as private, so the package owner must change visibility to public
-after the first push; the image contains only the SOPS utility, not secrets. The
-final runtime bundle removes the bootstrap and requires the signed digest, as
-described in the
+Hosted metadata records adopted SOPS, PostgreSQL and Restic digest references,
+plus the separately captured shared identity database reference. Scheduled
+backups and restore rehearsals resolve the active environment's images and
+verify trusted revision signatures; a new app candidate cannot silently change
+another environment's backup image. Failed deployment restores exact prior image
+selections, not database contents. Legacy bootstrap pins remain only for staged
+root-bundle compatibility; install and verify the reviewed bundle before using
+the utility-aware deployment protocol. Because SOPS must decrypt the environment
+before GHCR login, the project SOPS package is public-pullable and CI checks
+anonymous access to the exact digest. GHCR creates new packages as private, so
+the package owner must change visibility to public after the first push; the
+image contains only the SOPS utility, not secrets. The final runtime bundle
+removes the bootstrap and requires the signed digest, as described in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
 The host also stores an immutable source directory for each deployed revision.
@@ -172,6 +216,16 @@ silently upload a different bundle; inspect the exact release run and the
 restricted manifest evidence before retrying. For the full state model,
 configuration, and Play-track recovery actions, use the
 [Google Play account runbook](runbooks/google-play-console.md).
+
+Before native acceptance, verify the deployed `ALLOWED_ORIGINS` includes
+`https://app.geoguessme.com` and deploy the gateway from the same verified
+revision. OIDC session OPTIONS must reach the backend CORS policy; a 401 from
+OAuth2 Proxy during preflight indicates old gateway routing. A 401 on an actual
+unauthenticated session POST is expected and must remain enforced. Environment
+examples do not update the encrypted payloads or installed configuration. Use
+`make prod-container-verify` for the isolated gateway contract and
+`make mobile-smoke` for the bundled app against the live API, followed by the
+[physical-device checklist](mobile.md#physical-device-testing-and-logs).
 
 ### Database
 
@@ -213,27 +267,37 @@ name). It is destructive — existing objects are dropped by `pg_restore`.
 ### Restart rehearsal
 
 The `make restart-rehearsal` and `make reconnect-rehearsal` targets run stateful
-rehearsals that verify all services recover cleanly with persistent data.
+rehearsals that verify all services recover cleanly with persistent data. Run
+`make bootstrap` for a fresh checkout first: rehearsal tool containers share
+that checkout's isolated tools namespace, never another worktree's dependency
+volume. Local verification images also use checkout-scoped build tags; selected
+container artifacts are pinned to immutable IDs before inspection/start. Caller
+signed-digest selections and production promotion remain unchanged. Disposable
+rehearsal projects include the checkout namespace and process ID and use the
+checkout's test-port block. Existing specific port/project overrides still work;
+occupied ports fail closed. Live development, production and identity project
+names and data are unchanged.
 
 `make restart-rehearsal`:
 
 1. Starts the full test stack with a dedicated project name
 2. Seeds real fixture data (users, groups, photos, guesses, messages, challenge
-   views) and a MinIO media object
+   views) and an authenticated S3 fixture object
 3. Records pre-restart state: row counts, migration count, data checksums,
-   constraint count, and MinIO object content
+   constraint count, and S3 fixture object content
 4. Stops all services (down without `-v`, preserving named volumes)
 5. Restarts all services (up -d --wait), recreating containers and networks
 6. Polls health/readiness with deadline-based polling (no unconditional sleeps)
 7. Verifies: schema continuity (migrations unchanged, no duplicates), data
-   continuity (row counts and checksums match), media continuity (MinIO object
-   intact, content verified), no runaway deletion jobs, and nominal metrics
-   backlog
+   continuity (row counts and checksums match), media continuity (S3 fixture
+   object intact, content verified), no runaway deletion jobs, and nominal
+   metrics backlog
 8. Cleans up all project resources on exit
 
-The rehearsal is self-contained and uses the `geoguessme-restart-rehearsal`
-project. It refuses project names that do not contain `rehearsal`. Regression
-tests validate script structure via `make test-restart-regression`.
+The rehearsal is self-contained and uses a unique checkout-scoped
+`restart-rehearsal` project. It refuses project names that do not contain
+`rehearsal`. Regression tests validate script structure via
+`make test-restart-regression`.
 
 `make reconnect-rehearsal` starts the same disposable stack and runs the Go
 reconnect-rehearsal harness, which exercises concurrent WebSocket clients,
@@ -413,11 +477,13 @@ Failures are logged at `WARN` level. The backlog is exposed via the
 
 ## Incident response
 
-If a local or CI stack fails before startup with `pull access denied` for MinIO,
-check access to the public `quay.io/thanos/minio` mirror and confirm it still
-serves the pinned manifest digest. Compose keeps the original immutable MinIO
-digest; see the [deployment guide](deployment.md). Keep existing volumes intact;
-registry access failures do not require a storage reset.
+Registry or scanner outages are operational failures, not vulnerability success:
+retain the complete reports and retry classification from the
+[security scanning guide](security-scanning.md). Do not rebuild dependencies on
+an authentication failure or lower the gate. Local S3 fixtures now use an
+immutable official SeaweedFS digest; retired MinIO volumes require the explicit
+[verified migration procedure](runbooks/s3-fixture-migration.md), never a reset.
+Hosted R2 remains external and unchanged.
 
 | Scenario          | Response                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |

@@ -5,6 +5,9 @@ import { createServer } from "node:http";
 
 const pageServer = createServer((request, response) => {
   response.setHeader("Content-Type", "text/html");
+  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'nonce-private-value'");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Set-Cookie", "session=private-value; HttpOnly");
   const pathname = new URL(request.url || "/", "http://qa-contract.test").pathname;
   if (pathname === "/forgot-password") {
     response.end(`<!doctype html><title>QA MCP contract</title><main><h1>Reset password</h1><label>Email <input aria-label="Email"></label><button>Send reset link</button></main>`);
@@ -64,7 +67,7 @@ try {
   child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const listed = await request(2, "tools/list");
   const names = new Set(listed.tools.map((entry) => entry.name));
-  for (const required of ["session_create", "qa_account_login", "qa_email_account_signup", "browser_observe", "browser_screenshot", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
+  for (const required of ["session_create", "qa_account_login", "qa_email_account_signup", "browser_observe", "browser_screenshot", "browser_security_headers", "browser_transfer_link", "browser_open_transferred_link", "qa_record_finding", "qa_finish"]) {
     if (!names.has(required)) throw new Error(`missing tool ${required}`);
   }
   if (process.env.QA_LIVE_MAILBOX === "1") {
@@ -77,9 +80,14 @@ try {
   const session = await request(3, "tools/call", { name: "session_create", arguments: { width: 800, height: 600 } });
   if (!session.structuredContent?.session_id) throw new Error("session_create returned no session id");
   const sessionId = session.structuredContent.session_id;
+  const beforeNavigation = await request(18, "tools/call", { name: "browser_security_headers", arguments: { session_id: sessionId } });
+  if (!beforeNavigation.isError) throw new Error("security headers were inspected without an app document");
   await request(4, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const observed = await request(5, "tools/call", { name: "browser_observe", arguments: { session_id: sessionId } });
   if (JSON.stringify(observed).includes("secret-invite")) throw new Error("safe browser output leaked an invite token");
+  const headers = await request(17, "tools/call", { name: "browser_security_headers", arguments: { session_id: sessionId } });
+  if (headers.isError || !headers.structuredContent?.present?.["content-security-policy"] || !headers.structuredContent?.present?.["x-frame-options"] || !headers.structuredContent?.csp_directives?.includes("script-src")) throw new Error("document security-header inventory missing");
+  if (/private-value|set-cookie|nonce-/i.test(JSON.stringify(headers))) throw new Error("document security-header inventory exposed a secret");
   const forgotPage = await request(13, "tools/call", { name: "browser_click", arguments: { session_id: sessionId, target: { role: "link", name: "Forgot your password?" } } });
   if (!JSON.stringify(forgotPage).includes("Reset password")) throw new Error("browser_click did not await same-origin link navigation");
   await request(16, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });

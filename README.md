@@ -74,13 +74,18 @@ illustrations below are part of GeoGuessMe’s own visual language.
 
 ## ✨ What you can do
 
+- **Control your interactions** with [player blocking](docs/user-blocking.md)
+  from profiles and a blocked-users manager in Settings.
 - **Challenge your people** with private, short-lived photo and video prompts.
 - **Explore your group's world** on a rotatable 3D Earth, opened from the globe
   icon in group chat. Browse all challenges while hidden locations stay private.
 - **Personalize your map pins** by completing any of 30 challenges, then choose
   an unlocked marker in Settings for your globe locations and challenge results.
 - **Keep the conversation moving** with messenger-style hidden message actions,
-  emoji reactions, and replies.
+  emoji reactions, and replies. Report a harmful group message from its actions
+  or report another player from their profile;
+  [moderation operations](docs/data-protection.md#content-report-review)
+  describe how notices are reviewed.
 - **Make groups feel like yours** with a group photo and independent
   notification settings for every group.
 - **Have fun with the camera** using on-device face tracking, playful lenses,
@@ -172,8 +177,14 @@ flows.
   clean at handoff.
 - Production releases use a short-lived repository `release/*` branch based on
   `main`. Its tree must exactly match the successfully deployed `dev` tree.
-- Merges publish signed, immutable development images first. Production then
-  promotes those exact image digests without rebuilding them.
+- Dependency images are reused by reviewed input hash, not application revision.
+  Merges freshly scan exact runtime digests before signing revision adoption;
+  production promotes those exact bytes without rebuilding.
+- `make audit-images` scans the entire required inventory. Known exploitation
+  and confirmed deployment exposure block; other upstream CVEs remain visible
+  advisories. Application source dependency checks remain strict. See
+  [image security scanning](docs/security-scanning.md) for explicit preparation
+  targets, strict failures, and the staged host cutover.
 
 See [Contributing](CONTRIBUTING.md), [Testing](docs/testing.md), and the
 [hosted deployment runbook](docs/runbooks/hosted-deployment.md) before working

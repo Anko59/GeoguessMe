@@ -47,6 +47,15 @@ beforeEach(() => {
 });
 
 describe('MessageRow', () => {
+    it('offers report only on another player message when actions are open', () => {
+        renderRow({ actionsOpen: true });
+        expect(screen.getByRole('button', { name: 'Report message' })).toBeInTheDocument();
+    });
+
+    it('does not offer reporting your own message', () => {
+        renderRow({ actionsOpen: true, isMe: true });
+        expect(screen.queryByRole('button', { name: 'Report message' })).not.toBeInTheDocument();
+    });
     it('links the sender name and avatar to the player profile', () => {
         renderRow();
         expect(screen.getByRole('link', { name: 'bob' })).toHaveAttribute('href', '/profile/user-2');

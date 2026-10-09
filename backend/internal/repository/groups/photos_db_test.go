@@ -3,6 +3,7 @@ package groups
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	viewExpires := now.Add(30 * time.Minute)
@@ -61,7 +62,7 @@ func TestPhotoCreationAndChallengeAcceptance(t *testing.T) {
 	// deadline) derives the guess deadline from the stored view end so the
 	// accept response stays valid.
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-2").
 		WillReturnRows(pgxmock.NewRows([]string{"photo_id", "user_id", "accepted_at", "view_expires_at", "guess_expires_at"}).
@@ -78,14 +79,14 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	repo := NewRepository(mock)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	photo := &models.Photo{ID: "photo-1", UserID: "user-1", GroupID: "group-1", StorageKey: "photos/one", MIMEType: "image/jpeg", ByteSize: 10, Lat: 48.8, Long: 2.3, LifecycleStatus: "ready", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour), RetentionAt: now.Add(24 * time.Hour)}
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	gotPhoto, allowed, err := repo.CanViewResults(context.Background(), photo.ID, "user-2", now)
 	if err != nil || gotPhoto == nil || allowed {
 		t.Fatalf("result visibility = %+v/%v, %v", gotPhoto, allowed, err)
 	}
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-1").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	gotPhoto, allowed, err = repo.CanViewResults(context.Background(), photo.ID, "user-1", now)
 	if err != nil || !allowed || gotPhoto == nil {
@@ -96,7 +97,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 		t.Fatalf("invalid guess = %v", err)
 	}
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -107,7 +108,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	}
 	guessTime := now.Add(time.Hour)
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at", "guess_expires_at"}).AddRow(now.Add(-time.Hour), now.Add(-time.Minute), now.Add(2*time.Hour)))
@@ -124,7 +125,7 @@ func TestResultsAndGuessIdempotency(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnRows(guessRows(guessTime))
 	mock.ExpectCommit()
@@ -144,7 +145,7 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	// even though the viewing window is closed, so a player who closed the
 	// app cannot bypass the deadline by reopening the challenge.
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -158,7 +159,7 @@ func TestGuessRejectedAfterGuessWindow(t *testing.T) {
 	// A legacy view row without a recorded deadline (NULL, pre-migration)
 	// keeps the previous behavior: no guess-window limit.
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -186,7 +187,7 @@ func TestPartyTimeDoubling(t *testing.T) {
 	submit := func(partyLookup func() *pgxmock.Rows) *GuessResult {
 		t.Helper()
 		mock.ExpectBegin()
-		mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+		mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 		mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -241,7 +242,7 @@ func TestTimeoutGuessAcceptsClientCountdownSkew(t *testing.T) {
 	// before the authoritative deadline; the small skew tolerance must let
 	// the timeout row be recorded instead of rejecting with 409.
 	viewExpires := now.Add(-time.Hour)
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -255,7 +256,7 @@ func TestTimeoutGuessAcceptsClientCountdownSkew(t *testing.T) {
 	}
 
 	// A call clearly before the deadline is still refused without writing.
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -275,7 +276,7 @@ func TestLateGuessPersistsTimeoutBeforeExpiryReply(t *testing.T) {
 	// A failed timeout insert surfaces as an error (500 + observability)
 	// rather than silently returning 410 without a persisted timeout row.
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(photoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-2").WillReturnRows(photoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-2").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT id, photo_id, user_id").WithArgs(photo.ID, "user-2").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-2").
@@ -316,5 +317,54 @@ func TestViewDeliveryStatus(t *testing.T) {
 		WillReturnError(pgx.ErrNoRows)
 	if _, _, err := repo.ViewDeliveryStatus(context.Background(), "photo-1", "user-2"); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("missing view error = %v", err)
+	}
+}
+
+func TestBlockedChallengeOperationsStopBeforeMembershipOrMutation(t *testing.T) {
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	for _, operation := range []string{"photo", "accept", "guess", "timeout", "results"} {
+		t.Run(operation, func(t *testing.T) {
+			mock := newMockPool(t)
+			r := NewRepository(mock)
+			transaction := operation == "accept" || operation == "guess"
+			if transaction {
+				mock.ExpectBegin()
+			}
+			mock.ExpectQuery(regexp.QuoteMeta(photoVisibility)).WithArgs("blocked-photo", "viewer").WillReturnError(pgx.ErrNoRows)
+			if transaction {
+				mock.ExpectRollback()
+			}
+			var err error
+			switch operation {
+			case "photo":
+				var photo *models.Photo
+				photo, err = r.PhotoForViewer(t.Context(), "blocked-photo", "viewer")
+				if photo != nil || err != nil {
+					t.Fatalf("blocked photo = %+v, %v", photo, err)
+				}
+				return
+			case "accept":
+				_, _, err = r.AcceptChallenge(t.Context(), "blocked-photo", "viewer", time.Second, time.Minute, now)
+			case "guess":
+				_, err = r.SubmitGuess(t.Context(), "blocked-photo", "viewer", 0, 0, now)
+			case "timeout":
+				_, err = r.TimeoutGuess(t.Context(), "blocked-photo", "viewer", now)
+			case "results":
+				_, _, err = r.CanViewResults(t.Context(), "blocked-photo", "viewer", now)
+			}
+			if !errors.Is(err, ErrNotFound) {
+				t.Fatalf("blocked %s = %v", operation, err)
+			}
+		})
+	}
+}
+
+func TestResultsHideBlockedGuessContributors(t *testing.T) {
+	mock := newMockPool(t)
+	r := NewRepository(mock)
+	mock.ExpectQuery(`b.blocker_id=\$2 AND b.blocked_id=g.user_id.*b.blocker_id=g.user_id AND b.blocked_id=\$2.*ORDER BY`).WithArgs("photo", "viewer").WillReturnRows(pgxmock.NewRows([]string{"id", "photo_id", "user_id", "group_id", "lat", "long", "score", "distance", "timed_out", "created_at", "username", "avatar", "view_expires_at", "pin_key", "pin_name", "pin_image"}))
+	guesses, err := r.GuessesForPhotoForViewer(t.Context(), "photo", "viewer")
+	if err != nil || len(guesses) != 0 {
+		t.Fatalf("hidden guess contributions = %+v, %v", guesses, err)
 	}
 }

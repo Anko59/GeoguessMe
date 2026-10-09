@@ -62,6 +62,7 @@ func (a *ChatAPI) requireMember(w http.ResponseWriter, r *http.Request, groupID,
 }
 
 func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	if r.Method != http.MethodGet {
 		MethodNotAllowed(w)
 		return
@@ -94,12 +95,7 @@ func (a *ChatAPI) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
 	// the user scrolls up. It takes precedence over the forward cursor and is
 	// resolved scoped to the group.
 	if beforeID := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeID != "" {
-		page, err := a.messages.GetGroupMessagesPageBefore(r.Context(), groupID, beforeID, limit)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
-			return
-		}
-		page, err = a.messages.EnrichMessagesPageForViewer(r.Context(), page, userID)
+		page, err := a.messages.GetGroupMessagesPageBeforeForViewer(r.Context(), groupID, beforeID, limit, userID)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load messages")
 			return
@@ -201,6 +197,10 @@ func (a *ChatAPI) UploadChatMedia(w http.ResponseWriter, r *http.Request) {
 				slog.Error("failed to persist chat media upload compensation", "storage_key", asset.StorageKey, "delete_error", deleteErr, "enqueue_error", queueErr)
 			}
 		}
+		if errors.Is(err, chatrepo.ErrMessageForbidden) {
+			WriteError(w, http.StatusForbidden, "forbidden", "Message is not available")
+			return
+		}
 		if errors.Is(err, chatrepo.ErrInvalidMessageReply) {
 			WriteError(w, http.StatusBadRequest, "invalid_message", "Reply target is not in this group")
 			return
@@ -267,6 +267,7 @@ func (a *ChatAPI) compensateChatMediaDelete(r *http.Request, key string) {
 // is still a member of the message's group. The opaque storage key is never
 // returned to clients and the response is deliberately non-cacheable.
 func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	if r.Method != http.MethodGet {
 		MethodNotAllowed(w)
 		return
@@ -280,7 +281,7 @@ func (a *ChatAPI) ServeChatMedia(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "missing_media_id", "Media ID is required")
 		return
 	}
-	asset, err := a.messages.GetChatMedia(r.Context(), mediaID)
+	asset, err := a.messages.GetChatMediaForViewer(r.Context(), mediaID, GetUserIDFromContext(r))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load media")
 		return

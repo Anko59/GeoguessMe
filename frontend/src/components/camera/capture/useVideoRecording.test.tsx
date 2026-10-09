@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useVideoRecording } from './useVideoRecording';
 
@@ -42,6 +42,94 @@ function Recorder() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('useVideoRecording', () => {
+    it('ignores delayed final events after unmount without stopping borrowed preview tracks', () => {
+        class DelayedRecorder extends FakeMediaRecorder {
+            override stop() {
+                this.state = 'inactive';
+            }
+        }
+        vi.stubGlobal('MediaRecorder', DelayedRecorder);
+        const createObjectURL = vi.fn(() => 'blob:late');
+        vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+        const onError = vi.fn();
+        const onComplete = vi.fn();
+        const onSettled = vi.fn();
+        const stop = vi.fn();
+        const { result, unmount } = renderHook(() => useVideoRecording(onError));
+        act(() => {
+            result.current.startRecording(
+                { getTracks: () => [{ stop }] } as unknown as MediaStream,
+                onComplete,
+                onSettled,
+            );
+        });
+        const recorder = FakeMediaRecorder.instance!;
+        unmount();
+        act(() => {
+            recorder.ondataavailable?.({ data: new Blob(['late']) } as BlobEvent);
+            recorder.onstop?.(new Event('stop'));
+            recorder.onerror?.(new Event('error'));
+        });
+        expect(onSettled).toHaveBeenCalledTimes(1);
+        expect(createObjectURL).not.toHaveBeenCalled();
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+        expect(stop).not.toHaveBeenCalled();
+    });
+
+    it('revokes each owned URL once on replacement, discard, and unmount', () => {
+        vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+        const revokeObjectURL = vi.fn();
+        vi.stubGlobal('URL', {
+            createObjectURL: vi
+                .fn()
+                .mockReturnValueOnce('blob:first')
+                .mockReturnValueOnce('blob:second')
+                .mockReturnValueOnce('blob:third'),
+            revokeObjectURL,
+        });
+        const { result, unmount } = renderHook(() => useVideoRecording(vi.fn()));
+        act(() => {
+            result.current.startRecording({} as MediaStream, vi.fn());
+            result.current.stopRecording();
+        });
+        act(() => {
+            result.current.startRecording({} as MediaStream, vi.fn());
+            result.current.stopRecording();
+        });
+        act(() => result.current.discardRecording());
+        act(() => {
+            result.current.startRecording({} as MediaStream, vi.fn());
+            result.current.stopRecording();
+        });
+        unmount();
+        expect(revokeObjectURL.mock.calls).toEqual([['blob:first'], ['blob:second'], ['blob:third']]);
+    });
+
+    it('rejects final events from a superseded recording generation', () => {
+        class DelayedRecorder extends FakeMediaRecorder {
+            override stop() {
+                this.state = 'inactive';
+            }
+        }
+        vi.stubGlobal('MediaRecorder', DelayedRecorder);
+        const createObjectURL = vi.fn(() => 'blob:current');
+        vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+        const onComplete = vi.fn();
+        const onSettled = vi.fn();
+        const { result } = renderHook(() => useVideoRecording(vi.fn()));
+        act(() => result.current.startRecording({} as MediaStream, onComplete, onSettled));
+        const old = FakeMediaRecorder.instance!;
+        act(() => result.current.startRecording({} as MediaStream, onComplete, onSettled));
+        act(() => {
+            old.ondataavailable?.({ data: new Blob(['old']) } as BlobEvent);
+            old.onstop?.(new Event('stop'));
+        });
+        expect(result.current.recording).toBe(true);
+        expect(onSettled).toHaveBeenCalledTimes(1);
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(createObjectURL).not.toHaveBeenCalled();
+    });
     it('records a browser-supported WebM clip and exposes it for upload', () => {
         vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
         vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:recorded-video'), revokeObjectURL: vi.fn() });

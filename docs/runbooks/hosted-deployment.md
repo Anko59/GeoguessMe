@@ -93,8 +93,12 @@ Terraform ignores post-creation `user_data` drift because Hetzner cannot update
 cloud-init in place and replacing a stateful host is unsafe. Apply bootstrap
 changes explicitly to the running host and verify them, or use the documented
 backup/restore replacement procedure; a newly created host always receives the
-current template. Runtime scripts and compose definitions must be updated as one
-exact-revision set using the procedure in
+current template only after its strict Hetzner 32 KiB rendering and native
+parser gates pass. The template uses standard MIME `application/gzip` carrying a
+`#cloud-config-archive` with compact JSON cloud-config content to preserve
+UTF-8; that transport does not itself prove size-gate success. Runtime scripts,
+compose definitions, fixture JSON and units must be updated as one complete
+33-member exact-revision set using the procedure in
 [docs/runbooks/runtime-hardening.md](runtime-hardening.md#applying-monitored-host-definitions);
 copying only the latest changed file creates an unverifiable host state. After
 installing a runtime that adds release cleanup, run
@@ -242,18 +246,76 @@ validates that it is newer than the latest semantic release tag, creates the
 GitHub release/tag, and deploys production. Pull-request jobs never receive
 deployment secrets.
 
-The patched Keycloak runtime is built from its pinned upstream image with the
-checksum-verified FreeMarker 2.3.35 jar, then signed and scanned as a fourth
-release artifact. Development deploys run realm reconciliation without
-restarting the shared identity service. Production backs up the shared Keycloak
-database before switching to the promoted digest, records that digest with
-release metadata, and restores the prior image if deployment fails.
+Seven content-keyed dependencies—Caddy runtime, Cloudflared, Keycloak,
+PostgreSQL, Restic, SOPS and socket-proxy—are built or resolved separately from
+application publication. Reuse verifies original signed build provenance;
+development revision adoption and production promotion retain the exact digest.
+Keycloak uses the pinned upstream 26.7.5 runtime in its provenance wrapper,
+without the retired FreeMarker jar replacement. The pure, scan-only audit covers
+all 17 required images (eight pinned runtime entries, seven dependencies and the
+two application artifacts), including inactive optional fixtures. It blocks
+known-exploited or confirmed-exposure findings at any severity, including those
+without fixes, and fails closed on incomplete coverage. Other findings remain
+visible advisories; upstream binaries/packages are not rebuilt for CVE churn.
+Application source gates remain strict. See the
+[security scanning guide](../security-scanning.md) for evidence and preparation.
+
+Development deploys run realm reconciliation without restarting the shared
+identity service. Production backs up the shared Keycloak database before
+switching to the promoted digest, records that digest and the adopted database
+and Restic references with release metadata, and retains the previous image and
+independent identity database reference for rollback. Scheduled backups and
+restore rehearsals resolve active environment metadata, not an assumed new pin.
+
+### Operator prerequisite for the dependency-aware protocol
+
+The first step of each deploy job in `.github/workflows/deploy.yml` and
+`.github/workflows/release.yml` requires the GitHub **repository variable**
+`HOSTED_DEPENDENCY_PROTOCOL_READY` to equal literal `true`. Keep it unset/false
+until the separately authorized operator completes the
+[33-member root-runtime cutover](runtime-hardening.md#applying-monitored-host-definitions):
+review `common.sh`, `deploy.sh` and `forced-command.sh` together, validate the
+whole staged set before installation, compare all installed files with canonical
+source hashes, record the exact runtime revision, install checksum-verified host
+Cloudflared 2026.9.3 from the shared inventory, and pass `verify dev` and
+`verify production` through their respective Access SSH applications. A dotenv
+or Make variable does not satisfy this guard, and the flag proves neither review
+nor successful CI. Use the existing `make credentials-preflight`, scoped
+`make ops-ssh` and manual root-install procedure; never broaden CI keys or add
+an unreviewed privileged remote script.
+
+The new SSH forms include the verb in their field counts:
+
+```text
+dev (7):        deploy BACKEND WEB SOPS POSTGRES RESTIC REVISION
+production (8): deploy BACKEND WEB KEYCLOAK SOPS POSTGRES RESTIC REVISION
+```
+
+SOPS's workflow/revision signature is checked before its pull and before secret
+decryption; its package must be anonymously pullable. PostgreSQL and Restic
+signatures are checked before their pulls. Legacy arities/bootstrap references
+remain only for staged compatibility; they are not evidence of actual host
+adoption. Source/runtime revision differences require explicit operator cutover.
+The shared monitor still uses separate `watch SOCKET_PROXY_IMAGE REVISION`; dev
+CI must not change it. See
+[protocol staging](runtime-hardening.md#staging-a-deploy-protocol-change).
+
+The maintained local/disposable S3 fixture is official SeaweedFS 4.48, verified
+against its release signature and included in scans; `minio`/`local-minio`
+remain compatibility names. Hosted R2 is unchanged. Preserve legacy volumes and
+follow the separately approved
+[local S3 migration runbook](s3-fixture-migration.md); these hosted instructions
+authorize neither user-data migration nor live operations. Repository changes do
+not establish actual CI publication, signatures, development cutover, or an
+existing-host user-data transition. Full local verification and live closure
+remain separate evidence requirements.
 
 Both branches require signed commits, the aggregate Dockerized verification
 check, PRs, linear history, resolved conversations, admin enforcement, and
 prohibit force-push/deletion. The `development` environment accepts only `dev`;
-`production` accepts only `main`. The `monitoring` environment accepts only
-`main`. Keep approvals at zero while the repository has one maintainer.
+`production` accepts only `main`. The `monitoring` environment must allow `dev`
+for scheduled health checks from the default branch, as described above. Keep
+approvals at zero while the repository has one maintainer.
 
 ## Dev acceptance and production launch
 

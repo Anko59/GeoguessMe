@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { bustAvatarCache } from '../../components/common/avatarCache';
 import LogoutButton from '../../components/navigation/LogoutButton';
+import BlockedUsersManager from '../../components/settings/BlockedUsersManager';
 import MapPinPicker from '../../components/settings/MapPinPicker';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import type { OIDCConfig } from '../../types';
@@ -388,6 +389,7 @@ export default function AccountSettings() {
                         </button>
                     )}
                 </div>
+                <BlockedUsersManager />
                 <div className="account-danger">
                     <div className="account-section-heading">
                         <h2>Danger zone</h2>

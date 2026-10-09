@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
-# Go 1.26.6-alpine (immutable index digest: af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df)
-FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df
+# Go 1.26.9-alpine (immutable index digest: cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0)
+FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
 
 # Specialized security and operations tools: vulnerability scanning, race
 # detection (CGO), database client utilities. Normal format/lint/test/build
 # operations use the smaller go-tools image.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash build-base curl git postgresql-client \
+RUN apk add --no-cache bash build-base curl git jq postgresql-client \
  && git config --system --add safe.directory /workspace
 
 ENV CGO_ENABLED=1 \

@@ -2,7 +2,7 @@
 #
 # Human-readable versions are next to immutable image digests. Tool services
 # have no application volumes, production env files, or Docker socket access.
-name: geoguessme-tools
+name: ${GEOGUESSME_TOOLS_PROJECT:?Run tooling through Make}
 
 x-workspace: &workspace ./:/workspace:ro
 
@@ -42,24 +42,56 @@ services:
     devices:
       - /dev/kvm:/dev/kvm
 
+  # Opt-in Linux USB access, without privileged mode or access to host adb.
+  mobile-device-tools:
+    extends: mobile-tools
+    profiles: [mobile-device]
+    network_mode: none
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+
   go-tools:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.26.6
+    image: geoguessme/go-tools:1.26.9
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
 
+  s3-fixture-client:
+    extends: go-tools
+    profiles: [s3-fixture]
+    networks: [s3-fixture]
+
+  # Explicit local migration client; Linux host networking reaches loopback-only
+  # source/staging endpoints. It never receives live R2 configuration.
+  s3-fixture-host-client:
+    extends: go-tools
+    profiles: [s3-fixture]
+    network_mode: host
+
+  supply-chain-verifier:
+    <<: *host-tools
+    profiles: [s3-fixture]
+    image: ghcr.io/sigstore/cosign/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca
+    environment:
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    pids_limit: 128
+
   go-tools-write:
     <<: *host-tools
     build:
       context: .
       dockerfile: deployment/docker/tools/go-tools.Dockerfile
-    image: geoguessme/go-tools:1.26.6
+    image: geoguessme/go-tools:1.26.9
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -169,32 +201,25 @@ services:
     volumes:
       - ./:/workspace
 
-  # Caddy 2.11.4 with golang.org/x/net v0.56.0, matching the production
-  # frontend image's patched binary.
+  # Validation reuses the exact Caddy runtime consumed by the frontend build.
   caddy:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/caddy-tools.Dockerfile
-    image: geoguessme/caddy-tools:2.11.4-xnet-0.56.0
+    image: ${CADDY_RUNTIME_IMAGE:?Run through Make or supply a verified Caddy runtime}
     entrypoint: []
     volumes:
       - *workspace
 
-  # cloudflared 2026.9.1 with the OpenSSL libraries refreshed to the fixed
-  # release (CVE-2026-14456); used as an SSH ProxyCommand.
+  # Cloudflared 2026.9.3 with Debian OpenSSL deb13u3; AMD64 is explicit.
   cloudflared:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/cloudflared-tools.Dockerfile
-    image: geoguessme/cloudflared-tools:2026.9.1-openssl-3.5.7
+    platform: linux/amd64
+    image: ${CLOUDFLARED_IMAGE:?Run through Make or supply the immutable Cloudflared artifact}
     environment:
       - TUNNEL_SERVICE_TOKEN_ID
       - TUNNEL_SERVICE_TOKEN_SECRET
     volumes: []
 
-  # Terraform 1.15.8 with golang.org/x/net v0.56.0. State is remote in R2;
+  # Terraform 1.16.5 official binary with only the PCRE2 package refreshed.
   # provider credentials are passed explicitly and never baked into this image
   # or Compose configuration.
   terraform:
@@ -202,7 +227,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/terraform-tools.Dockerfile
-    image: geoguessme/terraform-tools:1.15.8-xnet-0.56.0
+    image: geoguessme/terraform-tools:1.16.5-pcre2-10.49-r0
     entrypoint: []
     working_dir: /workspace/infra/terraform
     environment:
@@ -216,15 +241,11 @@ services:
       - ./:/workspace
       - ./.tools-cache/terraform-plugins:/tf-plugin-cache
 
-  # Restic 0.19.1 with the Go module set refreshed (x/net v0.56.0, x/text
-  # v0.39.0, grpc v1.83.2, x/crypto v0.55.0). Hosted backup and restore
+  # Restic 0.19.1 with the reviewed fixed module graph. Hosted backup/restore
   # scripts receive this image as an exact signed registry reference.
   restic:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/restic-tools.Dockerfile
-    image: geoguessme/restic-tools:0.19.1-go-deps-2026-09
+    image: ${RESTIC_IMAGE:?Run through Make or supply the immutable Restic artifact}
     entrypoint: []
     volumes:
       - *workspace
@@ -234,10 +255,7 @@ services:
   # `make audit-images` in place of the upstream base.
   postgres-openssl:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/postgres-openssl.Dockerfile
-    image: geoguessme/postgres-openssl:15.19-openssl-3.5.8-libuuid-2.42.3
+    image: ${POSTGRES_IMAGE:?Run through Make or supply the immutable PostgreSQL artifact}
     entrypoint: []
     volumes:
       - *workspace
@@ -247,10 +265,7 @@ services:
   # this patched final image instead.
   sops:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/sops-tools/Dockerfile
-    image: geoguessme/sops-tools:3.13.3-expat-deb12u4
+    image: ${SOPS_IMAGE:?Run through Make or supply the immutable SOPS artifact}
     entrypoint: []
     volumes:
       - ./:/workspace
@@ -259,12 +274,7 @@ services:
   # the default audit reference with the exact published digest.
   socket-proxy-tools:
     <<: *host-tools
-    build:
-      context: .
-      dockerfile: deployment/docker/socket-proxy-tools/Dockerfile
-      args:
-        GEOGUESSME_REVISION: ${GEOGUESSME_REVISION:-local}
-    image: geoguessme/socket-proxy-tools:local
+    image: ${SOCKET_PROXY_IMAGE:?Run through Make or supply the immutable socket-proxy artifact}
     entrypoint: []
     volumes:
       - *workspace
@@ -285,7 +295,7 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/tools/go-security.Dockerfile
-    image: geoguessme/go-security:1.26.6
+    image: geoguessme/go-security:1.26.9
     volumes:
       - *workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -294,7 +304,7 @@ services:
 
   go-security-write:
     <<: *host-tools
-    image: geoguessme/go-security:1.26.6
+    image: geoguessme/go-security:1.26.9
     volumes:
       - ./:/workspace
       - ${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:${GEOGUESSME_GIT_COMMON_DIR:?GEOGUESSME_GIT_COMMON_DIR must be exported by make}:ro
@@ -313,8 +323,14 @@ services:
     environment:
       TRIVY_CACHE_DIR: /tmp/trivy-cache
     volumes:
-      - ./:/workspace
+      # Only audit artifacts: never mount checkout Git credentials or local dotenvs.
+      - ./security/image-reports:/workspace/security/image-reports
       - ./security/image-reports/.trivy-cache:/tmp/trivy-cache
+
+networks:
+  s3-fixture:
+    external: true
+    name: ${GEOGUESSME_S3_FIXTURE_NETWORK:?Run the fixture client through Make}
 
 volumes:
   go-mod-cache:
