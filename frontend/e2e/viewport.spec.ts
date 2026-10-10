@@ -92,7 +92,15 @@ test.describe('Viewport preservation', () => {
         const geometry: Array<{ left: number; top: number; width: number; height: number }> = [];
 
         for (const path of ['/feed', '/groups', '/profile', '/settings']) {
+            // Cached session hints render the shell before refresh-cookie rotation
+            // completes. Await that response before the next hard navigation.
+            const refreshedSession = authenticatedPage.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/auth/refresh') && response.request().method() === 'POST',
+            );
             await authenticatedPage.goto(path);
+            const refreshResponse = await refreshedSession;
+            expect(refreshResponse.status()).toBe(200);
+            expect(await refreshResponse.finished()).toBeNull();
             const navigation = authenticatedPage.locator('.authenticated-page-shell > .app-topbar');
             await expect(navigation).toBeVisible();
             const box = await navigation.boundingBox();
