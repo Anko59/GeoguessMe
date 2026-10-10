@@ -137,7 +137,7 @@ describe('live stream transitions', () => {
             identity: 'user-1:group-1',
             items: [message('page-a', '2026-01-01T00:00:00Z')],
         });
-        expect(ids(state)).toEqual(['live']);
+        expect(ids(state)).toEqual([]);
         expect(state.hasMoreOlder).toBe(false);
 
         const fullPage = Array.from({ length: 50 }, (_, i) =>
@@ -149,6 +149,41 @@ describe('live stream transitions', () => {
             items: fullPage,
         });
         expect(state.hasMoreOlder).toBe(true);
+    });
+
+    it('discards blocked cached messages newer than the server page while preserving live delivery', () => {
+        let state = initialChatStreamState('user-1:group-1', 'user-1', [
+            message('blocked-cache', '2026-01-03T00:00:00Z'),
+        ]);
+        state = act(state, {
+            type: 'merge',
+            identity: state.identity,
+            incoming: [message('live', '2026-01-04T00:00:00Z')],
+        });
+        state = act(state, {
+            type: 'first_page',
+            identity: state.identity,
+            items: [message('allowed', '2026-01-01T00:00:00Z')],
+        });
+        state = act(state, {
+            type: 'merge',
+            identity: state.identity,
+            incoming: [message('allowed', '2026-01-01T00:00:00Z')],
+        });
+        expect(ids(state)).toEqual(['allowed', 'live']);
+    });
+
+    it('preserves a new live message when the authoritative startup page is empty', () => {
+        let state = initialChatStreamState('user-1:group-1', 'user-1', [
+            message('blocked-cache', '2026-01-03T00:00:00Z'),
+        ]);
+        state = act(state, {
+            type: 'merge',
+            identity: state.identity,
+            incoming: [message('live', '2026-01-04T00:00:00Z')],
+        });
+        state = act(state, { type: 'first_page', identity: state.identity, items: [] });
+        expect(ids(state)).toEqual(['live']);
     });
 
     it('updates the challenge status of exactly the matching challenge message', () => {
