@@ -31,6 +31,9 @@ grep -Eq 'QA_MAILBOX_ACCESS_CLIENT_ID' "$root_dir/tools/qa/codex-adapter.sh"
 grep -Eq 'QA_MAILBOX_ALLOWED_LINK_ORIGINS' "$root_dir/tools/qa/codex-adapter.sh"
 grep -Eq 'QA_MAILBOX_ALLOWED_LINK_ORIGINS' "$root_dir/tools/make/tests.mk"
 grep -Eq 'QA_AGENT_FOCUS' "$root_dir/tools/qa/codex-adapter.sh"
+for adapter in codex pi; do
+    grep -Fq 'QA policy (curated runtime instructions)' "$root_dir/tools/qa/$adapter-adapter.sh"
+done
 grep -Eq 'QA_SKIP_BOOTSTRAP' "$root_dir/tools/make/tests.mk"
 grep -Eq 'chmod 600' "$root_dir/tools/qa/codex-adapter.sh"
 if grep -Eq 'mcp_servers\.qa_browser\.env\.' "$root_dir/tools/qa/codex-adapter.sh"; then exit 1; fi
@@ -48,6 +51,10 @@ fi
 grep -Eq 'qa_account_login' "$root_dir/.agents/qa/AGENT.md"
 grep -Eq 'qa_email_account_signup' "$root_dir/.agents/qa/AGENT.md"
 grep -Eq 'qa_email_account_signup' "$root_dir/.agents/qa/tools.yaml"
+for recovery_tool in qa_email_account_reset_password qa_email_account_login; do
+    grep -Fq "$recovery_tool" "$root_dir/.agents/qa/tools.yaml"
+    grep -Fq "$recovery_tool" "$root_dir/.agents/qa/AGENT.md"
+done
 grep -Eq 'runner validates that the operator supplied the dedicated pool password' "$root_dir/.agents/qa/AGENT.md"
 grep -Eq 'three distinct dedicated accounts' "$root_dir/.agents/qa/AGENT.md"
 grep -Eq 'CLOUDFLARE_API_TOKEN' "$root_dir/tools/qa/cloudflare-access.sh"

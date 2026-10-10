@@ -81,20 +81,24 @@ claim email coverage until `mailbox_search`, `mailbox_read`, and
 not need Email Routing Rules access. A visible “verification sent” page proves
 only that the identity service accepted the request; it is not delivery
 evidence. Likewise, opening a reset link is not evidence that reset completion
-or changed-password sign-in succeeded: the generic `browser_type` contract would
-reveal the supplied password in the MCP call, so the source-blind agent must
-leave those stages unexercised until a dedicated credential-holding helper is
-available. Do not enter secrets using generic browser tools. During the
-September 2026 recovery, the public Mail.tm fallback reached that page but
-received no message. Keycloak mail uses multipart and quoted-printable encoding;
-the gateway decodes both before redacting previews and opening links. It
-classifies Keycloak action-token links by message subject so verification and
-password reset remain distinct. On September 25, a full diagnostic run against
-then-deployed revision `1ac86feea5e18b2eca2b03ebf46f368248edd370` completed
-verification and opened both reset-link paths through the controlled relay;
-password change and subsequent sign-in were not evidenced. Release evidence
-still requires a full run against the actual release candidate after that
-candidate deploys.
+or changed-password sign-in succeeded. Use `qa_email_account_reset_password` on
+the mailbox-bound reset form and `qa_email_account_login` in an isolated
+session; require `changed_password_verified: true`. The provider holds both
+passwords privately, permits only this run's disposable account, binds the reset
+grant to its exact tab and URL, and checks the configured credential origin
+before filling any password. Sign-in clears that QA context's cookies so SSO
+cannot replace password proof. The complete coverage gate requires the verified
+changed-password sign-in. Generic `browser_type` would expose the password in
+the MCP call and must never carry credentials. During the September 2026
+recovery, the public Mail.tm fallback reached that page but received no message.
+Keycloak mail uses multipart and quoted-printable encoding; the gateway decodes
+both before redacting previews and opening links. It classifies Keycloak
+action-token links by message subject so verification and password reset remain
+distinct. On September 25, a full diagnostic run against then-deployed revision
+`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and opened
+both reset-link paths through the controlled relay; password change and
+subsequent sign-in were not evidenced. Release evidence still requires a full
+run against the actual release candidate after that candidate deploys.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -104,13 +108,20 @@ recovery, and use the two remaining roles for the multi-user journey. This keeps
 the mailbox-backed account within the three-account signup budget. A run that
 cannot do so is blocked as QA-harness failure.
 
-Visible one-time group invite links have a separate safe handoff contract:
+Visible group invite links have a separate safe handoff contract:
 `browser_transfer_link` captures a labeled invite control in the owner session
 and returns only an opaque single-use transfer ID;
-`browser_open_transferred_link` consumes that ID in the member session. The raw
-link never enters model output, diagnostics, screenshots, or the report. A
-failed transfer is a QA harness failure and blocks the multi-user journey; it
-must not be recorded as an acceptable coverage limitation.
+`browser_open_transferred_link` consumes that ID in another isolated session.
+Create one invite for the new QA group and capture two independent handles while
+that same link is visible. Use the first for the member; after checking outsider
+denial, use the second for the non-poster Party Time comparison. This reads the
+existing invitation rather than creating another product invite. The raw link
+never enters model output, diagnostics, screenshots, or the report. A failed
+transfer is a QA harness failure and blocks the multi-user journey; it must not
+be recorded as an acceptable coverage limitation. Finding artifact references
+must match evidence returned by the current run; invented screenshot paths are
+rejected. Both adapters include the curated QA policy in their prompt without
+granting the model filesystem or source access.
 
 The runtime adapters are deliberately thin:
 

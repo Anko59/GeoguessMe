@@ -103,11 +103,14 @@ try {
   await request(16, "tools/call", { name: "browser_navigate", arguments: { session_id: sessionId, url: pageUrl } });
   const transfer = await request(6, "tools/call", { name: "browser_transfer_link", arguments: { session_id: sessionId, target: { label: "Invite link" }, kind: "group-invite" } });
   if (!transfer.structuredContent?.transfer_id || JSON.stringify(transfer).includes("secret-invite")) throw new Error("invite transfer leaked a link or returned no opaque id");
+  const secondTransfer = await request(30, "tools/call", { name: "browser_transfer_link", arguments: { session_id: sessionId, target: { label: "Invite link" }, kind: "group-invite" } });
+  if (secondTransfer.structuredContent?.transfer_id === transfer.structuredContent.transfer_id || JSON.stringify(secondTransfer).includes("secret-invite")) throw new Error("one visible invite did not produce separate opaque single-use transfers");
   const member = await request(7, "tools/call", { name: "session_create", arguments: { width: 800, height: 600 } });
   const memberId = member.structuredContent?.session_id;
   if (!memberId) throw new Error("member session_create returned no session id");
   await request(8, "tools/call", { name: "browser_navigate", arguments: { session_id: memberId, url: pageUrl } });
   const opened = await request(9, "tools/call", { name: "browser_open_transferred_link", arguments: { session_id: memberId, transfer_id: transfer.structuredContent.transfer_id } });
+  await request(31, "tools/call", { name: "browser_open_transferred_link", arguments: { session_id: memberId, transfer_id: secondTransfer.structuredContent.transfer_id } });
   if (JSON.stringify(opened).includes("secret-invite")) throw new Error("opened invite transfer leaked an invite token");
   const reused = await request(14, "tools/call", { name: "browser_open_transferred_link", arguments: { session_id: memberId, transfer_id: transfer.structuredContent.transfer_id } });
   if (!reused.isError || JSON.stringify(reused).includes("secret-invite")) throw new Error("invite transfer was not single-use or leaked a token on reuse");
@@ -135,9 +138,16 @@ try {
   if (!loggedIn.structuredContent?.authenticated || loggedIn.structuredContent.account_role !== "owner") {
     throw new Error("qa_account_login contract failed");
   }
-  for (const required of ["browser_capabilities", "mailbox_create", "mailbox_search", "mailbox_read", "mailbox_open_link"]) {
+  for (const required of ["browser_capabilities", "mailbox_create", "mailbox_search", "mailbox_read", "mailbox_open_link", "qa_email_account_reset_password", "qa_email_account_login"]) {
     if (!names.has(required)) throw new Error(`missing extended QA tool ${required}`);
   }
+  const unknownAccount = await request(32, "tools/call", { name: "qa_email_account_reset_password", arguments: { session_id: sessionId, mailbox_id: "pool-account" } });
+  if (!unknownAccount.isError) throw new Error("pool/arbitrary password reset was allowed");
+  const invalidArtifact = await request(33, "tools/call", { name: "qa_record_finding", arguments: { category: "UX_DEBT", severity: "low", title: "invalid evidence", steps: [], expected: "existing evidence", actual: "missing evidence", impact: "contract", artifacts: ["/tmp/nonexistent.png"] } });
+  if (!invalidArtifact.isError) throw new Error("nonexistent finding evidence was accepted");
+  const screenshot = await request(34, "tools/call", { name: "browser_screenshot", arguments: { session_id: sessionId, purpose: "contract evidence" } });
+  const validArtifact = await request(35, "tools/call", { name: "qa_record_finding", arguments: { category: "UX_DEBT", severity: "low", title: "contract evidence", steps: [], expected: "existing evidence", actual: "existing evidence", impact: "contract", artifacts: [screenshot.structuredContent.artifact_path] } });
+  if (validArtifact.isError || validArtifact.structuredContent?.blocking !== false) throw new Error("returned screenshot evidence was rejected");
   await request(11, "tools/call", { name: "session_close", arguments: { session_id: sessionId } });
   await request(12, "tools/call", { name: "session_close", arguments: { session_id: memberId } });
   const report = await request(15, "tools/call", { name: "qa_finish", arguments: { status: "PASS", summary: "contract test", journeys_exercised: [] } });

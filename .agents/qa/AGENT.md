@@ -90,26 +90,34 @@ error handling when visible during those journeys.
 
 For multi-user checks, log in at least three distinct dedicated accounts in a
 full or nightly run, use separate browser sessions, and assign clear roles:
-owner, member, and outsider. Have the owner invite the other accounts, accept
-the invitation in the member session. For a visible one-time invite link, use
-`browser_transfer_link` on the owner's labeled invite-link control, then use
-`browser_open_transferred_link` from the member session; retain only the opaque
-transfer ID and never copy the raw link. Exercise a group conversation with
-multiple members, then test an outsider's authorization boundary. Do not claim
-realtime delivery from a single session; observe it from the separate member
-sessions. If account-pool login or the transfer tool cannot complete this
-handoff, report the journey as `BLOCKED` due to a QA harness failure; do not
-accept it as a product limitation or claim that the journey was tested.
+owner, member, and outsider. Create one invite for the owner's newly created QA
+group. While its link is visible, capture two independent single-use opaque
+handles with `browser_transfer_link`; this reads the same existing invitation
+and creates no second product invite. Open the first handle in the member
+session using `browser_open_transferred_link`. Keep the other handle private
+until after the outsider's authorization-denial check, then use it to join the
+same QA group for the non-poster Party Time comparison. Retain only the opaque
+IDs and never copy the raw link. Exercise a group conversation with multiple
+members, then test an outsider's authorization boundary. Do not claim realtime
+delivery from a single session; observe it from the separate member sessions. If
+account-pool login or the transfer tool cannot complete this handoff, report the
+journey as `BLOCKED` due to a QA harness failure; do not accept it as a product
+limitation or claim that the journey was tested.
 
 For email-dependent flows, use `qa_email_account_signup`, then `mailbox_search`
 with a state-based wait and `mailbox_read` for safe metadata. Use
 `mailbox_open_link` for verification or reset links, and exercise the
 forgot-password form from a clean session. Opening a reset link alone does not
-prove that password reset or sign-in with the changed password works. Never put
-an account password in `browser_type` or the report; if the browser provider
-cannot complete the reset with an internally held credential, explicitly list
-reset completion and changed-password sign-in as unexercised. Use the opaque
-browser transfer tools for visible one-time invites. If the mailbox provider is
+prove that password reset or sign-in with the changed password works. On the
+owner's matching reset form, call `qa_email_account_reset_password` with the
+returned mailbox ID, then use `qa_email_account_login` in a separate isolated
+session and require `changed_password_verified: true`. Both tools keep the
+generated password private; they cannot change pool or arbitrary accounts.
+Choose the matching credential family: Keycloak email accounts use GeoGuessMe ID
+recovery, while direct-login accounts use application recovery. Do not infer
+revocation of separate application sessions from an identity-provider password
+reset. Never put a password in `browser_type` or the report. If either helper
+cannot complete, mark recovery `BLOCKED`. If the mailbox provider is
 unavailable, mark those journeys blocked and retain the limitation.
 
 For session expiry, distinguish reload/refresh restoration, revocation after a
@@ -134,6 +142,9 @@ Party Time, start it using the visible group control and compare an eligible
 poster/guesser with a non-poster, then inspect the active/recharge state when
 available; do not assert cooldown completion without observing it. These are
 independent subjourneys: list each untested stage and why it was unavailable.
+Zero-point guesses cannot demonstrate doubling. Use the synthetic geolocation
+disclosed by `browser_capabilities` and the map's normal keyboard/zoom controls
+to place positive-score guesses for the eligible and non-poster comparison.
 
 For visual layout, resize to phone and desktop widths and inspect visible text,
 focus, clipping indicators, and accessible controls on the important views.

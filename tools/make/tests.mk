@@ -130,6 +130,8 @@ test-qa-agent: ## Validate the provider-neutral QA contract and MCP lifecycle in
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node --check /workspace/tools/qa/email-account.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-account-pool.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-email-account.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/browser/test-email-credentials.mjs
+	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/browser/test-email-credentials-ui.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-coverage.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-security-headers.mjs
 	$(COMPOSE_TOOLS_RUN) --rm --no-deps playwright node /workspace/tools/qa/test-mcp.mjs
