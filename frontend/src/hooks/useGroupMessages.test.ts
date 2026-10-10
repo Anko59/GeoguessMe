@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAGE_SIZE } from '../chat/chatSocketController';
 import type { Message } from '../types';
-import { saveCachedMessages } from '../utils/pwaSessionCache';
+import { readCachedMessages, saveCachedMessages } from '../utils/pwaSessionCache';
 import { useGroupMessages } from './useGroupMessages';
 
 const mocks = vi.hoisted(() => ({
@@ -96,6 +96,22 @@ describe('useGroupMessages reconnect sequence', () => {
 
         expect(ids(result.current.messages)).toEqual(['cached']);
         await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    });
+
+    it('reconciles persisted live history with changed server visibility after reload', async () => {
+        saveCachedMessages('user-1', 'group-1', [
+            message('retained', '2026-01-01T00:00:00Z'),
+            message('now-blocked', '2026-01-02T00:00:00Z'),
+        ]);
+        mocks.post.mockResolvedValue({ data: { ticket: 't' } });
+        mocks.get.mockResolvedValue({ data: { items: [message('retained', '2026-01-01T00:00:00Z')] } });
+        const { result } = renderHook(() => useGroupMessages('group-1', 'user-1'));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+        await act(async () => {
+            MockWebSocket.instances[0].fireOpen();
+        });
+        await waitFor(() => expect(ids(result.current.messages)).toEqual(['retained']));
+        await waitFor(() => expect(ids(readCachedMessages('user-1', 'group-1'))).toEqual(['retained']));
     });
 
     it('merges catch-up and live delivery without loss or duplicates', async () => {
