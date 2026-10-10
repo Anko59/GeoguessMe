@@ -15,7 +15,7 @@ services:
         condition: service_completed_successfully
 
   postgres:
-    image: postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181
+    image: ${POSTGRES_IMAGE:?Run through Make or supply the audited immutable PostgreSQL image}
     env_file:
       - path: ${GEOGUESSME_ENV_FILE:-deployment/env/production.env}
         required: true
@@ -23,10 +23,7 @@ services:
       - database:/var/lib/postgresql/data
     read_only: true
     tmpfs: ["/tmp", "/var/run/postgresql"]
-    # The official entrypoint runs as root and drops to postgres: it must chown
-    # and re-stat the data directory and create the Unix socket, so keep the
-    # minimal ownership/drop-privilege capabilities. Do NOT set user here; the
-    # image manages its own uid/gid and the entrypoint requires root to chown.
+    # Leave user unset: entrypoint starts root, owns data/socket, then drops UID.
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     security_opt: ["no-new-privileges:true"]

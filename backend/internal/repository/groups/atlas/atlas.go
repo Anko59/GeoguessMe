@@ -81,6 +81,8 @@ func List(ctx context.Context, pool database.Pool, groupID, viewerID, cursor str
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id = p.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key = ep.pin_key
 		WHERE p.group_id = $1
+		AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$2 AND b.blocked_id=p.user_id) OR (b.blocker_id=p.user_id AND b.blocked_id=$2))
 		AND EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = p.group_id AND m.user_id = $2)`
 	args := []any{groupID, viewerID}
 	if id != "" {

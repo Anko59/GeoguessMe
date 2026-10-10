@@ -1,5 +1,6 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+# Keep decompression failures visible even when psql accepts the partial stream.
+set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck source=deployment/scripts/hosted/common.sh
@@ -11,13 +12,14 @@ require_secret_file "$environment"
 name="geoguessme-restore-${environment}-$$"
 dump=$(mktemp)
 identity_name="$name-keycloak"
-identity_dump=$(mktemp)
+identity_dump=''
 
 cleanup() {
     docker rm -f "$name" "$identity_name" >/dev/null 2>&1 || true
     rm -f "$dump" "$identity_dump"
 }
 trap cleanup EXIT INT TERM
+identity_dump=$(mktemp)
 
 latest=$(restic "$environment" snapshots --tag "$environment" --latest 1 --json |
     sed -n 's/.*"short_id":"\([^"]*\)".*/\1/p')
@@ -28,10 +30,11 @@ path=$(restic "$environment" ls "$latest" --json |
 restic "$environment" dump "$latest" "/backup/$path" >"$dump"
 gzip -t "$dump"
 
+restore_postgres=$(select_postgres_image "$environment")
 docker run -d --name "$name" \
     -e POSTGRES_USER=geoguessme -e POSTGRES_PASSWORD=rehearsal \
     -e POSTGRES_DB=geoguessme \
-    postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181 >/dev/null
+    "$restore_postgres" >/dev/null
 attempt=0
 until docker exec "$name" pg_isready -U geoguessme -d geoguessme >/dev/null 2>&1; do
     attempt=$((attempt + 1))
@@ -48,10 +51,11 @@ if [ "$environment" = production ]; then
     [ -n "$identity_path" ] || die 'production snapshot contains no Keycloak dump'
     restic "$environment" dump "$latest" "/backup/$identity_path" >"$identity_dump"
     gzip -t "$identity_dump"
+    restore_identity_postgres=$(select_identity_postgres_image)
     docker run -d --name "$identity_name" \
         -e POSTGRES_USER=keycloak -e POSTGRES_PASSWORD=rehearsal \
         -e POSTGRES_DB=keycloak \
-        postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f >/dev/null
+        "$restore_identity_postgres" >/dev/null
     attempt=0
     until docker exec "$identity_name" pg_isready -U keycloak -d keycloak >/dev/null 2>&1; do
         attempt=$((attempt + 1))

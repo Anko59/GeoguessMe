@@ -101,7 +101,7 @@ func (c *Client) writePump() {
 				// pump cleanly.
 				return
 			}
-			if err := c.conn.WriteJSON(message); err != nil {
+			if err := c.deliver(message); err != nil {
 				return
 			}
 		case <-c.done:

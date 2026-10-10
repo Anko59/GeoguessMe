@@ -21,6 +21,48 @@ const signal = new AbortController().signal;
 beforeEach(() => vi.resetAllMocks());
 
 describe('feed timed-game adapter', () => {
+    it('preserves hidden-location metadata and score-only peers in the shared results view', async () => {
+        mocks.timedResults.mockResolvedValue({
+            challenge_id: 'private-location',
+            location_hidden: true,
+            location_reveals_at: '2026-10-11T12:00:00Z',
+            guesses: [
+                {
+                    id: 'own',
+                    user_id: 'viewer',
+                    username: 'Viewer',
+                    avatar: '',
+                    lat: 1,
+                    long: 2,
+                    score: 4000,
+                    distance: 1000,
+                    timed_out: false,
+                    created_at: '2026-10-09T12:00:00Z',
+                },
+                {
+                    id: 'peer',
+                    user_id: 'peer',
+                    username: 'Peer',
+                    avatar: '',
+                    score: 4500,
+                    timed_out: false,
+                    created_at: '2026-10-09T12:00:00Z',
+                },
+            ],
+            server_time: '2026-10-09T12:00:01Z',
+        });
+        mocks.media.mockResolvedValue(new Blob(['photo'], { type: 'image/jpeg' }));
+        const { results } = await feedTimedGameAdapter.loadResults('private-location', signal);
+        expect(results).toMatchObject({ location_hidden: true, location_reveals_at: '2026-10-11T12:00:00Z' });
+        expect(results.actual_lat).toBeUndefined();
+        expect(results.actual_long).toBeUndefined();
+        expect(results.guesses[0]).toMatchObject({ lat: 1, long: 2, distance: 1000 });
+        expect(results.guesses[1]).toMatchObject({ score: 4500 });
+        expect(results.guesses[1]).not.toHaveProperty('lat');
+        expect(results.guesses[1]).not.toHaveProperty('long');
+        expect(results.guesses[1]).not.toHaveProperty('distance');
+    });
+
     it('normalizes public results for the shared map and score view', async () => {
         mocks.timedResults.mockResolvedValue({
             challenge_id: 'feed-1',

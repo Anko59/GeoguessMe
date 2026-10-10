@@ -16,8 +16,10 @@ async function openGlobe(page: Page, testInfo: TestInfo) {
     // let each layout branch below assert its own visibility state.
     await expect(globe.locator('.globe-controls')).toBeAttached();
     await expect(globe).toBeInViewport({ ratio: 1 });
-    await expect(globe.locator('canvas')).toBeVisible();
-    const maxTextureSize = await globe.locator('canvas').evaluate((canvas) => {
+    const rendererCanvas = globe.locator('.globe-stage canvas[data-engine]');
+    await expect(rendererCanvas).toBeVisible();
+    await expect(globe.locator('.globe-stage canvas.globe-pin-overlay')).toBeVisible();
+    const maxTextureSize = await rendererCanvas.evaluate((canvas) => {
         const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
         return context?.getParameter(context.MAX_TEXTURE_SIZE) ?? 0;
     });
@@ -79,6 +81,42 @@ function projectGlobePin(
         width: screenHeight * 0.78,
         height: screenHeight,
     };
+}
+
+async function pinOverlayHasInkAt(overlay: Locator, x: number, y: number) {
+    return overlay.evaluate(
+        (element, point) => {
+            const canvas = element as HTMLCanvasElement;
+            const context = canvas.getContext('2d');
+            if (!context || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) return false;
+            const pixelX = Math.round((point.x * canvas.width) / canvas.clientWidth);
+            const pixelY = Math.round((point.y * canvas.height) / canvas.clientHeight);
+            const left = Math.max(0, pixelX - 2);
+            const top = Math.max(0, pixelY - 2);
+            const width = Math.min(5, canvas.width - left);
+            const height = Math.min(5, canvas.height - top);
+            if (width <= 0 || height <= 0) return false;
+            const pixels = context.getImageData(left, top, width, height).data;
+            for (let index = 3; index < pixels.length; index += 4) {
+                if (pixels[index] > 0) return true;
+            }
+            return false;
+        },
+        { x, y },
+    );
+}
+
+async function pinOverlayHasAnyInk(overlay: Locator) {
+    return overlay.evaluate((element) => {
+        const canvas = element as HTMLCanvasElement;
+        const context = canvas.getContext('2d');
+        if (!context || canvas.width <= 0 || canvas.height <= 0) return false;
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let index = 3; index < pixels.length; index += 4) {
+            if (pixels[index] > 0) return true;
+        }
+        return false;
+    });
 }
 
 const GLOBE_SCREENSHOT_TIMEOUT_MS = 20_000;
@@ -146,7 +184,9 @@ test('explores group challenges on Earth without revealing an unplayed location'
         const { uploader, guesser } = scenario;
         const emptyGlobe = await openGlobe(uploader, testInfo);
         await expect(emptyGlobe).toContainText('No geochallenges yet.');
-        await expect(emptyGlobe.locator('.globe-pin-marker')).toHaveCount(0);
+        const emptyPinOverlay = emptyGlobe.locator('.globe-pin-overlay');
+        await expect(emptyPinOverlay).toHaveCount(1);
+        expect(await pinOverlayHasAnyInk(emptyPinOverlay)).toBe(false);
         await captureGlobe(uploader, testInfo, 'empty');
         await emptyGlobe.getByRole('button', { name: 'Close group globe' }).click();
         await uploader.getByRole('button', { name: 'Camera', exact: true }).click();
@@ -170,33 +210,34 @@ test('explores group challenges on Earth without revealing an unplayed location'
         await refresh.click();
         expect((await refreshed).status()).toBe(200);
         await expect(globe).toContainText('1 challenge · 1 on the globe');
-        const globePin = globe.locator('.globe-pin-marker');
-        await expect(globePin).toHaveCount(1);
-        await expect(globePin).toBeVisible();
-        await expect(globePin).toHaveAttribute('src', '/assets/map-pins/standard-marker-v1.svg');
-        await expect
-            .poll(
-                () =>
-                    globePin.evaluate((element) => {
-                        const image = element as HTMLImageElement;
-                        return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
-                    }),
-                { message: 'the designed pin artwork should decode before it is shown', timeout: 8_000 },
-            )
-            .toBe(true);
-        const [canvasBounds, pinBounds] = await Promise.all([
-            globe.locator('canvas').boundingBox(),
-            globePin.boundingBox(),
+        const pinOverlay = globe.locator('.globe-pin-overlay');
+        await expect(pinOverlay).toHaveCount(1);
+        const [canvasBounds, overlayBounds] = await Promise.all([
+            globe.locator('canvas:not(.globe-pin-overlay)').boundingBox(),
+            pinOverlay.boundingBox(),
         ]);
-        if (!canvasBounds || !pinBounds) throw new Error('The visible globe pin and canvas must have bounding boxes');
+        if (!canvasBounds || !overlayBounds) throw new Error('The globe canvases must have bounding boxes');
         const expectedPin = projectGlobePin(canvasBounds.width, canvasBounds.height, 48.8566, 2.3522);
-        expect(Math.abs(pinBounds.x + pinBounds.width / 2 - canvasBounds.x - expectedPin.x)).toBeLessThanOrEqual(1.5);
-        expect(Math.abs(pinBounds.y + pinBounds.height / 2 - canvasBounds.y - expectedPin.y)).toBeLessThanOrEqual(1.5);
-        expect(Math.abs(pinBounds.width - expectedPin.width)).toBeLessThanOrEqual(1.5);
-        expect(Math.abs(pinBounds.height - expectedPin.height)).toBeLessThanOrEqual(1.5);
+        await expect
+            .poll(() => pinOverlayHasInkAt(pinOverlay, expectedPin.x, expectedPin.y), {
+                message: 'decoded pin artwork should be drawn at the projected location',
+                timeout: 8_000,
+            })
+            .toBe(true);
+        expect(Math.abs(overlayBounds.x - canvasBounds.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(overlayBounds.y - canvasBounds.y)).toBeLessThanOrEqual(1);
+        expect(Math.abs(overlayBounds.width - canvasBounds.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(overlayBounds.height - canvasBounds.height)).toBeLessThanOrEqual(1);
+        expect(await pinOverlayHasInkAt(pinOverlay, 20, 20)).toBe(false);
         await captureGlobe(uploader, testInfo, 'overview');
         if (mobile) {
-            const sheet = globe.getByRole('button', { name: 'Expand geochallenge list' });
+            const sheet = globe.locator('.globe-sheet-grabber');
+            await sheet.click();
+            await expect(sheet).toHaveAttribute('aria-expanded', 'true');
+            await expect(globe.locator('.globe-challenge-list button')).toBeVisible();
+            await sheet.focus();
+            await uploader.keyboard.press('Enter');
+            await expect(sheet).toHaveAttribute('aria-expanded', 'false');
             await sheet.dispatchEvent('pointerdown', { clientY: 600, pointerId: 1, pointerType: 'touch' });
             await sheet.dispatchEvent('pointermove', { clientY: 520, pointerId: 1, pointerType: 'touch' });
             await sheet.dispatchEvent('pointerup', { clientY: 520, pointerId: 1, pointerType: 'touch' });
@@ -226,7 +267,9 @@ test('explores group challenges on Earth without revealing an unplayed location'
 
         const privateGlobe = await openGlobe(guesser, testInfo);
         await expect(privateGlobe).toContainText('1 challenge · 0 on the globe');
-        await expect(privateGlobe.locator('.globe-pin-marker')).toHaveCount(0);
+        const privatePinOverlay = privateGlobe.locator('.globe-pin-overlay');
+        await expect(privatePinOverlay).toHaveCount(1);
+        expect(await pinOverlayHasAnyInk(privatePinOverlay)).toBe(false);
         await expect(privateGlobe).toContainText('Guess this challenge to reveal its location');
         if (mobile) {
             const expandList = privateGlobe.getByRole('button', { name: 'Expand geochallenge list' });

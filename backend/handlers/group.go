@@ -50,7 +50,7 @@ func (a *ChatAPI) GetGroupReactionUsage(w http.ResponseWriter, r *http.Request) 
 	if !a.requireMember(w, r, groupID, GetUserIDFromContext(r)) {
 		return
 	}
-	usage, err := a.messages.ReactionUsageForGroup(r.Context(), groupID)
+	usage, err := a.messages.ReactionUsageForGroupForViewer(r.Context(), groupID, GetUserIDFromContext(r))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load reaction usage")
 		return

@@ -231,7 +231,7 @@ func (a *GameAPI) GetChallengeResults(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusForbidden, "results_not_available", "Results are not available yet")
 		return
 	}
-	guesses, err := a.groups.GuessesForPhoto(r.Context(), photoID)
+	guesses, err := a.groups.GuessesForPhotoForViewer(r.Context(), photoID, viewerID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load results")
 		return

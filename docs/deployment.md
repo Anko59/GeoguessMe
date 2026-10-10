@@ -1,25 +1,83 @@
 # Deployment guide
 
+Player blocking requires the forward-only `038_user_blocks` migration and the
+enforcing backend before the updated frontend. Retain block data on rollback;
+see [blocking rollout and rollback](user-blocking.md#api-and-rollout).
+
 The supported deployment workflow is documented in
 [deployment/README.md](../deployment/README.md). It covers first deploy,
 migrations, immutable image upgrades, rollback, backup/restore, restart
 behavior, health checks, secrets, outage response, and rehearsal evidence.
-Nightly `make verify` builds local application and Keycloak images with Buildx
-`--load` before `make audit-images` scans them, so the image gate inspects the
-artifacts produced by that verification run. The Keycloak base-image pin and its
-narrowly scoped audit exceptions are maintained in the
-[security scanning guide](security-scanning.md). Hosted SOPS and the monitoring
-socket proxy use project-owned, digest-pinned security derivatives; CI scans
-their exact published digests before signing and production promotion never
-rebuilds them. The proxy fixes Alpine PCRE2 without a CVE exception and is
-updated through a separate `watch` command, not the app deploy. Host runtime
-changes follow the staged procedure in the
+Nightly verification resolves existing signed dependency artifacts, then builds
+local application images with Buildx `--load`; the scan-only `make audit-images`
+inspects those exact artifacts and the complete runtime inventory. Dependency
+identity follows reviewed inputs/platform, not application revision: a frontend
+change reuses the shared Caddy runtime. Database, Restic, SOPS and socket-proxy
+selection is aligned with audited digests. Original build provenance remains
+separate from revision-adoption signatures, and promotion does not rebuild.
+Preparation, strict failures and exploitation-based release decisions are
+described in the [security scanning guide](security-scanning.md). The proxy
+fixes Alpine PCRE2 without a CVE exception and is updated through a separate
+`watch` command, not the app deploy. Host runtime changes follow the staged
+procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
+
+Application/tooling builds use Go 1.27.2 for the October security fixes. Caddy
+and Restic consume official upstream releases without source rebuilding. Publish
+changed envelope input keys before resolving nightly artifacts; reuse and
+promotion continue to require exact signed digests.
+
+Both frontend Dockerfiles include the reviewed local braces security backport
+before npm installs dependencies. Keep the vendor source in the build context; a
+manifest/lockfile-only copy is insufficient for this file dependency.
+`make audit` verifies upstream integrity, reconstructed source, and depth-limit
+regressions in addition to normal dependency scanning. See the
+[backport compatibility ledger](agent-engineering.md#braces-security-backport)
+for provenance and the upstream replacement/removal condition. Production still
+promotes the exact verified image digest without rebuilding.
+
+The gateway image explicitly installs its public Caddy configuration as
+root-owned mode `0644`, so the non-root runtime can read it even when the source
+checkout uses a restrictive umask. This does not change permissions on host
+credentials or encrypted deployment configuration.
+
+OAuth2 Proxy retains its pinned upstream image and read-only UID `65532`
+configuration mounts. Hosted deployment, `make prod-up`, and the production
+rehearsal run the
+[public config preparer](../deployment/oauth2-proxy/prepare-public-configs.sh)
+to set only its two tracked public templates to mode `0644`, independent of the
+checkout/extraction umask. The preparer rejects missing files and symlinks;
+private environment files and runtime credential values are never changed.
 
 The concrete hosted implementation and launch checklist is in the
 [hosted deployment runbook](runbooks/hosted-deployment.md). It covers the
 Hetzner CX23, Cloudflare Tunnel/Access/R2, SOPS age keys, GitHub environments,
 signed digest deployments, Brevo, monitoring, and recovery.
+
+Terraform losslessly compresses one native cloud-config archive containing the
+raw host bootstrap, runtime installer, and 33-member UTF-8 runtime bundle. The
+complete MIME user-data must fit Hetzner's unchanged 32768-byte limit.
+Cloud-init writes the bootstrap as a root-owned `0700` executable after
+installing the required packages; its Cloudflared version and checksum come from
+the reviewed host-tool pins. The
+[bootstrap script](../infra/cloud-init/bootstrap-host.sh) checks its tools
+before configuring the host, retains the ordered SSH/firewall/backup setup, and
+leaves monitoring disabled pending operator setup. Runtime extraction consumes
+one shared file descriptor and hashes the exact installed bytes with fixed
+ownership and permissions.
+
+`make watch-rehearsal` stages only the three public monitoring configurations
+into a readable temporary directory and replaces their Compose mounts, leaving
+checkout permissions and hosted root-owned `0444` configuration unchanged. Its
+metrics token and mock gateway files are fake fixtures; the agent environment
+remains private. Vector collects only the two owned fake containers while still
+checking the production-label allowlist.
+
+`make load-test` preserves the pinned k6 image and strict load profile, using
+the canonical non-root checkout-owner UID/GID rather than changing private
+checkout permissions. Its tooling container honors `GEOGUESSME_TOOLS_PROJECT`;
+the load stack remains separate from smoke and production projects. See the
+[testing guide](testing.md) for ownership and isolation regressions.
 
 Android distribution is part of the production release boundary but remains a
 separate artifact from the hosted services. The production workflow builds and
@@ -28,7 +86,19 @@ provenance manifest, and publishes that exact artifact to the configured Play
 track only after the production deployment succeeds. The Play publication job
 uses GitHub OIDC and the separate `play-publishing` environment; only the host
 deployment uses GitHub's `production` environment. It fails closed on access,
-digest, version, and edit-validation checks. See the
+digest, version, deployed native-origin CORS, and edit-validation checks. The
+workflow refuses an automatic production-track publish: validate the exact
+bundle on the internal/closed track and promote it explicitly after physical
+device acceptance. Hosted dev and production `ALLOWED_ORIGINS` must permit the
+virtual `https://app.geoguessme.com` asset origin before native distribution.
+Update the matching encrypted environment payloads, not only the example files;
+use the
+[hosted configuration procedure](runbooks/hosted-deployment.md#provision). Caddy
+forwards only OIDC session **OPTIONS** requests directly to the backend CORS
+policy. Actual session requests still pass through OAuth2 Proxy: accepting a
+preflight is not authorization to exchange a session. The production-container
+verification checks allowed/denied origins and rejects unauthenticated or
+forged-identity POSTs through this gateway. See the
 [mobile release guide](mobile.md) and
 [Google Play account runbook](runbooks/google-play-console.md) for the
 configuration and recovery procedure.
@@ -65,16 +135,23 @@ test-only credentials, polls health and readiness, verifies representative HTTP
 behavior (liveness, readiness, auth enforcement, WebSocket auth), and tears down
 all resources. It is safe for local/CI use because it uses the `local-db`,
 `local-minio`, and `local-smtp` Compose profiles and never touches production
-infrastructure. The gateway uses port `18083` and the disposable Mailpit UI uses
-`18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
-`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied.
+infrastructure. The gateway binds only `127.0.0.1:18083` and the disposable
+Mailpit UI uses `18085` by default; set `GEOGUESSME_PROD_VERIFY_WEB_PORT` or
+`GEOGUESSME_PROD_VERIFY_SMTP_PORT` when those ports are occupied. The rehearsal
+requires Docker Compose 2.24.4+ for `!override`: the gateway binding replaces
+all inherited production web ports, including `GEOGUESSME_WEB_PORT`, rather than
+publishing both the production and rehearsal ports. Teardown errors are visible
+and fail an otherwise successful rehearsal; an earlier verification failure
+keeps its original exit status.
 
-Development, integration/E2E, and the optional `local-minio` profile pull the
-MinIO release from the public `quay.io/thanos/minio` mirror. All three pin the
-same release and immutable manifest digest previously used for
-`quay.io/minio/minio`; the mirror serves that exact manifest. Verify the digest
-before changing registries. Registry access failures do not require a data
-migration or volume reset.
+Development, integration/E2E and the optional `local-minio` profile use the same
+immutable official SeaweedFS S3-compatible fixture. The service/DNS name `minio`
+and S3 port 9000 remain compatibility names, not the server implementation. The
+retired MinIO volume format is incompatible: a new volume is used and old
+development data is never reset or mounted into SeaweedFS. Follow the explicit
+[verified migration procedure](runbooks/s3-fixture-migration.md) before starting
+an existing development stack. The old port-9001 MinIO console is removed; no
+unauthenticated replacement admin UI is exposed. Hosted R2 remains unchanged.
 
 Compose restart is not zero-downtime rolling deployment. Do not describe this
 topology as rolling without adding an orchestrator and its corresponding failure

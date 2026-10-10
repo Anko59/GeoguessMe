@@ -147,7 +147,7 @@ func TestTranscodeWithRealFFmpeg(t *testing.T) {
 	// Generate a tiny VP8 WebM with audio. Skip if this ffmpeg cannot encode
 	// VP8 (environment-specific), but fail the transcode if a valid fixture
 	// cannot be converted to the canonical output.
-	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+	gen := exec.CommandContext(t.Context(), ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", "testsrc=size=160x90:rate=15",
 		"-f", "lavfi", "-i", "sine=frequency=440:duration=1",
 		"-t", "1", "-c:v", "libvpx", "-b:v", "50k", "-c:a", "libvorbis", src)
@@ -162,7 +162,7 @@ func TestTranscodeWithRealFFmpeg(t *testing.T) {
 	}
 
 	// Verify canonical output: H.264 yuv420p video + AAC audio.
-	probeV := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
+	probeV := exec.CommandContext(t.Context(), "ffprobe", "-hide_banner", "-loglevel", "error",
 		"-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", dst)
 	vout, err := probeV.Output()
 	if err != nil {
@@ -171,7 +171,7 @@ func TestTranscodeWithRealFFmpeg(t *testing.T) {
 	if got := strings.TrimSpace(string(vout)); got != "h264,yuv420p" {
 		t.Fatalf("video codec/pix_fmt = %q, want h264,yuv420p", got)
 	}
-	probeA := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
+	probeA := exec.CommandContext(t.Context(), "ffprobe", "-hide_banner", "-loglevel", "error",
 		"-select_streams", "a:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", dst)
 	aout, err := probeA.Output()
 	if err != nil {

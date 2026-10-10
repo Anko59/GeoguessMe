@@ -190,6 +190,11 @@ func uniqueU(name string) string { return unique(name) }
 
 func uploadPublicPhoto(t *testing.T, bearer string) string {
 	t.Helper()
+	return uploadPublicPhotoWithPrivacy(t, bearer, false)
+}
+
+func uploadPublicPhotoWithPrivacy(t *testing.T, bearer string, hideLocation bool) string {
+	t.Helper()
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
 	file, err := form.CreateFormFile("photo", "public.png")
@@ -201,6 +206,7 @@ func uploadPublicPhoto(t *testing.T, bearer string) string {
 	require.NoError(t, form.WriteField("lat", "48.8"))
 	require.NoError(t, form.WriteField("long", "2.3"))
 	require.NoError(t, form.WriteField("caption", "Find this public place"))
+	require.NoError(t, form.WriteField("hide_location", boolString(hideLocation)))
 	require.NoError(t, form.Close())
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/feed/challenges", &body)
 	require.NoError(t, err)
@@ -307,7 +313,7 @@ func TestPublicFeedJourney(t *testing.T) {
 	require.NoError(t, err)
 	guessCtx, cancelGuess := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancelGuess()
-	_, err = feedrepo.NewRepository(db).Guess(guessCtx, publicID, other.userID, 0, 0)
+	_, err = feedrepo.NewRepository(db).Guess(guessCtx, publicID, other.userID, 0, 0, time.Now(), 48*time.Hour)
 	require.NoError(t, err, "different players must be able to guess while a shared parent lock is held")
 	require.NoError(t, lock.Rollback(t.Context()))
 	resp, otherRevealed := doJSON(t, http.MethodGet, path+"/media", nil, other.access, nil)

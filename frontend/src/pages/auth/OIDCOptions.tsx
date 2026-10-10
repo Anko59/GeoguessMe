@@ -111,7 +111,7 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
             )}
 
             <form
-                action={loginPath}
+                action={backendURL(loginPath)}
                 method="get"
                 className="auth-form auth-oidc-form"
                 onSubmit={(event) => {
@@ -151,6 +151,7 @@ export default function OIDCOptions({ loginPath, intent, onStart, socialProvider
             <p className="auth-provider-note">
                 {socialProviders.length === 0 && 'Social sign-in is not configured in this environment. '}
                 Your password is entered only on GeoGuessMe ID. Two-factor authentication and passkeys stay optional.
+                {!signup && ' To reset that separate password, select Forgot your password? on the GeoGuessMe ID page.'}
             </p>
         </>
     );

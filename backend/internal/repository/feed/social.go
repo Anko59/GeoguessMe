@@ -38,7 +38,7 @@ func (r *Repository) Comments(ctx context.Context, id, viewer string, cursor Cur
 	query := `SELECT c.id,c.user_id,u.username,u.avatar,c.content,c.created_at,
 		c.user_id=$1 OR p.user_id=$1 FROM public_comments c
 		JOIN users u ON u.id=c.user_id JOIN public_challenges p ON p.id=c.challenge_id
-		WHERE c.challenge_id=$2 AND ` + challengeVisibility + ` `
+		WHERE c.challenge_id=$2 AND ` + challengeVisibility + ` AND ` + commentVisibility + ` `
 	args := []any{viewer, id, limit + 1}
 	if cursor.ID != "" {
 		query += `AND (c.created_at,c.id)<($4,$5) `
@@ -83,7 +83,7 @@ func (r *Repository) Comment(ctx context.Context, id, viewer, content string) (m
 // Authors can remove their comments; post owners can moderate their threads.
 func (r *Repository) DeleteComment(ctx context.Context, id, commentID, viewer string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM public_comments c USING public_challenges p
-		WHERE c.challenge_id=p.id AND p.id=$2 AND c.id=$3 AND (c.user_id=$1 OR p.user_id=$1) AND `+challengeVisibility, viewer, id, commentID)
+		WHERE c.challenge_id=p.id AND p.id=$2 AND c.id=$3 AND (c.user_id=$1 OR p.user_id=$1) AND `+challengeVisibility+` AND `+commentVisibility, viewer, id, commentID)
 	if err == nil && tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}

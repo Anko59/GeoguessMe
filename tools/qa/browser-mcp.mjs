@@ -5,17 +5,20 @@ import { LinkTransferStore } from "./link-transfer.mjs";
 import { MailboxGateway, resolveMailboxAccessCredentials } from "./mailbox.mjs";
 import { redactUrls } from "./safe-output.mjs";
 import { loginAccount } from "./account-pool.mjs";
-import { signUpEmailAccount } from "./email-account.mjs";
+import { EmailCredentials } from "./browser/email-credentials.mjs";
 import { writeQaReport } from "./report.mjs";
 import { CoverageTracker } from "./coverage.mjs";
 import { tools } from "./browser/tool-definitions.mjs";
 import { clickAndWaitForNavigation } from "./navigation.mjs";
+import { inspectDocumentResponse } from "./security-headers.mjs";
+import { withNextDialog } from "./browser/dialogs.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
 const maxItems = 40;
 const hostArtifactDir = process.env.QA_HOST_ARTIFACT_DIR || artifactDir;
 const mailboxAllowedLinkOrigins = String(process.env.QA_MAILBOX_ALLOWED_LINK_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
+const emailCredentials = new EmailCredentials({ baseUrl, identityOrigins: mailboxAllowedLinkOrigins });
 const budgets = {
   fast: { maxMinutes: 15, maxFindings: 10, screenshotLimit: 4 },
   full: { maxMinutes: 45, maxFindings: 30, screenshotLimit: 12 },
@@ -69,8 +72,8 @@ function safeUrl(value) {
   }
 }
 function safeText(value) {
-  let text = redactUrls(String(value ?? ""));
-  for (const secret of [process.env.QA_ACCESS_CLIENT_ID, process.env.QA_ACCESS_CLIENT_SECRET]) {
+  let text = emailCredentials.redact(redactUrls(String(value ?? "")));
+  for (const secret of [process.env.QA_ACCESS_CLIENT_ID, process.env.QA_ACCESS_CLIENT_SECRET, process.env.QA_ACCOUNT_PASSWORD]) {
     if (secret && secret.length > 3) text = text.split(secret).join("[redacted]");
   }
   text = text.replace(
@@ -199,6 +202,15 @@ async function call(name, args) {
   if (name === "qa_email_account_signup") {
     return startEmailAccountSignup(args);
   }
+  if (name === "qa_email_account_reset_password") {
+    return emailCredentials.reset({ page: sessionFor(args).page, mailboxId: args.mailbox_id });
+  }
+  if (name === "qa_email_account_login") {
+    const result = await emailCredentials.login({ page: sessionFor(args).page, mailboxId: args.mailbox_id });
+    coverage.role(args.session_id, result.account_role);
+    if (result.changed_password_verified) coverage.passwordRecoveryCompleted();
+    return result;
+  }
   if (name === "tab_open") {
     const session = sessions.get(args.session_id);
     if (!session) throw new Error(`Unknown session: ${args.session_id}`);
@@ -240,20 +252,34 @@ async function call(name, args) {
     coverage.capabilitiesObserved(result);
     return result;
   }
+  if (name === "browser_security_headers") {
+    const { page } = sessionFor(args);
+    // A fresh top-level navigation yields the actual document response, rather
+    // than mistaking an API call or an asset's headers for the page's policy.
+    if (new URL(page.url()).origin !== baseUrl.origin) throw new Error("Navigate to the QA application before inspecting document headers");
+    const response = await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    if (!response) throw new Error("No top-level document response was available");
+    const result = await inspectDocumentResponse(response, page, baseUrl);
+    if (!result) throw new Error("No same-origin top-level document response was available");
+    coverage.action("browser_reload", args);
+    return result;
+  }
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {
     const { page } = sessionFor(args);
     const locator = await locate(page, args.target);
-    if (name === "browser_click") await clickAndWaitForNavigation(page, locator, baseUrl);
-    if (name === "browser_type") await locator.fill(args.text);
-    if (name === "browser_select") await locator.selectOption(args.value);
-    if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+    const dialog = await withNextDialog(page, args.dialog_action, async () => {
+      if (name === "browser_click") await clickAndWaitForNavigation(page, locator, baseUrl);
+      if (name === "browser_type") await locator.fill(args.text);
+      if (name === "browser_select") await locator.selectOption(args.value);
+      if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+    }, safeText);
     coverage.action(name, args);
-    return observe(args);
+    return { ...await observe(args), ...(dialog ? { dialog } : {}) };
   }
   if (name === "browser_key") {
     const { page } = sessionFor(args);
-    await page.keyboard.press(args.key);
-    return observe(args);
+    const dialog = await withNextDialog(page, args.dialog_action, () => page.keyboard.press(args.key), safeText);
+    return { ...await observe(args), ...(dialog ? { dialog } : {}) };
   }
   if (name === "browser_reload") {
     const { page } = sessionFor(args);
@@ -314,11 +340,17 @@ async function call(name, args) {
       throw new Error("Mailbox link navigation failed");
     }
     coverage.linkOpened(args.kind);
+    if (args.kind === "password-reset" && emailCredentials.owns(args.mailbox_id)) {
+      emailCredentials.authorizeReset(args.mailbox_id, page);
+    }
     return observe(args);
   }
   if (name === "qa_record_finding") {
     if (findings.length >= budget.maxFindings) {
       throw new Error(`Finding budget exhausted for ${process.env.QA_BUDGET || "full"} run`);
+    }
+    if ((args.artifacts || []).some((path) => !artifacts.some((artifact) => artifact.path === path))) {
+      throw new Error("Finding artifacts must reference evidence returned by this QA run");
     }
     const finding = { id: `finding-${findings.length + 1}`, ...args, blocking: args.category === "BUG", recorded_at: new Date().toISOString() };
     finding.title = safeText(finding.title);
@@ -342,7 +374,7 @@ async function call(name, args) {
   throw new Error(`Unknown tool: ${name}`);
 }
 async function startEmailAccountSignup(args) {
-  const result = await signUpEmailAccount({ accountRole: args.account_role, page: sessionFor(args).page, baseUrl, mailbox });
+  const result = await emailCredentials.signup({ accountRole: args.account_role, page: sessionFor(args).page, mailbox });
   coverage.emailAccount();
   coverage.mailboxCreated(result.mailbox_id);
   if (result.authenticated) coverage.role(args.session_id, args.account_role);
@@ -353,6 +385,7 @@ async function close() {
   if (!finished) await writeReport({ coverage: coverage.snapshot(process.env.QA_BUDGET || "full") });
   for (const session of sessions.values()) await session.context.close().catch(() => {});
   await browser?.close().catch(() => {});
+  emailCredentials.clear();
   linkTransfers.clear();
   await mailbox.cleanup();
 }

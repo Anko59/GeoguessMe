@@ -31,12 +31,12 @@ func (r *Repository) resolveSenderProfile(ctx context.Context, q rowQuerier, msg
 // validateReplyTarget rejects a reply_to_id that does not reference an existing
 // message in the same group. It is the single canonical reply validation for
 // every message creation path.
-func (r *Repository) validateReplyTarget(ctx context.Context, q rowQuerier, groupID string, replyToID *string) error {
+func (r *Repository) validateReplyTarget(ctx context.Context, q rowQuerier, groupID, userID string, replyToID *string) error {
 	if replyToID == nil {
 		return nil
 	}
 	var exists bool
-	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND group_id = $2)`, *replyToID, groupID).Scan(&exists); err != nil {
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages m WHERE id = $1 AND group_id = $2 AND `+messageVisibility("$3")+`)`, *replyToID, groupID, userID).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {
@@ -49,10 +49,19 @@ func (r *Repository) validateReplyTarget(ctx context.Context, q rowQuerier, grou
 // validating the reply target through the shared canonical helpers.
 func (r *Repository) SaveMessage(ctx context.Context, msg *models.Message) error {
 	r.resolveSenderProfile(ctx, r.pool, msg)
-	if err := r.validateReplyTarget(ctx, r.pool, msg.GroupID, msg.ReplyToID); err != nil {
+	if err := r.validateReplyTarget(ctx, r.pool, msg.GroupID, msg.UserID, msg.ReplyToID); err != nil {
 		return err
 	}
-	_, err := r.pool.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, reply_to_id, content, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.ReplyToID, msg.Content, msg.CreatedAt)
+	// Socket membership and reply validation can become stale before the write.
+	// Recheck both in the INSERT's snapshot so a revoked sender or newly blocked
+	// reply cannot be persisted and subsequently broadcast as a successful send.
+	tag, err := r.pool.Exec(ctx, `INSERT INTO messages(id, group_id, user_id, kind, photo_id, reply_to_id, content, created_at)
+		SELECT $1,$2,$3,$4,$5,$6,$7,$8
+		WHERE EXISTS (SELECT 1 FROM group_members WHERE group_id=$2 AND user_id=$3)
+		AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM messages m WHERE m.id=$6 AND m.group_id=$2 AND `+messageVisibility("$3")+`))`, msg.ID, msg.GroupID, msg.UserID, msg.Kind, msg.PhotoID, msg.ReplyToID, msg.Content, msg.CreatedAt)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrMessageForbidden
+	}
 	return err
 }
 
@@ -68,14 +77,15 @@ func (r *Repository) SaveMessage(ctx context.Context, msg *models.Message) error
 // StableCursor is populated for every non-empty page and points strictly after
 // the last message of that page, so a client can snapshot it and resume
 // catch-up losslessly after a reconnect.
-func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int) (MessagesPage, error) {
+func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor string, limit int, viewers ...string) (MessagesPage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
 
 	if cursor == "" {
 		query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 ORDER BY m.created_at DESC, m.id DESC LIMIT $2`
-		rows, err := r.pool.Query(ctx, query, groupID, limit)
+		query, args := viewerMessageQuery(query, []any{groupID, limit}, viewers...)
+		rows, err := r.pool.Query(ctx, query, args...)
 		if err != nil {
 			return MessagesPage{}, err
 		}
@@ -98,7 +108,8 @@ func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor s
 		return MessagesPage{}, fmt.Errorf("invalid message cursor: %w", err)
 	}
 	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) > ROW($2, $3) ORDER BY m.created_at ASC, m.id ASC LIMIT $4`
-	rows, err := r.pool.Query(ctx, query, groupID, createdAt, id, limit+1)
+	query, args := viewerMessageQuery(query, []any{groupID, createdAt, id, limit + 1}, viewers...)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return MessagesPage{}, err
 	}
@@ -125,7 +136,7 @@ func (r *Repository) GetGroupMessagesPage(ctx context.Context, groupID, cursor s
 // empty NextCursor. The caller derives the next older request from the oldest
 // returned message. An unknown or out-of-group beforeID yields an empty page
 // (there is nothing older to load).
-func (r *Repository) GetGroupMessagesPageBefore(ctx context.Context, groupID, beforeID string, limit int) (MessagesPage, error) {
+func (r *Repository) GetGroupMessagesPageBefore(ctx context.Context, groupID, beforeID string, limit int, viewers ...string) (MessagesPage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
@@ -138,7 +149,8 @@ func (r *Repository) GetGroupMessagesPageBefore(ctx context.Context, groupID, be
 		return MessagesPage{}, err
 	}
 	query := `SELECT ` + messageColumns + ` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.group_id = $1 AND ROW(m.created_at, m.id) < ROW($2, $3) ORDER BY m.created_at DESC, m.id DESC LIMIT $4`
-	rows, err := r.pool.Query(ctx, query, groupID, createdAt, beforeID, limit)
+	query, args := viewerMessageQuery(query, []any{groupID, createdAt, beforeID, limit}, viewers...)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return MessagesPage{}, err
 	}
@@ -156,7 +168,7 @@ func (r *Repository) GetGroupMessagesPageBefore(ctx context.Context, groupID, be
 // existing challenge views and guesses tables, so reconnects and hard reloads
 // restore the same action shown in the chat without client-only assumptions.
 func (r *Repository) GetGroupMessagesPageForViewer(ctx context.Context, groupID, cursor string, limit int, viewerID string) (MessagesPage, error) {
-	page, err := r.GetGroupMessagesPage(ctx, groupID, cursor, limit)
+	page, err := r.GetGroupMessagesPage(ctx, groupID, cursor, limit, viewerID)
 	if err != nil {
 		return page, err
 	}

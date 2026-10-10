@@ -22,7 +22,7 @@ export GEOGUESSME_TEST_MAILPIT_PORT=$mailpit_port
 export GEOGUESSME_TEST_PUBLIC_URL="http://localhost:$web_port"
 export GEOGUESSME_TEST_ALLOWED_ORIGINS="http://localhost:$web_port"
 
-"${compose[@]}" up -d --build --wait
+"${compose[@]}" up -d --no-build --wait
 "$repo/tools/mobile/seed-e2e.sh" "http://localhost:$web_port" "$environment_file"
 
 make -C "$repo" mobile-build \

@@ -413,6 +413,46 @@ func TestQueueOverflowDropsWithoutBlocking(t *testing.T) {
 	svc.Stop()
 }
 
+func TestPrivacyAuthorizationConsumesDeliveryBudget(t *testing.T) {
+	deliver := newFakeDeliverer()
+	svc := newConfiguredService(&fakeStore{}, deliver, &config.Config{PushDeliveryTimeout: 50 * time.Millisecond})
+	workerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.FilterDelivery = func(ctx context.Context, _, _ string, send func()) {
+		if _, bounded := ctx.Deadline(); !bounded {
+			t.Error("privacy authorization has no deadline")
+			cancel() // avoid wedging the regression when the bound is missing
+		}
+		<-ctx.Done()
+		send() // an expired authorization must not restart the delivery budget
+	}
+	svc.deliverSubscription(workerCtx, fanoutJob{senderID: "author"}, &Subscription{ID: "sub"})
+	if len(deliver.snapshot()) != 0 {
+		t.Fatal("delivery started after authorization exhausted its budget")
+	}
+}
+
+func TestHostSemaphoreWaitConsumesDeliveryBudget(t *testing.T) {
+	deliver := newFakeDeliverer()
+	svc := newConfiguredService(&fakeStore{}, deliver, &config.Config{PushDeliveryTimeout: 50 * time.Millisecond, PushDeliveryPerHost: 1})
+	sem := svc.hostSem("push.example")
+	sem <- struct{}{} // deterministically exhaust the host gate before delivery
+	defer func() { <-sem }()
+	finished := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		svc.deliverOne(ctx, &Subscription{ID: "sub", Endpoint: "https://push.example/sub"}, nil)
+		close(finished)
+	}()
+	if !waitForSignal(finished, time.Second) {
+		t.Fatal("host semaphore wait has no delivery deadline")
+	}
+	if len(deliver.snapshot()) != 0 {
+		t.Fatal("delivery bypassed saturated host semaphore")
+	}
+}
+
 type blockingDeliverer struct{}
 
 func (blockingDeliverer) Send(ctx context.Context, _ *Subscription, _ []byte) error {

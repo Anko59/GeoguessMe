@@ -15,6 +15,8 @@ complete.mailboxCreated("mailbox-1");
 complete.mailboxSearched("mailbox-1");
 complete.linkOpened("verification");
 complete.linkOpened("password-reset");
+assert.equal(complete.snapshot("full").missing.some(({ id }) => id === "email-verification-and-recovery"), true);
+complete.passwordRecoveryCompleted();
 complete.transferCaptured();
 complete.transferOpened();
 complete.capabilitiesObserved({ camera: { usable: true }, geolocation: { usable: true } });

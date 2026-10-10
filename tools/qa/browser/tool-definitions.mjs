@@ -1,4 +1,4 @@
-import { actionSchema, pageSchema, tool } from "../mcp-schemas.mjs";
+import { actionSchema, dialogActionSchema, pageSchema, tool } from "../mcp-schemas.mjs";
 
 export const tools = [
   tool("session_create", "Create an isolated browser session.", {
@@ -10,8 +10,10 @@ export const tools = [
     required: ["session_id"],
     properties: { session_id: { type: "string" } },
   }),
-  tool("qa_account_login", "Log an isolated session into a dedicated owner, member, or outsider QA account. If no QA account password is configured, start a fresh disposable mailbox-backed signup and keep its mailbox inside the browser provider; complete any visible identity-provider registration and verification before using the role.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
-  tool("qa_email_account_signup", "Create a fresh email-backed QA account through the visible signup flow; generated passwords stay inside the browser provider. The result may require completing the visible identity-provider registration and opening a mailbox verification link before the role is authenticated.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
+  tool("qa_account_login", "Log an isolated session into a configured dedicated owner, member, or outsider QA account. Requires the operator's privately supplied pool password; no credential is returned.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
+  tool("qa_email_account_signup", "Create this run's single fresh email-backed QA account through the visible signup flow; generated passwords stay inside the browser provider. The result may require completing visible identity-provider registration and opening a mailbox verification link before the role is authenticated.", { type: "object", required: ["session_id", "account_role"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, account_role: { type: "string", enum: ["owner", "member", "outsider"] } } }),
+  tool("qa_email_account_reset_password", "Submit the visible reset form for this run's one disposable email account using a new privately held password. Requires its password-reset mailbox link to have been opened in this exact tab. Does not reset pool or arbitrary accounts; sign-in must still be verified separately.", { ...pageSchema(), required: ["session_id", "mailbox_id"], properties: { ...pageSchema().properties, mailbox_id: { type: "string" } } }),
+  tool("qa_email_account_login", "Verify the privately held password by signing into this run's disposable email account through the normal UI. Clears only this isolated QA context's cookies to prevent SSO from replacing password proof. Returns whether a submitted changed password was verified; never returns credentials.", { ...pageSchema(), required: ["session_id", "mailbox_id"], properties: { ...pageSchema().properties, mailbox_id: { type: "string" } } }),
   tool("tab_open", "Open a second tab in an existing session.", {
     type: "object",
     required: ["session_id"],
@@ -37,7 +39,8 @@ export const tools = [
     type: "object", required: ["session_id", "transfer_id"], properties: { session_id: { type: "string" }, tab_id: { type: "string" }, transfer_id: { type: "string" } },
   }),
   tool("browser_capabilities", "Probe the granted synthetic camera and location services with a fixed safe check.", pageSchema()),
-  tool("browser_click", "Click one visible control selected by role, label, text, or placeholder.", actionSchema()),
+  tool("browser_security_headers", "Reload the current same-origin page and inspect only fixed document security-header presence and safe policy flags; never return raw header values, cookies, or nonce material.", pageSchema()),
+  tool("browser_click", "Click one visible control selected by role, label, text, or placeholder. Use dialog_action: accept to confirm its next native confirmation; otherwise it is dismissed and reported.", actionSchema()),
   tool("browser_type", "Fill one visible text control selected by role, label, text, or placeholder.", {
     ...actionSchema(),
     required: ["session_id", "target", "text"],
@@ -55,7 +58,7 @@ export const tools = [
   tool("browser_key", "Send a keyboard key to the active tab.", {
     type: "object",
     required: ["session_id", "key"],
-    properties: { session_id: { type: "string" }, tab_id: { type: "string" }, key: { type: "string" } },
+    properties: { session_id: { type: "string" }, tab_id: { type: "string" }, key: { type: "string" }, dialog_action: dialogActionSchema() },
   }),
   tool("browser_reload", "Reload the active tab.", pageSchema()),
   tool("browser_back", "Go back in the active tab history.", pageSchema()),

@@ -2,6 +2,7 @@ package email
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -25,7 +26,7 @@ func startTestSMTPServer(t *testing.T, startTLS, implicitTLS, advertiseAuth bool
 	_ = key
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, ClientAuth: tls.NoClientCert}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -50,7 +51,7 @@ func startTestSMTPServer(t *testing.T, startTLS, implicitTLS, advertiseAuth bool
 			if err != nil {
 				return
 			}
-			go handleSMTP(conn, tlsConfig, startTLS, advertiseAuth, func(body string) {
+			go handleSMTP(t.Context(), conn, tlsConfig, startTLS, advertiseAuth, func(body string) {
 				mu.Lock()
 				delivered = append(delivered, body)
 				mu.Unlock()
@@ -62,7 +63,7 @@ func startTestSMTPServer(t *testing.T, startTLS, implicitTLS, advertiseAuth bool
 	return port, cert
 }
 
-func handleSMTP(conn net.Conn, tlsConfig *tls.Config, startTLS, advertiseAuth bool, deliver func(string)) {
+func handleSMTP(ctx context.Context, conn net.Conn, tlsConfig *tls.Config, startTLS, advertiseAuth bool, deliver func(string)) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	reader := bufio.NewReader(conn)
@@ -103,7 +104,7 @@ func handleSMTP(conn net.Conn, tlsConfig *tls.Config, startTLS, advertiseAuth bo
 		case upper == "STARTTLS":
 			write("220 ready")
 			tlsConn := tls.Server(conn, tlsConfig)
-			if err := tlsConn.Handshake(); err != nil {
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
 				return
 			}
 			inTLS = true

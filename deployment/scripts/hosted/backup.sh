@@ -1,5 +1,6 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+# A valid gzip stream alone does not prove that pg_dump completed successfully.
+set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck source=deployment/scripts/hosted/common.sh

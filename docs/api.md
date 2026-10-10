@@ -10,7 +10,8 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
   automatically by the `/api/v1/auth/refresh` endpoint.
 - **Request body**: JSON (`application/json`), except multipart uploads such as
   `POST /api/v1/auth/profile/avatar` and `POST /api/v1/photo/upload`.
-- **Response body**: Always JSON (or image bytes for media endpoints).
+- **Response body**: JSON (or image bytes for media endpoints), except 204
+  responses with no body.
 - **Errors**: `{"error":{"code":"machine_readable","message":"human_readable"}}`
 - **Timestamps**: ISO 8601 / RFC 3339 format in UTC.
 - **Rate limits**: When exceeded, the response includes a `Retry-After` header
@@ -45,22 +46,26 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 `GET /api/v1/auth/profile` returns the authenticated user's profile together
 with lifetime guess points, guess count, average score, global Elo rating, the
-server-calculated rank progression, and three global rankings. Lifetime points
-are the sum of all accepted guess scores; rank thresholds and the geography
+server-calculated rank progression, and three global rankings. `guess_count`
+counts persisted group and public feed challenge guesses, including zero-point
+submissions. Lifetime points and average score remain based on group challenge
+guesses (including zero-point group guesses); public feed submissions do not
+change progression or global group rankings. Rank thresholds and the geography
 themed rank names are server-owned. `global_rank.rank` is the player's position
-among every player who has guessed at least once, ordered by lifetime points
-with standard competition ranking (equal totals share a rank), and
-`global_rank.total_players` is the size of that population; a player who has
-never guessed has `rank` 0. `global_average_rank` is the same ranking ordered by
-average guess score, and `global_elo_rank` ranks the player among everyone who
-has been compared against another guesser on a shared challenge, ordered by Elo
-rating (`elo` is 0 and the rank is 0 for a player with no such challenge). The
-global rating is an all-time ladder and moves with a small update factor, so it
-tracks long-run skill rather than the most recent challenges. Each rank object
-carries a `next_rank` with the following rank's name and badge key (omitted at
-the highest rank). Group leaderboard entries include the same rank object
-beneath each player's name while their `score` remains the selected period's
-sum; entries also carry `average_score` and `elo` for the same period.
+among every player who has made a group challenge guess, ordered by lifetime
+points with standard competition ranking (equal totals share a rank), and
+`global_rank.total_players` is the size of that population; a player with no
+group challenge guesses has `rank` 0. `global_average_rank` is the same ranking
+ordered by average guess score, and `global_elo_rank` ranks the player among
+everyone who has been compared against another guesser on a shared challenge,
+ordered by Elo rating (`elo` is 0 and the rank is 0 for a player with no such
+challenge). The global rating is an all-time ladder and moves with a small
+update factor, so it tracks long-run skill rather than the most recent
+challenges. Each rank object carries a `next_rank` with the following rank's
+name and badge key (omitted at the highest rank). Group leaderboard entries
+include the same rank object beneath each player's name while their `score`
+remains the selected period's sum; entries also carry `average_score` and `elo`
+for the same period.
 
 The group leaderboard is ranked by one of three metrics — `total` (period score
 sum, the default), `average` (period average score), or `elo` (Elo rating
@@ -74,8 +79,9 @@ ladders moderately (`K = 20`), and all-time ladders slowest (`K = 8`).
 `GET /api/v1/user/profile/{userID}` returns another player's identity and
 progression with the same shape minus email and account details. The player must
 share at least one group with the requester (viewing yourself always works);
-otherwise the endpoint returns 403. This is the data behind the player profile
-page reachable from chat and leaderboards.
+otherwise the endpoint returns 403. A block in either direction instead returns
+404 without revealing the relationship. This is the data behind the player
+profile page reachable from chat and leaderboards.
 
 Profiles may include `map_pin` when the player has equipped an unlocked pin. It
 contains the pin artwork and the unlock challenge credited when that pin was
@@ -156,6 +162,40 @@ passing that time alone does not grant access to an unplayed active challenge.
 | POST   | `/api/v1/group/messages/media`                               | Bearer | Send private image/MP4/WebM chat attachment                                            |
 | GET    | `/api/v1/group/messages/media/{mediaID}`                     | Bearer | Stream attachment for a current member (`private, no-store`)                           |
 
+### Player blocking
+
+`POST /api/v1/users/{id}/block` creates an idempotent outgoing block;
+`DELETE /api/v1/users/{id}/block` removes only your outgoing block. Both return
+204 with no body. The target must share a group, have authored public feed
+content, or already be blocked by you. Self-blocks and malformed IDs return 400;
+missing or ineligible block targets return 404. Authentication and normal write
+rate limits apply (401/429).
+
+`GET /api/v1/users/blocks` returns
+`{items:[{user_id,username,avatar,created_at}]}`; all identity fields are
+strings, and `created_at` is RFC 3339. Only outgoing blocks are listed; an empty
+list is `{items:[]}`. Either direction suppresses chat/feed/profile/media
+interaction, while group membership and ranking identities remain intact.
+Blocked profile, avatar, and media access returns ordinary 404 without
+disclosing incoming blocks. See [Player blocking](user-blocking.md) for controls
+and rollout.
+
+### Content reports
+
+Authenticated members can submit a notice about a message visible in their
+current group (`POST /api/v1/messages/{id}/report`) or another player sharing a
+group (`POST /api/v1/users/{id}/report`). JSON requires `reason` (one of
+`illegal_content`, `harassment`, `sexual_content`, `other`) and accepts optional
+`details` of up to 2,000 Unicode characters. A notice alleging illegal content
+must explain the allegation in `details`. A successful response is
+`{"id":"<report UUID>"}` (200); retries by the same reporter for the same target
+return the same reference without changing the original notice. Targets outside
+the member's groups, missing targets and self-reports return 404. Invalid input
+returns 400; authentication failures return 401. The normal write-rate policy
+applies, including 429 and `Retry-After`. Report text is not returned through
+the public API; see
+[moderation operations](data-protection.md#content-report-review).
+
 ### Challenges
 
 | Method | Path                                           | Auth   | Description                                                                                     |
@@ -190,6 +230,14 @@ authenticated rate limit; GET requests do not consume that write allowance.
 Posts and comments use a descending `(created_at, id)` cursor; `limit` defaults
 to 20 and accepts 1–50. Read [public feed behavior and rollout](public-feed.md)
 for visibility and retention.
+
+Public results honor `hide_location` using the same configured reveal window and
+author exception as group results. Before reveal, `actual_lat` and `actual_long`
+are omitted and timed/legacy guess responses carry `location_hidden: true` and
+`location_reveals_at`. Timed peer guesses omit coordinates and distances; legacy
+ranked results omit peer distances. The viewer's own guess and distance remain
+available. Clients must treat these coordinate/distance fields as optional,
+including on reload.
 
 | Method      | Path                                                | Description                                                                                                                                        |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |

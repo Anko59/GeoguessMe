@@ -91,7 +91,7 @@ func (f *fakeKicker) kickedUsers() []string {
 }
 
 func requestWithUser(method, target, body, userID string) *http.Request {
-	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))
+	request := httptest.NewRequestWithContext(context.Background(), method, target, bytes.NewBufferString(body))
 	return request.WithContext(handlers.WithUserID(request.Context(), userID))
 }
 
@@ -128,7 +128,7 @@ func TestSignup(t *testing.T) {
 
 func TestDecodeJSONRejectsTrailingValues(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice"}{"username":"bob"}`))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice"}{"username":"bob"}`))
 	var payload SignupRequest
 	if handlers.DecodeJSON(recorder, request, &payload) {
 		t.Fatal("DecodeJSON accepted trailing JSON")
@@ -144,7 +144,7 @@ func TestSessionSetupFailuresReturnServerError(t *testing.T) {
 	user := &models.User{ID: "user-1", Username: "alice", Email: "alice@example.test", Password: "hash", Avatar: "avatar.png"}
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(assert.AnError)
 	recorder := httptest.NewRecorder()
-	api.issueSession(httptest.NewRequest(http.MethodPost, "/", nil).Context(), recorder, user)
+	api.issueSession(httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil).Context(), recorder, user)
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("session failure status = %d", recorder.Code)
 	}
@@ -165,13 +165,13 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
+	api.Signup(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","email":"alice@example.test","password":"StrongPassword123","age_attested":true}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("signup status = %d (%s)", recorder.Code, recorder.Body.String())
 	}
 
 	// Refresh rotates the presented session.
-	refreshRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+	refreshRequest := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 	refreshRequest.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE refresh_sessions SET revoked_at").WithArgs(pgxmock.AnyArg(), authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
@@ -186,7 +186,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 
 	// Logout-all atomically revokes every session, bumps the auth version, and
 	// deletes outstanding WebSocket tickets.
-	logoutRequest := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
+	logoutRequest := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/?all=1", nil)
 	logoutRequest.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 	mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow(user.ID))
 	mock.ExpectBegin()
@@ -220,7 +220,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectExec("UPDATE users SET email =").WithArgs("alice@example.test", "alice@example.test", user.ID).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
-	api.VerifyEmail(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
+	api.VerifyEmail(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"verification-token"}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("verify status = %d", recorder.Code)
 	}
@@ -232,7 +232,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectExec("INSERT INTO password_reset_tokens").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
-	api.ForgotPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
+	api.ForgotPassword(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"email":"alice@example.test"}`)))
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("forgot password status = %d", recorder.Code)
 	}
@@ -245,7 +245,7 @@ func TestSignupRefreshLogoutAndEmailFlows(t *testing.T) {
 	mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs(user.ID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectCommit()
 	recorder = httptest.NewRecorder()
-	api.ResetPassword(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"reset-token","password":"NewPassword123"}`)))
+	api.ResetPassword(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"reset-token","password":"NewPassword123"}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("reset password status = %d", recorder.Code)
 	}
@@ -292,7 +292,7 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users").WithArgs("alice", "alice").WillReturnRows(handlerUserRows(user))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","password":"Password123"}`)))
+	api.Login(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"alice","password":"Password123"}`)))
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Set-Cookie") == "" {
 		t.Fatalf("login response = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -307,7 +307,7 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 		called = handlers.GetUserIDFromContext(r) == user.ID
 		w.WriteHeader(http.StatusNoContent)
 	})(httptest.NewRecorder(), func() *http.Request {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		r.Header.Set("Authorization", "Bearer "+token)
 		return r
 	}())
@@ -317,14 +317,14 @@ func TestLoginAndAuthMiddlewareSuccess(t *testing.T) {
 	mock.ExpectQuery("SELECT auth_version").WithArgs(user.ID).WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(user.AuthVersion+1, false))
 	recorder = httptest.NewRecorder()
 	api.AuthMiddleware(func(http.ResponseWriter, *http.Request) { t.Fatal("revoked session reached handler") })(recorder, func() *http.Request {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		r.Header.Set("Authorization", "Bearer "+token)
 		return r
 	}())
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("revoked session status = %d", recorder.Code)
 	}
-	if handlers.GetUserIDFromContext(httptest.NewRequest(http.MethodGet, "/", nil)) != "" {
+	if handlers.GetUserIDFromContext(httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)) != "" {
 		t.Fatal("anonymous request unexpectedly has a user")
 	}
 }
@@ -335,7 +335,7 @@ func TestOIDCEnabledPreservesExistingPasswordLogin(t *testing.T) {
 	api.cfg.OIDCEnabled = true
 
 	recorder := httptest.NewRecorder()
-	api.Signup(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewBufferString(`{"username":"new-player","password":"Password123"}`)))
+	api.Signup(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/signup", bytes.NewBufferString(`{"username":"new-player","password":"Password123"}`)))
 	if recorder.Code != http.StatusGone || !strings.Contains(recorder.Body.String(), `"code":"legacy_signup_disabled"`) {
 		t.Fatalf("legacy signup = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -348,7 +348,7 @@ func TestOIDCEnabledPreservesExistingPasswordLogin(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users").WithArgs("legacy", "legacy").WillReturnRows(handlerUserRows(legacy))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), legacy.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder = httptest.NewRecorder()
-	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"legacy","password":"Password123"}`)))
+	api.Login(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"legacy","password":"Password123"}`)))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"migration_required":false`) {
 		t.Fatalf("existing account login = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -357,7 +357,7 @@ func TestOIDCEnabledPreservesExistingPasswordLogin(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users").WithArgs("linked", "linked").WillReturnRows(handlerUserRows(linked))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), linked.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder = httptest.NewRecorder()
-	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
+	api.Login(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("linked password login = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -378,7 +378,7 @@ func TestOIDCDisabledPreservesLinkedPasswordLogin(t *testing.T) {
 	mock.ExpectQuery("SELECT .*FROM users").WithArgs("linked", "linked").WillReturnRows(handlerUserRows(linked))
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), linked.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	recorder := httptest.NewRecorder()
-	api.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
+	api.Login(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"linked","password":"Password123"}`)))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"password_login_enabled":true`) || strings.Contains(recorder.Body.String(), `"migration_required":true`) {
 		t.Fatalf("rollback login = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -433,12 +433,12 @@ func TestAuthHandlersRejectUnsupportedMethods(t *testing.T) {
 func TestAuthValidationAndUnauthenticatedBranches(t *testing.T) {
 	mock := newAuthMockPool(t)
 	api := newAuthAPI(t, mock, nil)
-	requireStatus(t, api.Signup, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":""}`)), http.StatusBadRequest)
-	requireStatus(t, api.Login, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":`)), http.StatusBadRequest)
-	requireStatus(t, api.Refresh, httptest.NewRequest(http.MethodPost, "/", nil), http.StatusUnauthorized)
-	requireStatus(t, api.VerifyEmail, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{}`)), http.StatusBadRequest)
-	requireStatus(t, api.ForgotPassword, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"email":`)), http.StatusBadRequest)
-	requireStatus(t, api.ResetPassword, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"x","password":"short"}`)), http.StatusBadRequest)
+	requireStatus(t, api.Signup, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":""}`)), http.StatusBadRequest)
+	requireStatus(t, api.Login, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":`)), http.StatusBadRequest)
+	requireStatus(t, api.Refresh, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil), http.StatusUnauthorized)
+	requireStatus(t, api.VerifyEmail, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{}`)), http.StatusBadRequest)
+	requireStatus(t, api.ForgotPassword, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"email":`)), http.StatusBadRequest)
+	requireStatus(t, api.ResetPassword, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"x","password":"short"}`)), http.StatusBadRequest)
 	mock.ExpectQuery("SELECT .*FROM users WHERE id").WithArgs("user-1").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, api.DeleteAccount, requestWithUser(http.MethodDelete, "/", `{}`, "user-1"), http.StatusUnauthorized)
 }

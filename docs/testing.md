@@ -11,13 +11,14 @@ tools from pinned images and named caches.
 | make preflight                             | Structure, format, lint, contracts, Terraform, type-check, audit, and unit tests; the eight harness self-test suites are path-triggered on harness changes (`PREFLIGHT_HARNESS=true/false` overrides)                                                                                                                                 | Fast deterministic local/PR gate PASS                                     |
 | make preflight-docs                        | Structure, formatting, documentation lint, and path-classifier regression                                                                                                                                                                                                                                                             | Documentation-only gate PASS                                              |
 | make test-unit                             | Backend unit tests and frontend Vitest                                                                                                                                                                                                                                                                                                | go test PASS; Vitest PASS                                                 |
+| make test-feed-fixtures                    | Feed interactions with controlled blob settlement and real image cancellation                                                                                                                                                                                                                                                         | All feed fixture tests PASS                                               |
 | make test-race                             | Backend race detector                                                                                                                                                                                                                                                                                                                 | go test -race PASS (no races)                                             |
 | make test-verified                         | Backend unit tests once with race detection and coverage; frontend Vitest with coverage                                                                                                                                                                                                                                               | go test -race -cover + coverage-threshold PASS; Vitest --coverage PASS    |
 | make test-structure-regression             | Structure-check regression tests in disposable Git repos                                                                                                                                                                                                                                                                              | check-structure-regression.sh PASS                                        |
 | make test-debt-markers-regression          | Owned and unowned deferred-work marker fixtures                                                                                                                                                                                                                                                                                       | check-markers-test.sh PASS                                                |
 | make test-ci-retention-regression          | Verify CI bounded retention and cache scopes                                                                                                                                                                                                                                                                                          | check-ci-retention-regression.sh PASS                                     |
-| make test-e2e-regression                   | Verify E2E cleanup, safe arguments, browser selection, and volume safeguards                                                                                                                                                                                                                                                          | check-e2e-regression.sh PASS                                              |
-| make test-load-harness-regression          | Verify the k6 load profile attests age on every signup it creates                                                                                                                                                                                                                                                                     | check-load-attestation.sh PASS                                            |
+| make test-e2e-regression                   | Verify E2E safeguards and integration working-directory/container/image ownership                                                                                                                                                                                                                                                     | All runner safeguard checks PASS                                          |
+| make test-load-harness-regression          | Verify signup attestation, nonroot owner mapping, restrictive k6 compilation, and isolated load lifecycle                                                                                                                                                                                                                             | All load harness checks PASS                                              |
 | make test-cache-status-regression          | Cache-status reporting regression tests                                                                                                                                                                                                                                                                                               | check-cache-status-regression.sh PASS                                     |
 | make test-restart-regression               | Restart-rehearsal script structure regression                                                                                                                                                                                                                                                                                         | check-restart-regression.sh PASS                                          |
 | make test-prune-regression                 | Prune script regression tests                                                                                                                                                                                                                                                                                                         | check-prune-regression.sh PASS                                            |
@@ -25,11 +26,11 @@ tools from pinned images and named caches.
 | make test-prod-container-verify-regression | Prod-container-verify script structure regression                                                                                                                                                                                                                                                                                     | check-prod-container-verify-regression.sh PASS                            |
 | make test-disk-cleanup-regression          | Disk-cleanup regression tests                                                                                                                                                                                                                                                                                                         | check-disk-cleanup-regression.sh PASS                                     |
 | make test-build-caching                    | Verify build-images uses layer caching and clean-build does not                                                                                                                                                                                                                                                                       | check-build-caching.sh PASS                                               |
-| make test-image-scan-exceptions-regression | Verify exception validation and nightly Buildx image loading before audit-images                                                                                                                                                                                                                                                      | All image-scan regression checks PASS                                     |
+| make test-image-scan-exceptions-regression | Compatibility alias for complete image-audit and exploitation-policy regressions                                                                                                                                                                                                                                                      | All image-scan regression checks PASS                                     |
 | make cache-status                          | Report project-only Docker resources (read-only)                                                                                                                                                                                                                                                                                      | script output (non-fatal)                                                 |
 | make maintenance-report                    | Agent-readable deferred-work and structural-pressure summary                                                                                                                                                                                                                                                                          | Markdown summary (non-mutating)                                           |
 | make coverage                              | Backend ≥70% overall; frontend ≥80/80/80/70 (statements/branches/functions/lines)                                                                                                                                                                                                                                                     | go test cover OK; Vitest --coverage PASS                                  |
-| make test-integration                      | Isolated PostgreSQL, MinIO, Mailpit, backend suite                                                                                                                                                                                                                                                                                    | All integration tests PASS                                                |
+| make test-integration                      | Isolated PostgreSQL, authenticated SeaweedFS S3 fixture, Mailpit, backend suite                                                                                                                                                                                                                                                       | All integration tests PASS                                                |
 | make test-e2e                              | Chromium desktop, Firefox desktop, and Pixel 5 Playwright projects                                                                                                                                                                                                                                                                    | All Playwright projects PASS                                              |
 | make test-e2e-pr                           | Chromium desktop Playwright project; CI may set `GEOGUESSME_E2E_SHARD=N/M` for isolated shards                                                                                                                                                                                                                                        | PR browser checks PASS                                                    |
 | make test-mobile                           | Isolated backend fixture, Capacitor APK build, headless Android emulator, and Maestro gameplay journey                                                                                                                                                                                                                                | APK installs; auth, chat, guess, camera capture, and upload PASS          |
@@ -47,8 +48,75 @@ tools from pinned images and named caches.
 | make smoke-rehearsal                       | Smoke test against a disposable test stack                                                                                                                                                                                                                                                                                            | smoke-rehearsal.sh PASS                                                   |
 | make verify                                | quality + test-integration + test-e2e + container-verify + prod-container-verify + migration-test + backup-rehearsal + restart-rehearsal + reconnect-rehearsal + smoke + load-test                                                                                                                                                    | All gates PASS; complete release readiness                                |
 
+Concurrent integration/E2E runs in different worktrees must select a private
+`GEOGUESSME_TEST_PROJECT` and `GEOGUESSME_TOOLS_PROJECT`, plus separate
+`GEOGUESSME_TEST_WEB_PORT`, `GEOGUESSME_TEST_MAILPIT_PORT`,
+`GEOGUESSME_TEST_DB_PORT`, and `GEOGUESSME_TEST_TOXIPROXY_PORT`. Make's test
+environment honors these caller values. Sequential integration/E2E phases may
+reuse that private project after successful teardown; they must not overlap.
+
+The integration runner refuses pre-existing stacks and verifies every
+container's Compose working-directory label against its canonical checkout. It
+snapshots container/image IDs after startup, checks the backend against its
+pre-start image ID, and rejects identity changes before tests, after tests, and
+before diagnostics or teardown. A foreign working directory or replacement
+container leaves the project untouched and fails the run, never gathering peer
+logs or destroying peer resources. A present revision label must match the
+checkout; legacy images without revision labels do not prove their source SHA.
+Private projects are essential: the label checks are not a distributed lock.
+
+`make load-test` runs the pinned k6 image with the canonical non-root
+`TOOLS_UID:TOOLS_GID` checkout-owner mapping, preserving owner-only directory
+and file permissions and the read-only workspace mount. It honors
+`GEOGUESSME_TOOLS_PROJECT` and isolates its disposable application resources
+with `GEOGUESSME_LOAD_PROJECT` (default includes the tools namespace and PID).
+Root UID mappings are rejected before startup. The permission regression
+compiles the unchanged load profile in the actual pinned image with networking
+disabled; it does not run requests or alter the live scenario, defaults, or
+thresholds.
+
+`make test-npm-security-overrides` verifies the scoped tooling patches in
+[the compatibility ledger](agent-engineering.md#tooling-security-overrides-376).
+It runs before `make test-frontend` and `make test-verified`, covering the
+actual Xcode/Markdownlint APIs and deterministic advisory regression cases.
+`make test-braces-security` verifies the canonical local braces security
+backport's installed runtime hashes, nesting bounds, cyclic AST rejection, and
+consumer compatibility. It is required by `make audit` because npm audit alone
+cannot assess maintained local source. See
+[the backport ledger](agent-engineering.md#braces-security-backport).
+
 Reports and traces are written to ignored repository output directories from
-inside containers.
+inside containers. Security lifecycle regressions always run in preflight and
+quality: `make test-image-audit`, `make test-image-audit-native`,
+`make test-dependency-images`, `make test-security-workflows`, and
+`make test-image-scan-exceptions-regression`. They verify complete scan-only
+scope, immutable identity, independent build/adoption trust, bounded retries,
+and fail-closed operational errors. Image findings block on known exploitation
+or confirmed deployment exposure, including unfixed/low-severity findings;
+source dependency gates remain strict. Other image findings remain advisories.
+`make audit-images` never prepares images: use explicit dependency/application
+build targets first. The full default inventory requires 17 references and
+retains raw JSON/SPDX, gate results, resolution and database snapshot evidence.
+See the [security lifecycle](security-scanning.md).
+
+`make terraform-test` delegates to `make terraform-cloud-init-test`: the pinned
+Ubuntu parser dispatches the actual standard gzip cloud-config archive, checks
+all 33 installed members and hashes, and rejects malformed payloads. Terraform
+validates and exercises the real module using three explicit mocked providers,
+without network access, operator credentials, backend configuration, or state.
+Original and realistic synthetic SSH-key/tunnel-token inputs, including UTF-8,
+must remain within Hetzner's strict 32,768-byte user-data limit. The actual
+server resource also enforces that limit for dynamic operator inputs; larger
+keys or future bundle growth can fail closed and require reviewed size
+reductions.
+
+`make test-s3-fixture` verifies client and migration/recovery contracts;
+`make test-s3-fixture-race` runs the HTTP/integrity tests with race detection.
+`make test-s3-fixture-integration` uses a unique disposable real-image project
+for signed authentication, anonymous denial, no-overwrite, verified copy and
+restart persistence. `make verify-s3-upstream` checks the exact official release
+signature. These tests never migrate user data; follow the
+[explicit migration runbook](runbooks/s3-fixture-migration.md).
 
 The harness self-test rows (`test-structure-regression`,
 `test-debt-markers-regression`, `test-e2e-regression`, plus
@@ -85,12 +153,17 @@ deployment, infrastructure, tools, and Makefile changes also select both suites.
 ## Integration stack
 
 deployment/compose.test.yaml is disposable and uses dedicated database and media
-volumes. GEOGUESSME_TEST_WEB_PORT and GEOGUESSME_TEST_MAILPIT_PORT may be set to
-non-default ports (the defaults are `18080` and `18025` to avoid the development
-stack's `8080` and `8025`). The runner derives one public URL and supplies it to
-PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket origins, and email-link
-assertions. Mailpit is addressed through the separately derived
-MAILPIT_BASE_URL.
+volumes. Make derives a checkout-scoped port block using
+`GEOGUESSME_TEST_PORT_BASE` (default `20000 + (checkout checksum % 3000) * 10`).
+Web, Mailpit, database and Toxiproxy use offsets 0–3; specific
+`GEOGUESSME_TEST_*_PORT` overrides take precedence. Disposable projects include
+the checkout namespace and process ID, so another run cannot reuse or tear down
+this run's data. An occupied port fails closed; for simultaneous runs in the
+same checkout, explicitly choose distinct port blocks. Canonical report
+publication is not parallel-safe within one checkout. The runner derives one
+public URL and supplies it to PUBLIC_URL, ALLOWED_ORIGINS, Playwright, WebSocket
+origins, and email-link assertions. Mailpit is addressed through the separately
+derived MAILPIT_BASE_URL.
 
 The suite covers authentication, group boundaries, challenge lifecycle and media
 visibility, transactions, rate limits, storage failures, cleanup retries,
@@ -159,14 +232,25 @@ before removing the stack and preserves the original failure status.
 
 ## Cache and artifact bounds
 
-| Resource              | Scope              | Bound                                                                      |
-| --------------------- | ------------------ | -------------------------------------------------------------------------- |
-| Docker layer cache    | BuildKit           | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
-| Named tool caches     | geoguessme-tools   | Removed by make tools-clean or make prune --include-build-cache            |
-| Project images        | geoguessme* prefix | prune.sh --max-images 50                                                   |
-| Project volumes       | geoguessme* prefix | prune.sh --max-volumes 20 (opt-in)                                         |
-| Workspace artifacts   | repo paths         | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
-| CI workflow artifacts | GitHub Actions     | retention-days: 7                                                          |
+| Resource              | Scope                         | Bound                                                                      |
+| --------------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| Docker layer cache    | BuildKit                      | `docker builder prune --force` (dangling only); CI: branch+lockfile scoped |
+| Named tool caches     | Checkout-scoped tools project | Removed by make tools-clean or make prune --include-build-cache            |
+| Project images        | geoguessme* prefix            | prune.sh --max-images 50                                                   |
+| Project volumes       | geoguessme* prefix            | prune.sh --max-volumes 20 (opt-in)                                         |
+| Workspace artifacts   | repo paths                    | disk-cleanup.sh --min-age-days 7 --max-total-mb 1024                       |
+| CI workflow artifacts | GitHub Actions                | retention-days: 7                                                          |
+
+Hosted CI configures the Docker daemon and isolated Buildx builders to try
+Google's public `mirror.gcr.io` cache before Docker Hub. Image names and
+committed digests remain unchanged; cache misses fall back to Docker Hub and
+failures still stop the gate. `make ci-registry-cache` is restricted to empty
+ephemeral GitHub-hosted Linux runners and preserves other daemon configuration.
+Local and production Docker configuration is unaffected. The shared setup action
+preserves each job's existing BuildKit cache bound. See
+[Docker registry mirror configuration](https://docs.docker.com/build/buildkit/configure/#registry-mirror)
+and
+[Google's public cache contract](https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images).
 
 All cleanup targets are dry-run by default and require explicit CONFIRM before
 execution.
