@@ -7,16 +7,21 @@ function fakePage({ oidc }) {
     state,
     url: () => state.url,
     goto: async (url) => { state.url = url; },
+    locator: () => {
+      const field = (index) => ({ fill: async (value) => state.fields.set(index ? "Confirm password" : "New Password", value), waitFor: async () => {} });
+      return { count: async () => 2, first: () => field(0), nth: field };
+    },
     getByPlaceholder: (label) => ({
       count: async () => label === "Username" && !oidc ? 1 : 0,
       fill: async (value) => state.fields.set(label, value),
     }),
     getByLabel: (label) => ({
-      count: async () => oidc && ["New Password", "Confirm password"].includes(String(label)) && state.url.endsWith("update-password") ? 1 : 0,
+      count: async () => oidc && label instanceof RegExp && label.test("New Password *") && state.url.endsWith("update-password") ? 1 : 0,
       check: async () => state.checked.push(String(label)),
-      fill: async (value) => state.fields.set(String(label), value),
+      fill: async (value) => state.fields.set(label instanceof RegExp ? (label.test("New Password *") ? "New Password" : "Confirm password") : String(label), value),
     }),
     getByRole: (_role, options) => ({
+      or: () => ({ first: () => ({ waitFor: async () => {} }) }),
       count: async () => oidc && options.name === "Create account" && state.url.endsWith("registration") ? 1 : 0,
       click: async () => {
         state.clicked.push(options.name);
@@ -25,7 +30,7 @@ function fakePage({ oidc }) {
         if (options.name === "Create account") state.url = "https://auth.geoguessme.test/realms/geoguessme/login-actions/update-password";
       },
     }),
-    waitForURL: async (predicate) => assert.equal(predicate(new URL("https://dev.geoguessme.test/groups")), true),
+    waitForURL: async (predicate) => assert.equal(predicate(new URL(state.url)), true),
     waitForLoadState: async () => {},
   };
 }
@@ -34,7 +39,7 @@ const mailbox = { create: async () => ({ mailbox_id: "mailbox-1", address: "qa@e
 const baseUrl = new URL("https://dev.geoguessme.test/");
 
 const oidcPage = fakePage({ oidc: true });
-const oidcResult = await signUpEmailAccount({ page: oidcPage, baseUrl, mailbox, accountRole: "owner" });
+const oidcResult = await signUpEmailAccount({ page: oidcPage, baseUrl, mailbox, accountRole: "owner", identityOrigins: new Set(["https://auth.geoguessme.test"]) });
 assert.equal(oidcResult.authenticated, false);
 assert.equal(oidcResult.verification_required, true);
 assert.equal(oidcResult.address, "qa@example.test");

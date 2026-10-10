@@ -21,6 +21,7 @@ export class CoverageTracker {
     this.emailSignup = false;
     this.verificationLinkOpened = false;
     this.resetLinkOpened = false;
+    this.recoveryCompleted = false;
     this.inviteCaptured = false;
     this.inviteOpened = false;
     this.outsiderGroupAttempt = false;
@@ -45,6 +46,7 @@ export class CoverageTracker {
   }
 
   emailAccount() { this.emailSignup = true; }
+  passwordRecoveryCompleted() { this.recoveryCompleted = true; }
 
   mailboxCreated(mailboxId) { this.emailMailboxIds.add(mailboxId); }
 
@@ -106,7 +108,7 @@ export class CoverageTracker {
     const full = ["full", "nightly"].includes(budget);
     const checks = {
       "authentication-and-session": this.roles.size > 0,
-      "email-verification-and-recovery": this.emailSignup && [...this.emailMailboxIds].some((mailboxId) => this.searchedMailboxIds.has(mailboxId)) && this.verificationLinkOpened && this.resetLinkOpened,
+      "email-verification-and-recovery": this.emailSignup && [...this.emailMailboxIds].some((mailboxId) => this.searchedMailboxIds.has(mailboxId)) && this.verificationLinkOpened && this.resetLinkOpened && this.recoveryCompleted,
       "groups-and-authorization": this.inviteCaptured && this.inviteOpened && this.outsiderGroupAttempt,
       "multi-user-group-chat": ["owner", "member", "outsider"].every((role) => this.roles.has(role)) && this.chatAction && this.chatObservationSessions.size >= 2,
       "photo-challenge-game": this.challengeUploaded && this.challengeObserved && this.challengeAccepted && this.guessPlaced && this.guessSubmitted,
