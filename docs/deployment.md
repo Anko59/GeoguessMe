@@ -22,7 +22,7 @@ fixes Alpine PCRE2 without a CVE exception and is updated through a separate
 procedure in the
 [runtime hardening runbook](runbooks/runtime-hardening.md#staging-a-deploy-protocol-change).
 
-Application/tooling builds use Go 1.26.9 for the October security fixes. Caddy
+Application/tooling builds use Go 1.27.2 for the October security fixes. Caddy
 and Restic consume official upstream releases without source rebuilding. Publish
 changed envelope input keys before resolving nightly artifacts; reuse and
 promotion continue to require exact signed digests.

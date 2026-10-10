@@ -36,6 +36,13 @@ Same-origin link clicks wait for a destination change before returning their
 observation, so a transient pre-navigation page cannot be mistaken for a failed
 product link.
 
+Click, keyboard, fill, select, and upload actions report any native dialog they
+handle. The default is dismissal. To exercise a confirmation such as player
+blocking or Party Time, pass `dialog_action: accept` for that action; it accepts
+only the next confirmation. Further dialogs and all credential prompts remain
+dismissed. Prompt default values never enter observations. Duplicate button
+names can be navigated through the visible form's ordinary keyboard path.
+
 The same MCP server exposes a high-level disposable mailbox contract:
 `mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
 adapter default is Mail.tm, which requires no operator mailbox credential; the

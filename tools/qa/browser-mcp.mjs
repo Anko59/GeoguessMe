@@ -11,6 +11,7 @@ import { CoverageTracker } from "./coverage.mjs";
 import { tools } from "./browser/tool-definitions.mjs";
 import { clickAndWaitForNavigation } from "./navigation.mjs";
 import { inspectDocumentResponse } from "./security-headers.mjs";
+import { withNextDialog } from "./browser/dialogs.mjs";
 const baseUrl = new URL(process.env.QA_BASE_URL || "http://127.0.0.1/");
 const artifactDir = process.env.QA_ARTIFACT_DIR || "/tmp/qa-artifacts";
 const maxText = 12000;
@@ -256,17 +257,19 @@ async function call(name, args) {
   if (["browser_click", "browser_type", "browser_select", "browser_upload"].includes(name)) {
     const { page } = sessionFor(args);
     const locator = await locate(page, args.target);
-    if (name === "browser_click") await clickAndWaitForNavigation(page, locator, baseUrl);
-    if (name === "browser_type") await locator.fill(args.text);
-    if (name === "browser_select") await locator.selectOption(args.value);
-    if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+    const dialog = await withNextDialog(page, args.dialog_action, async () => {
+      if (name === "browser_click") await clickAndWaitForNavigation(page, locator, baseUrl);
+      if (name === "browser_type") await locator.fill(args.text);
+      if (name === "browser_select") await locator.selectOption(args.value);
+      if (name === "browser_upload") await locator.setInputFiles({ name: "qa-fixture.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+    }, safeText);
     coverage.action(name, args);
-    return observe(args);
+    return { ...await observe(args), ...(dialog ? { dialog } : {}) };
   }
   if (name === "browser_key") {
     const { page } = sessionFor(args);
-    await page.keyboard.press(args.key);
-    return observe(args);
+    const dialog = await withNextDialog(page, args.dialog_action, () => page.keyboard.press(args.key), safeText);
+    return { ...await observe(args), ...(dialog ? { dialog } : {}) };
   }
   if (name === "browser_reload") {
     const { page } = sessionFor(args);

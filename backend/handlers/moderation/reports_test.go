@@ -39,7 +39,7 @@ func (m *reportMailStub) Send(_, _, body string) error { m.calls++; m.body = bod
 func TestReportUserUsesUserTarget(t *testing.T) {
 	store := &reportStoreStub{result: moderationrepo.ContentReport{ID: "receipt-1", Created: false}}
 	api := ContentReportAPI{Store: store, Mailer: &reportMailStub{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/users/user-1/report", strings.NewReader(`{"reason":"other"}`))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/users/user-1/report", strings.NewReader(`{"reason":"other"}`))
 	r.SetPathValue("id", "user-1")
 	r = r.WithContext(handlers.WithUserID(r.Context(), "reporter-id"))
 	w := httptest.NewRecorder()
@@ -72,7 +72,7 @@ func TestReportMessageValidationAndNotification(t *testing.T) {
 			store := &reportStoreStub{result: moderationrepo.ContentReport{ID: "report-id", Created: tc.created}, err: tc.storeErr}
 			mail := &reportMailStub{}
 			api := ContentReportAPI{Store: store, Mailer: mail, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Contact: "privacy@example.test"}
-			r := httptest.NewRequest(http.MethodPost, "/api/v1/messages/message-id/report", strings.NewReader(tc.body))
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/messages/message-id/report", strings.NewReader(tc.body))
 			r.SetPathValue("id", "message-id")
 			r = r.WithContext(handlers.WithUserID(r.Context(), "reporter-id"))
 			w := httptest.NewRecorder()

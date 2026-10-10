@@ -39,7 +39,7 @@ func serveSystem(t *testing.T, cfg *config.Config, pool database.Pool, store sto
 	mux := http.NewServeMux()
 	registerSystemRoutes(mux, cfg, pool, metrics, store)
 
-	request := httptest.NewRequest(method, target, nil)
+	request := httptest.NewRequestWithContext(t.Context(), method, target, nil)
 	if auth != "" {
 		request.Header.Set("Authorization", auth)
 	}
@@ -167,7 +167,7 @@ func TestRouteTestControlsGatedByEnvironment(t *testing.T) {
 	mux := http.NewServeMux()
 	registerSystemRoutes(mux, cfg, nil, metrics, store)
 	recorder := httptest.NewRecorder()
-	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
+	mux.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("development test control status = %d, want 404", recorder.Code)
 	}
@@ -177,7 +177,7 @@ func TestRouteTestControlsGatedByEnvironment(t *testing.T) {
 	testMux := http.NewServeMux()
 	registerSystemRoutes(testMux, testCfg, nil, newTestMetrics(), store)
 	recorder = httptest.NewRecorder()
-	testMux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
+	testMux.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/test/rate-limit/reset", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("test control status = %d, want 200", recorder.Code)
 	}

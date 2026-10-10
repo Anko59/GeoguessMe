@@ -53,12 +53,14 @@ type PublicCommentsPage struct {
 }
 
 type PublicGuessResult struct {
-	Score      int     `json:"score"`
-	Distance   float64 `json:"distance"`
-	Lat        float64 `json:"lat"`
-	Long       float64 `json:"long"`
-	ActualLat  float64 `json:"actual_lat"`
-	ActualLong float64 `json:"actual_long"`
+	Score             int        `json:"score"`
+	Distance          float64    `json:"distance"`
+	Lat               float64    `json:"lat"`
+	Long              float64    `json:"long"`
+	ActualLat         *float64   `json:"actual_lat,omitempty"`
+	ActualLong        *float64   `json:"actual_long,omitempty"`
+	LocationHidden    bool       `json:"location_hidden,omitempty"`
+	LocationRevealsAt *time.Time `json:"location_reveals_at,omitempty"`
 }
 
 // PublicChallengeAccepted and PublicChallengeMediaDelivered mirror the
@@ -110,21 +112,23 @@ type PublicTimedResultGuess struct {
 }
 
 type PublicTimedResults struct {
-	ChallengeID string                   `json:"challenge_id"`
-	ActualLat   float64                  `json:"actual_lat"`
-	ActualLong  float64                  `json:"actual_long"`
-	Guesses     []PublicTimedResultGuess `json:"guesses"`
-	ServerTime  time.Time                `json:"server_time"`
+	ChallengeID       string                   `json:"challenge_id"`
+	ActualLat         *float64                 `json:"actual_lat,omitempty"`
+	ActualLong        *float64                 `json:"actual_long,omitempty"`
+	LocationHidden    bool                     `json:"location_hidden,omitempty"`
+	LocationRevealsAt *time.Time               `json:"location_reveals_at,omitempty"`
+	Guesses           []PublicTimedResultGuess `json:"guesses"`
+	ServerTime        time.Time                `json:"server_time"`
 }
 
 type PublicFeedResult struct {
-	Rank     int     `json:"rank"`
-	UserID   string  `json:"user_id"`
-	Username string  `json:"username"`
-	Avatar   string  `json:"avatar"`
-	MapPin   *MapPin `json:"map_pin,omitempty"`
-	Score    int     `json:"score"`
-	Distance float64 `json:"distance"`
-	EloDelta int     `json:"elo_delta"`
-	IsViewer bool    `json:"is_viewer"`
+	Rank     int      `json:"rank"`
+	UserID   string   `json:"user_id"`
+	Username string   `json:"username"`
+	Avatar   string   `json:"avatar"`
+	MapPin   *MapPin  `json:"map_pin,omitempty"`
+	Score    int      `json:"score"`
+	Distance *float64 `json:"distance,omitempty"`
+	EloDelta int      `json:"elo_delta"`
+	IsViewer bool     `json:"is_viewer"`
 }

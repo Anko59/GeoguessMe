@@ -52,7 +52,7 @@ func TestBlockChangeValidationAndPrivacy(t *testing.T) {
 			store := &blockStoreStub{err: tc.err}
 			serialized := 0
 			api := BlockAPI{Store: store, SerializeChanges: func(f func() error) error { serialized++; return f() }}
-			r := httptest.NewRequest(tc.method, "/", nil)
+			r := httptest.NewRequestWithContext(context.Background(), tc.method, "/", nil)
 			r.SetPathValue("id", tc.target)
 			r = r.WithContext(handlers.WithUserID(r.Context(), owner))
 			w := httptest.NewRecorder()
@@ -73,7 +73,7 @@ func TestBlockListEmptyAndFailure(t *testing.T) {
 		if fail {
 			store.err = errors.New("database")
 		}
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		r = r.WithContext(handlers.WithUserID(r.Context(), "owner"))
 		w := httptest.NewRecorder()
 		(&BlockAPI{Store: store}).List(w, r)

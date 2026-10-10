@@ -67,12 +67,12 @@ func TestTimedGuessRejectsOwnerBeforeCreatingSessionGuess(t *testing.T) {
 func TestTimedResultsRequireResolutionForOtherViewers(t *testing.T) {
 	r, mock := mockRepository(t)
 	mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs("viewer", "post").WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "lat", "long"}).AddRow("author", 48.8, 2.3),
+		pgxmock.NewRows([]string{"user_id", "lat", "long", "hide_location", "created_at"}).AddRow("author", 48.8, 2.3, false, time.Now()),
 	)
 	mock.ExpectQuery("SELECT EXISTS \\(SELECT 1 FROM public_guesses").WithArgs("post", "viewer", pgxmock.AnyArg()).WillReturnRows(
 		pgxmock.NewRows([]string{"exists"}).AddRow(false),
 	)
-	if _, err := r.TimedResults(t.Context(), "post", "viewer", time.Now()); !errors.Is(err, ErrForbidden) {
+	if _, err := r.TimedResults(t.Context(), "post", "viewer", time.Now(), 48*time.Hour); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("unresolved results error = %v", err)
 	}
 }
@@ -81,14 +81,14 @@ func TestTimedResultsIncludeSelectedPinAndHideTimeoutCoordinates(t *testing.T) {
 	r, mock := mockRepository(t)
 	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs("owner", "post").WillReturnRows(
-		pgxmock.NewRows([]string{"user_id", "lat", "long"}).AddRow("owner", 48.8, 2.3),
+		pgxmock.NewRows([]string{"user_id", "lat", "long", "hide_location", "created_at"}).AddRow("owner", 48.8, 2.3, false, now),
 	)
 	mock.ExpectQuery("SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score").WithArgs("post", "owner").WillReturnRows(
 		pgxmock.NewRows([]string{"id", "user_id", "username", "avatar", "lat", "long", "score", "distance", "timed_out", "created_at", "pin_key", "pin_name", "pin_image"}).
 			AddRow("guess-1", "viewer", "Explorer", "avatar.png", 47.0, 3.0, 4000, 200000.0, false, now, "north-star", "North Star", "/map-pins/north-star.svg").
 			AddRow("guess-2", "other", "Cartographer", "avatar2.png", 0.0, 0.0, 0, 0.0, true, now, "", "", ""),
 	)
-	result, err := r.TimedResults(t.Context(), "post", "owner", now)
+	result, err := r.TimedResults(t.Context(), "post", "owner", now, 48*time.Hour)
 	if err != nil || len(result.Guesses) != 2 {
 		t.Fatalf("TimedResults = %+v, %v", result, err)
 	}
@@ -106,5 +106,47 @@ func TestDeliveryAcknowledgementUsesViewerForVisibility(t *testing.T) {
 	mock.ExpectQuery(`WHERE v.challenge_id=\$2 AND v.user_id=\$1.*`+regexp.QuoteMeta(challengeVisibility)).WithArgs("viewer", "post", now, int64(10), int64(120)).WillReturnError(pgx.ErrNoRows)
 	if _, err := r.MarkTimedMediaDelivered(t.Context(), "post", "viewer", 10*time.Second, 2*time.Minute, now); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("blocked acknowledgement = %v", err)
+	}
+}
+
+func TestTimedResultsHideAnswerAndOtherPlayersUntilReveal(t *testing.T) {
+	created := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, viewer string
+		elapsed      time.Duration
+		hidden       bool
+	}{
+		{"resolved viewer before reveal", "viewer", time.Minute, true},
+		{"author", "author", time.Minute, false},
+		{"reveal boundary", "viewer", 48 * time.Hour, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, mock := mockRepository(t)
+			now := created.Add(tc.elapsed)
+			mock.ExpectQuery("SELECT p.user_id,p.lat,p.long").WithArgs(tc.viewer, "post").WillReturnRows(pgxmock.NewRows([]string{"owner", "lat", "long", "hide_location", "created_at"}).AddRow("author", 48.8, 2.3, true, created))
+			if tc.viewer != "author" {
+				mock.ExpectQuery("SELECT EXISTS").WithArgs("post", tc.viewer, now).WillReturnRows(pgxmock.NewRows([]string{"allowed"}).AddRow(true))
+			}
+			mock.ExpectQuery("SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score").WithArgs("post", tc.viewer).WillReturnRows(
+				pgxmock.NewRows([]string{"id", "user_id", "username", "avatar", "lat", "long", "score", "distance", "timed_out", "created_at", "pin_key", "pin_name", "pin_image"}).
+					AddRow("own", "viewer", "Viewer", "", 1.0, 2.0, 4000, 100.0, false, now, "", "", "").
+					AddRow("peer", "peer", "Peer", "", 3.0, 4.0, 4500, 200.0, false, now, "", "", ""),
+			)
+			result, err := r.TimedResults(t.Context(), "post", tc.viewer, now, 48*time.Hour)
+			if err != nil || len(result.Guesses) != 2 {
+				t.Fatalf("result = %+v, %v", result, err)
+			}
+			if result.LocationHidden != tc.hidden || result.Guesses[0].Lat == nil || result.Guesses[1].Score != 4500 {
+				t.Fatalf("privacy result = %+v", result)
+			}
+			if tc.hidden {
+				peer := result.Guesses[1]
+				if result.ActualLat != nil || result.ActualLong != nil || result.LocationRevealsAt == nil || !result.LocationRevealsAt.Equal(created.Add(48*time.Hour)) || peer.Lat != nil || peer.Long != nil || peer.Distance != nil {
+					t.Fatalf("hidden data leaked = %+v", result)
+				}
+			} else if result.ActualLat == nil || *result.ActualLat != 48.8 || result.Guesses[1].Lat == nil || result.Guesses[1].Distance == nil {
+				t.Fatalf("revealed result = %+v", result)
+			}
+		})
 	}
 }

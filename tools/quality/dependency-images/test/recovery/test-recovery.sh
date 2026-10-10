@@ -13,7 +13,10 @@ mkdir -p "$OWNED/repo/tools/quality/dependency-images" "$OWNED/repo/tools/qualit
 cp "$ROOT/tools/quality/dependency-images/"{common,registry,recover-keycloak}.sh "$OWNED/repo/tools/quality/dependency-images/"
 cp "$ROOT/tools/quality/image-audit/retry.sh" "$OWNED/repo/tools/quality/image-audit/"
 cp "$ROOT/deployment/images/dependencies.tsv" "$OWNED/repo/deployment/images/"
-cp "$ROOT/deployment/docker/keycloak-patched/Dockerfile" "$OWNED/repo/deployment/docker/keycloak-patched/"
+# Recovery is tied to one historical publication, independent of today's base.
+jq -er '.SLSA.runDetails.metadata.buildkit_metadata.source.infos[] |
+    select(.filename == "Dockerfile") | .data' "$FIXTURE/producer.json" |
+    base64 -d >"$OWNED/repo/deployment/docker/keycloak-patched/Dockerfile"
 cp "$ROOT/.dockerignore" "$OWNED/repo/"
 for command in gh docker cosign make sleep; do ln -s "$FIXTURE/fake-command.sh" "$OWNED/bin/$command"; done
 export PATH="$OWNED/bin:$PATH" TEST_FIXTURE="$FIXTURE" TEST_STATE="$OWNED/state"
@@ -80,7 +83,10 @@ reset_case
 printf '# stale reviewed inputs\n' >>"$OWNED/repo/deployment/docker/keycloak-patched/Dockerfile"
 TEST_CASE=stale-inputs reject
 [[ ! -s "$TEST_STATE/trace" ]] || fail_test 'stale inputs performed external operation'
-cp "$ROOT/deployment/docker/keycloak-patched/Dockerfile" "$OWNED/repo/deployment/docker/keycloak-patched/"
+# Recovery is tied to one historical publication, independent of today's base.
+jq -er '.SLSA.runDetails.metadata.buildkit_metadata.source.infos[] |
+    select(.filename == "Dockerfile") | .data' "$FIXTURE/producer.json" |
+    base64 -d >"$OWNED/repo/deployment/docker/keycloak-patched/Dockerfile"
 for scenario in api-denied run-origin run-workflow run-branch job-origin job-failure log-denied log-digest log-failure registry-denied registry-missing tag-digest attestation-link multiple-runtime direct-multi-runtime runtime-digest local-inputs local-platform local-base repo-digest; do
     reset_case
     export TEST_CASE=$scenario
