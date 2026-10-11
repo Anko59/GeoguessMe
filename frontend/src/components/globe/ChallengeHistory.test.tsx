@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GroupChallenge } from '../../types';
 import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
@@ -34,27 +34,29 @@ describe('Challenge history', () => {
     it('bounds the rendered list and keeps every challenge reachable', () => {
         const select = vi.fn();
         render(<ChallengeHistory items={items} selectedID={null} onSelect={select} />);
+        const pages = within(screen.getByRole('navigation', { name: 'Challenge pages' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(50);
-        expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(pages.getByRole('button', { name: 'Previous' })).toBeDisabled();
+        fireEvent.click(pages.getByRole('button', { name: 'Next' }));
         expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        fireEvent.click(pages.getByRole('button', { name: 'Next' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(23);
-        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        expect(pages.getByRole('button', { name: 'Next' })).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: /Player 122 / }));
         expect(select).toHaveBeenCalledWith('p122');
-        fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+        fireEvent.click(pages.getByRole('button', { name: 'Previous' }));
         expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
     });
     it('searches the full history, resets pagination and distinguishes playable and revealed challenges', () => {
         render(<ChallengeHistory items={items} selectedID={null} onSelect={vi.fn()} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(screen.getByRole('searchbox'), { target: { value: ' PLAYER 122 ' } });
+        const pages = within(screen.getByRole('navigation', { name: 'Challenge pages' }));
+        fireEvent.click(pages.getByRole('button', { name: 'Next' }));
+        fireEvent.change(screen.getByLabelText('Find a player'), { target: { value: ' PLAYER 122 ' } });
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
         expect(screen.getByText('Player 122')).toBeInTheDocument();
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'available' } });
+        fireEvent.change(screen.getByLabelText('Filter challenge list'), { target: { value: 'available' } });
         expect(screen.getByRole('status')).toHaveTextContent('No challenges match');
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'located' } });
+        fireEvent.change(screen.getByLabelText('Filter challenge list'), { target: { value: 'located' } });
         expect(screen.getByText('Player 122')).toBeInTheDocument();
     });
 });
