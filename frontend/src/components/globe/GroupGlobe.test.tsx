@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import type { GroupChallenge } from '../../types';
 import GroupGlobe from './GroupGlobe';
 
@@ -85,6 +86,29 @@ describe('GroupGlobe', () => {
             'aria-expanded',
             'false',
         );
+    });
+
+    it('captures on the grabber instead of the sheet so taps toggle once and Enter still works', async () => {
+        get.mockResolvedValue({ data: { items: [challenge] } });
+        render(<GroupGlobe {...props} />);
+        const grabber = await screen.findByRole('button', { name: 'Expand geochallenge list' });
+        const sheet = grabber.closest('.globe-history') as HTMLElement;
+        const capture = vi.fn();
+        sheet.setPointerCapture = capture;
+        const buttonCapture = vi.fn();
+        grabber.setPointerCapture = buttonCapture;
+        fireEvent.pointerDown(grabber, { clientY: 600, pointerId: 1 });
+        fireEvent.pointerUp(grabber, { clientY: 600, pointerId: 1 });
+        expect(capture).not.toHaveBeenCalled();
+        expect(buttonCapture).toHaveBeenCalledWith(1);
+        fireEvent.click(grabber);
+        expect(grabber).toHaveAttribute('aria-expanded', 'true');
+        grabber.focus();
+        await userEvent.keyboard('{Enter}');
+        expect(grabber).toHaveAttribute('aria-expanded', 'false');
+        const heading = screen.getByRole('heading', { name: 'Geochallenges' });
+        fireEvent.pointerDown(heading, { clientY: 600, pointerId: 2 });
+        expect(capture).toHaveBeenCalledWith(2);
     });
 
     it('opens and closes the mobile sheet with vertical swipes', async () => {

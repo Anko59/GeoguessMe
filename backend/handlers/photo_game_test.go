@@ -151,7 +151,7 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id.*FOR UPDATE").WithArgs(photo.ID, "user-1").WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT photo_id, user_id").WithArgs(photo.ID, "user-1").WillReturnError(pgx.ErrNoRows)
 	mock.ExpectExec("INSERT INTO challenge_views").WithArgs(photo.ID, "user-1", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
@@ -165,7 +165,7 @@ func TestUploadAcceptAndServeMedia(t *testing.T) {
 	}
 	assertScoreGraceSeconds(t, recorder)
 
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID).WillReturnRows(handlerPhotoRows(photo))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photo.ID, "user-1").WillReturnRows(handlerPhotoRows(photo))
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(photo.GroupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery("SELECT media_delivered_at, view_expires_at").WithArgs(photo.ID, "user-1").
 		WillReturnRows(pgxmock.NewRows([]string{"media_delivered_at", "view_expires_at"}).AddRow(nil, now.Add(time.Hour)))
@@ -241,7 +241,7 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 			AddRow(messageID, "group-1", "user-2", "bob", "", "text", nil, nil, nil, nil, "hello", now)
 	}
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
-		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID, "user-1").WillReturnRows(messageRows())
 		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		mock.ExpectQuery("SELECT EXISTS").WithArgs("group-1", "user-1").
@@ -253,7 +253,7 @@ func TestSetAndRemoveMessageReaction(t *testing.T) {
 			mock.ExpectExec("DELETE FROM message_reactions").WithArgs(messageID, "user-1", "like").
 				WillReturnResult(pgxmock.NewResult("DELETE", 1))
 		}
-		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID).WillReturnRows(messageRows())
+		mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").WithArgs(messageID, "user-1").WillReturnRows(messageRows())
 		mock.ExpectQuery("SELECT message_id, reaction, COUNT").WithArgs([]string{messageID}, "user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"message_id", "reaction", "count", "reacted", "usernames"}))
 		request := requestWithUser(method, "/", `{"reaction":"like"}`, "user-1")
@@ -290,7 +290,7 @@ func TestUploadAndServeChatMedia(t *testing.T) {
 	if err := store.Put(context.Background(), asset.StorageKey, bytes.NewReader([]byte("data")), asset.ByteSize, asset.MIMEType); err != nil {
 		t.Fatal(err)
 	}
-	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(assetID).WillReturnRows(
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(assetID, "user-1").WillReturnRows(
 		pgxmock.NewRows([]string{"group_id", "user_id", "storage_key", "mime_type", "byte_size", "created_at"}).AddRow(asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt),
 	)
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
@@ -338,18 +338,18 @@ func TestChatMediaFailureResponses(t *testing.T) {
 		request.SetPathValue("mediaID", mediaID)
 		return request
 	}
-	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID, "user-1").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusNotFound)
 
 	asset := &models.ChatMedia{ID: mediaID, GroupID: groupID, UserID: "user-2", StorageKey: "chat-media/missing", MIMEType: "image/png", ByteSize: 4, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
 	assetRows := func() *pgxmock.Rows {
 		return pgxmock.NewRows([]string{"group_id", "user_id", "storage_key", "mime_type", "byte_size", "created_at"}).AddRow(asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt)
 	}
-	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID, "user-1").WillReturnRows(assetRows())
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusForbidden)
 
-	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID).WillReturnRows(assetRows())
+	mock.ExpectQuery("SELECT cm.group_id, cm.user_id, cm.storage_key").WithArgs(mediaID, "user-1").WillReturnRows(assetRows())
 	mock.ExpectQuery("SELECT EXISTS").WithArgs(groupID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	requireStatus(t, chatAPI.ServeChatMedia, serve(), http.StatusGone)
 }

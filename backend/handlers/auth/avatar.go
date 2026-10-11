@@ -134,6 +134,9 @@ func (a *AuthAPI) ServeUserAvatar(w http.ResponseWriter, r *http.Request) {
 		handlers.WriteError(w, http.StatusBadRequest, "missing_user_id", "User ID is required")
 		return
 	}
+	if !a.requireUnblockedPlayer(w, r, handlers.GetUserIDFromContext(r), userID) {
+		return
+	}
 	user, err := a.repos.GetUserByID(r.Context(), userID)
 	if err != nil || user == nil {
 		handlers.WriteError(w, http.StatusNotFound, "not_found", "User not found")

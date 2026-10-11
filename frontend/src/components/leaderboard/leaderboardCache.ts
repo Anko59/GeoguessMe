@@ -13,6 +13,7 @@ interface CachedLeaderboard {
     storedAt: number;
 }
 
+let generation = 0;
 const cache = new Map<string, CachedLeaderboard>();
 const requests = new Map<string, Promise<LeaderboardEntry[]>>();
 
@@ -54,16 +55,19 @@ export async function refreshLeaderboard(
     const existing = requests.get(key);
     if (existing) return existing;
 
+    const requestGeneration = generation;
     const request = api
         .get<LeaderboardEntry[]>('/group/leaderboard', { params: { group_id: groupID, period, metric } })
         .then((response) => response.data || [])
         .then((leaderboard) => {
             const now = Date.now();
             prune(now);
-            cache.set(key, { leaderboard, storedAt: now });
+            if (requestGeneration === generation) cache.set(key, { leaderboard, storedAt: now });
             return leaderboard;
         })
-        .finally(() => requests.delete(key));
+        .finally(() => {
+            if (requests.get(key) === request) requests.delete(key);
+        });
     requests.set(key, request);
     return request;
 }
@@ -71,6 +75,7 @@ export async function refreshLeaderboard(
 /** Drop every cached leaderboard (the explicit invalidation path; also used
  *  to isolate cache tests). */
 export function clearLeaderboardCache(): void {
+    generation += 1;
     cache.clear();
     requests.clear();
 }

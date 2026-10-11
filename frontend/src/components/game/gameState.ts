@@ -25,6 +25,15 @@ export interface GamePosition {
     long: number;
 }
 
+/** The player who submitted the active challenge. Rendered on the viewing
+ *  view so the guesser can see whose challenge they are playing while the
+ *  private photo is visible. */
+export interface GamePoster {
+    userId: string;
+    username?: string;
+    avatar?: string;
+}
+
 /** The score-celebration overlay shown after a non-duplicate guess. */
 export interface GameFeedback {
     feedback: GuessFeedback;

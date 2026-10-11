@@ -4,6 +4,7 @@ import GameView from './GameViews';
 import GuessScoreFeedback from './GuessScoreFeedback';
 import { groupTimedGameAdapter } from '../../hooks/groupTimedGameAdapter';
 import { useTimedGame } from '../../hooks/useTimedGame';
+import type { GamePoster } from './gameState';
 import './Game.css';
 
 interface GameProps {
@@ -24,6 +25,12 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
         onStatusChange: onChallengeStatusChange,
         onClose,
     });
+    // The chat message already carries the submitting player's identity; it
+    // feeds the viewing-view badge so the guesser knows whose photo they are
+    // looking at.
+    const poster: GamePoster | undefined = gameMessage
+        ? { userId: gameMessage.user_id, username: gameMessage.username, avatar: gameMessage.avatar }
+        : undefined;
 
     return (
         <GameView
@@ -35,6 +42,7 @@ export default function Game({ gameMessage, onChallengeStatusChange, onClose }: 
             potentialScore={timedGame.potentialScore}
             scoreNotice={timedGame.scoreNotice}
             serverNowMs={timedGame.serverNowMs}
+            poster={poster}
             feedback={
                 timedGame.state.feedback ? (
                     <GuessScoreFeedback

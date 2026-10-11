@@ -121,12 +121,12 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 
 	// Routing the pilot endpoint through instance A must not affect instance B:
 	// each request is served from the owning instance's injected repository.
-	reqA := httptest.NewRequest(http.MethodGet, "/api/v1/user/groups", nil)
+	reqA := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/user/groups", nil)
 	reqA = reqA.WithContext(handlers.WithUserID(reqA.Context(), "user-1"))
 	recA := httptest.NewRecorder()
 	appA.Groups.GetUserGroups(recA, reqA)
 
-	reqB := httptest.NewRequest(http.MethodGet, "/api/v1/user/groups", nil)
+	reqB := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/user/groups", nil)
 	reqB = reqB.WithContext(handlers.WithUserID(reqB.Context(), "user-1"))
 	recB := httptest.NewRecorder()
 	appB.Groups.GetUserGroups(recB, reqB)
@@ -153,7 +153,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		app := instance.app
 		routes := app.routes()
 		rec := httptest.NewRecorder()
-		routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+		routes.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/live", nil))
 		if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
 			t.Fatalf("instance %s /health/live = %d %q", name, rec.Code, rec.Body.String())
 		}
@@ -161,7 +161,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 		// than the older facade that only implements UserGroups.
 		instance.pool.ExpectQuery("SELECT g.id, g.name,").WithArgs("user-1").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "name", "unread", "message_id", "kind", "username", "created_at"}))
-		inboxRequest := httptest.NewRequest(http.MethodGet, "/api/v1/user/groups/inbox", nil)
+		inboxRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/user/groups/inbox", nil)
 		inboxRequest = inboxRequest.WithContext(handlers.WithUserID(inboxRequest.Context(), "user-1"))
 		inboxRecorder := httptest.NewRecorder()
 		app.Groups.GetUserGroupsInbox(inboxRecorder, inboxRequest)
@@ -179,7 +179,7 @@ func TestAppInstancesAreIndependent(t *testing.T) {
 			{"DELETE", "/feed/challenges/post/comments/comment"},
 		} {
 			rec := httptest.NewRecorder()
-			routes.ServeHTTP(rec, httptest.NewRequest(route.method, "/api/v1"+route.path, nil))
+			routes.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), route.method, "/api/v1"+route.path, nil))
 			require.Equal(t, http.StatusUnauthorized, rec.Code, "%s %s", route.method, route.path)
 		}
 	}
@@ -211,7 +211,7 @@ func TestFeedReadsPreserveMutationRateLimit(t *testing.T) {
 			pool.ExpectQuery("SELECT auth_version").WithArgs("viewer").
 				WillReturnRows(pgxmock.NewRows([]string{"auth_version", "oidc_linked"}).AddRow(0, false))
 		}
-		req := httptest.NewRequest(method, "/api/v1/feed"+path, nil)
+		req := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/feed"+path, nil)
 		if bearer != "" {
 			req.Header.Set("Authorization", "Bearer "+bearer)
 		}

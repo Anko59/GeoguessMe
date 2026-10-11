@@ -4,6 +4,7 @@ import Avatar from '../../common/Avatar';
 import MessageActions from './MessageActions';
 import MessageContent from './MessageContent';
 import MessageReactions from './MessageReactions';
+import ReportAction from '../../ui/ReportAction';
 import { reactionOptions, type ReactionOption } from '../reactionOptions';
 
 interface MessageRowProps {
@@ -133,6 +134,7 @@ export default function MessageRow({
                 {!isSystem && (
                     <MessageReactions message={message} onToggle={(reaction) => onReaction(message, reaction)} />
                 )}
+                {!isSystem && !isMe && actionsOpen && <ReportAction kind="messages" targetID={message.id} />}
             </div>
         </div>
     );

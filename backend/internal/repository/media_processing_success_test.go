@@ -131,7 +131,7 @@ func TestCompleteChatProcessing(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT EXISTS.*group_members").WithArgs("g1", "user-1").WillReturnRows(pgxmock.NewRows([]string{"authorized"}).AddRow(true))
 	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar-1"))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs("msg-0", "g1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("msg-0", "g1", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectExec("INSERT INTO chat_media").WithArgs(asset.ID, asset.GroupID, asset.UserID, asset.StorageKey, asset.MIMEType, asset.ByteSize, asset.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectExec("INSERT INTO messages").WithArgs(msg.ID, msg.GroupID, msg.UserID, asset.ID, msg.ReplyToID, msg.Content, msg.CreatedAt).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	mock.ExpectExec("UPDATE media_processing_jobs.*status = 'ready'").WithArgs("job-2", "chat-media/canonical-1", "chat", "msg-1", "video/mp4", int64(12), "lease-2").WillReturnResult(pgxmock.NewResult("UPDATE", 1))

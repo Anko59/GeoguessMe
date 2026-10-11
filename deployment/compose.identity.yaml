@@ -5,7 +5,7 @@ name: geoguessme-identity
 # while Keycloak keeps its own PostgreSQL data and lifecycle.
 services:
   keycloak-db:
-    image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+    image: ${IDENTITY_POSTGRES_IMAGE:-${POSTGRES_IMAGE:?Supply the audited immutable PostgreSQL image}}
     env_file:
       - path: ${GEOGUESSME_IDENTITY_ENV_FILE:-deployment/env/identity.env}
         required: true

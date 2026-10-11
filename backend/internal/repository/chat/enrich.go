@@ -88,7 +88,8 @@ func (r *Repository) EnrichMessagesPageForViewer(ctx context.Context, page Messa
 // GetMessageForViewer loads a single message with its viewer-specific reaction
 // state, or nil when the message does not exist.
 func (r *Repository) GetMessageForViewer(ctx context.Context, messageID, viewerID string) (*models.Message, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.id = $1`, messageID)
+	query, args := viewerMessageQuery(`SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.id = $1`, []any{messageID}, viewerID)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,17 +100,19 @@ func (r *Repository) GetMessageForViewer(ctx context.Context, messageID, viewerI
 	if len(messages) == 0 {
 		return nil, nil
 	}
-	if err := r.enrichMessageReactions(ctx, messages, viewerID); err != nil {
+	page, err := r.EnrichMessagesPageForViewer(ctx, MessagesPage{Items: messages}, viewerID)
+	if err != nil {
 		return nil, err
 	}
-	return &messages[0], nil
+	return &page.Items[0], nil
 }
 
 // GetChallengeMessageForViewer returns the persisted chat message associated
 // with a challenge. Guess submission uses it to publish a live resolved-state
 // update without creating another message or push notification.
 func (r *Repository) GetChallengeMessageForViewer(ctx context.Context, photoID, viewerID string) (*models.Message, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.photo_id = $1 AND m.kind = 'challenge'`, photoID)
+	query, args := viewerMessageQuery(`SELECT `+messageColumns+` FROM messages m LEFT JOIN users u ON m.user_id = u.id LEFT JOIN chat_media cm ON m.media_id = cm.id WHERE m.photo_id = $1 AND m.kind = 'challenge'`, []any{photoID}, viewerID)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -120,10 +123,11 @@ func (r *Repository) GetChallengeMessageForViewer(ctx context.Context, photoID, 
 	if len(messages) == 0 {
 		return nil, nil
 	}
-	if err := r.enrichMessageReactions(ctx, messages, viewerID); err != nil {
+	page, err := r.EnrichMessagesPageForViewer(ctx, MessagesPage{Items: messages}, viewerID)
+	if err != nil {
 		return nil, err
 	}
-	return &messages[0], nil
+	return &page.Items[0], nil
 }
 
 // enrichMessageReactions attaches the viewer-specific reaction aggregates to a
@@ -145,6 +149,8 @@ func (r *Repository) enrichMessageReactions(ctx context.Context, messages []mode
 		FROM message_reactions
 		JOIN users u ON u.id = message_reactions.user_id
 		WHERE message_id = ANY($1)
+		AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$2 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$2))
 		GROUP BY message_id, reaction
 		ORDER BY message_id, reaction`, messageIDs, viewerID)
 	if err != nil {

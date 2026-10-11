@@ -189,12 +189,13 @@ func (a *API) TimedResults(w http.ResponseWriter, r *http.Request) {
 	if !validID(w, r) {
 		return
 	}
-	result, err := a.repo.TimedResults(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r), a.clock())
+	now := a.clock()
+	result, err := a.repo.TimedResults(r.Context(), r.PathValue("id"), handlers.GetUserIDFromContext(r), now, a.cfg.LocationHide)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	result.ServerTime = a.clock()
+	result.ServerTime = now
 	w.Header().Set("Cache-Control", "private, no-store")
 	handlers.WriteJSON(w, http.StatusOK, result)
 }

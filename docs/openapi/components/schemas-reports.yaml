@@ -1,0 +1,32 @@
+BlockedUser:
+  type: object
+  required: [user_id, username, avatar, created_at]
+  properties:
+    user_id: { type: string, format: uuid }
+    username: { type: string }
+    avatar: { type: string }
+    created_at: { type: string, format: date-time }
+BlockedUsersPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items: { $ref: "#/BlockedUser" }
+ReportRequest:
+  type: object
+  additionalProperties: false
+  required: [reason]
+  properties:
+    reason:
+      type: string
+      enum: [illegal_content, harassment, sexual_content, other]
+    details:
+      type: string
+      maxLength: 2000
+      description: Required when reason is illegal_content; explain why the content may be illegal. Do not include sensitive personal data unless necessary.
+ReportReceipt:
+  type: object
+  required: [id]
+  properties:
+    id: { type: string, format: uuid }

@@ -26,11 +26,22 @@ camera device and each context receives a fixed geolocation (Paris by default;
 override with `QA_FAKE_LATITUDE`, `QA_FAKE_LONGITUDE`, and
 `QA_FAKE_LOCATION_ACCURACY`). `browser_capabilities` performs a controlled
 camera/location probe so the report can distinguish an unexercised journey from
-a missing test capability.
+a missing test capability. `browser_security_headers` reloads the current
+same-origin page and returns only a fixed inventory of top-level document
+security-header presence and safe CSP flags; it never returns raw values, which
+can contain nonces, cookies, or redirect credentials. It does not inspect every
+response in a redirect chain, cross-origin identity provider, or API call.
 
 Same-origin link clicks wait for a destination change before returning their
 observation, so a transient pre-navigation page cannot be mistaken for a failed
 product link.
+
+Click, keyboard, fill, select, and upload actions report any native dialog they
+handle. The default is dismissal. To exercise a confirmation such as player
+blocking or Party Time, pass `dialog_action: accept` for that action; it accepts
+only the next confirmation. Further dialogs and all credential prompts remain
+dismissed. Prompt default values never enter observations. Duplicate button
+names can be navigated through the visible form's ordinary keyboard path.
 
 The same MCP server exposes a high-level disposable mailbox contract:
 `mailbox_create`, `mailbox_search`, `mailbox_read`, and `mailbox_open_link`. The
@@ -69,15 +80,25 @@ claim email coverage until `mailbox_search`, `mailbox_read`, and
 `CLOUDFLARE_API_TOKEN` needs the Access permissions used by the browser; it does
 not need Email Routing Rules access. A visible “verification sent” page proves
 only that the identity service accepted the request; it is not delivery
-evidence. During the September 2026 recovery, the public Mail.tm fallback
-reached that page but received no message. Keycloak mail uses multipart and
-quoted-printable encoding; the gateway decodes both before redacting previews
-and opening links. It classifies Keycloak action-token links by message subject
-so verification and password reset remain distinct. On September 25, a full
-diagnostic run against then-deployed revision
-`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and both reset
-flows through the controlled relay. Release evidence still requires a full run
-against the actual release candidate after that candidate deploys.
+evidence. Likewise, opening a reset link is not evidence that reset completion
+or changed-password sign-in succeeded. Use `qa_email_account_reset_password` on
+the mailbox-bound reset form and `qa_email_account_login` in an isolated
+session; require `changed_password_verified: true`. The provider holds both
+passwords privately, permits only this run's disposable account, binds the reset
+grant to its exact tab and URL, and checks the configured credential origin
+before filling any password. Sign-in clears that QA context's cookies so SSO
+cannot replace password proof. The complete coverage gate requires the verified
+changed-password sign-in. Generic `browser_type` would expose the password in
+the MCP call and must never carry credentials. During the September 2026
+recovery, the public Mail.tm fallback reached that page but received no message.
+Keycloak mail uses multipart and quoted-printable encoding; the gateway decodes
+both before redacting previews and opening links. It classifies Keycloak
+action-token links by message subject so verification and password reset remain
+distinct. On September 25, a full diagnostic run against then-deployed revision
+`1ac86feea5e18b2eca2b03ebf46f368248edd370` completed verification and opened
+both reset-link paths through the controlled relay; password change and
+subsequent sign-in were not evidenced. Release evidence still requires a full
+run against the actual release candidate after that candidate deploys.
 
 It also exposes `qa_email_account_signup`, which creates a fresh account with a
 disposable recovery address through the visible signup form while keeping the
@@ -87,13 +108,20 @@ recovery, and use the two remaining roles for the multi-user journey. This keeps
 the mailbox-backed account within the three-account signup budget. A run that
 cannot do so is blocked as QA-harness failure.
 
-Visible one-time group invite links have a separate safe handoff contract:
+Visible group invite links have a separate safe handoff contract:
 `browser_transfer_link` captures a labeled invite control in the owner session
 and returns only an opaque single-use transfer ID;
-`browser_open_transferred_link` consumes that ID in the member session. The raw
-link never enters model output, diagnostics, screenshots, or the report. A
-failed transfer is a QA harness failure and blocks the multi-user journey; it
-must not be recorded as an acceptable coverage limitation.
+`browser_open_transferred_link` consumes that ID in another isolated session.
+Create one invite for the new QA group and capture two independent handles while
+that same link is visible. Use the first for the member; after checking outsider
+denial, use the second for the non-poster Party Time comparison. This reads the
+existing invitation rather than creating another product invite. The raw link
+never enters model output, diagnostics, screenshots, or the report. A failed
+transfer is a QA harness failure and blocks the multi-user journey; it must not
+be recorded as an acceptable coverage limitation. Finding artifact references
+must match evidence returned by the current run; invented screenshot paths are
+rejected. Both adapters include the curated QA policy in their prompt without
+granting the model filesystem or source access.
 
 The runtime adapters are deliberately thin:
 
@@ -190,7 +218,15 @@ handoff, multi-session chat observations, challenge submission, camera/location
 probes, leaderboard and profile/settings visits, refresh, and mobile viewport
 evidence. If any required area is missing, `qa_finish` converts the result to
 `BLOCKED` and lists the missing coverage in the report; a model-supplied `PASS`
-or `FINDINGS` status cannot override that gate.
+or `FINDINGS` status cannot override that gate. This coarse gate does not
+certify natural expiry, reset completion, hidden-location reveal after its
+deadline, challenge timeout, Party Time cooldown, or pixel-level responsive
+review. The runbook requires explicitly recording each stage that was not
+exercised. Do not use a synthetic clock, arbitrary wait, or a screenshot path as
+proof of these behaviors; the deadline can exceed even the nightly budget.
+Screenshots remain local artifacts for a trusted operator to inspect, not image
+content returned to the model, because they can contain one-time links or other
+private data.
 
 ## Release evidence
 

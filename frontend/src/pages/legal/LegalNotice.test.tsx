@@ -23,6 +23,28 @@ describe('LegalNotice', () => {
         );
     });
 
+    it('publishes the verified cloud contracting entity and postal address', () => {
+        expect(hostingProviders).toEqual([
+            {
+                name: 'Hetzner Online GmbH',
+                address: 'Industriestr. 25, 91710 Gunzenhausen, Germany',
+                role: 'Application and database servers',
+            },
+            {
+                name: 'Cloudflare, Inc.',
+                address: '101 Townsend St, San Francisco, CA 94107, USA',
+                role: 'Network edge, DNS, and email routing',
+            },
+        ]);
+        render(
+            <MemoryRouter>
+                <LegalNotice />
+            </MemoryRouter>,
+        );
+        expect(screen.getByText('Hetzner Online GmbH')).toBeInTheDocument();
+        expect(screen.getByText('Industriestr. 25, 91710 Gunzenhausen, Germany')).toBeInTheDocument();
+    });
+
     it('reaches the operator through the published contact addresses', () => {
         render(
             <MemoryRouter>

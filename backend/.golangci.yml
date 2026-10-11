@@ -1,4 +1,13 @@
+version: "2"
+run:
+  tests: true
+  timeout: 3m
 linters:
+  default: none
+  settings:
+    staticcheck:
+      # v1 staticcheck + gosimple; stylecheck and quick-fix rules were not enabled.
+      checks: ["SA*", "S*"]
   enable:
     - govet
     - staticcheck
@@ -7,14 +16,23 @@ linters:
     - unused
     - bodyclose
     - noctx
-    - gosimple
   disable:
     - exhaustruct
-  linters-settings:
-    govet:
-      enable-all: true
-    staticcheck:
-      checks: ["all", "-SA1019"]
-run:
-  tests: true
-  timeout: 3m
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

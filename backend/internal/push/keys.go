@@ -38,12 +38,8 @@ func (k *KeyPair) PrivateKeyBase64URL() string {
 // signer reconstructs the ecdsa.PrivateKey used to sign VAPID JWTs (ES256).
 // The public point is derived deterministically from the scalar so the stored
 // private material is sufficient.
-func (k *KeyPair) signer() *ecdsa.PrivateKey {
-	d := new(big.Int).SetBytes(k.PrivateKey)
-	curve := elliptic.P256()
-	priv := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: curve}, D: d}
-	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarBaseMult(k.PrivateKey)
-	return priv
+func (k *KeyPair) signer() (*ecdsa.PrivateKey, error) {
+	return ecdsa.ParseRawPrivateKey(elliptic.P256(), k.PrivateKey)
 }
 
 // GenerateKeyPair creates a fresh VAPID keypair using the cryptographic random

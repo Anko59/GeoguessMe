@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ func TestMetricsAndRequestID(t *testing.T) {
 	metrics.Observe(http.StatusOK)
 	metrics.Observe(http.StatusInternalServerError)
 	metrics.SetCleanupBacklog(3)
-	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	recorder := httptest.NewRecorder()
 	metrics.Handler(recorder, request)
 	body := recorder.Body.String()
@@ -30,14 +31,14 @@ func TestMetricsAndRequestID(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	request.Header.Set("X-Request-ID", "known-id")
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	if recorder.Header().Get("X-Request-ID") != "known-id" {
 		t.Fatalf("request ID = %q", recorder.Header().Get("X-Request-ID"))
 	}
-	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	recorder = httptest.NewRecorder()
 	RequestID(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(recorder, request)
 	if recorder.Header().Get("X-Request-ID") == "" {
@@ -50,7 +51,7 @@ func TestMetricsIncludesLimiterRejectionsAndExtra(t *testing.T) {
 	metrics := &Metrics{ExtraMetrics: func() string { return "push_queue_depth 0\n" }}
 	metrics.Observe(http.StatusOK)
 	recorder := httptest.NewRecorder()
-	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	metrics.Handler(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 	body := recorder.Body.String()
 	for _, want := range []string{"geoguessme_limiter_rejections_total 0", "push_queue_depth 0"} {
 		if !strings.Contains(body, want) {
@@ -62,7 +63,7 @@ func TestMetricsIncludesLimiterRejectionsAndExtra(t *testing.T) {
 	policy := Policy{Name: "login", Buckets: []BucketSpec{{Type: BucketIdentity, Limit: 1, Window: time.Minute}}}
 	mw := PolicyMiddleware(policy, PolicyOptions{Identity: func(r *http.Request) string { return "alice" }})
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
-	req := httptest.NewRequest(http.MethodPost, "/login", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/login", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req) // first request is allowed
@@ -72,7 +73,7 @@ func TestMetricsIncludesLimiterRejectionsAndExtra(t *testing.T) {
 		t.Fatalf("rejection status = %d, want 429", rr.Code)
 	}
 	recorder = httptest.NewRecorder()
-	metrics.Handler(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	metrics.Handler(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 	body = recorder.Body.String()
 	if !strings.Contains(body, `geoguessme_limiter_rejections_total{policy="login"} 1`) {
 		t.Errorf("metrics missing per-policy line in %q", body)
@@ -106,27 +107,27 @@ func TestMetricsAuth(t *testing.T) {
 	}
 
 	// Without token, request is rejected with protection headers.
-	assertRejection(t, "no token", httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assertRejection(t, "no token", httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 
 	// Wrong token (same length, differs in content) is rejected in constant time.
-	wrong := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	wrong := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	wrong.Header.Set("Authorization", "Bearer "+strings.Repeat("x", len(token)))
 	assertRejection(t, "wrong token", wrong)
 
 	// Wrong-length token is rejected.
-	short := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	short := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	short.Header.Set("Authorization", "Bearer short")
 	assertRejection(t, "short token", short)
 
 	// Missing Bearer prefix.
-	bare := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	bare := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	bare.Header.Set("Authorization", token)
 	assertRejection(t, "bare token", bare)
 
 	// Case-insensitive scheme, correct token succeeds and reaches the handler.
 	handler := MetricsAuth(token, okHandler)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	request.Header.Set("Authorization", "bearer "+token)
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "metrics" {
@@ -149,7 +150,7 @@ const minMetricsTokenBytesForTest = 32
 
 func TestRecoverAndRequestLog(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	Recover(slog.Default(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	Recover(slog.Default(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })).ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "internal_error") {
 		t.Fatalf("panic response = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -158,7 +159,7 @@ func TestRecoverAndRequestLog(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	RequestLog(nil, metrics, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
-	})).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	})).ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if recorder.Code != http.StatusOK || metrics.requests.Load() != 1 {
 		t.Fatalf("logged response = %d, requests = %d", recorder.Code, metrics.requests.Load())
 	}
@@ -180,7 +181,7 @@ func TestRecoverAndRequestLog(t *testing.T) {
 func TestCORSSecurityAndMiddlewareError(t *testing.T) {
 	base := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	allowed := CORS([]string{"https://app.test"})(base)
-	request := httptest.NewRequest(http.MethodOptions, "/", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/", nil)
 	request.Header.Set("Origin", "https://app.test")
 	recorder := httptest.NewRecorder()
 	allowed.ServeHTTP(recorder, request)
@@ -188,7 +189,7 @@ func TestCORSSecurityAndMiddlewareError(t *testing.T) {
 		t.Fatalf("allowed CORS response = %d %q", recorder.Code, recorder.Header().Get("Access-Control-Allow-Origin"))
 	}
 
-	request = httptest.NewRequest(http.MethodOptions, "/", nil)
+	request = httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/", nil)
 	request.Header.Set("Origin", "https://evil.test")
 	recorder = httptest.NewRecorder()
 	allowed.ServeHTTP(recorder, request)
@@ -197,7 +198,7 @@ func TestCORSSecurityAndMiddlewareError(t *testing.T) {
 	}
 
 	recorder = httptest.NewRecorder()
-	SecurityHeaders(base).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	SecurityHeaders(base).ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if recorder.Header().Get("X-Frame-Options") != "DENY" || recorder.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("security headers missing")
 	}

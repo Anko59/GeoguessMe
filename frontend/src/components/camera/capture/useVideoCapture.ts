@@ -78,11 +78,14 @@ function createMirroredCanvasSource(video: HTMLVideoElement): MirroredCanvasSour
 // recorded so the feature still works.
 export function useVideoCapture({ onError }: UseVideoCaptureOptions) {
     const { recordedVideo, recording, startRecording, stopRecording, discardRecording } = useVideoRecording(onError);
-    const audioStreamRef = useRef<MediaStream | null>(null);
+    const cleanupRef = useRef<(() => void) | null>(null);
+    const generationRef = useRef(0);
+    const disposedRef = useRef(false);
 
-    const stopAudioStream = useCallback(() => {
-        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
-        audioStreamRef.current = null;
+    const releaseOwnedResources = useCallback(() => {
+        generationRef.current += 1;
+        cleanupRef.current?.();
+        cleanupRef.current = null;
     }, []);
 
     const startHeldRecording = useCallback(
@@ -93,6 +96,10 @@ export function useVideoCapture({ onError }: UseVideoCaptureOptions) {
             mirror = false,
             videoElement: HTMLVideoElement | null = null,
         ) => {
+            if (disposedRef.current) return;
+            releaseOwnedResources();
+            const generation = generationRef.current;
+            const isCurrent = () => !disposedRef.current && generationRef.current === generation && isStillPressed();
             if (!videoStream.getVideoTracks().length) {
                 onError('The camera is not ready yet. Wait for the preview, then hold to record.');
                 return;
@@ -103,44 +110,51 @@ export function useVideoCapture({ onError }: UseVideoCaptureOptions) {
                 mirroredSource = createMirroredCanvasSource(videoElement);
                 if (mirroredSource) recordStream = mirroredSource.stream;
             }
+            let audioStream: MediaStream | null = null;
+            let released = false;
+            const cleanup = () => {
+                if (released) return;
+                released = true;
+                mirroredSource?.stop();
+                audioStream?.getTracks().forEach((track) => track.stop());
+                if (cleanupRef.current === cleanup) cleanupRef.current = null;
+            };
+            cleanupRef.current = cleanup;
             try {
                 const audio = await navigator.mediaDevices.getUserMedia({ audio: true });
-                if (!isStillPressed()) {
-                    mirroredSource?.stop();
+                if (!isCurrent()) {
                     audio.getTracks().forEach((track) => track.stop());
+                    cleanup();
                     return;
                 }
-                audioStreamRef.current = audio;
+                audioStream = audio;
                 recordStream = new MediaStream([
                     ...(mirroredSource?.stream ?? videoStream).getVideoTracks(),
                     ...audio.getAudioTracks(),
                 ]);
             } catch {
-                if (!isStillPressed()) {
-                    mirroredSource?.stop();
+                if (!isCurrent()) {
+                    cleanup();
                     return;
                 }
             }
-            startRecording(recordStream, () => {
-                mirroredSource?.stop();
-                stopAudioStream();
-                onComplete();
-            });
+            startRecording(recordStream, onComplete, cleanup);
         },
-        [onError, startRecording, stopAudioStream],
+        [onError, releaseOwnedResources, startRecording],
     );
 
     const discardAll = useCallback(() => {
-        stopAudioStream();
+        releaseOwnedResources();
         discardRecording();
-    }, [discardRecording, stopAudioStream]);
+    }, [discardRecording, releaseOwnedResources]);
 
-    useEffect(
-        () => () => {
-            stopAudioStream();
-        },
-        [stopAudioStream],
-    );
+    useEffect(() => {
+        disposedRef.current = false;
+        return () => {
+            disposedRef.current = true;
+            releaseOwnedResources();
+        };
+    }, [releaseOwnedResources]);
 
     return { recordedVideo, recording, startHeldRecording, stopRecording, discardRecording: discardAll };
 }

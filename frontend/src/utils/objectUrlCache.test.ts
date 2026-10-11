@@ -2,6 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { createObjectUrlStore } from './objectUrlCache';
 
 describe('createObjectUrlStore', () => {
+    it('clear revokes all owned URLs and prevents pending fetches repopulating the cache', async () => {
+        const store = createObjectUrlStore();
+        const revoke = vi.spyOn(URL, 'revokeObjectURL');
+        await store.getOrFetch('a', async () => 'blob:existing');
+        await store.getOrFetch('fallback', async () => '/logo.png');
+        let resolve!: (url: string) => void;
+        const pending = store.getOrFetch(
+            'b',
+            () =>
+                new Promise<string>((done) => {
+                    resolve = done;
+                }),
+        );
+        store.clear();
+        store.clear();
+        expect(store.get('a')).toBeUndefined();
+        expect(revoke).toHaveBeenCalledTimes(1);
+        resolve('blob:late');
+        await expect(pending).resolves.toBeUndefined();
+        expect(revoke).toHaveBeenCalledTimes(2);
+        expect(store.get('b')).toBeUndefined();
+    });
     it('deduplicates concurrent fetches for the same key', async () => {
         const store = createObjectUrlStore();
         const fetcher = vi.fn(() => Promise.resolve('blob:one'));

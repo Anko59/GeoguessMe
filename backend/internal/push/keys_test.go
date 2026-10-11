@@ -1,6 +1,11 @@
 package push
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"testing"
 )
 
@@ -70,13 +75,34 @@ func TestSignerProducesVerifiableSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer := kp.signer()
-	if !signer.PublicKey.Curve.IsOnCurve(signer.PublicKey.X, signer.PublicKey.Y) {
-		t.Fatal("derived public point is not on the curve")
+	signer, err := kp.signer()
+	if err != nil {
+		t.Fatal(err)
 	}
-	// The reconstructed public key must re-marshal to the stored bytes.
-	reconstructed := signer.PublicKey
-	if len(reconstructed.X.Bytes()) == 0 {
-		t.Fatal("public X is zero")
+	public, err := signer.PublicKey.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(public, kp.PublicKey) {
+		t.Fatal("derived public key differs from stored bytes")
+	}
+	hash := sha256.Sum256([]byte("VAPID signer regression"))
+	signature, err := ecdsa.SignASN1(rand.Reader, signer, hash[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	storedPublic, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), kp.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ecdsa.VerifyASN1(storedPublic, hash[:], signature) {
+		t.Fatal("stored public key rejects signature")
+	}
+}
+
+func TestSignerRejectsInvalidScalar(t *testing.T) {
+	kp := &KeyPair{PrivateKey: make([]byte, 32)}
+	if _, err := kp.signer(); err == nil {
+		t.Fatal("zero scalar must be rejected")
 	}
 }

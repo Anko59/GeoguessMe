@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func mustReceiverSubscription(t *testing.T, endpoint string) *Subscription {
@@ -127,5 +128,12 @@ func TestSenderRejectsBadEndpointScheme(t *testing.T) {
 	sub := mustReceiverSubscription(t, "ftp://example.test/push")
 	if err := sender.Send(context.Background(), sub, []byte(`{}`)); err == nil {
 		t.Fatal("expected error for ftp endpoint")
+	}
+}
+
+func TestVAPIDJWTRejectsInvalidSigningKey(t *testing.T) {
+	sender := &Sender{keys: &KeyPair{PrivateKey: make([]byte, 32)}, subject: "mailto:test@example.com", now: time.Now}
+	if _, err := sender.vapidJWT("https://example.com"); err == nil {
+		t.Fatal("invalid signing key must return an error")
 	}
 }

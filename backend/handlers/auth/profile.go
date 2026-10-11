@@ -143,6 +143,9 @@ func (a *AuthAPI) GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	targetID := strings.TrimSpace(r.PathValue("userID"))
 	viewerID := handlers.GetUserIDFromContext(r)
+	if !a.requireUnblockedPlayer(w, r, viewerID, targetID) {
+		return
+	}
 	user, err := a.repos.GetUserByID(r.Context(), targetID)
 	if err != nil {
 		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load profile")
@@ -202,6 +205,21 @@ func (a *AuthAPI) GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 		GlobalEloRank:     GlobalRank{Rank: globalElo.Rank, TotalPlayers: globalElo.TotalPlayers},
 		MapPin:            mapPin,
 	})
+}
+
+// Blocked profiles deliberately have the same response as absent profiles.
+func (a *AuthAPI) requireUnblockedPlayer(w http.ResponseWriter, r *http.Request, viewerID, targetID string) bool {
+	w.Header().Set("Cache-Control", "private, no-store")
+	blocked, err := a.repos.Blocks.Blocked(r.Context(), viewerID, targetID)
+	if err != nil {
+		handlers.WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to load player")
+		return false
+	}
+	if blocked {
+		handlers.WriteError(w, http.StatusNotFound, "not_found", "Player not found")
+		return false
+	}
+	return true
 }
 
 type equipMapPinRequest struct {

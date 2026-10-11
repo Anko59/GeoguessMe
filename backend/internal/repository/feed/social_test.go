@@ -2,6 +2,7 @@ package feed
 
 import (
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -66,5 +67,16 @@ func TestCommentsPropagateMissingPostsAndReadFailures(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnError(failure)
 	if _, err := r.Comments(t.Context(), "post", "viewer", Cursor{}, 20); !errors.Is(err, failure) {
 		t.Fatalf("lost failure: %v", err)
+	}
+}
+
+func TestCommentsFilterBlockedContributorsBeforeCursorLimit(t *testing.T) {
+	r, mock := mockRepository(t)
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	mock.ExpectQuery("SELECT EXISTS").WithArgs("viewer", "post").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(regexp.QuoteMeta(commentVisibility)+`.*AND \(c.created_at,c.id\).*ORDER BY.*LIMIT`).WithArgs("viewer", "post", 3, now, "anchor").WillReturnRows(pgxmock.NewRows([]string{"id", "user", "name", "avatar", "content", "at", "can_delete"}))
+	page, err := r.Comments(t.Context(), "post", "viewer", Cursor{CreatedAt: now, ID: "anchor"}, 2)
+	if err != nil || len(page.Items) != 0 || page.NextCursor != "" {
+		t.Fatalf("hidden comment page = %+v, %v", page, err)
 	}
 }

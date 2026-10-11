@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ func TestLogoutFailClosedOnRevocationError(t *testing.T) {
 	api := newAuthAPI(t, mock, nil)
 
 	t.Run("single logout surfaces revocation errors as 500 and clears the cookie", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 		mock.ExpectExec("UPDATE refresh_sessions SET revoked_at").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnError(errors.New("database unavailable"))
 		rr := httptest.NewRecorder()
@@ -34,7 +35,7 @@ func TestLogoutFailClosedOnRevocationError(t *testing.T) {
 	})
 
 	t.Run("logout-all surfaces revocation errors as 500 and clears the cookie", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/?all=1", nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 		mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
 		mock.ExpectBegin()
@@ -51,7 +52,7 @@ func TestLogoutFailClosedOnRevocationError(t *testing.T) {
 	})
 
 	t.Run("logout-all without a session is a truthful no-op 204", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/?all=1", nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "unknown"})
 		mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("unknown")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}))
 		rr := httptest.NewRecorder()
@@ -67,7 +68,7 @@ func TestRevocationHandlersKickLiveSockets(t *testing.T) {
 		mock := newAuthMockPool(t)
 		kicker := &fakeKicker{}
 		api := newAuthAPIWithKicker(t, mock, kicker)
-		req := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/?all=1", nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 		mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
 		mock.ExpectBegin()
@@ -88,7 +89,7 @@ func TestRevocationHandlersKickLiveSockets(t *testing.T) {
 	t.Run("logout-all with a nil kicker stays a safe 204", func(t *testing.T) {
 		mock := newAuthMockPool(t)
 		api := newAuthAPI(t, mock, nil)
-		req := httptest.NewRequest(http.MethodPost, "/?all=1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/?all=1", nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "raw-refresh"})
 		mock.ExpectQuery("SELECT user_id FROM refresh_sessions").WithArgs(authsvc.HashToken("raw-refresh")).WillReturnRows(pgxmock.NewRows([]string{"user_id"}).AddRow("user-1"))
 		mock.ExpectBegin()
@@ -141,7 +142,7 @@ func TestRevocationHandlersKickLiveSockets(t *testing.T) {
 		mock.ExpectExec("DELETE FROM websocket_tickets").WithArgs("user-1").WillReturnResult(pgxmock.NewResult("DELETE", 1))
 		mock.ExpectCommit()
 		rr := httptest.NewRecorder()
-		api.ResetPassword(rr, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"token":"reset-token-raw","password":"NewPassword123"}`)))
+		api.ResetPassword(rr, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"token":"reset-token-raw","password":"NewPassword123"}`)))
 		if rr.Code != http.StatusOK {
 			t.Fatalf("reset-password status = %d, want 200", rr.Code)
 		}

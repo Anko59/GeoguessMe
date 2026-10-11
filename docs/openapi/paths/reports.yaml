@@ -1,0 +1,89 @@
+userBlock:
+  parameters:
+    - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  post:
+    operationId: blockUser
+    summary: Block a player in both directions.
+    description: The player must share a group, have authored public feed content, or already be blocked by the requester. Self-blocks and malformed IDs return 400; missing or ineligible targets return 404. Duplicate blocks are idempotent. Membership and ranking identities remain intact.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "204": { description: Player blocked; no response body. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+  delete:
+    operationId: unblockUser
+    summary: Remove your outgoing block.
+    description: Idempotent. Does not remove a block created by the other player.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "204": { description: Outgoing block removed; no response body. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+userBlocks:
+  get:
+    operationId: listBlockedUsers
+    summary: List your outgoing blocks.
+    description: Returns identity metadata for managing your own blocks, never incoming blocks. An empty list has items set to an empty array.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Your outgoing blocked users.
+        content:
+          application/json:
+            schema: { $ref: "../components/schemas-reports.yaml#/BlockedUsersPage" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+messageReport:
+  post:
+    operationId: reportMessage
+    summary: Report a group message to the moderation team.
+    description: The reporter must currently belong to the message's group; duplicate notices return the original ID.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas-reports.yaml#/ReportRequest" }
+    responses:
+      "200":
+        description: Notice accepted (or previously accepted).
+        content: { application/json: { schema: { $ref: "../components/schemas-reports.yaml#/ReportReceipt" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+userReport:
+  post:
+    operationId: reportUser
+    summary: Report a player to the moderation team.
+    description: The reporter must currently share a group with the player; duplicate notices return the original ID.
+    tags: [Moderation]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "../components/schemas-reports.yaml#/ReportRequest" }
+    responses:
+      "200":
+        description: Notice accepted (or previously accepted).
+        content: { application/json: { schema: { $ref: "../components/schemas-reports.yaml#/ReportReceipt" } } }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "404": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "429": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }

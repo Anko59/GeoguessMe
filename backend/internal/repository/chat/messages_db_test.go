@@ -18,7 +18,7 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	photoID := "photo-1"
 
 	mock.ExpectQuery("SELECT .*FROM messages.*ORDER BY m.created_at DESC").
-		WithArgs("group-1", 10).
+		WithArgs("group-1", 10, "viewer-1").
 		WillReturnRows(singleMessageRow("message-1", "challenge", &photoID, now))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-1").
@@ -41,7 +41,7 @@ func TestViewerMessageStateAndReactions(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT .*FROM messages.*WHERE m.id").
-		WithArgs("message-1").
+		WithArgs("message-1", "viewer-2").
 		WillReturnRows(singleMessageRow("message-1", "text", nil, now))
 	mock.ExpectQuery("SELECT message_id, reaction, COUNT").
 		WithArgs([]string{"message-1"}, "viewer-2").
@@ -79,14 +79,14 @@ func TestMessagePersistenceAndPagination(t *testing.T) {
 	}
 	replyID := "message-parent"
 	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(replyID, "group-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(replyID, "group-1", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectExec("INSERT INTO messages").WithArgs("message-2", "group-1", "user-1", "text", photoID, &replyID, "reply", now).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	if err := repo.SaveMessage(context.Background(), &models.Message{ID: "message-2", GroupID: "group-1", UserID: "user-1", Kind: "text", ReplyToID: &replyID, Content: "reply", CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	missing := "missing"
 	mock.ExpectQuery("SELECT username, avatar FROM users").WithArgs("user-1").WillReturnRows(pgxmock.NewRows([]string{"username", "avatar"}).AddRow("alice", "avatar.png"))
-	mock.ExpectQuery("SELECT EXISTS").WithArgs(missing, "group-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery("SELECT EXISTS").WithArgs(missing, "group-1", "user-1").WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 	if err := repo.SaveMessage(context.Background(), &models.Message{ID: "message-3", GroupID: "group-1", UserID: "user-1", Kind: "text", ReplyToID: &missing, Content: "reply", CreatedAt: now}); !errors.Is(err, ErrInvalidMessageReply) {
 		t.Fatalf("invalid reply = %v", err)
 	}

@@ -50,7 +50,13 @@ type revalidationResult struct {
 	valid  bool
 }
 
+// DeliveryFunc reloads a queued event for its recipient immediately before
+// writing it. A nil result or error suppresses delivery (fail closed).
+type DeliveryFunc func(context.Context, models.Message, string) (*models.Message, error)
+
 type Hub struct {
+	Delivery            DeliveryFunc
+	privacy             sync.RWMutex
 	clients             map[*Client]bool
 	clientsByUser       map[string]map[*Client]bool
 	broadcast           chan event

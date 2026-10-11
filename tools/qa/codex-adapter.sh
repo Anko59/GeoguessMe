@@ -8,6 +8,8 @@ fi
 root_dir=$1
 prompt_file="$root_dir/.agents/qa/AGENT.md"
 prompt=$(<"$prompt_file")
+prompt+=$'\n\nQA policy (curated runtime instructions):\n'
+prompt+=$(<"$root_dir/.agents/qa/policy.yaml")
 prompt+=$'\n\nRun context:\n- Target deployed URL: '"$QA_BASE_URL"$'\n- Deployed revision evidence: '"$QA_BUILD_SHA"$'\n- Budget: '"$QA_BUDGET"$'\n\nUse only the qa-browser MCP tools. Start with session_create and finish with qa_finish. Do not use any built-in source, shell, filesystem, HTTP, or web tools even if they are offered by the runtime.'
 
 if [[ -n "${QA_AGENT_FOCUS:-}" ]]; then
@@ -99,6 +101,9 @@ fi
 if jq -e '.summary == "The runtime ended before qa_finish was called."' "$QA_REPORT_DIR/qa-report.json" >/dev/null; then
     if [[ "${QA_DEBUG:-}" == 1 && -s "$mcp_events" ]]; then
         cp -- "$mcp_events" "$QA_REPORT_DIR/qa-agent-events.jsonl"
+    fi
+    if [[ "${QA_DEBUG:-}" == 1 && -s "$mcp_log" ]]; then
+        cp -- "$mcp_log" "$QA_REPORT_DIR/qa-mcp-stderr.log"
     fi
     echo 'QA agent ended without calling qa_finish; treating the run as a harness failure.' >&2
     exit 1

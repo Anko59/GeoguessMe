@@ -26,9 +26,11 @@ describe('ResetPassword', () => {
                 <ResetPassword />
             </MemoryRouter>,
         );
+        expect(screen.getByRole('heading', { name: 'Choose a new direct-login password' })).toBeInTheDocument();
+        expect(screen.getByText('This will not change your separate GeoGuessMe ID password.')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'NewStrongPassword1!' } });
         fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
-        expect(await screen.findByRole('status')).toHaveTextContent('Password reset');
+        expect(await screen.findByRole('status')).toHaveTextContent('Direct-login password reset');
         vi.useFakeTimers();
         vi.advanceTimersByTime(1200);
         vi.useRealTimers();

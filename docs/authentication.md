@@ -140,7 +140,11 @@ the reset request.
 ## Existing-account password reset
 
 The application recovery endpoints remain available to existing password
-accounts when Keycloak is enabled.
+accounts when Keycloak is enabled. They reset only the direct-login credential
+(the Username or email / Password form). GeoGuessMe ID has a separate password
+and recovery flow: select Email address → Continue to password on the login
+page, then use Forgot your password? on the GeoGuessMe ID page. Resetting one
+does not change the other.
 
 - `POST /api/v1/auth/password/forgot {email}` sends a reset link for a verified
   address, or a verification link for a pending address (always returns 202 to
@@ -167,6 +171,10 @@ password after linking Keycloak.
   the cookie. Returns 204.
 - `POST /api/v1/auth/logout?all=1` — revokes all refresh sessions for the user
   **and** bumps `auth_version`, invalidating every outstanding access token.
+- The web client broadcasts local logout through browser storage so other open
+  tabs on the same origin clear their in-memory token and cached session and
+  leave protected routes without waiting for a reload. This is client-state
+  coordination, not a substitute for server-side token revocation.
 
 ## Auth version and immediate revocation
 

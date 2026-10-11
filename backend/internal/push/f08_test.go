@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"geoguessme/internal/chat"
 	"geoguessme/internal/config"
 
 	"github.com/pashagolub/pgxmock/v5"
@@ -380,5 +381,102 @@ func TestCountAndTouchSubscriptions(t *testing.T) {
 	removed, err := (pgStore{pool: mock}).DeleteAll(context.Background(), "user-1")
 	if err != nil || removed != 2 {
 		t.Fatalf("DeleteAll = %d, %v; want 2, nil", removed, err)
+	}
+}
+
+func TestQueuedPushRechecksBlockingAtDelivery(t *testing.T) {
+	store := &fakeStore{subsByUser: map[string][]Subscription{"viewer": {{ID: "subscription", UserID: "viewer"}}}}
+	deliver := newFakeDeliverer()
+	svc := newTestService(store, deliver)
+	blocked, checks := false, 0
+	svc.FilterDelivery = func(_ context.Context, sender, viewer string, send func()) {
+		checks++
+		if sender != "author" || viewer != "viewer" {
+			t.Errorf("pair %s/%s", sender, viewer)
+		}
+		if !blocked {
+			send()
+		}
+	}
+	svc.enqueue(fanoutJob{senderID: "author", userIDs: []string{"viewer"}, groupID: "group", payload: []byte("private")})
+	blocked = true
+	svc.deliverJob(context.Background(), <-svc.jobs)
+	if checks != 1 || len(deliver.snapshot()) != 0 {
+		t.Fatal("queued push disclosed blocked author")
+	}
+	blocked = false
+	svc.deliverJob(context.Background(), fanoutJob{senderID: "author", userIDs: []string{"viewer"}, groupID: "group", payload: []byte("allowed")})
+	if checks != 2 || len(deliver.snapshot()) != 1 {
+		t.Fatal("unblock did not restore authorized push")
+	}
+}
+
+type stalledHousekeepingStore struct {
+	*fakeStore
+	mode    string
+	entered chan context.Context
+}
+
+func (s *stalledHousekeepingStore) stall(ctx context.Context) error {
+	s.entered <- ctx
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (s *stalledHousekeepingStore) TouchSubscription(ctx context.Context, id string) error {
+	if s.mode == "touch" {
+		return s.stall(ctx)
+	}
+	return s.fakeStore.TouchSubscription(ctx, id)
+}
+func (s *stalledHousekeepingStore) DeleteByID(ctx context.Context, id string) error {
+	if s.mode == "delete" {
+		return s.stall(ctx)
+	}
+	return s.fakeStore.DeleteByID(ctx, id)
+}
+
+func TestStalledPushHousekeepingReleasesPrivacyBarrier(t *testing.T) {
+	for _, mode := range []string{"touch", "delete"} {
+		t.Run(mode, func(t *testing.T) {
+			store := &stalledHousekeepingStore{fakeStore: &fakeStore{}, mode: mode, entered: make(chan context.Context, 1)}
+			deliver := newFakeDeliverer()
+			deliver.goneFor["sub"] = mode == "delete"
+			svc := newConfiguredService(store, deliver, &config.Config{PushDeliveryTimeout: 50 * time.Millisecond})
+			hub := chat.NewHub(nil, nil)
+			authorized := make(chan context.Context, 1)
+			svc.FilterDelivery = func(ctx context.Context, _, _ string, send func()) {
+				hub.WithPrivacyRead(func() { authorized <- ctx; send() })
+			}
+			finished := make(chan struct{})
+			workerCtx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			go func() {
+				svc.deliverSubscription(workerCtx, fanoutJob{senderID: "author"}, &Subscription{ID: "sub"})
+				close(finished)
+			}()
+			select {
+			case ctx := <-store.entered:
+				deadline, bounded := ctx.Deadline()
+				authDeadline, authBounded := (<-authorized).Deadline()
+				if !bounded || !authBounded || !deadline.Equal(authDeadline) {
+					t.Error("authorization and housekeeping must share one deadline")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("housekeeping never entered")
+			}
+			changed := make(chan error, 1)
+			go func() { changed <- hub.SerializePrivacyChange(func() error { return nil }) }()
+			select {
+			case err := <-changed:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("stalled housekeeping wedged privacy changes")
+			}
+			if !waitForSignal(finished, time.Second) {
+				t.Fatal("delivery did not finish")
+			}
+		})
 	}
 }

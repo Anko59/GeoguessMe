@@ -17,6 +17,7 @@ export interface ObjectUrlStore {
     /** Revoke (when a blob: URL) and drop the cached URL and any in-flight
      *  request for the key. */
     bust(key: string): void;
+    clear(): void;
 }
 
 export function createObjectUrlStore(): ObjectUrlStore {
@@ -52,6 +53,14 @@ export function createObjectUrlStore(): ObjectUrlStore {
                 });
             inflight.set(key, request);
             return request;
+        },
+        clear() {
+            for (const key of new Set([...urls.keys(), ...inflight.keys()])) {
+                generations.set(key, (generations.get(key) ?? 0) + 1);
+                revoke(urls.get(key));
+            }
+            urls.clear();
+            inflight.clear();
         },
         bust(key) {
             generations.set(key, (generations.get(key) ?? 0) + 1);

@@ -4,6 +4,7 @@ import { getAPIErrorMessage, publicFeedAPI } from '../../api';
 import Avatar from '../../components/common/Avatar';
 import type { PublicFeedLeaderboardEntry } from '../../types';
 import '../../components/leaderboard/Leaderboard.css';
+import './FeedLeaderboard.css';
 
 type LeaderboardState = {
     items: PublicFeedLeaderboardEntry[];
@@ -144,7 +145,10 @@ export default function FeedLeaderboard({
     const leaderValue = state.items[0]?.total_score ?? 1;
 
     return (
-        <section className="leaderboard-container" aria-labelledby="profile-feed-leaderboard-title">
+        <section
+            className="leaderboard-container profile-feed-leaderboard"
+            aria-labelledby="profile-feed-leaderboard-title"
+        >
             <div className="leaderboard-header">
                 <img src="/friends_leaderboard_icon.png" alt="" className="leaderboard-icon" />
                 <div>

@@ -96,7 +96,26 @@ adb shell cmd location set-location-enabled true
 ) &
 location_feed_pid=$!
 adb install -r -t "$apk"
-adb reverse "tcp:${GEOGUESSME_MOBILE_WEB_PORT:-18081}" "tcp:${GEOGUESSME_MOBILE_WEB_PORT:-18081}"
+if [[ "${MOBILE_BUNDLED_SMOKE:-false}" == true ]]; then
+    # Fail before launching if a prior test-mobile left a localhost server URL
+    # in ignored generated assets. This test must exercise packaged assets.
+    if ! unzip -p "$apk" assets/capacitor.config.json | jq -e '
+        .server.hostname == "app.geoguessme.com" and .server.androidScheme == "https" and
+        (.server | has("url") | not)' >/dev/null; then
+        echo "Bundled smoke requires a production-configured APK; run make mobile-build" >&2
+        exit 2
+    fi
+    flow="$repo/frontend/mobile-e2e/bundled-smoke.yaml"
+    maestro_env=()
+else
+    adb reverse "tcp:${GEOGUESSME_MOBILE_WEB_PORT:-18081}" "tcp:${GEOGUESSME_MOBILE_WEB_PORT:-18081}"
+    flow="$repo/frontend/mobile-e2e/android.yaml"
+    maestro_env=(
+        -e "MOBILE_USERNAME=${MOBILE_USERNAME:?MOBILE_USERNAME is required}"
+        -e "MOBILE_PASSWORD=${MOBILE_PASSWORD:?MOBILE_PASSWORD is required}"
+        -e "MOBILE_GROUP_NAME=${MOBILE_GROUP_NAME:?MOBILE_GROUP_NAME is required}"
+    )
+fi
 for permission in \
     android.permission.CAMERA \
     android.permission.RECORD_AUDIO \
@@ -108,11 +127,9 @@ done
 export MAESTRO_CLI_NO_ANALYTICS=1
 if ! maestro test \
     --driver-host-port "${MAESTRO_DRIVER_HOST_PORT:-7001}" \
-    -e "MOBILE_USERNAME=${MOBILE_USERNAME:?MOBILE_USERNAME is required}" \
-    -e "MOBILE_PASSWORD=${MOBILE_PASSWORD:?MOBILE_PASSWORD is required}" \
-    -e "MOBILE_GROUP_NAME=${MOBILE_GROUP_NAME:?MOBILE_GROUP_NAME is required}" \
+    "${maestro_env[@]}" \
     --format junit --output "$artifact_dir/results.xml" \
-    "$repo/frontend/mobile-e2e/android.yaml" 2>&1 | tee "$maestro_log"; then
+    "$flow" 2>&1 | tee "$maestro_log"; then
     diagnostics
     exit 1
 fi

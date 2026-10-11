@@ -113,7 +113,6 @@ func main() {
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	pushSvc := configurePush(cfg, logger, pool)
-	pushSvc.Start(workerCtx, cfg.PushDeliveryWorkers)
 
 	// The realtime hub is constructed by the composition root with its
 	// persistence and push callbacks injected: message persistence goes
@@ -146,7 +145,6 @@ func main() {
 		member, err := repos.Groups.IsMember(ctx, groupID, userID)
 		return err == nil && member
 	}
-	go hub.Run()
 
 	var identityVerifiers []authsvc.IdentityVerifier
 	if cfg.OIDCEnabled {
@@ -160,6 +158,9 @@ func main() {
 		identityVerifiers = append(identityVerifiers, verifier)
 	}
 	app := NewApp(cfg, pool, repos, store, mailer, pushSvc, hub, logger, time.Now, identityVerifiers...)
+	// Configure delivery authorization before any worker can observe it.
+	pushSvc.Start(workerCtx, cfg.PushDeliveryWorkers)
+	go hub.Run()
 	// An OIDC-off rollback must not depend on Keycloak to start or verify
 	// sessions. When its client configuration remains available, retain only
 	// the lazy admin client so account deletion still propagates upstream.

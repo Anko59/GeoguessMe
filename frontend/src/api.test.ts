@@ -6,10 +6,52 @@ import api, {
     getAPIErrorMessage,
     getAccessToken,
     publicFeedAPI,
+    moderationAPI,
+    refreshAuthSession,
+    userBlocksAPI,
     setAccessToken,
+    exchangeOIDCSession,
 } from './api';
 
+const validSession = { access_token: 'fresh', user: { id: 'player-1', username: 'Explorer' }, expires_in: 900 };
+
 describe('api client', () => {
+    it('uses typed block endpoints, preserves 204 and broadcasts only successful changes', async () => {
+        const get = vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [] } });
+        const post = vi.spyOn(api, 'post').mockResolvedValue({ status: 204 });
+        const remove = vi.spyOn(api, 'delete').mockResolvedValue({ status: 204 });
+        const listener = vi.fn();
+        window.addEventListener('geoguessme:block-visibility', listener);
+        const signal = new AbortController().signal;
+        await expect(userBlocksAPI.list(signal)).resolves.toEqual({ items: [] });
+        await expect(userBlocksAPI.block('id/space here', signal)).resolves.toBeUndefined();
+        await expect(userBlocksAPI.unblock('id/space here', signal)).resolves.toBeUndefined();
+        expect(get).toHaveBeenCalledWith('/users/blocks', { signal });
+        expect(post).toHaveBeenCalledWith('/users/id%2Fspace%20here/block', undefined, { signal });
+        expect(remove).toHaveBeenCalledWith('/users/id%2Fspace%20here/block', { signal });
+        expect(listener).toHaveBeenCalledTimes(2);
+        expect(localStorage.getItem('geoguessme:block-visibility:v1')).not.toContain('id/space');
+        post.mockRejectedValueOnce(new Error('Denied'));
+        await expect(userBlocksAPI.block('id')).rejects.toThrow('Denied');
+        expect(listener).toHaveBeenCalledTimes(2);
+        window.removeEventListener('geoguessme:block-visibility', listener);
+        get.mockRestore();
+        post.mockRestore();
+        remove.mockRestore();
+    });
+    it('sends typed content reports on the authenticated client', async () => {
+        const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'notice-1' } });
+        const controller = new AbortController();
+        await expect(
+            moderationAPI.report('messages', 'id/with slash', { reason: 'other', details: '' }, controller.signal),
+        ).resolves.toEqual({ id: 'notice-1' });
+        expect(post).toHaveBeenCalledWith(
+            '/messages/id%2Fwith%20slash/report',
+            { reason: 'other', details: '' },
+            { signal: controller.signal },
+        );
+        post.mockRestore();
+    });
     it('stores tokens and exposes secure defaults', () => {
         setAccessToken('token');
         expect(getAccessToken()).toBe('token');
@@ -49,7 +91,7 @@ describe('api client', () => {
     });
 
     it('refreshes a failed request once and coalesces refresh calls', async () => {
-        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'fresh' } } as never);
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: validSession } as never);
         const adapter = vi.fn().mockResolvedValue({ status: 200, data: { ok: true }, headers: {}, config: {} });
         api.defaults.adapter = adapter;
         setAccessToken(null);
@@ -63,7 +105,7 @@ describe('api client', () => {
     });
 
     it('restores a memory-only token before sending a protected startup request', async () => {
-        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { access_token: 'fresh' } } as never);
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: validSession } as never);
         setAccessToken(null);
 
         const request = await api.interceptors.request.handlers![0]!.fulfilled!({
@@ -74,6 +116,60 @@ describe('api client', () => {
         expect(request.headers.Authorization).toBe('Bearer fresh');
         expect(post).toHaveBeenCalledWith('/api/v1/auth/refresh', undefined, { withCredentials: true });
         post.mockRestore();
+    });
+
+    it('does not restore a token from a refresh completed after logout', async () => {
+        let finishRefresh!: (response: { data: typeof validSession }) => void;
+        const post = vi
+            .spyOn(axios, 'post')
+            .mockReturnValue(new Promise((resolve) => (finishRefresh = resolve)) as never);
+        setAccessToken(null);
+        const refresh = refreshAuthSession();
+        setAccessToken(null);
+        finishRefresh({ data: { ...validSession, access_token: 'stale' } });
+        await expect(refresh).resolves.toBeNull();
+        expect(getAccessToken()).toBeNull();
+        post.mockRestore();
+    });
+
+    it.each([
+        '<!doctype html><html><div id="root"></div></html>',
+        { access_token: 'fresh' },
+        { access_token: '', user: { id: 'player-1', username: 'Explorer' } },
+        { access_token: 'fresh', user: null },
+    ])('rejects an invalid restored session instead of authenticating with an undefined user: %j', async (data) => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ status: 200, data } as never);
+        setAccessToken('previous');
+        try {
+            await expect(refreshAuthSession()).resolves.toBeNull();
+            expect(getAccessToken()).toBeNull();
+        } finally {
+            post.mockRestore();
+        }
+    });
+
+    it('rejects HTML from an OIDC exchange without replacing the current token', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: '<!doctype html>bundled SPA' } as never);
+        setAccessToken('previous');
+        try {
+            await expect(exchangeOIDCSession()).rejects.toThrow('invalid sign-in response');
+            expect(getAccessToken()).toBe('previous');
+        } finally {
+            post.mockRestore();
+        }
+    });
+
+    it('rejects an HTML API response before a feed component can consume it', () => {
+        const handle = api.interceptors.response.handlers![0]!.fulfilled!;
+        expect(() =>
+            handle({
+                data: '<!doctype html>bundled SPA',
+                headers: { 'content-type': 'text/html; charset=utf-8' },
+                config: { url: '/feed/challenges' },
+            } as never),
+        ).toThrow('web page instead of application data');
+        const media = { data: new Blob(['image']), headers: { 'content-type': 'image/jpeg' }, config: {} };
+        expect(handle(media as never)).toBe(media);
     });
 
     it('returns useful error messages', () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 import api, { getAPIErrorMessage } from '../../api';
 import Avatar from '../../components/common/Avatar';
@@ -7,10 +7,12 @@ import RankBadge from '../../components/progression/RankBadge';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import FullScreenImage from '../../components/ui/FullScreenImage';
 import Icon from '../../components/ui/Icon';
+import ReportAction from '../../components/ui/ReportAction';
 import { useAuth } from '../../context/AuthContext';
 import type { Profile, PublicProfile } from '../../types';
 import FeedLeaderboard from './FeedLeaderboard';
 import MapPinProfileCard from '../../components/profile/MapPinProfileCard';
+import { useUserBlocks } from '../../hooks/useUserBlocks';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
@@ -21,23 +23,34 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<Profile | PublicProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const blocks = useUserBlocks(!isSelf);
+    const [blockOverride, setBlockOverride] = useState<{ id: string; blocked: boolean } | null>(null);
+    const blocked =
+        blockOverride && blockOverride.id === userId
+            ? blockOverride.blocked
+            : blocks.items.some((item) => item.user_id === userId);
     // Resolved once per profile so the hero avatar can open full screen; the
     // hook is called unconditionally to keep the hook order stable across the
     // loading/error early returns.
     const avatarURL = useAvatarUrl(profile?.id ?? '', profile?.avatar);
 
+    const profileRequest = useRef<AbortController | null>(null);
     const loadProfile = useCallback(async () => {
+        profileRequest.current?.abort();
+        const request = new AbortController();
+        profileRequest.current = request;
         setError('');
         setLoading(true);
         try {
             if (isOwnProfile) {
-                const response = await api.get<Profile>('/auth/profile');
-                setProfile(response.data);
+                const response = await api.get<Profile>('/auth/profile', { signal: request.signal });
+                if (!request.signal.aborted) setProfile(response.data);
             } else {
-                const response = await api.get<PublicProfile>(`/user/profile/${userId}`);
-                setProfile(response.data);
+                const response = await api.get<PublicProfile>(`/user/profile/${userId}`, { signal: request.signal });
+                if (!request.signal.aborted) setProfile(response.data);
             }
         } catch (requestError: unknown) {
+            if (request.signal.aborted) return;
             setError(
                 getAPIErrorMessage(
                     requestError,
@@ -45,14 +58,55 @@ export default function ProfilePage() {
                 ),
             );
         } finally {
-            setLoading(false);
+            if (!request.signal.aborted) setLoading(false);
         }
     }, [isOwnProfile, userId]);
 
     useEffect(() => {
         const task = window.setTimeout(() => void loadProfile(), 0);
-        return () => window.clearTimeout(task);
+        return () => {
+            window.clearTimeout(task);
+            profileRequest.current?.abort();
+        };
     }, [loadProfile]);
+
+    const blockControls =
+        !isSelf && userId ? (
+            <section aria-label="Player blocking">
+                <p>
+                    Blocking hides chat, feed, profiles, and media in both directions. Group membership and rankings
+                    stay unchanged.
+                </p>
+                <button
+                    className="btn btn-secondary"
+                    disabled={blocks.loading || Boolean(blocks.pending) || Boolean(blocks.error)}
+                    onClick={() => {
+                        if (
+                            !blocked &&
+                            !window.confirm(
+                                'Block this player? Content and interactions will be hidden in both directions.',
+                            )
+                        )
+                            return;
+                        void blocks.change(userId, !blocked).then((success) => {
+                            if (!success) return;
+                            setBlockOverride({ id: userId, blocked: !blocked });
+                            if (blocked) void loadProfile();
+                        });
+                    }}
+                >
+                    {blocks.pending ? 'Saving…' : blocked ? 'Unblock player' : 'Block player'}
+                </button>
+                {blocks.error && (
+                    <>
+                        <p role="alert">{blocks.error}</p>
+                        <button className="btn btn-secondary" onClick={blocks.retry}>
+                            Retry blocked users
+                        </button>
+                    </>
+                )}
+            </section>
+        ) : null;
 
     if (loading) {
         return (
@@ -71,7 +125,7 @@ export default function ProfilePage() {
         );
     }
 
-    if (error || !profile) {
+    if (blocked || error || !profile) {
         return (
             <AuthenticatedPageShell
                 className="profile-page-shell"
@@ -79,13 +133,20 @@ export default function ProfilePage() {
                 contentAs="main"
                 showSettings={isSelf}
             >
-                <div className="profile-error" role="alert">
-                    <strong>We couldn’t load this profile</strong>
-                    <span>{error || 'This profile is temporarily unavailable.'}</span>
-                    <button className="btn btn-secondary" onClick={() => void loadProfile()}>
-                        Retry
-                    </button>
+                <div className="profile-error" role={blocked ? 'status' : 'alert'}>
+                    <strong>{blocked ? 'Player blocked' : 'We couldn’t load this profile'}</strong>
+                    <span>
+                        {blocked
+                            ? 'Unblock this player to restore access, unless they have also blocked you.'
+                            : error || 'This profile is temporarily unavailable.'}
+                    </span>
+                    {!blocked && (
+                        <button className="btn btn-secondary" onClick={() => void loadProfile()}>
+                            Retry
+                        </button>
+                    )}
                 </div>
+                {blockControls}
             </AuthenticatedPageShell>
         );
     }
@@ -120,13 +181,15 @@ export default function ProfilePage() {
                         )}
                         <p className="profile-rank-name">
                             <RankBadge rank={rank} />
-                            {rank.name}
+                            <span className="profile-rank-label">{rank.name}</span>
                         </p>
                     </div>
                 </div>
                 <RankBadge rank={rank} size="large" alt={`${rank.name} badge`} className="profile-badge" />
             </section>
 
+            {blockControls}
+            {!isSelf && <ReportAction key={profile.id} kind="users" targetID={profile.id} />}
             <MapPinProfileCard username={profile.username} pin={profile.map_pin} ownProfile={isSelf} />
 
             <section className="profile-trackers" aria-label="Score trackers">
@@ -138,7 +201,7 @@ export default function ProfilePage() {
                             #{profile.global_rank.rank} of {profile.global_rank.total_players.toLocaleString()} players
                         </span>
                     ) : (
-                        <span>Guess a location to enter the ranking</span>
+                        <span>Guess a group challenge to enter the ranking</span>
                     )}
                 </article>
                 <article className="profile-stat-card profile-stat-guesses">
@@ -155,7 +218,7 @@ export default function ProfilePage() {
                             {profile.global_average_rank.total_players.toLocaleString()} players
                         </span>
                     ) : (
-                        <span>Guess a location to enter the ranking</span>
+                        <span>Guess a group challenge to enter the ranking</span>
                     )}
                 </article>
                 <article className="profile-stat-card profile-stat-elo">
@@ -175,7 +238,7 @@ export default function ProfilePage() {
                     <strong>#{rank.level}</strong>
                     <span className="profile-stat-rank-name">
                         <RankBadge rank={rank} />
-                        {rank.name}
+                        <span className="profile-rank-label">{rank.name}</span>
                     </span>
                 </article>
             </section>

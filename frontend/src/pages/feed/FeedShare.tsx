@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { publicWebURL } from '../../platform/endpoints';
 
 export default function FeedShare({ id, username }: { id: string; username: string }) {
     const inputID = useId();
@@ -10,7 +11,7 @@ export default function FeedShare({ id, username }: { id: string; username: stri
             active.current = false;
         };
     }, []);
-    const url = `${window.location.origin}/feed/${encodeURIComponent(id)}`;
+    const url = publicWebURL(`/feed/${encodeURIComponent(id)}`);
     async function share() {
         if (status === 'pending') return;
         setStatus('pending');

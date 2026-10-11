@@ -25,10 +25,15 @@ export default function ForgotPassword() {
     return (
         <div className="auth-container">
             <div className="auth-card fade-in">
-                <h2 className="auth-title gradient-text">Reset password</h2>
+                <h2 className="auth-title gradient-text">Reset your direct-login password</h2>
                 <p className="auth-subtitle">
-                    Enter the email address from your old GeoGuessMe account. We’ll send a reset link if it is verified,
-                    or a verification link first if it is not.
+                    This resets the password for Username or email / Password sign-in, not your separate GeoGuessMe ID
+                    password. Enter your account email to receive a reset link if verified, or a verification link
+                    first.
+                </p>
+                <p className="auth-provider-note">
+                    To reset your GeoGuessMe ID password instead, return to sign in, choose Email address → Continue to
+                    password, then select Forgot your password? on the GeoGuessMe ID page.
                 </p>
                 <form onSubmit={submit} className="auth-form">
                     <label htmlFor="forgot-email">Email</label>

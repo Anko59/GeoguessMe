@@ -65,8 +65,20 @@ export function useFeed(singleID?: string) {
             setItems((old) => old.map((p) => (p.id === post.id ? { ...p, ...post } : p))),
         [],
     );
+    // A comment may arrive while the viewer is guessing. The initial post
+    // snapshot is then stale even though the results discussion loads afresh.
+    const refreshPost = useCallback(
+        async (id: string) => {
+            const post = await run((signal) => publicFeedAPI.get(id, signal));
+            if (post)
+                setItems((old) =>
+                    old.map((item) => (item.id === id ? { ...item, comment_count: post.comment_count } : item)),
+                );
+        },
+        [run],
+    );
     const remove = (id: string) => setItems((old) => old.filter((p) => p.id !== id));
-    return { items, cursor, loaded, pending, error, load, update, remove };
+    return { items, cursor, loaded, pending, error, load, update, refreshPost, remove };
 }
 
 export function usePublicComments(id: string) {

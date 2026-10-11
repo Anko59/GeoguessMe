@@ -15,6 +15,8 @@ export interface ChatStreamState {
     /** The viewer id, used to reconcile reaction selection on merges. */
     viewerID?: string;
     messages: Message[];
+    /** Startup hints have not yet been authorized by this server session. */
+    unconfirmedCachedIDs: Set<string>;
     connectionStatus: ChatConnectionStatus;
     error: string;
     loadingOlder: boolean;
@@ -46,6 +48,7 @@ export function initialChatStreamState(
         identity,
         viewerID,
         messages: cached,
+        unconfirmedCachedIDs: new Set(cached.map((message) => message.id)),
         connectionStatus: 'connecting',
         error: '',
         loadingOlder: false,
@@ -68,13 +71,27 @@ export function chatStreamReducer(state: ChatStreamState, action: ChatStreamActi
         case 'error':
             return { ...state, error: action.message };
         case 'merge':
-            return { ...state, messages: mergeMessages(state.messages, action.incoming, state.viewerID) };
-        case 'first_page':
             return {
                 ...state,
-                messages: pruneBeforeAnchor(state.messages, action.items.length > 0 ? action.items[0] : null),
+                messages: mergeMessages(state.messages, action.incoming, state.viewerID),
+                unconfirmedCachedIDs: new Set(
+                    [...state.unconfirmedCachedIDs].filter(
+                        (id) => !action.incoming.some((message) => message.id === id),
+                    ),
+                ),
+            };
+        case 'first_page': {
+            // Visibility can change while this browser is closed. Cached IDs
+            // omitted by the authoritative page must not survive by timestamp.
+            // Keep actual live delivery during the fetch; the page merges next.
+            const live = state.messages.filter((message) => !state.unconfirmedCachedIDs.has(message.id));
+            return {
+                ...state,
+                messages: action.items.length > 0 ? pruneBeforeAnchor(live, action.items[0]) : live,
+                unconfirmedCachedIDs: new Set(),
                 hasMoreOlder: action.items.length >= PAGE_SIZE,
             };
+        }
         case 'challenge_status':
             return {
                 ...state,

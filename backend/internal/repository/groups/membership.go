@@ -131,6 +131,7 @@ func (r *Repository) UserInbox(ctx context.Context, userID string) ([]models.Gro
 		             ON mr.group_id = m.group_id AND mr.user_id = $1
 		           WHERE m.group_id = g.id
 		             AND m.user_id <> $1
+		             AND `+inboxMessageVisibility+`
 		             AND m.created_at > COALESCE(mr.last_read_at, gm.joined_at)
 		       ), 0),
 		       latest.id, latest.kind, latest.username, latest.created_at
@@ -140,7 +141,7 @@ func (r *Repository) UserInbox(ctx context.Context, userID string) ([]models.Gro
 		    SELECT m.id, m.kind, u.username, m.created_at
 		    FROM messages m
 		    JOIN users u ON u.id = m.user_id
-		    WHERE m.group_id = g.id
+		    WHERE m.group_id = g.id AND `+inboxMessageVisibility+`
 		    ORDER BY m.created_at DESC, m.id DESC
 		    LIMIT 1
 		) latest ON true

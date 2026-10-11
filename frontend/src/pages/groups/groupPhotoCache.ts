@@ -18,6 +18,10 @@ export function bustGroupPhotoCache(groupID: string): void {
     store.bust(groupID);
 }
 
+export function clearGroupPhotoCache(): void {
+    store.clear();
+}
+
 /** Resolve a private group photo, falling back to the app logo when unset. */
 export function useGroupPhotoUrl(groupID: string, refreshKey = 0): string {
     const [url, setUrl] = useState(() => store.get(groupID) ?? fallbackGroupPhoto);

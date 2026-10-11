@@ -1,17 +1,14 @@
 # syntax=docker/dockerfile:1
-# Validation-only Terraform image with the fixed x/net dependency used by the
-# pinned Terraform release.
-FROM golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS terraform-build
-RUN apk add --no-cache git=2.54.0-r0
-WORKDIR /src
-RUN git clone --depth 1 --branch v1.15.8 https://github.com/hashicorp/terraform.git /src \
-    && test "$(git rev-parse HEAD)" = b9e178decf87d274d25ed36bc5a4dbc857e00420 \
-    && go mod edit -replace=golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0 \
-    && go mod download golang.org/x/net \
-    && go mod tidy \
-    && go build -trimpath \
-        -ldflags='-s -w -X github.com/hashicorp/terraform/version.dev=no' \
-        -o /out/terraform .
+# Terraform 1.16.5 already includes the fixed Go dependency graph. Preserve
+# its official binary, entrypoint and CLI; refresh only the Alpine PCRE2 package
+# for CVE-2026-103111 rather than recompiling Terraform from source.
+FROM hashicorp/terraform:1.16.5@sha256:c7926feace05d0f7e73542842bf3945924e955a1f782cf000ccbb8d18fa42d77
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+RUN apk add --no-cache --upgrade 'pcre2=10.49-r0' \
+    && apk info -v | grep -Fxq 'pcre2-10.49-r0'
 
-FROM hashicorp/terraform:1.15.8@sha256:7ae513256f7ce67879e218ae8593d6fbe216ec9e123abe6c94e4e10704857963
-COPY --from=terraform-build /out/terraform /bin/terraform
+ARG DEPENDENCY_INPUTS
+LABEL dev.geoguessme.dependency-inputs="${DEPENDENCY_INPUTS}" \
+    org.opencontainers.image.base.name="hashicorp/terraform:1.16.5" \
+    org.opencontainers.image.base.digest="sha256:c7926feace05d0f7e73542842bf3945924e955a1f782cf000ccbb8d18fa42d77" \
+    org.opencontainers.image.version="1.16.5-pcre2-10.49-r0"

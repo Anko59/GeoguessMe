@@ -141,7 +141,7 @@
       "type": "string"
 "PublicGuessResult":
   "type": "object"
-  "required": ["score", "distance", "lat", "long", "actual_lat", "actual_long"]
+  "required": ["score", "distance", "lat", "long"]
   "properties":
     "score":
       "type": "integer"
@@ -157,11 +157,16 @@
       "type": "number"
     "actual_lat":
       "type": "number"
+      "description": "Omitted while the poster hides the location from this viewer."
     "actual_long":
       "type": "number"
+      "description": "Omitted while the poster hides the location from this viewer."
+    "location_hidden":
+      { "type": "boolean", "description": "True while the timed location privacy window is active for this viewer." }
+    "location_reveals_at": { "type": "string", "format": "date-time" }
 "PublicFeedResult":
   "type": "object"
-  "required": ["rank", "user_id", "username", "avatar", "score", "distance", "elo_delta", "is_viewer"]
+  "required": ["rank", "user_id", "username", "avatar", "score", "elo_delta", "is_viewer"]
   "properties":
     "rank":
       "type": "integer"
@@ -181,7 +186,7 @@
     "distance":
       "type": "number"
       "minimum": 0
-      "description": "Distance in meters."
+      "description": "Distance in meters; omitted for other players while the location is hidden."
     "elo_delta":
       "type": "integer"
       "description": "Signed all-time Elo change caused by this challenge in the global history replay."
@@ -250,16 +255,34 @@
     "lat": { "type": "number", "format": "double" }
     "long": { "type": "number", "format": "double" }
     "score": { "type": "integer", "minimum": 0, "maximum": 5000 }
-    "distance": { "type": "number", "minimum": 0, "description": "Distance in meters; omitted for timeouts." }
+    "distance":
+      {
+        "type": "number",
+        "minimum": 0,
+        "description": "Distance in meters; omitted for timeouts or other players while the location is hidden.",
+      }
     "timed_out": { "type": "boolean" }
     "created_at": { "type": "string", "format": "date-time" }
 
 "PublicTimedResults":
   "type": "object"
-  "required": ["challenge_id", "actual_lat", "actual_long", "guesses", "server_time"]
+  "required": ["challenge_id", "guesses", "server_time"]
   "properties":
     "challenge_id": { "type": "string", "format": "uuid" }
-    "actual_lat": { "type": "number", "format": "double" }
-    "actual_long": { "type": "number", "format": "double" }
+    "actual_lat":
+      {
+        "type": "number",
+        "format": "double",
+        "description": "Omitted while the poster hides the location from this viewer.",
+      }
+    "actual_long":
+      {
+        "type": "number",
+        "format": "double",
+        "description": "Omitted while the poster hides the location from this viewer.",
+      }
+    "location_hidden":
+      { "type": "boolean", "description": "True while the timed location privacy window is active for this viewer." }
+    "location_reveals_at": { "type": "string", "format": "date-time" }
     "guesses": { "type": "array", "items": { "$ref": "#/PublicTimedResultGuess" } }
     "server_time": { "type": "string", "format": "date-time" }

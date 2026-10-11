@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -38,9 +39,9 @@ func TestGameHandlersRejectUnsupportedMethods(t *testing.T) {
 func TestGameAndChatValidationBranches(t *testing.T) {
 	mock := newMockPool(t)
 	nilHubAPI := newChatAPI(t, mock, mustTestStore(t), nil)
-	requireStatus(t, nilHubAPI.HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusServiceUnavailable)
+	requireStatus(t, nilHubAPI.HandleChat, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil), http.StatusServiceUnavailable)
 	hubAPI := newChatAPI(t, mock, mustTestStore(t), chat.NewHub(nil, nil))
-	requireStatus(t, hubAPI.HandleChat, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusUnauthorized)
+	requireStatus(t, hubAPI.HandleChat, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil), http.StatusUnauthorized)
 
 	gameAPI := newGameAPI(t, mock)
 	requireStatus(t, nilHubAPI.CreateWebSocketTicket, requestWithUser(http.MethodPost, "/", "", "user-1"), http.StatusBadRequest)
@@ -50,7 +51,7 @@ func TestGameAndChatValidationBranches(t *testing.T) {
 	requireStatus(t, gameAPI.GetGroupDetails, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, gameAPI.GetGroupMembers, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusBadRequest)
 	requireStatus(t, gameAPI.SubmitChallengeGuess, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("").WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs("", "user-1").WillReturnError(pgx.ErrNoRows)
 	requireStatus(t, gameAPI.GetChallengeResults, requestWithUser(http.MethodGet, "/", "", "user-1"), http.StatusNotFound)
 	requireStatus(t, gameAPI.AcceptChallenge, requestWithUser(http.MethodPost, "/", `{}`, "user-1"), http.StatusBadRequest)
 	repos := repository.NewRepository(mock)
@@ -88,7 +89,7 @@ func TestGroupAndUploadValidation(t *testing.T) {
 }
 
 func TestWithUserID(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	if got := GetUserIDFromContext(req); got != "" {
 		t.Fatalf("GetUserIDFromContext empty = %q, want empty", got)
 	}
@@ -102,14 +103,14 @@ func TestWithUserID(t *testing.T) {
 func TestTimeoutChallengeGuessMethodAndNotFound(t *testing.T) {
 	mock := newMockPool(t)
 	gameAPI := newGameAPI(t, mock)
-	requireStatus(t, gameAPI.TimeoutChallengeGuess, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusMethodNotAllowed)
+	requireStatus(t, gameAPI.TimeoutChallengeGuess, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil), http.StatusMethodNotAllowed)
 	requireStatus(t, gameAPI.TimeoutChallengeGuess, func() *http.Request {
 		r := requestWithUser(http.MethodPost, "/", "", "user-1")
 		r.SetPathValue("photoID", "not-a-uuid")
 		return r
 	}(), http.StatusBadRequest)
 	photoID := "00000000-0000-0000-0000-000000000099"
-	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID).WillReturnRows(pgxmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT id, user_id, group_id").WithArgs(photoID, "user-1").WillReturnRows(pgxmock.NewRows([]string{"id"}))
 	req := requestWithUser(http.MethodPost, "/", "", "user-1")
 	req.SetPathValue("photoID", photoID)
 	requireStatus(t, gameAPI.TimeoutChallengeGuess, req, http.StatusNotFound)

@@ -276,7 +276,7 @@
   "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }]
   "get":
     "operationId": "getPublicGuess"
-    "summary": "Read your completed guess and the answer"
+    "summary": "Read your completed guess and the answer when location privacy permits"
     "tags": ["Feed"]
     "security": [{ "bearerAuth": [] }]
     "responses":

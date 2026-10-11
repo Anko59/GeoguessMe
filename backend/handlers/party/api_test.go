@@ -71,7 +71,7 @@ func requestWithUser(method, target, body, userID string) *http.Request {
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
-	request := httptest.NewRequest(method, target, reader)
+	request := httptest.NewRequestWithContext(context.Background(), method, target, reader)
 	if userID != "" {
 		request = request.WithContext(handlers.WithUserID(request.Context(), userID))
 	}

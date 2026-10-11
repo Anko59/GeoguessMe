@@ -2,6 +2,7 @@ import { useCallback, useContext, useState, type ReactNode } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import GameView from '../../components/game/GameViews';
 import GuessScoreFeedback from '../../components/game/GuessScoreFeedback';
+import type { GamePoster } from '../../components/game/gameState';
 import { useTimedGame } from '../../hooks/useTimedGame';
 import { feedTimedGameAdapter } from '../../hooks/feedTimedGameAdapter';
 
@@ -11,6 +12,7 @@ export default function FeedGame({
     id,
     isOwner,
     openResultsDirectly,
+    poster,
     restoreFocus,
     onClose,
     onResolved,
@@ -19,6 +21,8 @@ export default function FeedGame({
     id: string;
     isOwner: boolean;
     openResultsDirectly: boolean;
+    /** The submitting player, shown while the challenge photo is visible. */
+    poster?: GamePoster;
     restoreFocus: () => void;
     onClose: () => void;
     onResolved: () => void;
@@ -64,6 +68,7 @@ export default function FeedGame({
             potentialScore={timedGame.potentialScore}
             scoreNotice={timedGame.scoreNotice}
             serverNowMs={timedGame.serverNowMs}
+            poster={poster}
             resultsFooter={resultsFooter}
             feedback={
                 timedGame.state.feedback ? (

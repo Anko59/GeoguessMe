@@ -96,12 +96,20 @@ func (r *Repository) Create(ctx context.Context, p NewChallenge) error {
 
 const selectPost = `SELECT p.id, p.user_id, u.username, u.avatar, p.caption, p.created_at,
 	p.audience, p.user_id = $1, EXISTS (SELECT 1 FROM public_guesses g WHERE g.challenge_id=p.id AND g.user_id=$1),
-	(SELECT count(*) FROM public_reactions r WHERE r.challenge_id=p.id),
+	(SELECT count(*) FROM public_reactions r WHERE r.challenge_id=p.id AND ` + reactionVisibility + `),
 	EXISTS (SELECT 1 FROM public_reactions r WHERE r.challenge_id=p.id AND r.user_id=$1),
-	(SELECT count(*) FROM public_comments c WHERE c.challenge_id=p.id)
+	(SELECT count(*) FROM public_comments c WHERE c.challenge_id=p.id AND ` + commentVisibility + `)
 	FROM public_challenges p JOIN users u ON u.id=p.user_id `
 
-const challengeVisibility = `(p.user_id=$1 OR p.audience='public' OR
+const reactionVisibility = `NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+	(b.blocker_id=$1 AND b.blocked_id=r.user_id) OR (b.blocker_id=r.user_id AND b.blocked_id=$1))`
+
+const commentVisibility = `NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+	(b.blocker_id=$1 AND b.blocked_id=c.user_id) OR (b.blocker_id=c.user_id AND b.blocked_id=$1))`
+
+const challengeVisibility = `NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+	(b.blocker_id=$1 AND b.blocked_id=p.user_id) OR
+	(b.blocker_id=p.user_id AND b.blocked_id=$1)) AND (p.user_id=$1 OR p.audience='public' OR
 	(p.audience='friends' AND EXISTS (
 		SELECT 1 FROM group_members author_members
 		JOIN group_members viewer_members ON viewer_members.group_id=author_members.group_id

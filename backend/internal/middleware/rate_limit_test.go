@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,21 +28,21 @@ func TestRateLimit(t *testing.T) {
 	}))
 
 	// Test Request 1 (Allowed)
-	req1 := httptest.NewRequest("GET", "/", nil)
+	req1 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req1.RemoteAddr = "1.2.3.4:1234"
 	rr1 := httptest.NewRecorder()
 	handler.ServeHTTP(rr1, req1)
 	assert.Equal(t, http.StatusOK, rr1.Code)
 
 	// Test Request 2 (Allowed)
-	req2 := httptest.NewRequest("GET", "/", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req2.RemoteAddr = "1.2.3.4:5678" // Same IP, different port
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
 	assert.Equal(t, http.StatusOK, rr2.Code)
 
 	// Test Request 3 (Blocked)
-	req3 := httptest.NewRequest("GET", "/", nil)
+	req3 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req3.RemoteAddr = "1.2.3.4:9999"
 	rr3 := httptest.NewRecorder()
 	handler.ServeHTTP(rr3, req3)
@@ -49,7 +50,7 @@ func TestRateLimit(t *testing.T) {
 	assert.Equal(t, "1", rr3.Header().Get("Retry-After"))
 
 	// Test Request from different IP (Allowed)
-	req4 := httptest.NewRequest("GET", "/", nil)
+	req4 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req4.RemoteAddr = "5.6.7.8:1234"
 	rr4 := httptest.NewRecorder()
 	handler.ServeHTTP(rr4, req4)
@@ -67,14 +68,14 @@ func TestRateLimitHeaders(t *testing.T) {
 	}))
 
 	// Request 1 (Allowed)
-	req1 := httptest.NewRequest("GET", "/", nil)
+	req1 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req1.Header.Set("X-Forwarded-For", "10.0.0.1")
 	rr1 := httptest.NewRecorder()
 	handler.ServeHTTP(rr1, req1)
 	assert.Equal(t, http.StatusOK, rr1.Code)
 
 	// Request 2 (Blocked - same X-Forwarded-For)
-	req2 := httptest.NewRequest("GET", "/", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req2.Header.Set("X-Forwarded-For", "10.0.0.1")
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
@@ -95,7 +96,7 @@ func TestRateLimitWindowResetWithClockAdvance(t *testing.T) {
 
 	// Exhaust quota.
 	for range limit {
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 		req.RemoteAddr = ip
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -103,7 +104,7 @@ func TestRateLimitWindowResetWithClockAdvance(t *testing.T) {
 	}
 
 	// Should be rate-limited now.
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -113,7 +114,7 @@ func TestRateLimitWindowResetWithClockAdvance(t *testing.T) {
 	AdvanceTestClock(200 * time.Millisecond)
 
 	// Window reset; requests should succeed again.
-	req = httptest.NewRequest("GET", "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -133,14 +134,14 @@ func TestRateLimitResetClearsCountersAndClock(t *testing.T) {
 	ip := "10.0.0.99:1234"
 
 	// Exhaust.
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Rate-limited.
-	req = httptest.NewRequest("GET", "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -153,7 +154,7 @@ func TestRateLimitResetClearsCountersAndClock(t *testing.T) {
 	ResetRateLimiter()
 
 	// Full quota should be available and clock back to real time.
-	req = httptest.NewRequest("GET", "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -178,7 +179,7 @@ func TestRateLimitConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 			req.RemoteAddr = "172.16.0.1:1234"
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -216,7 +217,7 @@ func TestRateLimitConcurrentExceedsLimit(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 			req.RemoteAddr = "172.16.0.2:1234"
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -253,7 +254,7 @@ func TestRateLimitConcurrentClockAdvanceAndRequests(t *testing.T) {
 
 	// Exhaust quota.
 	for range limit {
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 		req.RemoteAddr = ip
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -274,7 +275,7 @@ func TestRateLimitConcurrentClockAdvanceAndRequests(t *testing.T) {
 	for range 2 {
 		go func() {
 			defer wg.Done()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 			req.RemoteAddr = ip
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -285,7 +286,7 @@ func TestRateLimitConcurrentClockAdvanceAndRequests(t *testing.T) {
 	// No race detector failures = success. After clock advance, new requests
 	// should succeed. Validate that at least one of the two concurrent
 	// requests succeeded (the window may have been reset during the advance).
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -306,7 +307,7 @@ func TestRateLimitConcurrentResetAndRequests(t *testing.T) {
 
 	// Exhaust quota.
 	for range limit {
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 		req.RemoteAddr = ip
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -324,7 +325,7 @@ func TestRateLimitConcurrentResetAndRequests(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 		req.RemoteAddr = ip
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
@@ -333,7 +334,7 @@ func TestRateLimitConcurrentResetAndRequests(t *testing.T) {
 	wg.Wait()
 
 	// After reset, quota should be available again.
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -357,14 +358,14 @@ func TestSetClockNilRestoresRealTime(t *testing.T) {
 	ip := "10.0.0.200:1234"
 
 	// Exhaust quota with frozen clock.
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Still rate-limited since clock never advances.
-	req = httptest.NewRequest("GET", "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -375,7 +376,7 @@ func TestSetClockNilRestoresRealTime(t *testing.T) {
 
 	// Reset and verify real clock works.
 	ResetRateLimiter()
-	req = httptest.NewRequest("GET", "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.RemoteAddr = ip
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -394,7 +395,7 @@ func TestRateLimitByIdentityPreservesMultipartBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	request := httptest.NewRequest(http.MethodPost, "/auth/profile/avatar", bytes.NewReader(payload))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/profile/avatar", bytes.NewReader(payload))
 	request.RemoteAddr = "192.0.2.10:1234"
 	request.Header.Set("Content-Type", "multipart/form-data; boundary=camera")
 	recorder := httptest.NewRecorder()
@@ -415,7 +416,7 @@ func TestRateLimitByIdentityPreservesLargeJSONBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	request := httptest.NewRequest(http.MethodPost, "/auth/profile", bytes.NewReader(payload))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/profile", bytes.NewReader(payload))
 	request.RemoteAddr = "192.0.2.11:1234"
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()

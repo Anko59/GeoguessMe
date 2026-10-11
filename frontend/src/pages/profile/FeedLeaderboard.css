@@ -1,0 +1,57 @@
+.profile-feed-leaderboard {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.profile-feed-leaderboard .leaderboard-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
+.profile-feed-leaderboard .leaderboard-header > div {
+    min-width: 0;
+}
+
+.profile-feed-leaderboard .leaderboard-icon {
+    grid-row: span 2;
+}
+
+.profile-feed-leaderboard .leaderboard-scope {
+    grid-column: 2;
+    justify-self: start;
+    margin-left: 0;
+    white-space: normal;
+}
+
+.profile-feed-leaderboard .leaderboard-entry {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) minmax(0, auto);
+}
+
+.profile-feed-leaderboard .entry-rank,
+.profile-feed-leaderboard .entry-score {
+    min-width: 0;
+}
+
+.profile-feed-leaderboard .entry-username,
+.profile-feed-leaderboard .entry-username-link {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+}
+
+@media (max-width: 520px) {
+    .profile-feed-leaderboard .leaderboard-entry {
+        grid-template-columns: minmax(0, 2rem) auto minmax(0, 1fr);
+    }
+
+    .profile-feed-leaderboard .entry-info {
+        grid-row: 2;
+        grid-column: 2 / -1;
+    }
+
+    .profile-feed-leaderboard .entry-score {
+        grid-row: 1;
+        grid-column: 3;
+    }
+}

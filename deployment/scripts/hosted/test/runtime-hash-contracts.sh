@@ -15,15 +15,17 @@ fail() {
 # fail when any installed file was modified out-of-band. A deploy-writable
 # release copy must not be able to change the expected baseline.
 VERIFY="$ROOT/deployment/scripts/hosted/verify-deployment-hashes.sh"
-hash_root=$(mktemp -d)
-trap 'rm -rf "$hash_root"' EXIT INT TERM
+hash_root=$(mktemp -d /tmp/geoguessme-runtime-hash.XXXXXX)
+case "$hash_root" in /tmp/geoguessme-runtime-hash.??????) ;; *) fail 'unsafe test root' ;; esac
+trap 'rm -rf -- "${hash_root:?}"' EXIT INT TERM
 # The environment's app revision may differ from the shared host-runtime
 # revision; integrity must use the latter for both environments.
 app_revision=$(printf 'a%.0s' $(seq 1 40))
 runtime_revision=$(printf 'b%.0s' $(seq 1 40))
 mkdir -p "$hash_root/app/releases/$runtime_revision/deployment/scripts/hosted" \
     "$hash_root/app/releases/$runtime_revision/deployment/watch" \
-    "$hash_root/app/bin" "$hash_root/app/config/watch" \
+    "$hash_root/app/releases/$runtime_revision/deployment/s3-fixture" \
+    "$hash_root/app/bin" "$hash_root/app/config/watch" "$hash_root/app/config/s3-fixture" \
     "$hash_root/systemd" \
     "$hash_root/state/releases/dev"
 printf 'REVISION=%s\n' "$app_revision" >"$hash_root/state/releases/dev/current.env"
@@ -47,6 +49,9 @@ for config in Caddyfile vector.yaml victoria-metrics.yaml; do
         "$hash_root/app/releases/$runtime_revision/deployment/watch/$config"
     cp "$ROOT/deployment/watch/$config" "$hash_root/app/config/watch/$config"
 done
+cp "$ROOT/deployment/s3-fixture/credentials.json" "$hash_root/app/config/s3-fixture/credentials.json"
+cp "$ROOT/deployment/s3-fixture/credentials.json" \
+    "$hash_root/app/releases/$runtime_revision/deployment/s3-fixture/credentials.json"
 for unit in \
     geoguessme-backup@.service geoguessme-backup@.timer \
     geoguessme-health@.service geoguessme-health@.timer \
@@ -83,6 +88,8 @@ done
         sha256sum "$hash_root/systemd/$unit" |
             awk -v path="units/$unit" '{print $1 "  " path}'
     done
+    sha256sum "$hash_root/app/config/s3-fixture/credentials.json" |
+        awk '{print $1 "  config/s3-fixture/credentials.json"}'
 } >"$hash_root/app/config/runtime-hashes"
 chmod 0444 "$hash_root/app/config/runtime-hashes"
 run_verify() {
@@ -91,6 +98,7 @@ run_verify() {
         GEOGUESSME_SECRET_ROOT="$hash_root/secrets" \
         GEOGUESSME_LOCK_ROOT="$hash_root/locks" \
         GEOGUESSME_SYSTEMD_ROOT="$hash_root/systemd" \
+        GEOGUESSME_S3_FIXTURE_CONFIG="$hash_root/app/releases/$runtime_revision/deployment/s3-fixture/credentials.json" \
         "$VERIFY" dev
 }
 if ! run_verify >/dev/null 2>&1; then
@@ -101,6 +109,35 @@ printf '\n# deploy-writable release copy must not alter the expected baseline\n'
 if ! run_verify >/dev/null 2>&1; then
     fail 'runtime hash check trusted a mutable release copy as its baseline'
 fi
+# The 33rd installed member is required even when the fixture profile is off.
+printf '\n' >>"$hash_root/app/releases/$runtime_revision/deployment/s3-fixture/credentials.json"
+if ! run_verify >/dev/null 2>&1; then
+    fail 'runtime hash check trusted deploy-writable fixture credentials or an environment override'
+fi
+credentials="$hash_root/app/config/s3-fixture/credentials.json"
+printf '\n# out-of-band fixture change\n' >>"$credentials"
+if run_verify >"$hash_root/output" 2>&1; then fail 'runtime hash check accepted modified fixture credentials'; fi
+grep -Fq 'MISMATCH config/s3-fixture/credentials.json' "$hash_root/output" ||
+    fail 'runtime hash failure did not identify modified fixture credentials'
+cp "$ROOT/deployment/s3-fixture/credentials.json" "$credentials"
+case "$credentials" in "$hash_root/app/config/s3-fixture/credentials.json") rm -f -- "$credentials" ;; *) fail 'unsafe fixture deletion' ;; esac
+if run_verify >"$hash_root/output" 2>&1; then fail 'runtime hash check accepted missing fixture credentials'; fi
+grep -Fq "MISSING installed file: $credentials" "$hash_root/output" ||
+    fail 'runtime hash failure did not identify missing fixture credentials'
+cp "$ROOT/deployment/s3-fixture/credentials.json" "$credentials"
+manifest="$hash_root/app/config/runtime-hashes"
+cp "$manifest" "$hash_root/complete-manifest"
+chmod 0644 "$manifest"
+awk '$2 != "config/s3-fixture/credentials.json"' "$hash_root/complete-manifest" >"$manifest"
+if run_verify >"$hash_root/output" 2>&1; then fail 'runtime hash check accepted a missing 33rd manifest entry'; fi
+grep -Fq 'MISSING or duplicate expected path in runtime hash manifest: config/s3-fixture/credentials.json' "$hash_root/output" ||
+    fail 'runtime hash failure did not identify the missing 33rd entry'
+cp "$hash_root/complete-manifest" "$manifest"
+tail -1 "$hash_root/complete-manifest" >>"$manifest"
+if run_verify >/dev/null 2>&1; then fail 'runtime hash check accepted duplicate fixture manifest entries'; fi
+cp "$hash_root/complete-manifest" "$manifest"
+chmod 0444 "$manifest"
+if ! run_verify >/dev/null 2>&1; then fail 'runtime hash check did not recover after restoring the 33rd member'; fi
 printf '\n# out-of-band unit change\n' >>"$hash_root/systemd/geoguessme-watch-health.service"
 if run_verify >/dev/null 2>&1; then
     fail 'runtime hash check accepted a changed root-owned systemd unit'

@@ -1,0 +1,24 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "fixture/critical",
+  "ArtifactType": "container_image",
+  "Metadata": { "OS": { "Family": "debian", "Name": "10" } },
+  "Results": [
+    {
+      "Target": "app/log4j-core-2.14.1.jar",
+      "Class": "lang-pkgs",
+      "Type": "jar",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2021-44228",
+          "PkgName": "org.apache.logging.log4j:log4j-core",
+          "InstalledVersion": "2.14.1",
+          "FixedVersion": "2.15.0",
+          "Status": "fixed",
+          "Severity": "CRITICAL",
+          "Title": "Log4Shell fixed Critical regression fixture"
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import GroupJoin from './pages/groups/GroupJoin';
 import GroupView from './pages/groups/GroupView';
 import ProtectedRoute from './components/navigation/ProtectedRoute';
 import AuthProvider from './context/AuthProvider';
+import BlockVisibilityBoundary from './context/BlockVisibilityBoundary';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
@@ -129,7 +130,9 @@ function App() {
     return (
         <Router>
             <AuthProvider>
-                <AppChrome />
+                <BlockVisibilityBoundary>
+                    <AppChrome />
+                </BlockVisibilityBoundary>
             </AuthProvider>
         </Router>
     );

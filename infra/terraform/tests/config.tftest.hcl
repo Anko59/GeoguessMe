@@ -1,5 +1,5 @@
 mock_provider "cloudflare" {
-  override_during = plan
+  alias = "mock"
 
   mock_data "cloudflare_zero_trust_tunnel_cloudflared_token" {
     defaults = {
@@ -7,11 +7,29 @@ mock_provider "cloudflare" {
     }
   }
 }
-mock_provider "hcloud" {}
-mock_provider "random" {}
+mock_provider "hcloud" {
+  alias = "mock"
 
-run "hosted_plan" {
-  command = plan
+  # hcloud exposes resource IDs as strings, but firewall_ids requires numbers.
+  mock_resource "hcloud_firewall" {
+    defaults = {
+      id = "123456"
+    }
+  }
+}
+mock_provider "random" {
+  alias = "mock"
+}
+
+# Run only through the isolated, network-disabled Dockerized Make target.
+# All three providers are explicit mocks; test state and inputs are disposable.
+run "hosted_mocked_bootstrap" {
+  command = apply
+  providers = {
+    cloudflare = cloudflare.mock
+    hcloud     = hcloud.mock
+    random     = random.mock
+  }
 
   variables {
     cloudflare_account_id        = "00000000000000000000000000000000"
@@ -88,16 +106,60 @@ run "hosted_plan" {
   }
 
   assert {
-    condition = nonsensitive(length(templatefile("../cloud-init/cloud-config.yaml.tftpl", {
-      admin_key         = var.admin_ssh_public_key
-      dev_ci_key        = var.dev_ci_ssh_public_key
-      production_key    = var.production_ci_ssh_public_key
-      runtime_revision  = var.runtime_revision
-      tunnel_token      = "mock-tunnel-token"
-      runtime_bundle    = local.runtime_bundle
-      runtime_installer = local.runtime_installer
-    }))) <= 32768
-    error_message = "Rendered cloud-init must fit Hetzner's 32 KiB user-data limit."
+    condition = nonsensitive(
+      length(base64encode(hcloud_server.app.user_data)) / 4 * 3 -
+      length(regexall("=", base64encode(hcloud_server.app.user_data))) <= 32768
+    )
+    error_message = "Actual MIME cloud-init user_data must fit Hetzner's strict 32768 UTF-8 byte limit, including headers."
+  }
+
+  assert {
+    condition = nonsensitive(hcloud_server.app.user_data == join("\n", concat(
+      ["MIME-Version: 1.0", "Content-Type: application/gzip", "Content-Transfer-Encoding: base64", ""],
+      regexall(".{1,76}", base64gzip(local.runtime_cloud_archive)),
+      [""],
+    )))
+    error_message = "The actual server user_data must equal standard base64 MIME of the one gzip-compressed cloud-config archive."
+  }
+
+  assert {
+    condition = nonsensitive(
+      local.runtime_cloud_config_template == templatefile("../cloud-init/cloud-config.yaml.tftpl", {
+        admin_key              = var.admin_ssh_public_key
+        dev_ci_key             = var.dev_ci_ssh_public_key
+        production_key         = var.production_ci_ssh_public_key
+        runtime_revision       = var.runtime_revision
+        tunnel_token           = "mock-tunnel-token"
+        runtime_bundle         = local.runtime_bundle
+        runtime_installer      = local.runtime_installer
+        host_bootstrap         = local.host_bootstrap
+        cloudflared_version    = local.host_tool_pins.cloudflared.version
+        cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256
+      }) &&
+      yamldecode(local.runtime_cloud_config) == yamldecode(local.runtime_cloud_config_template) &&
+      local.runtime_cloud_archive == "#cloud-config-archive\n- type: text/cloud-config\n  content: |1\n   ${indent(3, chomp(local.runtime_cloud_config))}\n"
+    )
+    error_message = "The compact single-entry archive must preserve the complete source cloud-config, fake key/token inputs, and reviewed host-tool pins."
+  }
+
+  assert {
+    condition = nonsensitive(
+      length(local.runtime_bundle_files) == 33 &&
+      alltrue([for content in local.runtime_bundle_files : endswith(content, "\n")]) &&
+      length([for entry in yamldecode(local.runtime_cloud_config).write_files : entry if
+        entry.path == "/tmp/geoguessme-runtime-bundle" &&
+        entry.content == local.runtime_bundle && !can(entry.encoding)
+      ]) == 1 &&
+      length([for entry in yamldecode(local.runtime_cloud_config).write_files : entry if
+        entry.path == "/usr/local/sbin/geoguessme-install-runtime-bundle" &&
+        entry.content == local.runtime_installer && !can(entry.encoding)
+      ]) == 1 &&
+      length([for entry in yamldecode(local.runtime_cloud_config).write_files : entry if
+        entry.path == "/usr/local/sbin/geoguessme-bootstrap-host" &&
+        entry.content == local.host_bootstrap && !can(entry.encoding)
+      ]) == 1
+    )
+    error_message = "Cloud-config must preserve all 33 framed UTF-8 members and the raw installer as exact literal contents, without nested compression."
   }
 
   assert {
@@ -166,14 +228,14 @@ run "hosted_plan" {
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "00-geoguessme.conf") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "PasswordAuthentication no") &&
       strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "d /run/lock/geoguessme 0750 deploy deploy -") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[systemd-tmpfiles, --create, /etc/tmpfiles.d/geoguessme.conf]") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemd-tmpfiles --create /etc/tmpfiles.d/geoguessme.conf") &&
       length(regexall("defer: true", file("../cloud-init/cloud-config.yaml.tftpl"))) == 2 &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[ufw, allow, in, \"on\", lo, to, any]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "[chown, -R, deploy:deploy, /etc/geoguessme/age]") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "geoguessme-backup@dev.timer") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "ufw allow in on lo to any") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "chown -R deploy:deploy /etc/geoguessme/age") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "geoguessme-backup@dev.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "geoguessme-watch-health.timer") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "watch-refresh-metrics-token") &&
-      strcontains(file("../cloud-init/cloud-config.yaml.tftpl"), "systemctl, enable, --now") &&
+      strcontains(file("../cloud-init/bootstrap-host.sh"), "systemctl enable --now") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.production.yaml") &&
       strcontains(file("../cloud-init/install-runtime-bundle.sh"), "/opt/geoguessme/config/compose.watch.yaml")
     )

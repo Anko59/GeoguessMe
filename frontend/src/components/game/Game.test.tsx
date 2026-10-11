@@ -92,6 +92,9 @@ describe('Game', () => {
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
         expect(screen.getByRole('dialog', { name: 'Challenge results' })).toHaveAttribute('aria-modal', 'true');
         expect(screen.getByText('The original media has been removed; scores remain available.')).toBeInTheDocument();
+        // The poster badge belongs to the viewing window only; the results
+        // view already lists every guesser by name.
+        expect(screen.queryByText('Posted by')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(onClose).toHaveBeenCalled();
 

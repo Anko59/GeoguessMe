@@ -19,7 +19,7 @@ func newHTTPService(store Store) *Service {
 }
 
 func userRequest(method, target, body string) *http.Request {
-	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), method, target, strings.NewReader(body))
 	return req.WithContext(handlers.WithUserID(context.Background(), "user-1"))
 }
 

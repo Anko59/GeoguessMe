@@ -6,11 +6,18 @@ import type { User } from '../../types';
 import ProfilePage from './ProfilePage';
 import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), profileLeaderboard: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+    get: vi.fn(),
+    profileLeaderboard: vi.fn(),
+    listBlocks: vi.fn(),
+    block: vi.fn(),
+    unblock: vi.fn(),
+}));
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
     publicFeedAPI: { profileLeaderboard: mocks.profileLeaderboard },
+    userBlocksAPI: { list: mocks.listBlocks, block: mocks.block, unblock: mocks.unblock },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -91,6 +98,13 @@ const renderProfile = (initialEntry = '/profile') =>
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mocks.listBlocks.mockReset().mockResolvedValue({ items: [] });
+    mocks.block.mockReset().mockResolvedValue(undefined);
+    mocks.unblock.mockReset().mockResolvedValue(undefined);
+    vi.stubGlobal(
+        'confirm',
+        vi.fn(() => true),
+    );
     mocks.get.mockReset();
     mocks.profileLeaderboard.mockReset();
     mocks.get.mockResolvedValue({ data: { items: [], next_cursor: '' } });
@@ -98,6 +112,43 @@ beforeEach(() => {
 });
 
 describe('ProfilePage', () => {
+    it('confirms a block and hides profile content only after success', async () => {
+        mocks.get.mockResolvedValueOnce({ data: { ...profile, id: 'user-2' } });
+        renderProfile('/profile/user-2');
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+        const button = screen.getByRole('button', { name: 'Block player' });
+        await waitFor(() => expect(button).toBeEnabled());
+        vi.mocked(window.confirm).mockReturnValueOnce(false);
+        fireEvent.click(button);
+        expect(mocks.block).not.toHaveBeenCalled();
+        mocks.block.mockRejectedValueOnce(new Error('Block failed'));
+        fireEvent.click(button);
+        expect(await screen.findByRole('alert')).toHaveTextContent('Block failed');
+        expect(screen.getByRole('heading', { name: 'alice' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Retry blocked users' }));
+        await waitFor(() => expect(button).toBeEnabled());
+        fireEvent.click(button);
+        expect(await screen.findByText('Player blocked')).toBeInTheDocument();
+        expect(mocks.block).toHaveBeenCalledWith('user-2', expect.any(AbortSignal));
+        expect(screen.queryByRole('heading', { name: 'alice' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Report player' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Unblock player' })).toBeEnabled();
+    });
+
+    it('unblocks an outgoing block even when the profile is unavailable', async () => {
+        mocks.listBlocks.mockResolvedValue({
+            items: [{ user_id: 'user-2', username: 'bob', avatar: 'avatar.png', created_at: '2026-01-01T00:00:00Z' }],
+        });
+        mocks.get
+            .mockRejectedValueOnce(new Error('Not found'))
+            .mockResolvedValueOnce({ data: { ...profile, id: 'user-2' } });
+        renderProfile('/profile/user-2');
+        fireEvent.click(await screen.findByRole('button', { name: 'Unblock player' }));
+        expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
+        expect(mocks.unblock).toHaveBeenCalledWith('user-2', expect.any(AbortSignal));
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+    });
+
     it('shows an equipped map pin and the challenge that unlocked it', async () => {
         mocks.get.mockResolvedValueOnce({
             data: {
@@ -157,8 +208,41 @@ describe('ProfilePage', () => {
             '/rank-badges/lost-tourist.png',
         );
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
-        expect(mocks.get).toHaveBeenCalledWith('/auth/profile');
+        expect(mocks.get).toHaveBeenCalledWith('/auth/profile', { signal: expect.any(AbortSignal) });
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+    });
+
+    it('preserves full long identity, rank and pin text in shrinkable layout content', async () => {
+        const username = 'qa_long_123456789012345678901234';
+        const rankName = 'Clueless Wanderer With An Especially Long Rank';
+        const pinName = 'North Star With An Especially Long Marker Name';
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                username,
+                rank: { ...profile.rank, name: rankName },
+                map_pin: {
+                    key: 'north-star',
+                    name: pinName,
+                    description: 'A clear sky marker.',
+                    image_url: '/map-pins/north-star.svg',
+                    unlocked_by: {
+                        key: 'perfect-score',
+                        name: 'Perfect score',
+                        description: 'Get the maximum score once.',
+                    },
+                },
+            },
+        });
+        renderProfile();
+
+        expect(await screen.findByRole('heading', { name: username })).toHaveTextContent(username);
+        const rankLabels = screen.getAllByText(rankName);
+        expect(rankLabels).toHaveLength(2);
+        for (const label of rankLabels) expect(label).toHaveClass('profile-rank-label');
+        expect(screen.getByRole('heading', { name: pinName })).toHaveTextContent(pinName);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: `Best at guessing ${username}` })).toBeInTheDocument();
     });
 
     it('shows an actionable error and retries the profile request', async () => {
@@ -192,18 +276,41 @@ describe('ProfilePage', () => {
         });
         renderProfile();
 
-        expect((await screen.findAllByText('Guess a location to enter the ranking')).length).toBeGreaterThan(0);
+        expect((await screen.findAllByText('Guess a group challenge to enter the ranking')).length).toBeGreaterThan(0);
+        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
+    });
+
+    it('shows persisted zero-point guesses without changing points or average', async () => {
+        mocks.get.mockResolvedValueOnce({
+            data: {
+                ...profile,
+                total_points: 0,
+                guess_count: 2,
+                average_score: 0,
+                global_rank: { rank: 0, total_players: 0 },
+                global_average_rank: { rank: 0, total_players: 0 },
+            },
+        });
+        renderProfile();
+
+        const guesses = (await screen.findByText('Guesses made')).closest('.profile-stat-card');
+        expect(guesses).toHaveTextContent('2');
+        const points = screen.getByText('Total points').closest('.profile-stat-card');
+        expect(points).toHaveTextContent('0');
+        expect(screen.getByText('Average score').closest('.profile-stat-card')).toHaveTextContent('0.0');
+        expect(screen.getAllByText('Guess a group challenge to enter the ranking')).toHaveLength(2);
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
     it('loads another player public profile without account details', async () => {
-        mocks.get.mockResolvedValueOnce({ data: { ...profile, email: undefined } });
+        mocks.get.mockResolvedValueOnce({ data: { ...profile, id: 'user-2', email: undefined } });
         renderProfile('/profile/user-2');
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
-        expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2');
+        expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-2', { signal: expect.any(AbortSignal) });
         expect(screen.queryByText('alice@example.test')).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Report player' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 
@@ -234,8 +341,11 @@ describe('ProfilePage', () => {
         renderProfile('/profile/user-1');
 
         expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
-        expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1');
+        expect(mocks.get).toHaveBeenCalledWith('/user/profile/user-1', { signal: expect.any(AbortSignal) });
         expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+        expect(screen.queryByRole('button', { name: 'Report player' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Block player' })).not.toBeInTheDocument();
+        expect(mocks.listBlocks).not.toHaveBeenCalled();
         expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
     });
 

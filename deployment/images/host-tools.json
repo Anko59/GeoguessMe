@@ -1,0 +1,7 @@
+{
+  "cloudflared": {
+    "version": "2026.9.3",
+    "platform": "linux/amd64",
+    "debSha256": "bc073ef293d504cf5ac533bd0aa1c824ef6b4f358765ccaa6628a8a95cacb4b7"
+  }
+}

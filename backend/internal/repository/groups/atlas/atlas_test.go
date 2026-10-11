@@ -78,7 +78,7 @@ func TestPaginationAndGroupIsolation(t *testing.T) {
 		}
 		rows.AddRow(ids[i], groupID, "poster", "Alice", now, now.Add(time.Hour), 48.0, 2.0, false, true, pinKey, pinName, pinImage)
 	}
-	pool.ExpectQuery(`WHERE p.group_id = \$1 AND EXISTS .*m.user_id = \$2.*ORDER BY p.created_at DESC, p.id DESC LIMIT 101`).WithArgs(groupID, "viewer").WillReturnRows(rows)
+	pool.ExpectQuery(`WHERE p.group_id = \$1 AND NOT EXISTS .*b.blocker_id=\$2 AND b.blocked_id=p.user_id.*b.blocker_id=p.user_id AND b.blocked_id=\$2.*AND EXISTS .*m.user_id = \$2.*ORDER BY p.created_at DESC, p.id DESC LIMIT 101`).WithArgs(groupID, "viewer").WillReturnRows(rows)
 	page, err := List(context.Background(), pool, groupID, "viewer", "", now, 48*time.Hour)
 	if err != nil || len(page.Items) != 100 || page.NextCursor == "" {
 		t.Fatalf("page: %+v, %v", page, err)

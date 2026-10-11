@@ -145,9 +145,40 @@ assert_contains "$ROOT/.github/workflows/deploy.yml" '-a "revision=$GITHUB_SHA"'
 assert_contains "$ROOT/.github/workflows/release.yml" '-a "revision=$GITHUB_SHA"'
 assert_contains "$ROOT/.github/workflows/deploy.yml" 'cosign-release: v2.6.5'
 assert_contains "$ROOT/.github/workflows/release.yml" 'cosign-release: v2.6.5'
-assert_contains "$ROOT/.github/workflows/deploy.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
-assert_contains "$ROOT/.github/workflows/release.yml" '81b5cd625beae2b64e025073402a69c0e8571aeda45a1f4726e33adab3e5824d  cloudflared.deb'
-assert_contains "$ROOT/tools/make/deployment.mk" 'docker image inspect "$$img"'
+# Both runners and fresh hosted provisioning consume one reviewed package pin.
+HOST_PINS="$ROOT/deployment/images/host-tools.json"
+HOST_INSTALLER="$ROOT/tools/quality/dependency-images/install-host-tool.sh"
+HOST_TEMPLATE="$ROOT/infra/cloud-init/cloud-config.yaml.tftpl"
+assert_contains "$HOST_PINS" '"version": "2026.9.3"'
+assert_contains "$HOST_PINS" '"platform": "linux/amd64"'
+assert_contains "$HOST_PINS" '"debSha256": "bc073ef293d504cf5ac533bd0aa1c824ef6b4f358765ccaa6628a8a95cacb4b7"'
+assert_contains "$HOST_INSTALLER" '.cloudflared.version'
+assert_contains "$HOST_INSTALLER" '.cloudflared.debSha256'
+assert_contains "$HOST_INSTALLER" 'deployment/images/host-tools.json'
+assert_contains "$HOST_INSTALLER" '$(dpkg --print-architecture)" == amd64'
+assert_contains "$HOST_INSTALLER" '"$digest" "$temporary/cloudflared.deb" | sha256sum --check'
+[ "$(line_of "$HOST_INSTALLER" 'sha256sum --check')" -lt \
+    "$(line_of "$HOST_INSTALLER" 'sudo dpkg -i')" ] || fail 'runner installs Cloudflared before checksum verification'
+assert_contains "$ROOT/infra/terraform/main.tf" 'jsondecode(file("${path.module}/../../deployment/images/host-tools.json"))'
+assert_contains "$ROOT/infra/terraform/main.tf" 'cloudflared_version    = local.host_tool_pins.cloudflared.version'
+assert_contains "$ROOT/infra/terraform/main.tf" 'cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256'
+HOST_BOOTSTRAP="$ROOT/infra/cloud-init/bootstrap-host.sh"
+assert_contains "$HOST_TEMPLATE" '[/usr/local/sbin/geoguessme-bootstrap-host, "${cloudflared_version}", "${cloudflared_deb_sha256}"]'
+assert_contains "$HOST_BOOTSTRAP" 'releases/download/${cloudflared_version}/cloudflared-linux-amd64.deb'
+assert_contains "$HOST_BOOTSTRAP" 'printf '\''%s  /tmp/cloudflared.deb\n'\'' "$cloudflared_deb_sha256" | sha256sum -c -'
+[ "$(line_of "$HOST_BOOTSTRAP" 'sha256sum -c -')" -lt \
+    "$(line_of "$HOST_BOOTSTRAP" 'dpkg -i /tmp/cloudflared.deb')" ] || fail 'host bootstrap installs before checksum verification'
+for host_workflow in "$ROOT/.github/workflows/deploy.yml" "$ROOT/.github/workflows/release.yml"; do
+    assert_contains "$host_workflow" 'run: bash tools/quality/dependency-images/install-host-tool.sh'
+    awk '
+        /^  deploy:/ { deploy = 1; next }
+        deploy && /^  [^ ]/ { deploy = 0 }
+        deploy && /uses: actions\/checkout@/ { checkout = 1 }
+        deploy && /run: bash tools\/quality\/dependency-images\/install-host-tool.sh/ { checked = checkout }
+        END { if (!checked) exit 1 }
+    ' "$host_workflow" || fail 'host deployment job must check out reviewed pins before installation'
+done
+assert_contains "$ROOT/tools/quality/image-audit/audit.sh" 'docker image inspect "$ref"'
 assert_contains "$ROOT/.github/workflows/release.yml" 'branches: [main]'
 printf '%s\n' "$RELEASE_VERSION" |
     grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' ||
@@ -337,17 +368,18 @@ done
 assert_contains "$CADDY" 'header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" 'header_up X-Real-IP {http.request.header.Cf-Connecting-Ip}'
 assert_contains "$CADDY" "script-src 'self' 'wasm-unsafe-eval'"
-assert_contains "$FRONTEND_DOCKERFILE" 'caddy:2.11.4-builder-alpine@sha256:8e89605351333ad2cc2f3bcc95275a2ccc427f88914050e86a5fde0fd77a63c4'
-assert_contains "$FRONTEND_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
-assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.name="caddy:2.11.4-alpine"'
-assert_contains "$FRONTEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"'
-assert_contains "$FRONTEND_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
-assert_contains "$RESTIC_DOCKERFILE" '6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf'
-assert_contains "$RESTIC_DOCKERFILE" "golang.org/x/net@v0.55.0=golang.org/x/net@v0.56.0"
-assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.name="alpine:3.24"'
-assert_contains "$RESTIC_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f"'
-assert_contains "$RESTIC_DOCKERFILE" "apk add --no-cache 'openssl>=3.5.8-r0'"
-assert_contains "$COMMON" '"$RESTIC_IMAGE" /usr/bin/restic "$@"'
+CADDY_RUNTIME_DOCKERFILE="$ROOT/deployment/docker/security/caddy-runtime.Dockerfile"
+assert_contains "$FRONTEND_DOCKERFILE" 'FROM ${CADDY_RUNTIME_IMAGE}'
+assert_contains "$ROOT/deployment/docker/caddy-tools.Dockerfile" 'FROM ${CADDY_RUNTIME_IMAGE}'
+assert_contains "$CADDY_RUNTIME_DOCKERFILE" 'FROM caddy:'
+assert_contains "$RESTIC_DOCKERFILE" 'FROM restic/restic:'
+for envelope in "$CADDY_RUNTIME_DOCKERFILE" "$RESTIC_DOCKERFILE"; do
+    assert_not_contains "$envelope" 'RUN '
+    assert_not_contains "$envelope" 'COPY '
+done
+assert_contains "$COMMON" 'active_restic=$(select_restic_image "$environment") || return 1'
+assert_contains "$COMMON" '"$active_restic" /usr/bin/restic "$@"'
+assert_contains "$COMMON" 'selected=$(active_metadata_image "$1" RESTIC_IMAGE) || exit 1'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
 assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
 assert_contains "$BACKEND_DOCKERFILE" "'openssl>=3.5.8-r0'"

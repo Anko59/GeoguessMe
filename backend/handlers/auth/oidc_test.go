@@ -47,7 +47,7 @@ func TestOIDCConfigAndExistingIdentityExchange(t *testing.T) {
 	api.cfg.OIDCSocialProviders = []string{"google"}
 
 	configRecorder := httptest.NewRecorder()
-	api.OIDCConfig(configRecorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	api.OIDCConfig(configRecorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if configRecorder.Code != http.StatusOK || configRecorder.Body.String() != "{\"account_url\":\"https://login.example.test/realms/geoguessme/account/\",\"enabled\":true,\"login_path\":\"/oauth2/start\",\"social_providers\":[\"google\"]}\n" {
 		t.Fatalf("OIDC config = %d %q", configRecorder.Code, configRecorder.Body.String())
 	}
@@ -63,7 +63,7 @@ func TestOIDCConfigAndExistingIdentityExchange(t *testing.T) {
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 	request.Header.Set("Authorization", "Bearer forwarded-keycloak-token")
 	api.ExchangeOIDCSession(recorder, request)
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Set-Cookie") == "" {
@@ -78,7 +78,7 @@ func TestOIDCExchangeRequiresAndAcceptsChosenUsername(t *testing.T) {
 	mock.ExpectRollback()
 
 	recorder := httptest.NewRecorder()
-	api.ExchangeOIDCSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+	api.ExchangeOIDCSession(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil))
 	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"username_required"`) {
 		t.Fatalf("missing username exchange = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -93,7 +93,7 @@ func TestOIDCExchangeRequiresAndAcceptsChosenUsername(t *testing.T) {
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	recorder = httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":" map-master "}`))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":" map-master "}`))
 	api.ExchangeOIDCSession(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"username":"map-master"`) {
 		t.Fatalf("chosen username exchange = %d %q", recorder.Code, recorder.Body.String())
@@ -103,7 +103,7 @@ func TestOIDCExchangeRequiresAndAcceptsChosenUsername(t *testing.T) {
 func TestOIDCExchangeRejectsInvalidUsernameBeforeIdentityLookup(t *testing.T) {
 	api := newOIDCTestAPI(t, newAuthMockPool(t))
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"username":"not valid"}`))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewBufferString(`{"username":"not valid"}`))
 	api.ExchangeOIDCSession(recorder, request)
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"invalid_username"`) {
 		t.Fatalf("invalid username exchange = %d %q", recorder.Code, recorder.Body.String())
@@ -131,7 +131,7 @@ func TestOIDCExchangeRequiresExplicitLinkForPendingEmail(t *testing.T) {
 	mock.ExpectRollback()
 
 	recorder := httptest.NewRecorder()
-	api.ExchangeOIDCSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+	api.ExchangeOIDCSession(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil))
 	if recorder.Code != http.StatusConflict || recorder.Body.String() == "" {
 		t.Fatalf("pending-email exchange = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -160,7 +160,7 @@ func TestOIDCExchangeAutoLinksExactVerifiedEmailWithoutChangingUserID(t *testing
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	recorder := httptest.NewRecorder()
-	api.ExchangeOIDCSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+	api.ExchangeOIDCSession(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("verified-email exchange = %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -198,7 +198,7 @@ func TestOIDCExplicitLinkIntentIsConsumed(t *testing.T) {
 	mock.ExpectExec("INSERT INTO refresh_sessions").WithArgs(pgxmock.AnyArg(), user.ID, pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	exchangeRecorder := httptest.NewRecorder()
-	exchangeRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+	exchangeRequest := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 	exchangeRequest.AddCookie(linkCookie)
 	api.ExchangeOIDCSession(exchangeRecorder, exchangeRequest)
 	if exchangeRecorder.Code != http.StatusOK || len(exchangeRecorder.Result().Cookies()) < 2 {

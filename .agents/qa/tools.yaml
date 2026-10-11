@@ -10,6 +10,8 @@ tools:
   - session_close
   - qa_account_login
   - qa_email_account_signup
+  - qa_email_account_reset_password
+  - qa_email_account_login
   - tab_open
   - tab_switch
   - browser_navigate
@@ -17,6 +19,7 @@ tools:
   - browser_transfer_link
   - browser_open_transferred_link
   - browser_capabilities
+  - browser_security_headers
   - browser_click
   - browser_type
   - browser_select

@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["tooling/dependencies/braces-security.js"],
   "project": ["src/**/*.{ts,tsx}", "e2e/**/*.ts", "*.{ts,js}"],
   "ignoreDependencies": ["@capacitor/keyboard", "@redocly/cli", "markdownlint-cli", "openapi-typescript", "prettier"]
 }

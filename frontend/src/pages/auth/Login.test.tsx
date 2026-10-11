@@ -49,6 +49,11 @@ describe('Login Page', () => {
         expect(screen.queryByRole('link', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
         expect(screen.getByPlaceholderText('you@example.com')).toHaveAttribute('name', 'login_hint');
         expect(screen.getByRole('button', { name: 'Continue to password' })).toBeInTheDocument();
+        expect(screen.getByText(/To reset that separate password, select Forgot your password\?/)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Forgot your direct-login username or password?' })).toHaveAttribute(
+            'href',
+            '/forgot-password',
+        );
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
         fireEvent.click(google);
@@ -85,7 +90,9 @@ describe('Login Page', () => {
         expect(screen.getByRole('note')).toHaveTextContent('Connecting Google in Settings is optional');
         expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Forgot your username or password?' })).toBeInTheDocument();
+        expect(
+            screen.getByRole('link', { name: 'Forgot your direct-login username or password?' }),
+        ).toBeInTheDocument();
         expect(mockGet).not.toHaveBeenCalled();
     });
 

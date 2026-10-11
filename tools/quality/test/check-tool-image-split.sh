@@ -5,9 +5,11 @@
 #   3. Makefile targets reference the correct images
 set -euo pipefail
 
+: "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}"
+
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO"
-COMPOSE_TOOLS="docker compose -p geoguessme-tools -f deployment/compose.tools.yaml --project-directory ."
+COMPOSE_TOOLS=(docker compose -p "${GEOGUESSME_TOOLS_PROJECT:?Run through Make}" -f deployment/compose.tools.yaml --project-directory .)
 
 failures=0
 
@@ -19,7 +21,7 @@ fail() {
 
 check_present() {
     local image="$1" tool="$2" desc="$3"
-    if $COMPOSE_TOOLS run --rm --no-deps "$image" sh -c "$tool" >/dev/null 2>&1; then
+    if "${COMPOSE_TOOLS[@]}" run --rm --no-deps "$image" sh -c "$tool" >/dev/null 2>&1; then
         pass "$desc"
     else
         fail "$desc"
@@ -28,7 +30,7 @@ check_present() {
 
 check_absent() {
     local image="$1" tool="$2" desc="$3"
-    if $COMPOSE_TOOLS run --rm --no-deps "$image" sh -c "command -v $tool" >/dev/null 2>&1; then
+    if "${COMPOSE_TOOLS[@]}" run --rm --no-deps "$image" sh -c "command -v $tool" >/dev/null 2>&1; then
         fail "$desc"
     else
         pass "$desc"
@@ -38,7 +40,7 @@ check_absent() {
 check_env() {
     local image="$1" var="$2" expected="$3" desc="$4"
     local actual
-    actual=$($COMPOSE_TOOLS run --rm --no-deps "$image" sh -c "go env $var" 2>/dev/null)
+    actual=$("${COMPOSE_TOOLS[@]}" run --rm --no-deps "$image" sh -c "go env $var" 2>/dev/null)
     if [ "$actual" = "$expected" ]; then
         pass "$desc"
     else

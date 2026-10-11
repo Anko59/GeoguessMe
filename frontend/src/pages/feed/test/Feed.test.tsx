@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { PublicChallenge } from '../../../types';
-import { getMocks, post, renderFeed } from './FeedTestHarness';
+import { clickFeed, getMocks, post, renderFeed, settleFeedMedia } from './FeedTestHarness';
 
 const mocks = getMocks();
 
@@ -37,22 +37,53 @@ describe('Public feed', () => {
             created_at: new Date().toISOString(),
             server_time: new Date().toISOString(),
         });
-        renderFeed();
+        await renderFeed();
         expect(await screen.findByAltText('Blurred preview of an unsolved geo challenge')).toHaveClass(
             'feed-photo-blurred',
         );
         await userEvent.click(screen.getByRole('button', { name: 'Play challenge' }));
+        await settleFeedMedia();
         const dialog = await screen.findByRole('dialog', { name: 'Challenge guessing' });
         expect(within(dialog).getByRole('button', { name: 'Select a location…' })).toBeDisabled();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Submit guess' }));
+        await clickFeed(within(dialog).getByRole('button', { name: 'Select map point' }));
+        await clickFeed(within(dialog).getByRole('button', { name: 'Submit guess' }));
         expect(await screen.findByText('4,900 points')).toBeInTheDocument();
         expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
         expect(mocks.timedGuess).toHaveBeenCalledWith('post-1', { lat: 48.8, long: 2.3 }, expect.any(AbortSignal));
         expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
         expect(mocks.timedResults).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        await clickFeed(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('shows the submitting player above the timed photo', async () => {
+        const viewExpiresAt = new Date(Date.now() + 8000).toISOString();
+        mocks.acceptTimed.mockResolvedValueOnce({
+            challenge_id: 'post-1',
+            media_url: '/api/v1/feed/challenges/post-1/timed-media',
+            media_type: 'image/jpeg',
+            accepted_at: new Date().toISOString(),
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: new Date(Date.now() + 128000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        mocks.timedMediaDelivered.mockResolvedValueOnce({
+            view_expires_at: viewExpiresAt,
+            guess_after: viewExpiresAt,
+            guess_expires_at: new Date(Date.now() + 128000).toISOString(),
+            score_grace_seconds: 30,
+            server_time: new Date().toISOString(),
+        });
+        await renderFeed();
+        await userEvent.click(screen.getByRole('button', { name: 'Play challenge' }));
+        await settleFeedMedia();
+
+        const dialog = await screen.findByRole('dialog', { name: 'Challenge photo' });
+        expect(within(dialog).getByText('Posted by')).toBeInTheDocument();
+        expect(within(dialog).getByText('Explorer')).toBeInTheDocument();
+        expect(dialog.querySelector('.challenge-poster__avatar img')).toHaveAttribute('src', '/avatars/avatar.png');
     });
 
     it('reveals an unsolved card after its timed-out guess is persisted', async () => {
@@ -81,22 +112,23 @@ describe('Public feed', () => {
 
         let unmount = () => {};
         try {
-            ({ unmount } = renderFeed());
+            ({ unmount } = await renderFeed());
             await screen.findByAltText('Blurred preview of an unsolved geo challenge');
-            fireEvent.click(await screen.findByRole('button', { name: 'Play challenge' }));
+            await clickFeed(await screen.findByRole('button', { name: 'Play challenge' }));
             await waitFor(() => expect(mocks.timedMediaDelivered).toHaveBeenCalled());
 
             await act(async () => {
                 vi.setSystemTime(startedAt + 4000);
                 await vi.advanceTimersByTimeAsync(200);
             });
+            await settleFeedMedia();
 
             await waitFor(() => expect(mocks.timedTimeout).toHaveBeenCalledWith('post-1', expect.any(AbortSignal)));
             expect(screen.getByText('✓ Revealed')).toBeInTheDocument();
             await screen.findByAltText('Geo challenge photo');
             expect(mocks.acceptTimed).toHaveBeenCalledTimes(1);
-            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Open challenge results' }));
+            await clickFeed(screen.getByRole('button', { name: 'Close' }));
+            await clickFeed(screen.getByRole('button', { name: 'Open challenge results' }));
             expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         } finally {
             unmount();
@@ -109,7 +141,7 @@ describe('Public feed', () => {
             items: [post({ is_owner: true }), post({ id: 'post-2', resolved: true })],
             next_cursor: '',
         });
-        renderFeed();
+        await renderFeed();
         await waitFor(() => expect(screen.getAllByAltText('Geo challenge photo')).toHaveLength(2));
         expect(screen.queryByRole('button', { name: 'Play challenge' })).not.toBeInTheDocument();
         expect(screen.getByText('Your challenge')).toBeInTheDocument();
@@ -149,8 +181,8 @@ describe('Public feed', () => {
             ],
             server_time: new Date().toISOString(),
         });
-        renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        await renderFeed();
+        await clickFeed(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
         expect(screen.getByText('Navigator')).toBeInTheDocument();
         expect(screen.getByText('4,800 pts')).toBeInTheDocument();
@@ -163,9 +195,9 @@ describe('Public feed', () => {
         ['another player who resolved it', post({ resolved: true })],
     ])('shows likes and comments below results for %s', async (_label, challenge) => {
         mocks.list.mockResolvedValue({ items: [challenge], next_cursor: '' });
-        renderFeed();
+        await renderFeed();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        await clickFeed(await screen.findByRole('button', { name: 'Open challenge results' }));
         const dialog = await screen.findByRole('dialog', { name: 'Challenge results' });
 
         expect(within(dialog).getByText('2 likes')).toBeInTheDocument();
@@ -175,19 +207,19 @@ describe('Public feed', () => {
 
     it('opens resolved results from card whitespace while keeping social controls independent', async () => {
         mocks.list.mockResolvedValue({ items: [post({ resolved: true })], next_cursor: '' });
-        renderFeed();
+        await renderFeed();
         const card = await screen.findByRole('article', { name: 'Geo challenge by Explorer' });
 
-        fireEvent.click(within(card).getByRole('button', { name: 'Like challenge' }));
+        await clickFeed(within(card).getByRole('button', { name: 'Like challenge' }));
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-        fireEvent.click(card);
+        await clickFeed(card);
         expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
     });
 
     it('opens a shared challenge URL directly in results without rendering a single-card feed page', async () => {
         mocks.get.mockResolvedValue(post({ is_owner: true }));
-        renderFeed('/feed/post-1');
+        await renderFeed('/feed/post-1');
 
         expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Explore the world' })).not.toBeInTheDocument();
@@ -205,8 +237,8 @@ describe('Public feed', () => {
             guesses: [],
             server_time: new Date().toISOString(),
         });
-        renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        await renderFeed();
+        await clickFeed(await screen.findByRole('button', { name: 'Open challenge results' }));
         expect(await screen.findByText('Challenge results')).toBeInTheDocument();
         expect(mocks.timedGuess).not.toHaveBeenCalled();
     });
@@ -216,9 +248,9 @@ describe('Public feed', () => {
         mocks.media
             .mockResolvedValueOnce(new Blob(['feed photo'], { type: 'image/jpeg' }))
             .mockRejectedValueOnce(new Error('Network unavailable'));
-        renderFeed();
+        await renderFeed();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Open challenge results' }));
+        await clickFeed(await screen.findByRole('button', { name: 'Open challenge results' }));
         const dialog = await screen.findByRole('dialog', { name: 'Challenge results' });
 
         expect(
@@ -231,7 +263,7 @@ describe('Public feed', () => {
 
     it('persists reactions, reverses them, and preserves state on failure', async () => {
         mocks.react.mockRejectedValueOnce(new Error('Unable to like')).mockResolvedValue(true);
-        renderFeed();
+        await renderFeed();
         const likeButton = await screen.findByRole('button', { name: 'Like challenge' });
         expect(screen.getByRole('img', { name: 'Explorer' })).toHaveAttribute('src', '/avatars/avatar.png');
         expect(likeButton.querySelector('img')).toHaveAttribute('src', '/reactions/like.png');
@@ -243,13 +275,13 @@ describe('Public feed', () => {
             'src',
             '/foward_arrow_icon.png',
         );
-        fireEvent.click(await screen.findByRole('button', { name: 'Like challenge' }));
+        await clickFeed(await screen.findByRole('button', { name: 'Like challenge' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to like');
         expect(screen.getByText('2 likes')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Like challenge' }));
+        await clickFeed(screen.getByRole('button', { name: 'Like challenge' }));
         expect(await screen.findByRole('button', { name: 'Unlike challenge' })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByText('3 likes')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Unlike challenge' }));
+        await clickFeed(screen.getByRole('button', { name: 'Unlike challenge' }));
         await waitFor(() => expect(screen.getByText('2 likes')).toBeInTheDocument());
         expect(mocks.react).toHaveBeenLastCalledWith('post-1', false, expect.any(AbortSignal));
     });
@@ -265,15 +297,15 @@ describe('Public feed', () => {
             can_delete: true,
         };
         mocks.comment.mockResolvedValue(comment);
-        renderFeed();
+        await renderFeed();
         expect(await screen.findByText('Comments may contain clues or spoilers.')).toBeInTheDocument();
         expect(mocks.comments).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: '0 comments' }));
+        await clickFeed(screen.getByRole('button', { name: '0 comments' }));
         await screen.findByText('No comments yet. Start the conversation.');
         fireEvent.change(screen.getByRole('textbox', { name: 'Add a comment' }), {
             target: { value: ' Beautiful place! ' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+        await clickFeed(screen.getByRole('button', { name: 'Post comment' }));
         expect(await screen.findByText('Beautiful place!')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Me' })).toHaveAttribute('src', '/avatars/avatar-viewer.png');
         expect(screen.getByRole('button', { name: '1 comment' })).toBeInTheDocument();
@@ -296,12 +328,12 @@ describe('Public feed', () => {
             created_at: '2026-09-12T11:00:00Z',
             can_delete: true,
         });
-        renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'Like challenge' }));
-        fireEvent.click(screen.getByRole('button', { name: '0 comments' }));
+        await renderFeed();
+        await clickFeed(await screen.findByRole('button', { name: 'Like challenge' }));
+        await clickFeed(screen.getByRole('button', { name: '0 comments' }));
         await screen.findByText('No comments yet. Start the conversation.');
         fireEvent.change(screen.getByRole('textbox', { name: 'Add a comment' }), { target: { value: 'Lovely!' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+        await clickFeed(screen.getByRole('button', { name: 'Post comment' }));
         await screen.findByRole('button', { name: '1 comment' });
         await act(async () => finishLike(true));
         expect(screen.getByRole('button', { name: '1 comment' })).toBeInTheDocument();
@@ -315,8 +347,8 @@ describe('Public feed', () => {
                 finishLoad = resolve;
             }),
         );
-        renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: '0 comments' }));
+        await renderFeed();
+        await clickFeed(await screen.findByRole('button', { name: '0 comments' }));
         await screen.findByText('Loading comments…');
         expect(screen.getByRole('textbox', { name: 'Add a comment' })).toBeDisabled();
         await act(async () => finishLoad({ items: [], next_cursor: '' }));
@@ -328,10 +360,10 @@ describe('Public feed', () => {
             .mockRejectedValueOnce(new Error('Unable to load feed'))
             .mockResolvedValueOnce({ items: [post()], next_cursor: 'next' })
             .mockResolvedValueOnce({ items: [post(), post({ id: 'post-2', username: 'Traveler' })], next_cursor: '' });
-        renderFeed();
+        await renderFeed();
         await screen.findByRole('alert');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'More adventures' }));
+        await clickFeed(screen.getByRole('button', { name: 'Try again' }));
+        await clickFeed(await screen.findByRole('button', { name: 'More adventures' }));
         await screen.findByRole('article', { name: 'Geo challenge by Traveler' });
         expect(screen.getAllByRole('article')).toHaveLength(2);
         expect(mocks.list).toHaveBeenLastCalledWith('next', expect.any(AbortSignal));
@@ -341,11 +373,11 @@ describe('Public feed', () => {
         mocks.list.mockResolvedValue({ items: [], next_cursor: '' });
         mocks.publish.mockResolvedValue({ id: 'created' });
         mocks.get.mockResolvedValue(post({ id: 'created', is_owner: true }));
-        renderFeed();
+        await renderFeed();
         await screen.findByText('The world is waiting for your first post');
-        fireEvent.click(screen.getByRole('button', { name: '+ Post a challenge' }));
+        await clickFeed(screen.getByRole('button', { name: '+ Post a challenge' }));
         const dialog = screen.getByRole('dialog');
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
+        await clickFeed(within(dialog).getByRole('button', { name: 'Take photo' }));
         expect(await screen.findByRole('dialog', { name: 'Challenge results' })).toBeInTheDocument();
         const form = mocks.publish.mock.calls[0][0] as FormData;
         expect(form.get('photo')).toBeInstanceOf(Blob);
@@ -359,10 +391,10 @@ describe('Public feed', () => {
     it('requires confirmation before removing an authored post', async () => {
         mocks.list.mockResolvedValue({ items: [post({ is_owner: true })], next_cursor: '' });
         mocks.remove.mockResolvedValue(true);
-        renderFeed();
-        fireEvent.click(await screen.findByRole('button', { name: 'Delete post' }));
+        await renderFeed();
+        await clickFeed(await screen.findByRole('button', { name: 'Delete post' }));
         expect(mocks.remove).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+        await clickFeed(screen.getByRole('button', { name: 'Confirm delete' }));
         await waitFor(() => expect(screen.queryByRole('article')).not.toBeInTheDocument());
         expect(mocks.remove).toHaveBeenCalledWith('post-1', expect.any(AbortSignal));
     });
@@ -376,14 +408,14 @@ describe('Public feed', () => {
                     fail = reject;
                 }),
             );
-            renderFeed();
+            await renderFeed();
             await screen.findByRole('article');
-            fireEvent.click(
+            await clickFeed(
                 screen.getByRole('button', { name: operation === 'publish' ? '+ Post a challenge' : 'Play challenge' }),
             );
             const dialog = screen.getByRole('dialog');
             if (operation === 'publish') {
-                fireEvent.click(within(dialog).getByRole('button', { name: 'Take photo' }));
+                await clickFeed(within(dialog).getByRole('button', { name: 'Take photo' }));
                 expect(mocks.publish).toHaveBeenCalledTimes(1);
                 expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
                 fireEvent(dialog, new Event('cancel', { cancelable: true }));
@@ -391,11 +423,11 @@ describe('Public feed', () => {
                 await act(async () => fail(new Error('Save failed')));
                 expect(await within(dialog).findByRole('alert')).toHaveTextContent('Save failed');
                 expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeEnabled();
-                fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+                await clickFeed(within(dialog).getByRole('button', { name: 'Close dialog' }));
                 expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
                 return;
             } else {
-                fireEvent.click(within(dialog).getByRole('button', { name: 'Select map point' }));
+                await clickFeed(within(dialog).getByRole('button', { name: 'Select map point' }));
             }
             expect(mocks[operation]).toHaveBeenCalledTimes(1);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeDisabled();
@@ -406,7 +438,7 @@ describe('Public feed', () => {
             if (operation === 'publish') expect(within(dialog).queryByLabelText('Latitude')).not.toBeInTheDocument();
             else expect(within(dialog).getByLabelText('Latitude')).toHaveValue(48.8);
             expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeEnabled();
-            fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+            await clickFeed(within(dialog).getByRole('button', { name: 'Close dialog' }));
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         },
     );
@@ -418,7 +450,7 @@ describe('Public feed', () => {
                 finish = resolve;
             }),
         );
-        const view = renderFeed();
+        const view = await renderFeed();
         await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(1));
         const signal = mocks.list.mock.calls[0][1] as AbortSignal;
         view.unmount();

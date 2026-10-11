@@ -192,13 +192,10 @@ export function createChatSocketController(options: ChatSocketControllerOptions)
                 setPhase('connected');
                 const firstSync = !hasConnected;
                 hasConnected = true;
-                // A local cache makes the first screen immediate, but the
-                // first server sync prunes any cached message older than the
-                // fetched page so stale session history can never sit below
-                // the live tail with a gap. Live messages arriving during the
-                // fetch are newer than the page and survive the prune; older
-                // pages still load on scroll-up. Later reconnects use the
-                // cursor-only path to stay lossless and inexpensive.
+                // Startup cache entries are hints, not current visibility.
+                // The host discards unconfirmed cached IDs before merging
+                // this authoritative page, preserving actual live delivery
+                // during the fetch. Later reconnects use the stable cursor.
                 let firstPageHandled = false;
                 const onPage = (items: Message[]): void => {
                     if (firstSync && !firstPageHandled) {

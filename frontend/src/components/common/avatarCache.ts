@@ -18,6 +18,10 @@ export function bustAvatarCache(userID: string): void {
     store.bust(userID);
 }
 
+export function clearAvatarCache(): void {
+    store.clear();
+}
+
 function fetchAvatar(userID: string): Promise<string> {
     return api
         .get(`/users/${userID}/avatar`, { responseType: 'blob' })

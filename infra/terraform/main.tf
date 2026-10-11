@@ -20,9 +20,10 @@ removed {
 }
 
 locals {
-  # Keep the complete reviewed runtime set, including host units, in one gzip stream because Hetzner
-  # limits cloud-init user data to 32 KiB. The cloud-init extractor knows this
-  # fixed order and writes the members to their root-owned destinations.
+  host_tool_pins = jsondecode(file("${path.module}/../../deployment/images/host-tools.json"))
+  # Keep the complete reviewed runtime set, including host units, in this fixed
+  # order for the byte-oriented root-owned extractor. Compress the full cloud
+  # config once below; nested compressed members waste Hetzner's 32 KiB limit.
   runtime_bundle_files = [
     file("${path.module}/../../deployment/scripts/hosted/common.sh"),
     file("${path.module}/../../deployment/scripts/hosted/deploy.sh"),
@@ -56,14 +57,44 @@ locals {
     file("${path.module}/../cloud-init/units/geoguessme-watch-refresh-metrics-token.timer"),
     file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.service"),
     file("${path.module}/../cloud-init/units/geoguessme-watch-capacity.timer"),
+    file("${path.module}/../../deployment/s3-fixture/credentials.json"),
   ]
 
-  runtime_bundle = base64gzip(join("", concat(
+  runtime_bundle = join("", concat(
     ["GEOGUESSME_RUNTIME_BUNDLE_V1\n"],
-    [for content in local.runtime_bundle_files : "${length(content)}\n"],
+    # Count UTF-8 bytes, not Unicode characters, for the byte-oriented extractor.
+    [for content in local.runtime_bundle_files : "${length(base64encode(content)) / 4 * 3 - length(regexall("=", base64encode(content)))}\n"],
     local.runtime_bundle_files,
-  )))
-  runtime_installer = base64gzip(file("${path.module}/../cloud-init/install-runtime-bundle.sh"))
+  ))
+  host_bootstrap    = file("${path.module}/../cloud-init/bootstrap-host.sh")
+  runtime_installer = file("${path.module}/../cloud-init/install-runtime-bundle.sh")
+  runtime_cloud_config_template = templatefile("${path.module}/../cloud-init/cloud-config.yaml.tftpl", {
+    admin_key              = var.admin_ssh_public_key
+    dev_ci_key             = var.dev_ci_ssh_public_key
+    production_key         = var.production_ci_ssh_public_key
+    runtime_revision       = var.runtime_revision
+    tunnel_token           = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
+    runtime_bundle         = local.runtime_bundle
+    runtime_installer      = local.runtime_installer
+    host_bootstrap         = local.host_bootstrap
+    cloudflared_version    = local.host_tool_pins.cloudflared.version
+    cloudflared_deb_sha256 = local.host_tool_pins.cloudflared.debSha256
+  })
+  # JSON is a compact YAML subset; decoding the literal-content source template
+  # first preserves every write_files byte and all configuration value types.
+  runtime_cloud_config = "#cloud-config\n${jsonencode(yamldecode(local.runtime_cloud_config_template))}\n"
+  # A standard one-entry archive makes cloud-init create a charset-aware text
+  # part. Direct application/gzip -> text dispatch loses non-ASCII bytes in its
+  # charset-less email part on Ubuntu's native cloud-init handler walker.
+  runtime_cloud_archive = "#cloud-config-archive\n- type: text/cloud-config\n  content: |1\n   ${indent(3, chomp(local.runtime_cloud_config))}\n"
+  # One gzip stream covers all root definitions and YAML. Standard base64 MIME
+  # keeps hcloud user_data UTF-8 text; include the headers and 76-column wrapping
+  # in the strict byte-size gate, not just the compressed payload.
+  runtime_user_data = join("\n", concat(
+    ["MIME-Version: 1.0", "Content-Type: application/gzip", "Content-Transfer-Encoding: base64", ""],
+    regexall(".{1,76}", base64gzip(local.runtime_cloud_archive)),
+    [""],
+  ))
 }
 
 resource "random_bytes" "tunnel_secret" {
@@ -339,15 +370,7 @@ resource "hcloud_server" "app" {
   delete_protection  = true
   rebuild_protection = true
   firewall_ids       = [hcloud_firewall.deny_inbound.id]
-  user_data = templatefile("${path.module}/../cloud-init/cloud-config.yaml.tftpl", {
-    admin_key         = var.admin_ssh_public_key
-    dev_ci_key        = var.dev_ci_ssh_public_key
-    production_key    = var.production_ci_ssh_public_key
-    runtime_revision  = var.runtime_revision
-    tunnel_token      = data.cloudflare_zero_trust_tunnel_cloudflared_token.app.token
-    runtime_bundle    = local.runtime_bundle
-    runtime_installer = local.runtime_installer
-  })
+  user_data          = local.runtime_user_data
 
   public_net {
     ipv4_enabled = true
@@ -357,5 +380,13 @@ resource "hcloud_server" "app" {
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [user_data]
+
+    precondition {
+      condition = (
+        length(base64encode(local.runtime_user_data)) / 4 * 3 -
+        length(regexall("=", base64encode(local.runtime_user_data))) <= 32768
+      )
+      error_message = "Compressed reviewed bootstrap exceeds Hetzner's 32 KiB user-data limit; review runtime definitions and operator input sizes."
+    }
   }
 }

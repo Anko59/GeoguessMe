@@ -76,8 +76,8 @@ func (r *Repository) MarkTimedMediaDelivered(ctx context.Context, id, viewer str
 		view_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second' ELSE v.view_expires_at END,
 		guess_expires_at=CASE WHEN v.media_delivered_at IS NULL THEN $3::timestamptz+$4::double precision * INTERVAL '1 second'+$5::double precision * INTERVAL '1 second' ELSE v.guess_expires_at END
 		FROM public_challenges p
-		WHERE v.challenge_id=$1 AND v.user_id=$2 AND p.id=v.challenge_id AND `+challengeVisibility+`
-		RETURNING v.media_delivered_at,v.view_expires_at,v.guess_expires_at`, id, viewer, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow)).Scan(&deliveredAt, &view.ViewExpiresAt, &view.GuessExpiresAt)
+		WHERE v.challenge_id=$2 AND v.user_id=$1 AND p.id=v.challenge_id AND `+challengeVisibility+`
+		RETURNING v.media_delivered_at,v.view_expires_at,v.guess_expires_at`, viewer, id, now, intervalSeconds(viewWindow), intervalSeconds(guessWindow)).Scan(&deliveredAt, &view.ViewExpiresAt, &view.GuessExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PublicChallengeView{}, ErrForbidden
 	}
@@ -246,17 +246,17 @@ func (r *Repository) TimedTimeout(ctx context.Context, id, viewer string, now ti
 	return result, false, nil
 }
 
-func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now time.Time) (models.PublicTimedResults, error) {
+func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now time.Time, hideDuration time.Duration) (models.PublicTimedResults, error) {
 	var result models.PublicTimedResults
 	result.ChallengeID = id
-	var owner string
-	if err := r.pool.QueryRow(ctx, `SELECT p.user_id,p.lat,p.long FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id).Scan(&owner, &result.ActualLat, &result.ActualLong); err != nil {
+	var photo models.Photo
+	if err := r.pool.QueryRow(ctx, `SELECT p.user_id,p.lat,p.long,p.hide_location,p.created_at FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id).Scan(&photo.UserID, &photo.Lat, &photo.Long, &photo.HideLocation, &photo.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return result, ErrNotFound
 		}
 		return result, err
 	}
-	if owner != viewer {
+	if photo.UserID != viewer {
 		var allowed bool
 		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM public_guesses WHERE challenge_id=$1 AND user_id=$2)
 			OR EXISTS (SELECT 1 FROM public_challenge_views WHERE challenge_id=$1 AND user_id=$2 AND media_delivered_at IS NOT NULL AND guess_expires_at <= $3)`, id, viewer, now).Scan(&allowed); err != nil {
@@ -266,12 +266,15 @@ func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now ti
 			return result, ErrForbidden
 		}
 	}
+	result.ActualLat, result.ActualLong, result.LocationHidden, result.LocationRevealsAt = resultCoordinates(&photo, viewer, now, hideDuration)
 	rows, err := r.pool.Query(ctx, `SELECT g.id,g.user_id,u.username,u.avatar,g.lat,g.long,g.score,g.distance,g.timed_out,g.created_at,
 		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM public_guesses g JOIN users u ON u.id=g.user_id AND u.deleted_at IS NULL
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
-		WHERE g.challenge_id=$1 ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, id)
+		WHERE g.challenge_id=$1 AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$2 AND b.blocked_id=g.user_id) OR (b.blocker_id=g.user_id AND b.blocked_id=$2))
+		ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, id, viewer)
 	if err != nil {
 		return result, err
 	}
@@ -287,7 +290,7 @@ func (r *Repository) TimedResults(ctx context.Context, id, viewer string, now ti
 		if pinKey != "" {
 			guess.MapPin = &models.MapPin{Key: pinKey, Name: pinName, ImageURL: pinImage}
 		}
-		if !guess.TimedOut {
+		if !guess.TimedOut && (!result.LocationHidden || guess.UserID == viewer) {
 			guess.Lat, guess.Long, guess.Distance = &lat, &long, &distance
 		}
 		result.Guesses = append(result.Guesses, guess)

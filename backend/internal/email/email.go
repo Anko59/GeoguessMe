@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -108,7 +109,7 @@ func (s SMTP) connect() (*smtp.Client, error) {
 
 	switch normalizeMode(s.TLSMode) {
 	case ModeTLS:
-		conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+		conn, err := (&tls.Dialer{NetDialer: dialer, Config: tlsConfig}).DialContext(context.Background(), "tcp", addr)
 		if err != nil {
 			return nil, fmt.Errorf("email: implicit TLS dial: %w", err)
 		}

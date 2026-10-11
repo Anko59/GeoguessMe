@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type {
     APIErrorBody,
+    BlockedUsersPage,
     AuthResponse,
     PublicChallenge,
     PublicFeedPage,
@@ -16,14 +17,18 @@ import type {
     GroupInbox,
     ChallengePublication,
 } from './types';
+import { notifyBlockVisibilityChanged } from './utils/blockVisibility';
 import { apiBaseURL } from './platform/endpoints';
+import type { components } from './types/openapi.generated';
 
 let accessToken: string | null = null;
+let tokenVersion = 0;
 let refreshPromise: Promise<AuthResponse | null> | null = null;
 let oidcExchangePromise: Promise<AuthResponse> | null = null;
 
 export const setAccessToken = (token: string | null): void => {
     accessToken = token;
+    tokenVersion += 1;
 };
 
 export const getAccessToken = (): string | null => accessToken;
@@ -49,16 +54,39 @@ function isPublicAuthRequest(url: string | undefined): boolean {
     return publicAuthPaths.has(path);
 }
 
+function decodedAuthResponse(value: unknown): AuthResponse {
+    const auth = value as Partial<AuthResponse> | null;
+    if (
+        !auth ||
+        typeof auth !== 'object' ||
+        typeof auth.access_token !== 'string' ||
+        !auth.access_token ||
+        !auth.user ||
+        typeof auth.user.id !== 'string' ||
+        !auth.user.id ||
+        typeof auth.user.username !== 'string' ||
+        !auth.user.username
+    ) {
+        // A misrouted native request can return bundled HTML with status 200.
+        // Never turn that into an undefined user and an authenticated session.
+        throw new Error('The server returned an invalid sign-in response. Please try again.');
+    }
+    return auth as AuthResponse;
+}
+
 export const refreshAuthSession = async (): Promise<AuthResponse | null> => {
     if (!refreshPromise) {
+        const version = tokenVersion;
         refreshPromise = axios
             .post<AuthResponse>(`${apiBaseURL}/auth/refresh`, undefined, { withCredentials: true })
             .then((response) => {
-                setAccessToken(response.data.access_token);
-                return response.data;
+                if (version !== tokenVersion) return null;
+                const auth = decodedAuthResponse(response.data);
+                setAccessToken(auth.access_token);
+                return auth;
             })
             .catch(() => {
-                setAccessToken(null);
+                if (version === tokenVersion) setAccessToken(null);
                 return null;
             })
             .finally(() => {
@@ -75,8 +103,9 @@ export const exchangeOIDCSession = async (username?: string): Promise<AuthRespon
                 withCredentials: true,
             })
             .then((response) => {
-                setAccessToken(response.data.access_token);
-                return response.data;
+                const auth = decodedAuthResponse(response.data);
+                setAccessToken(auth.access_token);
+                return auth;
             })
             .finally(() => {
                 oidcExchangePromise = null;
@@ -127,7 +156,16 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 });
 
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const contentType = String(response.headers['content-type'] ?? '')
+            .split(';', 1)[0]
+            .trim()
+            .toLowerCase();
+        if (!response.config.url?.startsWith('http') && contentType === 'text/html') {
+            throw new Error('The API returned a web page instead of application data. Please try again.');
+        }
+        return response;
+    },
     async (error: AxiosError<APIErrorBody>) => {
         const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
         if (error.response?.status === 401 && request && !request._retried && !request.url?.includes('/auth/refresh')) {
@@ -215,6 +253,32 @@ export const groupsAPI = {
     inbox: async (signal?: AbortSignal) => (await api.get<GroupInbox[]>('/user/groups/inbox', { signal })).data,
     markRead: async (groupID: string, signal?: AbortSignal) => {
         await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
+    },
+};
+
+type ReportRequest = components['schemas']['ReportRequest'];
+type ReportReceipt = components['schemas']['ReportReceipt'];
+
+export const moderationAPI = {
+    report: async (
+        kind: 'messages' | 'users',
+        targetID: string,
+        notice: ReportRequest,
+        signal?: AbortSignal,
+    ): Promise<ReportReceipt> =>
+        (await api.post<ReportReceipt>(`/${kind}/${encodeURIComponent(targetID)}/report`, notice, { signal })).data,
+};
+
+export const userBlocksAPI = {
+    list: async (signal?: AbortSignal): Promise<BlockedUsersPage> =>
+        (await api.get<BlockedUsersPage>('/users/blocks', { signal })).data,
+    block: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.post(`/users/${encodeURIComponent(userID)}/block`, undefined, { signal });
+        notifyBlockVisibilityChanged();
+    },
+    unblock: async (userID: string, signal?: AbortSignal): Promise<void> => {
+        await api.delete(`/users/${encodeURIComponent(userID)}/block`, { signal });
+        notifyBlockVisibilityChanged();
     },
 };
 

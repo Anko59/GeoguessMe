@@ -2,23 +2,36 @@ package feed
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"geoguessme/internal/elo"
+	"geoguessme/internal/game"
 	"geoguessme/internal/models"
+
+	"github.com/jackc/pgx/v5"
 )
+
+func resultCoordinates(photo *models.Photo, viewer string, now time.Time, hideDuration time.Duration) (*float64, *float64, bool, *time.Time) {
+	if game.LocationHidden(photo, viewer, now, hideDuration) {
+		revealsAt := photo.CreatedAt.Add(hideDuration)
+		return nil, nil, true, &revealsAt
+	}
+	return &photo.Lat, &photo.Long, false, nil
+}
 
 // Results returns every completed public guess for a visible challenge. Elo
 // deltas replay the combined private/public history with the same stable
 // all-time factor used by the global ladder.
-func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.PublicFeedResult, error) {
-	var visible bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility+`)`, viewer, id).Scan(&visible); err != nil {
+func (r *Repository) Results(ctx context.Context, id, viewer string, now time.Time, hideDuration time.Duration) ([]models.PublicFeedResult, error) {
+	var photo models.Photo
+	if err := r.pool.QueryRow(ctx, `SELECT p.user_id,p.hide_location,p.created_at FROM public_challenges p WHERE p.id=$2 AND `+challengeVisibility, viewer, id).Scan(&photo.UserID, &photo.HideLocation, &photo.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
-	if !visible {
-		return nil, ErrNotFound
-	}
+	hidden := game.LocationHidden(&photo, viewer, now, hideDuration)
 	rows, err := r.pool.Query(ctx, `SELECT g.user_id,u.username,u.avatar,g.score,g.distance,
 		COALESCE(mp.pin_key, ''), COALESCE(mp.name, ''), COALESCE(mp.image_url, '')
 		FROM public_guesses g
@@ -26,7 +39,8 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 		JOIN public_challenges p ON p.id=g.challenge_id
 		LEFT JOIN user_equipped_map_pins ep ON ep.user_id=g.user_id
 		LEFT JOIN map_pins mp ON mp.pin_key=ep.pin_key
-		WHERE g.challenge_id=$2 AND `+challengeVisibility+`
+		WHERE g.challenge_id=$2 AND `+challengeVisibility+` AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_id=$1 AND b.blocked_id=g.user_id) OR (b.blocker_id=g.user_id AND b.blocked_id=$1))
 		ORDER BY g.score DESC,g.created_at ASC,g.user_id ASC`, viewer, id)
 	if err != nil {
 		return nil, err
@@ -41,8 +55,9 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 	results := make([]models.PublicFeedResult, 0)
 	for rows.Next() {
 		var result models.PublicFeedResult
+		var distance float64
 		var pinKey, pinName, pinImage string
-		if err := rows.Scan(&result.UserID, &result.Username, &result.Avatar, &result.Score, &result.Distance, &pinKey, &pinName, &pinImage); err != nil {
+		if err := rows.Scan(&result.UserID, &result.Username, &result.Avatar, &result.Score, &distance, &pinKey, &pinName, &pinImage); err != nil {
 			return nil, err
 		}
 		if pinKey != "" {
@@ -51,6 +66,9 @@ func (r *Repository) Results(ctx context.Context, id, viewer string) ([]models.P
 		result.Rank = len(results) + 1
 		result.EloDelta = deltas[result.UserID]
 		result.IsViewer = result.UserID == viewer
+		if !hidden || result.IsViewer {
+			result.Distance = &distance
+		}
 		results = append(results, result)
 	}
 	return results, rows.Err()

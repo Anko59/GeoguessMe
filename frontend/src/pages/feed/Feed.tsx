@@ -58,7 +58,13 @@ function FeedPage() {
                         </section>
                     )}
                     {feed.items.map((post) => (
-                        <FeedCard key={post.id} post={post} onUpdate={feed.update} onRemove={feed.remove} />
+                        <FeedCard
+                            key={post.id}
+                            post={post}
+                            onUpdate={feed.update}
+                            onRemove={feed.remove}
+                            onRefreshPost={feed.refreshPost}
+                        />
                     ))}
                     {feed.cursor && (
                         <button
@@ -109,10 +115,14 @@ function FeedResultsRoute({ id }: { id: string }) {
     const post = feed.items[0];
     const postId = post?.id;
     const updateFeedPost = feed.update;
+    const refreshPost = feed.refreshPost;
     const navigate = useNavigate();
     const markResolved = useCallback(() => {
-        if (postId) updateFeedPost({ id: postId, resolved: true });
-    }, [postId, updateFeedPost]);
+        if (postId) {
+            updateFeedPost({ id: postId, resolved: true });
+            void refreshPost(postId);
+        }
+    }, [postId, updateFeedPost, refreshPost]);
 
     return (
         <AuthenticatedPageShell className="public-feed">
@@ -140,6 +150,7 @@ function FeedResultsRoute({ id }: { id: string }) {
                         id={post.id}
                         isOwner={post.is_owner}
                         openResultsDirectly={post.is_owner || post.resolved}
+                        poster={{ userId: post.user_id, username: post.username, avatar: post.avatar }}
                         restoreFocus={() => {}}
                         onClose={() => navigate('/feed')}
                         onResolved={markResolved}

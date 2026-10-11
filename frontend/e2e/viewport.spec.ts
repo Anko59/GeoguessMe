@@ -1,6 +1,6 @@
 import { test, expect } from './support/fixtures';
 import type { Browser, BrowserContextOptions } from '@playwright/test';
-import { newAuthContext, signupViaUI, uniqueGroup } from './support/helpers';
+import { newAuthContext, signupViaUI, uniqueGroup, uniqueUsername } from './support/helpers';
 
 test.describe('Viewport preservation', () => {
     test('landing page remains usable at narrow-phone and tablet widths', async ({ page }) => {
@@ -92,7 +92,15 @@ test.describe('Viewport preservation', () => {
         const geometry: Array<{ left: number; top: number; width: number; height: number }> = [];
 
         for (const path of ['/feed', '/groups', '/profile', '/settings']) {
+            // Cached session hints render the shell before refresh-cookie rotation
+            // completes. Await that response before the next hard navigation.
+            const refreshedSession = authenticatedPage.waitForResponse(
+                (response) => response.url().endsWith('/api/v1/auth/refresh') && response.request().method() === 'POST',
+            );
             await authenticatedPage.goto(path);
+            const refreshResponse = await refreshedSession;
+            expect(refreshResponse.status()).toBe(200);
+            expect(await refreshResponse.finished()).toBeNull();
             const navigation = authenticatedPage.locator('.authenticated-page-shell > .app-topbar');
             await expect(navigation).toBeVisible();
             const box = await navigation.boundingBox();
@@ -141,6 +149,64 @@ test.describe('Viewport preservation', () => {
             navigator.permissions.query({ name: 'geolocation' }).then((s) => s.state),
         );
         expect(geoPerm).toBe('granted');
+    });
+});
+
+test.describe('Profile responsive overflow', () => {
+    test('adventurer card keeps long username, rank and pin readable at 320 and 390 px', async ({
+        browser,
+        contextOptions,
+    }) => {
+        const context = await newAuthContext(browser, contextOptions);
+        try {
+            const page = await context.newPage();
+            const username = uniqueUsername().replace('user_', 'qa_long_');
+            expect(username.length).toBeLessThanOrEqual(30);
+            await signupViaUI(page, { username });
+            for (const width of [320, 390]) {
+                await page.setViewportSize({ width, height: 568 });
+                await page.goto('/profile');
+                await expect(page.getByRole('heading', { name: username, exact: true })).toBeVisible();
+                await expect(page.locator('.profile-rank-name')).toBeVisible();
+                await expect(page.getByRole('heading', { name: 'Standard marker' })).toBeVisible();
+                const geometry = await page.evaluate(() => {
+                    const selectors = [
+                        '.profile-hero',
+                        '.profile-hero h1',
+                        '.profile-rank-name',
+                        '.profile-badge',
+                        '.profile-map-pin',
+                        '.profile-map-pin__artwork',
+                        '.profile-map-pin__details',
+                        '.profile-map-pin__details h2',
+                    ];
+                    return {
+                        viewport: document.documentElement.clientWidth,
+                        scrollWidth: document.documentElement.scrollWidth,
+                        elements: selectors.map((selector) => {
+                            const rect = document.querySelector(selector)!.getBoundingClientRect();
+                            return { selector, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+                        }),
+                    };
+                });
+                expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewport);
+                const bySelector = (selector: string) =>
+                    geometry.elements.find((element) => element.selector === selector)!;
+                for (const element of geometry.elements) {
+                    expect(element.left, `${width}px: ${element.selector} clipped left`).toBeGreaterThanOrEqual(0);
+                    expect(element.right, `${width}px: ${element.selector} clipped right`).toBeLessThanOrEqual(width);
+                }
+                expect(bySelector('.profile-hero h1').right).toBeLessThanOrEqual(bySelector('.profile-hero').right);
+                expect(bySelector('.profile-badge').top).toBeGreaterThanOrEqual(
+                    bySelector('.profile-rank-name').bottom,
+                );
+                expect(bySelector('.profile-map-pin__artwork').right).toBeLessThanOrEqual(
+                    bySelector('.profile-map-pin__details').left,
+                );
+            }
+        } finally {
+            await context.close();
+        }
     });
 });
 

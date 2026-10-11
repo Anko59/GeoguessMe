@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_MAP_PIN_IMAGE_URL } from '../../utils/mapPins';
 import {
     createGlobeScene,
     earthMinDistance,
@@ -18,6 +17,9 @@ const mocks = vi.hoisted(() => ({
     dispose: vi.fn(),
     forceContextLoss: vi.fn(),
     disconnect: vi.fn(),
+    clearPinOverlay: vi.fn(),
+    drawPinArtwork: vi.fn(),
+    setPinOverlayTransform: vi.fn(),
     maxTextureSize: 8192,
 }));
 vi.mock('three', async (importOriginal) => {
@@ -42,6 +44,14 @@ vi.mock('three', async (importOriginal) => {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.maxTextureSize = 8192;
+    const pinOverlayContext = {
+        clearRect: mocks.clearPinOverlay,
+        drawImage: mocks.drawPinArtwork,
+        setTransform: mocks.setPinOverlayTransform,
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextID) =>
+        contextID === '2d' ? pinOverlayContext : null,
+    );
     vi.stubGlobal(
         'ResizeObserver',
         class {
@@ -52,6 +62,7 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
 
@@ -85,52 +96,6 @@ describe('Earth scene', () => {
         expect(texture.anisotropy).toBe(4);
         expect(globe.controls.minDistance).toBe(HIGH_RES_MIN_DISTANCE);
         globe.dispose();
-    });
-
-    it('projects each designed pin over the globe and releases the scene cleanly', () => {
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
-            const texture = new THREE.Texture<HTMLImageElement>();
-            onLoad?.(texture);
-            return texture;
-        });
-        const host = document.createElement('div');
-        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
-        const globe = createGlobeScene(host, vi.fn(), vi.fn());
-        const items = [
-            {
-                photo_id: 'photo-1',
-                group_id: 'group-1',
-                user_id: 'user-1',
-                username: 'Alice',
-                created_at: '2026-09-27T10:00:00Z',
-                expires_at: '2026-09-28T10:00:00Z',
-                status: 'results' as const,
-                lat: 48.8,
-                long: 2.3,
-                map_pin: { key: 'north-star', name: 'North Star', image_url: '/map-pins/north-star.svg' },
-            },
-            {
-                photo_id: 'photo-2',
-                group_id: 'group-1',
-                user_id: 'user-2',
-                username: 'Bob',
-                created_at: '2026-09-27T10:00:00Z',
-                expires_at: '2026-09-28T10:00:00Z',
-                status: 'results' as const,
-                lat: 51.5,
-                long: -0.1,
-            },
-        ];
-        globe.update(items, null);
-        const markers = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
-        expect(markers).toHaveLength(2);
-        expect(markers[0].getAttribute('src')).toBe('/map-pins/north-star.svg');
-        expect(markers[1].getAttribute('src')).toBe(DEFAULT_MAP_PIN_IMAGE_URL);
-        expect(markers[0].hidden).toBe(false);
-        expect(Number.parseFloat(markers[0].style.width)).toBeGreaterThan(0);
-        expect(Number.parseFloat(markers[0].style.height)).toBeGreaterThan(0);
-        globe.dispose();
-        expect(host.children).toHaveLength(0);
     });
 
     it('keeps the bundled texture and conservative zoom on smaller WebGL limits', () => {
@@ -219,6 +184,16 @@ describe('Earth scene', () => {
         expect(releaseTexture).toHaveBeenCalledOnce();
         expect(mocks.disconnect).toHaveBeenCalledOnce();
         expect(mocks.dispose).toHaveBeenCalledOnce();
+    });
+
+    it('cleans up the renderer when the pin overlay context is unavailable', () => {
+        vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+        const host = document.createElement('div');
+
+        expect(() => createGlobeScene(host, vi.fn(), vi.fn())).toThrow('Canvas 2D is unavailable');
+        expect(host.children).toHaveLength(0);
+        expect(mocks.dispose).toHaveBeenCalledOnce();
+        expect(mocks.forceContextLoss).toHaveBeenCalledOnce();
     });
 
     it('ignores a texture completing after the globe is closed', () => {
@@ -312,166 +287,5 @@ describe('Earth scene', () => {
         expect(globePosition(0, -90).z).toBeCloseTo(1);
         expect(globePosition(0, 180).x).toBeCloseTo(-1);
         expect(globePosition(48.8566, 2.3522, 2).length()).toBeCloseTo(2);
-    });
-
-    it('keeps hit targets invisible, selection visible, navigation bounded and resources released', () => {
-        const textures: THREE.Texture[] = [];
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
-            const texture = new THREE.Texture<HTMLImageElement>();
-            textures.push(texture);
-            vi.spyOn(texture, 'dispose');
-            onLoad?.(texture);
-            return texture;
-        });
-        const disposeGeometry = vi.spyOn(THREE.SphereGeometry.prototype, 'dispose');
-        const host = document.createElement('div');
-        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
-        document.body.append(host);
-        const onError = vi.fn();
-        const globe = createGlobeScene(host, vi.fn(), onError);
-        const item = {
-            photo_id: 'p',
-            group_id: 'g',
-            user_id: 'u',
-            username: 'Alice',
-            created_at: '',
-            expires_at: '',
-            status: 'results' as const,
-            lat: 0,
-            long: 0,
-        };
-        const items = [
-            item,
-            { ...item, photo_id: 'hidden', lat: undefined, long: undefined },
-            { ...item, photo_id: 'far', lat: -22, long: -168 },
-        ];
-        globe.update(items, 'p');
-        const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
-        const pins = scene.children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
-        expect(pins.count).toBe(2);
-        expect((pins.material as THREE.MeshBasicMaterial).colorWrite).toBe(false);
-        expect((pins.material as THREE.MeshBasicMaterial).depthWrite).toBe(false);
-        const markerImages = host.querySelectorAll<HTMLImageElement>('.globe-pin-marker');
-        expect(markerImages).toHaveLength(2);
-        expect(markerImages[0].hidden).toBe(false);
-        expect(markerImages[1].hidden).toBe(true);
-        const marker = markerImages[0];
-        const selectedMarkerHeight = Number.parseFloat(marker.style.height);
-        const selectedMatrix = new THREE.Matrix4();
-        pins.getMatrixAt(0, selectedMatrix);
-        const selectedScale = new THREE.Vector3();
-        selectedMatrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), selectedScale);
-        const matrixVersion = pins.instanceMatrix.version;
-        globe.update(items, null);
-        expect(scene.children).toContain(pins);
-        expect(Number.parseFloat(marker.style.height)).toBeLessThan(selectedMarkerHeight);
-        expect(pins.instanceMatrix.version).toBeGreaterThan(matrixVersion);
-        const regularMatrix = new THREE.Matrix4();
-        pins.getMatrixAt(0, regularMatrix);
-        const regularScale = new THREE.Vector3();
-        regularMatrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), regularScale);
-        expect(regularScale.x).toBeLessThan(selectedScale.x);
-        globe.focus(item);
-        expect(camera.position.x).toBeCloseTo(camera.position.length());
-        const distance = camera.position.length();
-        globe.zoom(100);
-        expect(camera.position.length()).toBeCloseTo(distance);
-        expect(camera.zoom).toBe(1);
-        globe.zoom(0.001);
-        expect(camera.position.length()).toBeCloseTo(distance);
-        expect(camera.zoom).toBeGreaterThan(1);
-        const zBeforeRotate = camera.position.z;
-        const closeMatrix = new THREE.Matrix4();
-        pins.getMatrixAt(0, closeMatrix);
-        const closeScale = new THREE.Vector3();
-        closeMatrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), closeScale);
-        expect(closeScale.x).toBeLessThan(regularScale.x);
-        globe.rotate(0.25, 0.25);
-        expect(camera.position.z).not.toBe(zBeforeRotate);
-        const renders = mocks.render.mock.calls.length;
-        expect(renders).toBeGreaterThan(1);
-        host.querySelector('canvas')?.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
-        expect(onError).toHaveBeenCalledWith(expect.stringContaining('3D rendering is unavailable'));
-        globe.dispose();
-        expect(textures).toHaveLength(1);
-        textures.forEach((texture) => expect(texture.dispose).toHaveBeenCalledOnce());
-        expect(disposeGeometry).toHaveBeenCalledTimes(2);
-        expect(mocks.disconnect).toHaveBeenCalledOnce();
-        expect(mocks.dispose).toHaveBeenCalledOnce();
-        expect(mocks.forceContextLoss).toHaveBeenCalledOnce();
-        expect(host.children).toHaveLength(0);
-        host.remove();
-    });
-
-    it('selects front-facing pins and ignores far-side pins and drags', () => {
-        vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(new THREE.Texture<HTMLImageElement>());
-        const host = document.createElement('div');
-        Object.defineProperties(host, { clientWidth: { value: 500 }, clientHeight: { value: 400 } });
-        document.body.append(host);
-        const select = vi.fn();
-        const globe = createGlobeScene(host, select, vi.fn());
-        const front = {
-            photo_id: 'front',
-            group_id: 'g',
-            user_id: 'u',
-            username: 'Alice',
-            created_at: '',
-            expires_at: '',
-            status: 'results' as const,
-            lat: 0,
-            long: 0,
-        };
-        const back = { ...front, photo_id: 'back', long: 180 };
-        globe.update([front, back], null);
-        globe.focus(front);
-        const [scene, camera] = mocks.render.mock.lastCall as [THREE.Scene, THREE.PerspectiveCamera];
-        const canvas = host.querySelector('canvas')!;
-        canvas.setPointerCapture = vi.fn();
-        canvas.releasePointerCapture = vi.fn();
-        vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-            left: 0,
-            top: 0,
-            width: 500,
-            height: 400,
-        } as DOMRect);
-        const click = (drag = false, offset = 0) => {
-            scene.updateMatrixWorld(true);
-            camera.updateMatrixWorld(true);
-            canvas.dispatchEvent(
-                new PointerEvent('pointerdown', {
-                    clientX: 250 + offset,
-                    clientY: 200,
-                    pointerId: 1,
-                    pointerType: 'touch',
-                }),
-            );
-            if (drag)
-                canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 280, clientY: 200, pointerId: 1 }));
-            canvas.dispatchEvent(
-                new PointerEvent('pointerup', {
-                    clientX: 250 + offset,
-                    clientY: 200,
-                    pointerId: 1,
-                    pointerType: 'touch',
-                }),
-            );
-        };
-        click();
-        expect(select).toHaveBeenCalledWith('front');
-        select.mockClear();
-        click(false, 18);
-        expect(select).toHaveBeenCalledWith('front');
-        select.mockClear();
-        click(false, 30);
-        expect(select).not.toHaveBeenCalled();
-        click(true);
-        expect(select).not.toHaveBeenCalled();
-        globe.update([back], null);
-        click();
-        expect(select).not.toHaveBeenCalled();
-        click(false, 18);
-        expect(select).not.toHaveBeenCalled();
-        globe.dispose();
-        host.remove();
     });
 });

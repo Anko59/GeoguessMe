@@ -2,7 +2,8 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import Map from '../map/Map';
 import Icon from '../ui/Icon';
 import FullScreenImage from '../ui/FullScreenImage';
-import { MAX_GUESS_SCORE, type GameState, type GamePosition } from './gameState';
+import PosterBadge from './viewing/PosterBadge';
+import { MAX_GUESS_SCORE, type GamePosition, type GameState, type GamePoster } from './gameState';
 import '../../styles/game-results.css';
 
 // locationRevealClause renders the remaining hide duration for a hidden
@@ -50,6 +51,8 @@ interface GameViewProps {
     feedback: ReactNode | null;
     /** Optional source-specific social content rendered below the results map. */
     resultsFooter?: ReactNode;
+    /** The submitting player, shown on the viewing view (photo countdown). */
+    poster?: GamePoster;
     currentUserId?: string;
     onSelectLocation: (position: GamePosition) => void;
     onSubmitGuess: () => void;
@@ -132,7 +135,7 @@ function GameErrorView({ state, onClose }: { state: GameState; onClose: () => vo
     );
 }
 
-function GameViewingView({ state, remaining }: { state: GameState; remaining: number }) {
+function GameViewingView({ state, remaining, poster }: { state: GameState; remaining: number; poster?: GamePoster }) {
     return (
         <GameOverlay label="Challenge photo">
             <div className="photo-view scale-in">
@@ -147,6 +150,7 @@ function GameViewingView({ state, remaining }: { state: GameState; remaining: nu
                 ) : (
                     <img src={state.mediaUrl} alt="Challenge location" className="game-photo" />
                 )}
+                {poster && <PosterBadge poster={poster} />}
                 <div className="timer-overlay">
                     <div className="timer-container">
                         <img src="/timer_icon.png" alt="" className="timer-icon" />
@@ -431,6 +435,7 @@ export default function GameView({
     serverNowMs,
     feedback,
     resultsFooter,
+    poster,
     currentUserId,
     onSelectLocation,
     onSubmitGuess,
@@ -442,7 +447,7 @@ export default function GameView({
             view = <GameLoadingView loadingMedia={loadingMedia} />;
             break;
         case 'viewing':
-            view = <GameViewingView state={state} remaining={remaining} />;
+            view = <GameViewingView state={state} remaining={remaining} poster={poster} />;
             break;
         case 'waiting':
             view = <GameWaitingView remaining={remaining} />;

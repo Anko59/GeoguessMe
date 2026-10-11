@@ -1,6 +1,0 @@
-# No active Cloudflared exceptions.
-# The unpatched cloudflare/cloudflared image is a build-only input and is not
-# included in AUDIT_IMAGES. make audit-images scans the locally patched final
-# geoguessme/cloudflared-tools image instead; it currently has no applicable
-# High/Critical findings. Any future exception must cover the exact final image
-# and satisfy tools/quality/image-scan-exceptions-check.sh policy.

@@ -1,3 +1,7 @@
+BlockedUser:
+  $ref: ./schemas-reports.yaml#/BlockedUser
+BlockedUsersPage:
+  $ref: ./schemas-reports.yaml#/BlockedUsersPage
 PublicChallenge:
   $ref: ./schemas-feed.yaml#/PublicChallenge
 PublicFeedPage:
@@ -120,13 +124,13 @@ GlobalRank:
       type: integer
       minimum: 0
       description: >
-        Position among every player who has guessed at least once, ordered by
-        lifetime points using standard competition ranking. Zero while the
-        player has no guesses of their own.
+        Position among every player with a group challenge guess, ordered by
+        group challenge lifetime points using standard competition ranking.
+        Zero while the player has no group challenge guesses.
     total_players:
       type: integer
       minimum: 0
-      description: Number of players who have guessed at least once.
+      description: Number of players with at least one group challenge guess.
 
 Profile:
   allOf:
@@ -135,7 +139,10 @@ Profile:
       required: [total_points, guess_count, average_score, elo, rank, global_rank, global_average_rank, global_elo_rank]
       properties:
         total_points: { type: integer, minimum: 0 }
-        guess_count: { type: integer, minimum: 0 }
+        guess_count:
+          type: integer
+          minimum: 0
+          description: Persisted group and public challenge guesses, including zero-point guesses.
         average_score: { type: number, minimum: 0 }
         elo: { type: integer, minimum: 0, description: Global all-time Elo; 0 while never compared. }
         rank: { $ref: "#/ProgressionRank" }
@@ -165,7 +172,10 @@ PublicProfile:
     username: { type: string }
     avatar: { type: string }
     total_points: { type: integer, minimum: 0 }
-    guess_count: { type: integer, minimum: 0 }
+    guess_count:
+      type: integer
+      minimum: 0
+      description: Persisted group and public challenge guesses, including zero-point guesses.
     average_score: { type: number, minimum: 0 }
     elo: { type: integer, minimum: 0 }
     rank: { $ref: "#/ProgressionRank" }

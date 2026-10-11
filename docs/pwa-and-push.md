@@ -35,6 +35,14 @@ notifications. It does **not** cache the SPA, so asset freshness is unaffected.
 `skipWaiting` + `clients.claim` keep push handling up to date without a manual
 reload.
 
+### Chat startup history
+
+Chat startup history is a local hint. The first authoritative server page
+removes unconfirmed cached entries, including messages hidden by a player block
+since the previous session. Messages delivered live during that fetch remain
+lossless; later reconnects use the stable cursor and older history loads on
+scroll.
+
 ## Web Push
 
 ### Architecture
@@ -159,3 +167,9 @@ is full, the message is dropped and logged. Permanently invalid subscriptions
 - The `apple-mobile-web-app-capable` and `apple-touch-icon` meta tags provide
   the native-like launch experience.
 - The status bar uses `black-translucent` to blend with the navy theme.
+
+Chat startup history is a local hint. The first authoritative server page
+removes unconfirmed cached entries, including messages hidden by a player block
+since the previous session. Messages delivered live during that fetch remain
+lossless; later reconnects use the stable cursor and older history loads on
+scroll.

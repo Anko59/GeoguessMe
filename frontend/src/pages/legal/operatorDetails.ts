@@ -49,8 +49,10 @@ export function contactEmailAddress(contact: OperatorContact): string {
 
 export const hostingProviders: HostingProvider[] = [
     {
-        name: 'Hetzner Cloud GmbH',
-        address: 'Pfarrstraße 1, 10909 Berlin, Germany',
+        // Cloud contracting entity and postal address, verified against
+        // https://www.hetzner.com/legal/cloud-server/ and /legal/legal-notice/.
+        name: 'Hetzner Online GmbH',
+        address: 'Industriestr. 25, 91710 Gunzenhausen, Germany',
         role: 'Application and database servers',
     },
     {
@@ -62,4 +64,4 @@ export const hostingProviders: HostingProvider[] = [
 
 export const termsUpdatedDate = '17 September 2026';
 
-export const legalNoticeUpdatedDate = '17 September 2026';
+export const legalNoticeUpdatedDate = '3 October 2026';
