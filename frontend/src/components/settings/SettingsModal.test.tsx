@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
@@ -54,6 +54,70 @@ beforeEach(() => {
 });
 
 describe('SettingsModal', () => {
+    it.each(['close', 'unmount'])(
+        'owns copy feedback timers through %s and ignores late share completion',
+        async (end) => {
+            vi.useFakeTimers();
+            try {
+                const writeText = vi.fn().mockResolvedValue(undefined);
+                Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+                mocks.post.mockResolvedValue({
+                    data: {
+                        id: 'new-inv',
+                        group_id: 'group-1',
+                        token: 'test-token',
+                        invite_url: '/group/join#invite=test-token',
+                        created_at: '2026-08-05T00:00:00Z',
+                        expires_at: '2026-08-12T00:00:00Z',
+                    },
+                });
+                const modal = (isOpen: boolean) => (
+                    <AuthContext.Provider value={authValue}>
+                        <MemoryRouter>
+                            <SettingsModal isOpen={isOpen} onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+                        </MemoryRouter>
+                    </AuthContext.Provider>
+                );
+                const view = render(modal(true));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }));
+                });
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+                });
+                expect(screen.getByText('Copied!')).toBeInTheDocument();
+                expect(vi.getTimerCount()).toBe(1);
+                await act(async () => {
+                    vi.advanceTimersByTime(2000);
+                });
+                expect(screen.queryByText('Copied!')).toBeNull();
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+                });
+                expect(vi.getTimerCount()).toBe(1);
+                let completeShare!: () => void;
+                writeText.mockImplementationOnce(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            completeShare = resolve;
+                        }),
+                );
+                fireEvent.click(screen.getByRole('button', { name: 'Copied!' }));
+                await act(async () => {
+                    if (end === 'close') view.rerender(modal(false));
+                    else view.unmount();
+                });
+                expect(vi.getTimerCount()).toBe(0);
+                await act(async () => {
+                    completeShare();
+                });
+                expect(vi.getTimerCount()).toBe(0);
+            } finally {
+                vi.useRealTimers();
+            }
+        },
+    );
+
     it('creates an invite link (shown once) and lists invites without the token', async () => {
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,

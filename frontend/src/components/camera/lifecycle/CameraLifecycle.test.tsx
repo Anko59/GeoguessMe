@@ -12,6 +12,9 @@ vi.mock('../../../api', () => ({
     default: { get: mocks.get, post: mocks.post },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
+// Face-tracker loading has its own tests; lifecycle fixtures must not fetch
+// real model/WASM assets while exercising stream readiness and switching.
+vi.mock('../lenses/useFaceTrackerPreload', () => ({ useFaceTrackerPreload: vi.fn() }));
 
 function stubUserMedia() {
     const trackStop = vi.fn();
@@ -168,9 +171,10 @@ describe('Camera lifecycle', () => {
         });
         Object.defineProperty(HTMLVideoElement.prototype, 'readyState', { configurable: true, value: 2 });
         vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-        render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument());
-        await Promise.resolve();
+        await act(async () => {
+            render(<Camera groupID="group-1" onUploadComplete={vi.fn()} />);
+        });
+        expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument();
         const switchBtn = screen.getByLabelText(/switch to back camera/i);
         expect(trackStop).not.toHaveBeenCalled();
         fireEvent.click(switchBtn);

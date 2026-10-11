@@ -362,7 +362,6 @@ jobs:
             echo "cloudflared=${{ steps.sops-promotion.outputs.cloudflared }}"
             echo "caddy_runtime=${{ steps.sops-promotion.outputs.caddy_runtime }}"
           } >> "$GITHUB_OUTPUT"
-      - run: make ci-registry-cache
       - name: Download verified Android release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:

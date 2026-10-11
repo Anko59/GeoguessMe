@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type ChangeEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { InviteCreateResponse, InviteListItem, Member } from '../../types';
@@ -49,6 +49,13 @@ export default function SettingsModal({
     const [createdInvite, setCreatedInvite] = useState<InviteCreateResponse | null>(null);
     const [creatingInvite, setCreatingInvite] = useState(false);
     const [inviteError, setInviteError] = useState('');
+    const copyAttemptRef = useRef(0);
+
+    useEffect(() => {
+        if (!copied || !isOpen) return;
+        const timer = window.setTimeout(() => setCopied(false), 2000);
+        return () => window.clearTimeout(timer);
+    }, [copied, groupId, isOpen]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -89,6 +96,7 @@ export default function SettingsModal({
         if (!isOpen) {
             return () => {
                 active = false;
+                copyAttemptRef.current += 1;
             };
         }
         void api
@@ -108,6 +116,7 @@ export default function SettingsModal({
             });
         return () => {
             active = false;
+            copyAttemptRef.current += 1;
         };
     }, [groupId, isOpen]);
 
@@ -166,11 +175,12 @@ export default function SettingsModal({
     const inviteLink = createdInvite ? publicWebURL(createdInvite.invite_url) : '';
     const copyInvite = () => {
         if (!createdInvite) return;
+        const attempt = ++copyAttemptRef.current;
         setInviteError('');
         void shareOrCopy('Join my GeoGuessMe group', `Join ${groupName} on GeoGuessMe`, inviteLink).then((result) => {
+            if (attempt !== copyAttemptRef.current) return;
             if (result === 'shared' || result === 'copied') {
                 setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
                 return;
             }
             setInviteError('Unable to copy the invite. Select and copy the link manually.');
