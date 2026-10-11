@@ -49,4 +49,24 @@ if grep -Rq 'uses: docker/setup-buildx-action@' "$root/.github/workflows"; then
     echo 'A workflow bypasses the shared Docker pull-cache setup' >&2
     exit 1
 fi
-echo 'CI registry-cache contracts PASSED: preservation, idempotence, invalid configuration, host guard, daemon and Buildx paths'
+cache_before_builder() {
+    awk '
+        /^  [a-zA-Z0-9_-]+:/ { builder = 0 }
+        /uses: \.\/\.github\/actions\/setup-buildx/ { builder = 1 }
+        /run: make ci-registry-cache/ && builder { exit 1 }
+    ' "$1"
+}
+printf '  promote:\n      - uses: ./.github/actions/setup-buildx\n      - run: make ci-registry-cache\n' >"$tmp/late-cache.yml"
+if cache_before_builder "$tmp/late-cache.yml"; then
+    echo 'Late daemon reconfiguration after Buildx was accepted' >&2
+    exit 1
+fi
+printf '  first:\n      - uses: ./.github/actions/setup-buildx\n  second:\n      - run: make ci-registry-cache\n' >"$tmp/separate-jobs.yml"
+cache_before_builder "$tmp/separate-jobs.yml"
+for workflow in "$root"/.github/workflows/*.yml; do
+    if ! cache_before_builder "$workflow"; then
+        echo "Registry cache runs after Buildx in ${workflow##*/}" >&2
+        exit 1
+    fi
+done
+echo 'CI registry-cache contracts PASSED: preservation, idempotence, invalid configuration, host guard, daemon and Buildx paths, job ordering'
