@@ -1,9 +1,9 @@
 # Operations
 
-Go compiler updates align application/tooling pins. Upstream binaries stay
-vendor-managed; complete image scans block known exploitation and confirmed
-deployment exposure, while retaining other findings as advisories. See
-[image security scanning](security-scanning.md).
+Go 1.27.3 fixes GO-2026-6809 in app/tooling builds. Rebuild local tools with
+`make bootstrap-preflight`. Upstream binaries remain vendor-managed. Image scans
+block known exploitation and confirmed deployment exposure; retain other
+findings as advisories. See [image security scanning](security-scanning.md).
 
 ## Health endpoints
 
