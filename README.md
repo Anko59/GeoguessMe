@@ -28,6 +28,8 @@
 GeoGuessMe is a multiplayer location game for the moments that deserve a story.
 Create a private group, send a photo or video challenge, and let your friends
 guess where it was taken. Every guess becomes part of the group’s leaderboard.
+Unread badges on My Groups show the same server-saved counts as the feed inbox,
+so you can spot new messages and keep read state across devices.
 
 The app is a responsive, installable web app at
 **[geoguessme.com](https://geoguessme.com)** and shares that React application
