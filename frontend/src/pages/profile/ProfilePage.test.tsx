@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext } from '../../context/AuthContext';
@@ -114,9 +114,17 @@ beforeEach(() => {
 describe('ProfilePage', () => {
     it('confirms a block and hides profile content only after success', async () => {
         mocks.get.mockResolvedValueOnce({ data: { ...profile, id: 'user-2' } });
+        let finishLeaderboard!: () => void;
+        mocks.profileLeaderboard.mockReturnValueOnce(
+            new Promise((resolve) => {
+                finishLeaderboard = () => resolve({ items: [], next_cursor: '' });
+            }),
+        );
         renderProfile('/profile/user-2');
-        expect(await screen.findByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
-        const button = screen.getByRole('button', { name: 'Block player' });
+        const button = await screen.findByRole('button', { name: 'Block player' });
+        expect(screen.getByText('Loading feed rankings…')).toBeInTheDocument();
+        await act(async () => finishLeaderboard());
+        expect(screen.getByRole('heading', { name: 'No scores yet' })).toBeInTheDocument();
         await waitFor(() => expect(button).toBeEnabled());
         vi.mocked(window.confirm).mockReturnValueOnce(false);
         fireEvent.click(button);
