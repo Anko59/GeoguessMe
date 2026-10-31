@@ -56,6 +56,8 @@ describe('GroupsList', () => {
         );
         expect(await screen.findByLabelText('1 unread message')).toHaveTextContent('1');
         expect(screen.getByLabelText('123 unread messages')).toHaveTextContent('99+');
+        expect(screen.getByRole('img', { name: '123 unread messages' })).not.toHaveAttribute('aria-live');
+        expect(screen.getByRole('link', { name: /Travel/ }).querySelector('[role="status"]')).toBeNull();
         expect(screen.getByRole('link', { name: /Family/ }).querySelector('.group-unread-badge')).toBeNull();
         expect(mocks.inbox).toHaveBeenCalledWith(expect.any(AbortSignal));
     });
@@ -128,7 +130,7 @@ describe('GroupsList', () => {
         expect(mocks.inbox).toHaveBeenCalledTimes(3);
     });
 
-    it('does not overlap requests or apply a delayed response after unmount', async () => {
+    it('does not overlap requests and aborts the pending request on unmount', async () => {
         vi.useFakeTimers();
         let complete: (items: unknown[]) => void = () => undefined;
         mocks.inbox.mockImplementation(
@@ -147,11 +149,93 @@ describe('GroupsList', () => {
         });
         fireEvent.focus(window);
         expect(mocks.inbox).toHaveBeenCalledTimes(1);
+        const signal = mocks.inbox.mock.calls[0][0] as AbortSignal;
+        expect(signal.aborted).toBe(false);
         unmount();
+        expect(signal.aborted).toBe(true);
         await act(async () => {
             complete([{ id: 'stale', name: 'Stale', unread_count: 4 }]);
         });
-        expect(screen.queryByText('Stale')).not.toBeInTheDocument();
+        fireEvent.focus(window);
+        expect(mocks.inbox).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads initially in a hidden tab, then pauses background polling', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        mocks.inbox.mockResolvedValue([{ id: 'hidden', name: 'Friends', unread_count: 0 }]);
+        render(
+            <MemoryRouter>
+                <GroupsList />
+            </MemoryRouter>,
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(screen.getByText('Friends')).toBeInTheDocument();
+        expect(screen.queryByText('Loading your groups…')).not.toBeInTheDocument();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(30000);
+        });
+        expect(mocks.inbox).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps loaded cards and refresh wording while retrying another failure', async () => {
+        mocks.inbox.mockResolvedValue([{ id: 'retry', name: 'Friends', unread_count: 3 }]);
+        render(
+            <MemoryRouter>
+                <GroupsList />
+            </MemoryRouter>,
+        );
+        await screen.findByText('Friends');
+        mocks.inbox.mockRejectedValueOnce(new Error('offline'));
+        fireEvent.focus(window);
+        await screen.findByText('Unable to refresh unread counts. Try again.');
+        let rejectRetry!: (reason: Error) => void;
+        mocks.inbox.mockImplementationOnce(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectRetry = reject;
+                }),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByLabelText('3 unread messages')).toBeInTheDocument();
+        expect(screen.queryByText('Loading your groups…')).not.toBeInTheDocument();
+        await act(async () => {
+            rejectRetry(new Error('still offline'));
+        });
+        expect(screen.getByText('Unable to refresh unread counts. Try again.')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /Friends/ })).toBeInTheDocument();
+    });
+
+    it('resumes polling after a request times out', async () => {
+        vi.useFakeTimers();
+        mocks.inbox.mockResolvedValue([{ id: 'timeout', name: 'Friends', unread_count: 1 }]);
+        render(
+            <MemoryRouter>
+                <GroupsList />
+            </MemoryRouter>,
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        mocks.inbox.mockImplementationOnce(
+            () =>
+                new Promise((_resolve, reject) => {
+                    window.setTimeout(() => reject(new Error('timeout')), 10000);
+                }),
+        );
+        fireEvent.focus(window);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10000);
+        });
+        expect(screen.getByText('Unable to refresh unread counts. Try again.')).toBeInTheDocument();
+        expect(screen.getByLabelText('1 unread message')).toBeInTheDocument();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5000);
+        });
+        expect(mocks.inbox).toHaveBeenCalledTimes(3);
+        expect(screen.queryByText('Unable to refresh unread counts. Try again.')).not.toBeInTheDocument();
     });
 
     it('renders empty and populated groups, including a retry', async () => {

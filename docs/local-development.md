@@ -81,6 +81,13 @@ excluded by the server; counts above 99 display `99+`, with the full count
 available to screen readers. A failed refresh keeps the existing cards visible
 and offers Retry.
 
+Keep A in the visible chat while B sends another message, then return to My
+Groups: the badge stays cleared after the read update succeeds. Messages
+received while A is in a hidden tab or another group panel are marked read when
+the chat becomes visible again. Initial list loading works in a hidden tab;
+subsequent polling pauses there. Inbox requests time out after 10 seconds so
+later refreshes can recover. Retry keeps loaded cards and counts visible.
+
 ## Useful targets
 
 ```text

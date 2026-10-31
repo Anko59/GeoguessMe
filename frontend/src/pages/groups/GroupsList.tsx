@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getAPIErrorMessage, groupsAPI } from '../../api';
 import type { GroupInbox } from '../../types';
@@ -21,7 +21,7 @@ function GroupCard({ group }: { group: GroupInbox }) {
             {group.unread_count > 0 && (
                 <span
                     className="group-unread-badge"
-                    role="status"
+                    role="img"
                     aria-label={`${group.unread_count} unread ${group.unread_count === 1 ? 'message' : 'messages'}`}
                 >
                     {group.unread_count > 99 ? '99+' : group.unread_count}
@@ -37,19 +37,19 @@ export default function GroupsList() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [attempt, setAttempt] = useState(0);
+    const loaded = useRef(false);
 
     useEffect(() => {
         let active = true;
         let pending = false;
-        let loaded = false;
         const controller = new AbortController();
         const fetchGroups = async () => {
-            if (pending || document.visibilityState !== 'visible') return;
+            if (pending || (loaded.current && document.visibilityState !== 'visible')) return;
             pending = true;
             try {
                 const items = await groupsAPI.inbox(controller.signal);
                 if (active) {
-                    loaded = true;
+                    loaded.current = true;
                     setGroups(items ?? []);
                     setError('');
                 }
@@ -58,7 +58,7 @@ export default function GroupsList() {
                     setError(
                         getAPIErrorMessage(
                             requestError,
-                            loaded
+                            loaded.current
                                 ? 'Unable to refresh unread counts. Try again.'
                                 : 'Unable to load groups. Try again.',
                         ),
@@ -85,7 +85,7 @@ export default function GroupsList() {
 
     const retry = () => {
         setError('');
-        setLoading(true);
+        if (!loaded.current) setLoading(true);
         setAttempt((value) => value + 1);
     };
 

@@ -17,6 +17,13 @@ import api, {
 const validSession = { access_token: 'fresh', user: { id: 'player-1', username: 'Explorer' }, expires_in: 900 };
 
 describe('api client', () => {
+    it('bounds inbox requests so a stalled refresh cannot stop later polling', async () => {
+        const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [] });
+        const signal = new AbortController().signal;
+        await expect(groupsAPI.inbox(signal)).resolves.toEqual([]);
+        expect(get).toHaveBeenCalledWith('/user/groups/inbox', { signal, timeout: 10000 });
+        get.mockRestore();
+    });
     it('leaves the selected group without clearing the account session', async () => {
         const remove = vi.spyOn(api, 'delete').mockResolvedValue({ status: 204 });
         setAccessToken('signed-in');
