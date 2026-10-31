@@ -13,11 +13,82 @@ import (
 	"testing"
 	"time"
 
+	"geoguessme/internal/models"
 	"geoguessme/internal/repository/groups/atlas"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInboxOrdersByLatestMessageWithEmptyGroupsLast(t *testing.T) {
+	viewer := signup(t, unique("viewer"), unique("viewer")+"@example.test", "StrongPassword123")
+	older, _ := createGroup(t, viewer.access, "Older messages")
+	recent, _ := createGroup(t, viewer.access, "Recent messages")
+	empty, _ := createGroup(t, viewer.access, "New empty group")
+	db := testDB(t)
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	for i, id := range []string{older, recent, empty} {
+		_, err := db.Exec(t.Context(), `UPDATE groups SET created_at = $2 WHERE id = $1`, id, now.Add(time.Duration(i)*time.Hour))
+		require.NoError(t, err)
+	}
+	for i, id := range []string{older, recent} {
+		_, err := db.Exec(t.Context(), `INSERT INTO messages(id, group_id, user_id, kind, content, created_at) VALUES ($1,$2,$3,'text','Hello',$4)`, uuid.NewString(), id, viewer.userID, now.Add(time.Duration(i)*time.Minute))
+		require.NoError(t, err)
+	}
+	getOrder := func() []string {
+		resp, data := doJSON(t, http.MethodGet, "/api/v1/user/groups/inbox", nil, viewer.access, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var items []models.GroupInbox
+		require.NoError(t, jsonUnmarshal(data, &items))
+		ids := make([]string, 0, len(items))
+		for _, item := range items {
+			ids = append(ids, item.ID)
+		}
+		return ids
+	}
+	require.Equal(t, []string{recent, older, empty}, getOrder())
+	_, err := db.Exec(t.Context(), `INSERT INTO messages(id, group_id, user_id, kind, content, created_at) VALUES ($1,$2,$3,'text','New activity',$4)`, uuid.NewString(), older, viewer.userID, now.Add(3*time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, []string{older, recent, empty}, getOrder())
+}
+
+func TestLeaveGroupRemovesOnlyOwnMembershipAndCanRejoin(t *testing.T) {
+	alice := signup(t, unique("alice"), unique("alice")+"@example.test", "StrongPassword123")
+	bob := signup(t, unique("bob"), unique("bob")+"@example.test", "StrongPassword123")
+	groupID, invite := createGroup(t, alice.access, "Leave group")
+	joinGroup(t, bob.access, invite)
+	other, _ := createGroup(t, alice.access, "Keep group")
+	resp, _ := doJSON(t, http.MethodPut, "/api/v1/group/notifications?group_id="+groupID, map[string]bool{"enabled": false}, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodPut, "/api/v1/user/groups/inbox/read?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodDelete, "/api/v1/group/leave?group_id="+groupID, nil, "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	for range 2 {
+		resp, _ = doJSON(t, http.MethodDelete, "/api/v1/group/leave?group_id="+groupID, nil, alice.access, nil)
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	}
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/details?id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/details?id="+groupID, nil, bob.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp, _ = doJSON(t, http.MethodGet, "/api/v1/group/details?id="+other, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp, data := doJSON(t, http.MethodGet, "/api/v1/user/groups/inbox", nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var items []models.GroupInbox
+	require.NoError(t, jsonUnmarshal(data, &items))
+	require.Len(t, items, 1)
+	require.Equal(t, other, items[0].ID)
+	joinGroup(t, alice.access, invite)
+	resp, data = doJSON(t, http.MethodGet, "/api/v1/group/notifications?group_id="+groupID, nil, alice.access, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"enabled":true}`, string(data))
+	db := testDB(t)
+	var count int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT COUNT(*) FROM group_message_reads WHERE group_id=$1 AND user_id=$2`, groupID, alice.userID).Scan(&count))
+	require.Zero(t, count)
+}
 
 func attemptUpload(t *testing.T, bearer, groupID string) int {
 	t.Helper()

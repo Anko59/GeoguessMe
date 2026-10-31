@@ -35,6 +35,22 @@ async function createOwnerScenario(browser: Browser, contextOptions: BrowserCont
 }
 
 test.describe('Group operations', () => {
+    test('leaves a group from its settings and keeps account logout available', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            await owner.page.getByRole('button', { name: 'Open group settings' }).click();
+            const dialog = owner.page.getByRole('dialog');
+            await expect(dialog.getByRole('button', { name: 'Logout' })).toHaveCount(0);
+            await dialog.getByRole('button', { name: 'Leave the group' }).click();
+            await expect(owner.page).toHaveURL(/\/groups$/);
+            await expect(owner.page.locator(`[data-group-id="${owner.groupID}"]`)).toHaveCount(0);
+            await owner.page.getByRole('link', { name: 'Settings', exact: true }).click();
+            await expect(owner.page).toHaveURL(/\/settings$/);
+            await expect(owner.page.getByRole('button', { name: 'Logout', exact: true })).toBeVisible();
+        } finally {
+            await owner.context.close();
+        }
+    });
     test('unread group badges persist across reloads and clear after opening chat', async ({
         browser,
         contextOptions,

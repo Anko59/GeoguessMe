@@ -255,7 +255,7 @@ func (h *Hub) DisconnectUser(userID string) {
 }
 
 // DisconnectUserInGroup closes every live socket for a user within one group.
-// A future membership-removal path uses it to revoke access to a single group
+// The membership-removal path uses it to revoke access to a single group
 // without disturbing the user's sockets elsewhere.
 func (h *Hub) DisconnectUserInGroup(userID, groupID string) {
 	select {

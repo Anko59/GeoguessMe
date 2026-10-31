@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	chatHub "geoguessme/internal/chat"
@@ -356,4 +357,35 @@ type resultsGuess struct {
 	Avatar        string         `json:"avatar"`
 	MapPin        *models.MapPin `json:"map_pin,omitempty"`
 	EloDelta      int            `json:"elo_delta"`
+}
+
+// LeaveGroup revokes the authenticated user's membership without deleting the
+// group or its shared history. It is idempotent, including for non-members.
+func (a *GameAPI) LeaveGroup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		MethodNotAllowed(w)
+		return
+	}
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	if err := ValidateID(groupID, "group_id"); err != nil {
+		WriteError(w, http.StatusBadRequest, "missing_group_id", "group_id must be a valid UUID")
+		return
+	}
+	userID := GetUserIDFromContext(r)
+	leave := func() error { return a.groups.Leave(r.Context(), groupID, userID) }
+	var err error
+	if a.hub != nil {
+		// Order membership removal against pending private message deliveries.
+		err = a.hub.SerializePrivacyChange(leave)
+	} else {
+		err = leave()
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal_error", "Unable to leave group")
+		return
+	}
+	if a.hub != nil {
+		a.hub.DisconnectUserInGroup(userID, groupID)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

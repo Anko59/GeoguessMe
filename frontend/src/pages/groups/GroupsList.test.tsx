@@ -25,6 +25,24 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('GroupsList', () => {
+    it('preserves server message order and updates it when another group becomes active', async () => {
+        const older = { id: 'old', name: 'Older', unread_count: 0 };
+        const recent = { id: 'new', name: 'Recent', unread_count: 0 };
+        const empty = { id: 'empty', name: 'Empty', unread_count: 0 };
+        mocks.inbox.mockResolvedValue([recent, older, empty]);
+        render(
+            <MemoryRouter>
+                <GroupsList />
+            </MemoryRouter>,
+        );
+        await screen.findByText('Recent');
+        const order = () =>
+            Array.from(document.querySelectorAll('.group-card')).map((card) => card.getAttribute('data-group-id'));
+        expect(order()).toEqual(['new', 'old', 'empty']);
+        mocks.inbox.mockResolvedValue([older, recent, empty]);
+        fireEvent.focus(window);
+        await waitFor(() => expect(order()).toEqual(['old', 'new', 'empty']));
+    });
     it('shows accessible server counts, caps large badges, and hides zero counts', async () => {
         mocks.inbox.mockResolvedValue([
             { id: 'unread', name: 'Friends', unread_count: 1 },

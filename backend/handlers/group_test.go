@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"geoguessme/internal/chat"
 	"geoguessme/internal/models"
 
 	"github.com/pashagolub/pgxmock/v5"
@@ -189,4 +190,33 @@ func decodeJSONBody(recorder *httptest.ResponseRecorder, target any) error {
 		return errors.New("missing application/json content type")
 	}
 	return json.NewDecoder(recorder.Body).Decode(target)
+}
+
+func TestLeaveGroup(t *testing.T) {
+	const groupID = "00000000-0000-0000-0000-000000000001"
+	for _, tc := range []struct {
+		method, query string
+		status        int
+	}{
+		{http.MethodGet, "", 405},
+		{http.MethodDelete, "", 400},
+		{http.MethodDelete, "?group_id=invalid", 400},
+		{http.MethodDelete, "?group_id=" + groupID, 204},
+		{http.MethodDelete, "?group_id=" + groupID, 500},
+	} {
+		pool := newMockPool(t)
+		api := newGameAPI(t, pool)
+		if tc.status == 204 {
+			api.hub = chat.NewHub(nil, nil)
+			pool.ExpectExec("WITH preferences AS").WithArgs(groupID, "viewer").WillReturnResult(pgxmock.NewResult("DELETE", 1))
+		}
+		if tc.status == 500 {
+			pool.ExpectExec("WITH preferences AS").WithArgs(groupID, "viewer").WillReturnError(errors.New("private database details"))
+		}
+		recorder := httptest.NewRecorder()
+		api.LeaveGroup(recorder, requestWithUser(tc.method, "/"+tc.query, "", "viewer"))
+		if recorder.Code != tc.status || strings.Contains(recorder.Body.String(), "private database details") {
+			t.Fatalf("LeaveGroup = %d %s", recorder.Code, recorder.Body.String())
+		}
+	}
 }

@@ -272,8 +272,19 @@
     text-align: center;
 }
 
-.logout-section .logout-btn {
+.leave-group-btn {
     width: 100%;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: 0.75rem 1rem;
+    color: var(--danger);
+    background: var(--surface);
+    border: 1px solid #f3b7b2;
+    border-radius: var(--radius-sm);
+    font-weight: 750;
 }
 
 @keyframes modal-arrive {

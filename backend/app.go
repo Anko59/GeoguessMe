@@ -291,6 +291,7 @@ func (a *App) routes() http.Handler {
 	mux.Handle("DELETE /api/v1/users/{id}/block", protected(a.Blocks.Change))
 	mux.Handle("/api/v1/group/create", protected(a.Game.CreateGroup))
 	mux.Handle("/api/v1/group/join", protected(a.Game.JoinGroup))
+	mux.Handle("/api/v1/group/leave", protected(a.Game.LeaveGroup))
 	mux.Handle("POST /api/v1/group/invites", protected(a.Game.CreateInvite))
 	mux.Handle("GET /api/v1/group/invites", protected(a.Game.ListInvites))
 	mux.Handle("POST /api/v1/group/invites/preview", limit("write")(http.HandlerFunc(a.Game.PreviewInvite)))

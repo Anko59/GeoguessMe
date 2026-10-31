@@ -98,6 +98,8 @@ paths:
     $ref: ./openapi/paths/groups.yaml#/createGroup
   /group/join:
     $ref: ./openapi/paths/groups.yaml#/joinGroup
+  /group/leave:
+    $ref: ./openapi/paths/groups.yaml#/leaveGroup
   /group/invites:
     $ref: ./openapi/paths/groups.yaml#/groupInvites
   /group/invites/preview:
