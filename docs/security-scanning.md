@@ -17,10 +17,20 @@ maintenance without establishing deployment exploitability.
   regressions retained.
 - `make audit-images` blocks any finding in the fresh
   [CISA Known Exploited Vulnerabilities catalogue](https://www.cisa.gov/known-exploited-vulnerabilities-catalog),
-  regardless of severity or whether a fix is available. Confirmed deployment
-  exposures outside CISA are additive blockers in
+  regardless of severity or whether a fix is available, unless a reviewed
+  not-affected triage entry covers that exact CVE and package. Confirmed
+  deployment exposures outside CISA are additive blockers in
   [blocking-cves.tsv](../tools/quality/image-audit/blocking-cves.tsv), with an
-  accountable owner and evidence. No exclusion can suppress these blockers.
+  accountable owner and evidence; no triage entry can suppress those.
+- [not-affected.tsv](../tools/quality/image-audit/not-affected.tsv) records
+  VEX-style triage: CVE, package, owner, an
+  [OpenVEX justification](https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md#status-justifications),
+  an expiry at most 31 days out, and the exposure evidence. An entry silences
+  only that CVE in that package, so the same CVE in any other package still
+  blocks. The finding stays visible as `ADVISORY`. Malformed, expired,
+  duplicate, or confirmed-exposed entries fail the audit until they are fixed,
+  renewed after re-review, or removed. Remove an entry as soon as the upstream
+  image ships the fix.
 - Other runtime findings remain `ADVISORY`, with complete JSON and SPDX
   evidence. This explicitly accepts residual vendor risk; absence from CISA is
   not evidence of safety, non-reachability, or a completed exploitability
