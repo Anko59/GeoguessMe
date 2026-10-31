@@ -2,6 +2,7 @@ import { test, expect } from './support/fixtures';
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from '@playwright/test';
 import {
     createInviteFromSettings,
+    expectConnected,
     joinGroupViaInvite,
     newAuthContext,
     signupViaUI,
@@ -34,6 +35,68 @@ async function createOwnerScenario(browser: Browser, contextOptions: BrowserCont
 }
 
 test.describe('Group operations', () => {
+    test('leaves a group from its settings and keeps account logout available', async ({ browser, contextOptions }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        try {
+            await owner.page.getByRole('button', { name: 'Open group settings' }).click();
+            const dialog = owner.page.getByRole('dialog');
+            await expect(dialog.getByRole('button', { name: 'Logout' })).toHaveCount(0);
+            await dialog.getByRole('button', { name: 'Leave the group' }).click();
+            await expect(owner.page).toHaveURL(/\/groups$/);
+            await expect(owner.page.locator(`[data-group-id="${owner.groupID}"]`)).toHaveCount(0);
+            await owner.page.getByRole('link', { name: 'Settings', exact: true }).click();
+            await expect(owner.page).toHaveURL(/\/settings$/);
+            await expect(owner.page.getByRole('button', { name: 'Logout', exact: true })).toBeVisible();
+        } finally {
+            await owner.context.close();
+        }
+    });
+    test('unread group badges persist across reloads and clear after opening chat', async ({
+        browser,
+        contextOptions,
+    }) => {
+        const owner = await createOwnerScenario(browser, contextOptions);
+        const memberContext = await newAuthContext(browser, contextOptions);
+        try {
+            const member = await memberContext.newPage();
+            await signupViaUI(member);
+            await joinGroupViaInvite(member, owner.inviteUrl, owner.groupID);
+            await expectConnected(member);
+            const markRead = () =>
+                owner.page.waitForResponse(
+                    (response) => response.url().includes('/user/groups/inbox/read?') && response.status() === 204,
+                );
+            const initialReceipt = markRead();
+            await owner.page.reload();
+            await initialReceipt;
+            await expectConnected(owner.page);
+            await owner.page.goto('/groups');
+            const card = owner.page.locator(`[data-group-id="${owner.groupID}"]`);
+            await expect(card).toBeVisible();
+            await expect(card.locator('.group-unread-badge')).toHaveCount(0);
+
+            const text = `Unread group message ${Date.now()}`;
+            await member.locator('#chat-message').fill(text);
+            await member.locator('form.message-input-container').getByRole('button', { name: 'Send' }).click();
+            await expect(member.locator('.message-container').filter({ hasText: text })).toBeVisible();
+            await owner.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+            await expect(card.getByLabel('1 unread message')).toHaveText('1');
+            await owner.page.reload();
+            await expect(card.getByLabel('1 unread message')).toHaveText('1');
+
+            const receipt = markRead();
+            await card.click();
+            await receipt;
+            await expect(owner.page.locator('.message-container').filter({ hasText: text })).toBeVisible();
+            await owner.page.goto('/groups');
+            await expect(card).toBeVisible();
+            await expect(card.locator('.group-unread-badge')).toHaveCount(0);
+        } finally {
+            await memberContext.close();
+            await owner.context.close();
+        }
+    });
+
     test('owner can see the group in groups list', async ({ browser, contextOptions }) => {
         const owner = await createOwnerScenario(browser, contextOptions);
         try {

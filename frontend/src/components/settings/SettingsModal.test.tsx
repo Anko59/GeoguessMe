@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get, post: mocks.post, put: mocks.put, delete: mocks.delete },
+    groupsAPI: { leave: vi.fn() },
 }));
 
 const user: User = {
@@ -54,6 +55,17 @@ beforeEach(() => {
 });
 
 describe('SettingsModal', () => {
+    it('offers leaving the group without account logout', async () => {
+        render(
+            <MemoryRouter>
+                <SettingsModal isOpen onClose={vi.fn()} groupName="Friends" groupId="group-1" />
+            </MemoryRouter>,
+        );
+        expect(screen.getByRole('button', { name: 'Leave the group' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Logout' })).not.toBeInTheDocument();
+        await screen.findByText('No active invites yet.');
+        expect(authValue.logout).not.toHaveBeenCalled();
+    });
     it.each(['close', 'unmount'])(
         'owns copy feedback timers through %s and ignores late share completion',
         async (end) => {

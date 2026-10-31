@@ -40,7 +40,7 @@ func TestUserInboxReturnsUnreadCountAndLatestMetadata(t *testing.T) {
 	mock := newMockPool(t)
 	repo := NewRepository(mock)
 	now := time.Date(2026, 9, 18, 10, 0, 0, 0, time.UTC)
-	mock.ExpectQuery("SELECT g.id, g.name").WithArgs("viewer").WillReturnRows(
+	mock.ExpectQuery("SELECT g.id, g.name.*ORDER BY latest.created_at DESC NULLS LAST, g.created_at DESC, g.id DESC").WithArgs("viewer").WillReturnRows(
 		pgxmock.NewRows([]string{"id", "name", "unread", "message_id", "kind", "username", "message_at"}).
 			AddRow("group-1", "Paris", int64(3), "message-1", "text", "Alice", now).
 			AddRow("group-2", "No chat", int64(0), nil, nil, nil, nil),
@@ -55,6 +55,22 @@ func TestUserInboxReturnsUnreadCountAndLatestMetadata(t *testing.T) {
 	}
 	if inbox[1].LatestMessage != nil {
 		t.Fatalf("empty group has latest message: %+v", inbox[1].LatestMessage)
+	}
+}
+
+func TestLeaveScopesAllDeletesAndPropagatesErrors(t *testing.T) {
+	for _, dbErr := range []error{nil, errors.New("database unavailable")} {
+		mock := newMockPool(t)
+		repo := NewRepository(mock)
+		expected := mock.ExpectExec(`WITH preferences AS \( DELETE FROM group_notification_preferences WHERE group_id = \$1 AND user_id = \$2 \), reads AS \( DELETE FROM group_message_reads WHERE group_id = \$1 AND user_id = \$2 \), tickets AS \( DELETE FROM websocket_tickets WHERE group_id = \$1 AND user_id = \$2 \) DELETE FROM group_members WHERE group_id = \$1 AND user_id = \$2`).WithArgs("group", "viewer")
+		if dbErr != nil {
+			expected.WillReturnError(dbErr)
+		} else {
+			expected.WillReturnResult(pgxmock.NewResult("DELETE", 0))
+		}
+		if err := repo.Leave(t.Context(), "group", "viewer"); !errors.Is(err, dbErr) {
+			t.Fatalf("Leave = %v, want %v", err, dbErr)
+		}
 	}
 }
 

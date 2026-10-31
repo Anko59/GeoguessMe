@@ -250,7 +250,11 @@ export const publicFeedAPI = {
 };
 
 export const groupsAPI = {
-    inbox: async (signal?: AbortSignal) => (await api.get<GroupInbox[]>('/user/groups/inbox', { signal })).data,
+    leave: async (groupID: string) => {
+        await api.delete('/group/leave', { params: { group_id: groupID } });
+    },
+    inbox: async (signal?: AbortSignal) =>
+        (await api.get<GroupInbox[]>('/user/groups/inbox', { signal, timeout: 10000 })).data,
     markRead: async (groupID: string, signal?: AbortSignal) => {
         await api.put('/user/groups/inbox/read', undefined, { params: { group_id: groupID }, signal });
     },

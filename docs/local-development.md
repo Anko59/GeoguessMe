@@ -70,6 +70,24 @@ A genuinely new Google or Keycloak email identity must choose an
 empty-by-default GeoGuessMe username after verification. Keycloak's provider
 username is never silently copied into the public player profile.
 
+## Check unread group badges
+
+Use two accounts in separate browser profiles and join the same group by
+invitation. Leave account A on My Groups and send a message from B. A's badge
+refreshes within 15 seconds while the page is visible, or on window focus.
+Reloading preserves the count. Open the group as A, then return to My Groups:
+the badge reflects the read state shared with the feed inbox. Own messages are
+excluded by the server; counts above 99 display `99+`, with the full count
+available to screen readers. A failed refresh keeps the existing cards visible
+and offers Retry.
+
+Keep A in the visible chat while B sends another message, then return to My
+Groups: the badge stays cleared after the read update succeeds. Messages
+received while A is in a hidden tab or another group panel are marked read when
+the chat becomes visible again. Initial list loading works in a hidden tab;
+subsequent polling pauses there. Inbox requests time out after 10 seconds so
+later refreshes can recover. Retry keeps loaded cards and counts visible.
+
 ## Useful targets
 
 ```text

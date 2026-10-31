@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,11 +7,12 @@ import GroupView from './GroupView';
 
 const mocks = vi.hoisted(() => ({
     get: vi.fn(),
+    markRead: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
     default: { get: mocks.get },
-    groupsAPI: { markRead: vi.fn().mockResolvedValue(undefined) },
+    groupsAPI: { markRead: mocks.markRead },
     getAPIErrorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
 }));
 
@@ -157,6 +158,8 @@ function renderGroupView(groupId: string, auth = authValue()) {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.get.mockReset();
+    mocks.markRead.mockReset().mockResolvedValue(undefined);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     mockUseGroupMessages.mockReset();
     mockUseGroupMessages.mockReturnValue({
         messages: [],
@@ -174,6 +177,71 @@ beforeEach(() => {
 });
 
 describe('GroupView', () => {
+    it('marks live messages read only while chat is visible and catches up on return', async () => {
+        const result = mockUseGroupMessages();
+        const view = renderGroupView('group-1');
+        await screen.findByText('Test Group');
+        expect(mocks.markRead).toHaveBeenCalledTimes(1);
+        const update = async (id: string) => {
+            mockUseGroupMessages.mockReturnValue({ ...result, messages: [{ id, group_id: 'group-1', kind: 'text' }] });
+            await act(async () => {
+                view.rerender(groupTree('group-1'));
+            });
+        };
+        await update('live-1');
+        await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(2));
+        const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        await update('live-2');
+        expect(mocks.markRead).toHaveBeenCalledTimes(2);
+        visibility.mockReturnValue('visible');
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(mocks.markRead).toHaveBeenCalledTimes(3);
+        fireEvent.click(screen.getByTestId('tab-leaderboard'));
+        await update('live-3');
+        expect(mocks.markRead).toHaveBeenCalledTimes(3);
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('tab-chat'));
+        });
+        await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(4));
+        const signal = mocks.markRead.mock.calls[3][1] as AbortSignal;
+        view.unmount();
+        expect(signal.aborted).toBe(true);
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(mocks.markRead).toHaveBeenCalledTimes(4);
+    });
+
+    it('clears a read marker error after a later successful update', async () => {
+        mocks.markRead.mockRejectedValueOnce(new Error('read unavailable'));
+        renderGroupView('group-1');
+        expect(await screen.findByRole('alert')).toHaveTextContent('read unavailable');
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('ignores a superseded read request when visibility changes', async () => {
+        let fail!: (reason: Error) => void;
+        mocks.markRead.mockImplementationOnce(
+            () =>
+                new Promise((_resolve, reject) => {
+                    fail = reject;
+                }),
+        );
+        renderGroupView('group-1');
+        await screen.findByText('Test Group');
+        const signal = mocks.markRead.mock.calls[0][1] as AbortSignal;
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(signal.aborted).toBe(true);
+        await act(async () => {
+            fail(new Error('stale failure'));
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
     it('opens the current group globe from chat and launches its challenges', async () => {
         renderGroupView('group-1');
         const globeButton = await screen.findByRole('button', { name: 'Open group globe' });
@@ -387,7 +455,9 @@ describe('GroupView', () => {
         expect(screen.queryByTestId('game')).toBeNull();
         fireEvent.click(screen.getByTestId('chat-challenge'));
         expect(screen.getByTestId('game')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Close game' }));
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Close game' }));
+        });
         expect(screen.queryByTestId('game')).toBeNull();
     });
 });

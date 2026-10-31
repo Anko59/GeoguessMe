@@ -43,6 +43,21 @@ func (r *Repository) AddMember(ctx context.Context, member *models.GroupMember) 
 	return err
 }
 
+// Leave removes only the caller's membership and per-group preferences in one
+// atomic statement. History and scores remain intact. Repeated leaves succeed.
+func (r *Repository) Leave(ctx context.Context, groupID, userID string) error {
+	_, err := r.pool.Exec(ctx, `
+		WITH preferences AS (
+		    DELETE FROM group_notification_preferences WHERE group_id = $1 AND user_id = $2
+		), reads AS (
+		    DELETE FROM group_message_reads WHERE group_id = $1 AND user_id = $2
+		), tickets AS (
+		    DELETE FROM websocket_tickets WHERE group_id = $1 AND user_id = $2
+		)
+		DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	return err
+}
+
 // Members returns every member of groupID ordered by username.
 func (r *Repository) Members(ctx context.Context, groupID string) ([]Member, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -145,7 +160,7 @@ func (r *Repository) UserInbox(ctx context.Context, userID string) ([]models.Gro
 		    ORDER BY m.created_at DESC, m.id DESC
 		    LIMIT 1
 		) latest ON true
-		ORDER BY COALESCE(latest.created_at, g.created_at) DESC, g.id DESC`, userID)
+		ORDER BY latest.created_at DESC NULLS LAST, g.created_at DESC, g.id DESC`, userID)
 	if err != nil {
 		return nil, err
 	}

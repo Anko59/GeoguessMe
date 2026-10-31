@@ -76,12 +76,34 @@ export default function GroupView() {
         if (!firstPassForGroup && latest) refreshParty();
     }, [id, messages, refreshParty]);
 
+    const latestMessageID = messages.at(-1)?.id;
+    const chatVisible = activeTab === 'chat' && !gameMessage && globeGroupID !== id && !settingsOpen;
     useEffect(() => {
-        if (!id) return;
-        void groupsAPI.markRead(id).catch((requestError: unknown) => {
-            setInboxState({ id, error: getAPIErrorMessage(requestError, 'Unable to update group inbox.') });
-        });
-    }, [id]);
+        if (!id || !chatVisible || groupError) return;
+        let pendingController: AbortController | undefined;
+        const markRead = () => {
+            pendingController?.abort();
+            if (document.visibilityState !== 'visible') return;
+            const controller = new AbortController();
+            pendingController = controller;
+            void groupsAPI.markRead(id, controller.signal).then(
+                () => {
+                    if (!controller.signal.aborted) setInboxState({ id, error: '' });
+                },
+                (requestError: unknown) => {
+                    if (!controller.signal.aborted) {
+                        setInboxState({ id, error: getAPIErrorMessage(requestError, 'Unable to update group inbox.') });
+                    }
+                },
+            );
+        };
+        markRead();
+        document.addEventListener('visibilitychange', markRead);
+        return () => {
+            pendingController?.abort();
+            document.removeEventListener('visibilitychange', markRead);
+        };
+    }, [id, latestMessageID, chatVisible, groupError]);
 
     useEffect(() => {
         if (!id) return;

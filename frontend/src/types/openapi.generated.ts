@@ -770,7 +770,7 @@ export interface paths {
         };
         /**
          * List group rail summaries for the authenticated user.
-         * @description Unread counts are derived from persisted message read markers. Latest message metadata never includes message content or media.
+         * @description Unread counts are derived from persisted message read markers. Latest message metadata never includes message content or media. Groups are ordered by latest visible message descending, with groups without messages last; ties use group creation time then ID descending.
          */
         get: operations['listUserGroupInbox'];
         put?: never;
@@ -847,6 +847,26 @@ export interface paths {
         /** Join a group with an invite token. */
         post: operations['joinGroup'];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    '/group/leave': {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave a group without deleting its history or signing out.
+         * @description Removes only the authenticated user's membership. Repeated requests succeed.
+         */
+        delete: operations['leaveGroup'];
         options?: never;
         head?: never;
         patch?: never;
@@ -3602,6 +3622,29 @@ export interface operations {
             400: components['responses']['ErrorResponse'];
             404: components['responses']['ErrorResponse'];
             410: components['responses']['ErrorResponse'];
+        };
+    };
+    leaveGroup: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Membership and personal group preferences removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components['responses']['ErrorResponse'];
+            401: components['responses']['ErrorResponse'];
+            500: components['responses']['ErrorResponse'];
         };
     };
     listInvites: {

@@ -393,6 +393,13 @@ ELO/push egress, and redundant deadline-wrapper selectors in email. Defer these
 to a separately reviewed analyzer-policy change; error-message edits can affect
 public contracts. The migration adds no individual finding suppression.
 
+### Group UI and development startup follow-ups
+
+**Owners: Frontend/Groups and Deployment/dev.** Deferred: remove unused
+SettingsModal `.code-box .group-code` styles after confirming usage; make
+`make restart` wait for S3 before starting the backend, covered by workflow
+tests and the restart rehearsal.
+
 ## Residual risks
 
 - The operator authorized exploitation-based image prioritization on October

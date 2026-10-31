@@ -11,11 +11,31 @@ import api, {
     userBlocksAPI,
     setAccessToken,
     exchangeOIDCSession,
+    groupsAPI,
 } from './api';
 
 const validSession = { access_token: 'fresh', user: { id: 'player-1', username: 'Explorer' }, expires_in: 900 };
 
 describe('api client', () => {
+    it('bounds inbox requests so a stalled refresh cannot stop later polling', async () => {
+        const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [] });
+        const signal = new AbortController().signal;
+        await expect(groupsAPI.inbox(signal)).resolves.toEqual([]);
+        expect(get).toHaveBeenCalledWith('/user/groups/inbox', { signal, timeout: 10000 });
+        get.mockRestore();
+    });
+    it('leaves the selected group without clearing the account session', async () => {
+        const remove = vi.spyOn(api, 'delete').mockResolvedValue({ status: 204 });
+        setAccessToken('signed-in');
+        await expect(groupsAPI.leave('group-1')).resolves.toBeUndefined();
+        expect(remove).toHaveBeenCalledExactlyOnceWith('/group/leave', { params: { group_id: 'group-1' } });
+        expect(getAccessToken()).toBe('signed-in');
+        remove.mockRejectedValueOnce(new Error('Unavailable'));
+        await expect(groupsAPI.leave('group-1')).rejects.toThrow('Unavailable');
+        expect(getAccessToken()).toBe('signed-in');
+        remove.mockRestore();
+        setAccessToken(null);
+    });
     it('uses typed block endpoints, preserves 204 and broadcasts only successful changes', async () => {
         const get = vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [] } });
         const post = vi.spyOn(api, 'post').mockResolvedValue({ status: 204 });

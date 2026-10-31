@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../api';
-import type { Group } from '../../types';
+import { getAPIErrorMessage, groupsAPI } from '../../api';
+import type { GroupInbox } from '../../types';
 import Icon from '../../components/ui/Icon';
 import AuthenticatedPageShell from '../../components/layout/AuthenticatedPageShell';
 import { useGroupPhotoUrl } from './groupPhotoCache';
 import './GroupsList.css';
 
-function GroupCard({ group }: { group: Group }) {
+function GroupCard({ group }: { group: GroupInbox }) {
     const groupPhotoURL = useGroupPhotoUrl(group.id);
 
     return (
@@ -18,30 +18,76 @@ function GroupCard({ group }: { group: Group }) {
                     <h3>{group.name}</h3>
                 </div>
             </div>
+            {group.unread_count > 0 && (
+                <span
+                    className="group-unread-badge"
+                    role="img"
+                    aria-label={`${group.unread_count} unread ${group.unread_count === 1 ? 'message' : 'messages'}`}
+                >
+                    {group.unread_count > 99 ? '99+' : group.unread_count}
+                </span>
+            )}
             <Icon name="chevron-right" className="group-arrow" />
         </Link>
     );
 }
 
 export default function GroupsList() {
-    const [groups, setGroups] = useState<Group[]>([]);
+    const [groups, setGroups] = useState<GroupInbox[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-
-    const fetchGroups = useCallback(async () => {
-        try {
-            const res = await api.get('/user/groups');
-            setGroups(res.data || []);
-        } catch {
-            setError('Unable to load groups. Try again.');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const [attempt, setAttempt] = useState(0);
+    const loaded = useRef(false);
 
     useEffect(() => {
-        queueMicrotask(() => void fetchGroups());
-    }, [fetchGroups]);
+        let active = true;
+        let pending = false;
+        const controller = new AbortController();
+        const fetchGroups = async () => {
+            if (pending || (loaded.current && document.visibilityState !== 'visible')) return;
+            pending = true;
+            try {
+                const items = await groupsAPI.inbox(controller.signal);
+                if (active) {
+                    loaded.current = true;
+                    setGroups(items ?? []);
+                    setError('');
+                }
+            } catch (requestError: unknown) {
+                if (active) {
+                    setError(
+                        getAPIErrorMessage(
+                            requestError,
+                            loaded.current
+                                ? 'Unable to refresh unread counts. Try again.'
+                                : 'Unable to load groups. Try again.',
+                        ),
+                    );
+                }
+            } finally {
+                pending = false;
+                if (active) setLoading(false);
+            }
+        };
+        const refresh = () => void fetchGroups();
+        refresh();
+        const timer = window.setInterval(refresh, 15000);
+        window.addEventListener('focus', refresh);
+        document.addEventListener('visibilitychange', refresh);
+        return () => {
+            active = false;
+            controller.abort();
+            window.clearInterval(timer);
+            window.removeEventListener('focus', refresh);
+            document.removeEventListener('visibilitychange', refresh);
+        };
+    }, [attempt]);
+
+    const retry = () => {
+        setError('');
+        if (!loaded.current) setLoading(true);
+        setAttempt((value) => value + 1);
+    };
 
     if (loading) {
         return (
@@ -54,20 +100,13 @@ export default function GroupsList() {
         );
     }
 
-    if (error)
+    if (error && groups.length === 0)
         return (
             <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
                 <div className="groups-state error-message" role="alert">
                     <strong>We couldn’t load your groups</strong>
                     <span>{error}</span>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={() => {
-                            setError('');
-                            setLoading(true);
-                            void fetchGroups();
-                        }}
-                    >
+                    <button className="btn btn-secondary" onClick={retry}>
                         Retry
                     </button>
                 </div>
@@ -76,6 +115,14 @@ export default function GroupsList() {
 
     return (
         <AuthenticatedPageShell className="groups-page-shell" contentClassName="groups-list-container">
+            {error && (
+                <div className="groups-refresh-error" role="status">
+                    <span>{error}</span>
+                    <button className="btn btn-secondary" onClick={retry}>
+                        Retry
+                    </button>
+                </div>
+            )}
             <div className="groups-heading-row">
                 <div className="groups-header">
                     <p className="groups-eyebrow">Your game circles</p>

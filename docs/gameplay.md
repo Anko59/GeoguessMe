@@ -1,5 +1,22 @@
 # Gameplay
 
+## My Groups
+
+Groups are listed by their latest visible message, most recent first. Groups
+without messages appear at the bottom. The list refreshes periodically while
+visible and when you return to the app.
+
+Unread badges use the server's count and clear when you open the visible chat.
+New messages arriving while that chat stays visible also update its read marker.
+A hidden browser tab or another group panel waits until you return to the chat
+before updating the marker. If a read update fails, the chat shows an error; a
+later successful update clears it.
+
+In a group's settings, **Leave the group** removes your membership and returns
+you to My Groups. Shared history and other members remain. You stay signed in
+and can rejoin with an invite link. To sign out, use **Logout** in account
+settings.
+
 ## Challenge lifecycle
 
 A photo or video challenge moves through these states:

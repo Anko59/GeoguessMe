@@ -5,6 +5,18 @@ All endpoints are rooted at `/api/v1`. The canonical specification is
 
 ## Conventions
 
+`GET /api/v1/user/groups/inbox` orders groups by their latest visible message,
+newest first. Groups without messages come last; ties use group creation time
+then group ID descending. My Groups refreshes this ordering with its inbox
+counts.
+
+`DELETE /api/v1/group/leave?group_id=<uuid>` leaves only the authenticated
+user's group and returns 204, including on repeated requests. It removes
+membership, notification preferences, read markers, and outstanding group chat
+tickets, and disconnects that user's group sockets. Shared messages, challenges,
+scores, and other members remain. The account stays signed in and can rejoin by
+invite.
+
 - **Auth**: Protected endpoints require `Authorization: Bearer <access_token>`.
   The refresh cookie (`refresh_token`, path `/api/v1/auth`, HttpOnly) is used
   automatically by the `/api/v1/auth/refresh` endpoint.
@@ -146,6 +158,7 @@ passing that time alone does not grant access to an unplayed active challenge.
 | PUT    | `/api/v1/user/groups/inbox/read?group_id=`                   | Bearer | Mark one group inbox read through the server timestamp                                 |
 | POST   | `/api/v1/group/create`                                       | Bearer | Create group `{name}`                                                                  |
 | POST   | `/api/v1/group/join`                                         | Bearer | Join group `{invite_token}`                                                            |
+| DELETE | `/api/v1/group/leave?group_id=`                              | Bearer | Leave the current user's group without signing out                                     |
 | GET    | `/api/v1/group/details?id=`                                  | Bearer | Group details (member only)                                                            |
 | GET    | `/api/v1/group/members?id=`                                  | Bearer | List members (member only)                                                             |
 | GET    | `/api/v1/group/leaderboard?group_id=&period=&metric=`        | Bearer | Total, average, or Elo leaderboard for a calendar week/month or all time (member only) |

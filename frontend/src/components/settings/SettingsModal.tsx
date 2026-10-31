@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../api';
 import type { InviteCreateResponse, InviteListItem, Member } from '../../types';
 import Avatar from '../common/Avatar';
-import LogoutButton from '../navigation/LogoutButton';
+import LeaveGroupButton from './LeaveGroupButton';
 import Icon from '../ui/Icon';
 import { publicWebURL } from '../../platform/endpoints';
 import { shareOrCopy } from '../../platform/sharing';
@@ -404,8 +404,8 @@ export default function SettingsModal({
                     )}
                 </div>
 
-                <div className="settings-section logout-section">
-                    <LogoutButton />
+                <div className="settings-section">
+                    <LeaveGroupButton key={groupId} groupId={groupId} />
                 </div>
             </div>
         </div>

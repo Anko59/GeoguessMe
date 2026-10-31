@@ -1,3 +1,18 @@
+leaveGroup:
+  delete:
+    operationId: leaveGroup
+    summary: Leave a group without deleting its history or signing out.
+    description: Removes only the authenticated user's membership. Repeated requests succeed.
+    tags: [Groups]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: group_id, in: query, required: true, schema: { type: string, format: uuid } }
+    responses:
+      "204": { description: Membership and personal group preferences removed. }
+      "400": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "401": { $ref: "../components/responses.yaml#/ErrorResponse" }
+      "500": { $ref: "../components/responses.yaml#/ErrorResponse" }
+
 userGroups:
   get:
     operationId: listUserGroups
@@ -17,6 +32,8 @@ userGroupsInbox:
     description: >
       Unread counts are derived from persisted message read markers. Latest
       message metadata never includes message content or media.
+      Groups are ordered by latest visible message descending, with groups
+      without messages last; ties use group creation time then ID descending.
     tags: [Groups]
     security: [{ bearerAuth: [] }]
     responses:
