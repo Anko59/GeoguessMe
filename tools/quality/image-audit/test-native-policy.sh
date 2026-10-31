@@ -69,4 +69,20 @@ sed 's/"VulnerabilityID": "CVE-2021-44228"/"VulnerabilityID": "GHSA-fixture", "V
     tools/quality/image-audit/fixed-critical.json >"$TMP/known-alias.json"
 expect 42 trivy convert --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
     --ignore-policy "$policy" --format table "/workspace/${TMP#"$ROOT/"}/known-alias.json"
+# A reviewed not-affected entry silences only its exact CVE and package.
+mkdir -p "$TMP/triage"
+cp tools/quality/image-audit/risk-policy.sh tools/quality/image-audit/blocking-cves.tsv "$TMP/triage/"
+expires=$(date -u -d "@$(($(date -u +%s) + 10 * 86400))" +%F)
+printf 'CVE-2021-44228\torg.apache.logging.log4j:log4j-core\tfixture\tvulnerable_code_not_in_execute_path\t%s\tfixture\n' \
+    "$expires" >"$TMP/triage/not-affected.tsv"
+docker compose -p "$GEOGUESSME_TOOLS_PROJECT" -f deployment/compose.tools.yaml --project-directory . \
+    run -T --rm --no-deps --user "$TOOLS_UID:$TOOLS_GID" go-security \
+    bash "/workspace/${TMP#"$ROOT/"}/triage/risk-policy.sh" emit "/workspace/${TMP#"$ROOT/"}/kev.json" >"$TMP/triage.rego"
+triage_policy="/workspace/${TMP#"$ROOT/"}/triage.rego"
+expect 0 trivy convert --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
+    --ignore-policy "$triage_policy" --format table "/workspace/${TMP#"$ROOT/"}/fixed-critical.json"
+sed 's/"PkgName": "org.apache.logging.log4j:log4j-core"/"PkgName": "other-package"/' \
+    tools/quality/image-audit/fixed-critical.json >"$TMP/other-package.json"
+expect 42 trivy convert --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 42 --ignorefile /dev/null \
+    --ignore-policy "$triage_policy" --format table "/workspace/${TMP#"$ROOT/"}/other-package.json"
 echo "native exploitation policy tests PASSED ($CHECKS total checks)"
