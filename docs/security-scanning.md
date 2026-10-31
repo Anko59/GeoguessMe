@@ -195,7 +195,9 @@ helpers aligned. The backend requires `golang.org/x/net` 0.60.0 for the October
 HTTP fixes. Upstream image compilers are vendor inputs, not reasons to add
 project-owned source builds.
 
-Scoped npm overrides preserve YAML v4/v5 and CommonJS UUID compatibility.
+Scoped npm overrides pin patched YAML/TOML parsers for Markdownlint CLI and
+patched KaTeX for the Markdown math extension; see the
+[compatibility ledger](agent-engineering.md#tooling-security-overrides-376).
 `make test-npm-security-overrides` verifies installed consumers; `make audit`
 includes those and the braces regressions. These are application dependency
 contracts, independent of runtime image prioritization. The Terraform operator
