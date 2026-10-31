@@ -188,7 +188,7 @@ cloud-init does not update them because Terraform intentionally ignores
 
 ## Application tooling and temporary source patches
 
-Application and Dockerized Go tooling use the pinned Go 1.27.2 compiler and
+Application and Dockerized Go tooling use the pinned Go 1.27.3 compiler and
 GolangCI-Lint v2.14.0, Goimports v0.50.0, and Govulncheck v1.8.0 with Go 1.27
 export-data support; keep backend toolchain directives, tool tags, and fixture
 helpers aligned. The backend requires `golang.org/x/net` 0.60.0 for the October

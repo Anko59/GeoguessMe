@@ -381,7 +381,7 @@ assert_contains "$COMMON" 'active_restic=$(select_restic_image "$environment") |
 assert_contains "$COMMON" '"$active_restic" /usr/bin/restic "$@"'
 assert_contains "$COMMON" 'selected=$(active_metadata_image "$1" RESTIC_IMAGE) || exit 1'
 assert_contains "$BACKEND_DOCKERFILE" 'org.opencontainers.image.base.digest="sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"'
-assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.2-r0'
+assert_contains "$BACKEND_DOCKERFILE" 'apk add --no-cache ffmpeg=8.1.3-r0'
 assert_contains "$BACKEND_DOCKERFILE" "'openssl>=3.5.8-r0'"
 assert_contains "$BACKEND_DOCKERFILE" 'USER appuser:appuser'
 

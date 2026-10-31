@@ -126,7 +126,7 @@ func TestTranscodeNilRunnerUsesDefault(t *testing.T) {
 
 // TestTranscodeWithRealFFmpeg runs the exact canonical transcode command
 // against the real ffmpeg when one is installed. It is the regression guard
-// for ffmpeg flag-name compatibility: the pinned alpine ffmpeg 8.1.2-r0 build
+// for ffmpeg flag-name compatibility: the pinned alpine ffmpeg 8.1.3-r0 build
 // rejects "-movflags +fast-start" (and "fast_start") with a movflags parse
 // error, which previously made every transcode fail and the video E2E test
 // time out. The test skips when ffmpeg/ffprobe are unavailable or cannot
