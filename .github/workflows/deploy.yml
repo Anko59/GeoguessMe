@@ -54,7 +54,7 @@ jobs:
         run: make publish-security-images
       - name: Upload dependency scan evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dependency-scans-${{ github.sha }}
           path: security/image-reports/
@@ -212,7 +212,7 @@ jobs:
           fi
       - name: Upload browser diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: geoguessme-dev-e2e-${{ github.run_id }}
           retention-days: 7
@@ -234,7 +234,7 @@ jobs:
         run: make test-mobile
       - name: Upload Android diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: geoguessme-dev-mobile-${{ github.run_id }}
           retention-days: 7
@@ -432,7 +432,7 @@ jobs:
           done
       - name: Upload scan reports and SBOMs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: image-scan-dev-${{ github.sha }}
           path: |

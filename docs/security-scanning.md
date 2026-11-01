@@ -201,9 +201,9 @@ cloud-init does not update them because Terraform intentionally ignores
 Application and Dockerized Go tooling use the pinned Go 1.27.3 compiler and
 GolangCI-Lint v2.14.0, Goimports v0.50.0, and Govulncheck v1.8.0 with Go 1.27
 export-data support; keep backend toolchain directives, tool tags, and fixture
-helpers aligned. The backend requires `golang.org/x/net` 0.60.0 for the October
-HTTP fixes. Upstream image compilers are vendor inputs, not reasons to add
-project-owned source builds.
+helpers aligned. The backend requires `golang.org/x/net` 0.62.0 for the October
+HTTP fixes and GO-2026-6860/GO-2026-6866. Upstream image compilers are vendor
+inputs, not reasons to add project-owned source builds.
 
 Scoped npm overrides preserve YAML v4/v5 and CommonJS UUID compatibility.
 `make test-npm-security-overrides` verifies installed consumers; `make audit`

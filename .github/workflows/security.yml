@@ -45,7 +45,7 @@ jobs:
         run: make recover-reviewed-keycloak
       - name: Upload exact-digest recovery scan evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: reviewed-keycloak-recovery-${{ github.run_id }}
           path: security/image-reports/
@@ -74,11 +74,11 @@ jobs:
         language: [go, javascript-typescript]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
         with:
           languages: ${{ matrix.language }}
-      - uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
-      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+      - uses: github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
 
   audit-images:
     if: github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'main'))
@@ -122,7 +122,7 @@ jobs:
           make audit-images AUDIT_APPLICATION_IMAGES=false
       - name: Upload scan reports and SBOMs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: image-scan-weekly
           path: security/image-reports/
