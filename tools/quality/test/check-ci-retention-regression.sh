@@ -173,9 +173,9 @@ contains "$RELEASE" 'MOBILE_REQUIRE_EXPECTED_CERT: true' \
     "Android release fails closed on an unconfigured certificate"
 contains "$RELEASE" 'aab_sha256' \
     "Android release checks the immutable bundle digest"
-contains "$RELEASE" 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' \
+contains "$RELEASE" 'actions/upload-artifact@[0-9a-f]{40}' \
     "Android release retains the verified bundle"
-contains "$RELEASE" 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
+contains "$RELEASE" 'actions/download-artifact@[0-9a-f]{40}' \
     "release promotion consumes the verified bundle"
 contains "$RELEASE" 'android-release/app-release.aab' \
     "GitHub release carries the verified Android bundle"

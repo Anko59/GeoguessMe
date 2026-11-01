@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/repo/tools/quality/image-audit" "$TMP/state"
 cp "$SOURCE/audit.sh" "$SOURCE/retry.sh" "$SOURCE/risk-policy.sh" "$TMP/repo/tools/quality/image-audit/"
-cp "$SOURCE/blocking-cves.tsv" "$TMP/repo/tools/quality/image-audit/"
+cp "$SOURCE/blocking-cves.tsv" "$SOURCE/not-affected.tsv" "$TMP/repo/tools/quality/image-audit/"
 cp "$SOURCE/fake-docker.sh" "$TMP/bin/fake-docker-real"
 # Assert the bind source exists and is caller-owned before Docker can create it.
 cat >"$TMP/bin/docker" <<'DOCKER'

@@ -40,7 +40,7 @@ func Transcode(ctx context.Context, srcPath, dstPath string, hasAudio bool, maxO
 // +bitexact pair and the explicit "-metadata title=" keep output bytes
 // deterministic and metadata-free, and +faststart places the moov atom
 // first so the file streams while still downloading. The legacy faststart
-// flag name is required: the pinned alpine ffmpeg 8.1.2-r0 build rejects the
+// flag name is required: the pinned alpine ffmpeg 8.1.3-r0 build rejects the
 // newer fast_start spelling (and +fast-start) with a movflags parse error.
 func transcodeArgs(srcPath, dstPath string, hasAudio bool, maxOutputBytes int64) []string {
 	args := []string{
