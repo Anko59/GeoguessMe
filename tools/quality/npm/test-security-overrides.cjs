@@ -1,4 +1,4 @@
-// Installed-consumer regression contracts for scoped security overrides (#376).
+// Installed-consumer regression contracts for patched tooling dependencies (#376).
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -6,12 +6,10 @@ const path = require("node:path");
 const { createRequire } = require("node:module");
 const { spawnSync } = require("node:child_process");
 const { test } = require("node:test");
-const vm = require("node:vm");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "../../..");
 const frontendRequire = createRequire(path.join(root, "frontend/package.json"));
-const xcodeRequire = createRequire(frontendRequire.resolve("xcode"));
 const markdownlintEntry = frontendRequire.resolve("markdownlint-cli");
 const markdownlintRequire = createRequire(markdownlintEntry);
 
@@ -21,93 +19,33 @@ function temporaryDirectory(t) {
   return directory;
 }
 
-function emptyProject(filename) {
-  const project = frontendRequire("xcode").project(filename);
-  project.hash = { project: { objects: { PBXGroup: {} } } };
-  return project;
+// Accept upstream patch releases at or above the reviewed fixed version.
+function assertAtLeast(version, floor) {
+  const parse = (value) => value.split(/[.-]/).slice(0, 3).map(Number);
+  const [actual, minimum] = [parse(version), parse(floor)];
+  const order = actual.findIndex((part, index) => part !== minimum[index]);
+  assert.ok(order === -1 || actual[order] > minimum[order], `${version} must be >= ${floor}`);
 }
 
-test("manifest scopes fixes without replacing the reviewed braces backport", () => {
+test("manifest keeps only the overrides upstream has not yet released", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "frontend/package.json"), "utf8"));
   assert.equal(manifest.devDependencies.braces, "file:vendor/braces-security");
-  assert.equal(manifest.overrides.braces, "file:vendor/braces-security");
-  assert.equal(Object.hasOwn(manifest.overrides, "js-yaml"), false);
-  assert.equal(manifest.overrides["js-yaml@^4.0.0"], "4.3.2");
-  assert.deepEqual(manifest.overrides["markdownlint-cli"], {
-    "js-yaml": "5.4.2",
-    "smol-toml": "1.9.0",
+  assert.deepEqual(manifest.overrides, {
+    braces: "file:vendor/braces-security",
+    "markdownlint-cli": { "js-yaml": "5.4.2", "smol-toml": "1.9.0" },
+    "micromark-extension-math": { katex: "0.18.2" },
   });
-  assert.deepEqual(manifest.overrides["micromark-extension-math"], { katex: "0.18.2" });
-  assert.deepEqual(manifest.overrides.xcode, { uuid: "11.1.1" });
 });
 
-test("xcode resolves the patched CommonJS uuid and preserves project IDs", (t) => {
-  assert.equal(xcodeRequire("uuid/package.json").version, "11.1.1");
-  const uuid = xcodeRequire("uuid");
-  assert.match(
-    uuid.v4(),
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-  );
-  const filename = path.join(temporaryDirectory(t), "project.pbxproj");
-  const project = emptyProject(filename);
-  const group = project.pbxCreateGroup("Resources", "Resources");
-  assert.match(group, /^[0-9A-F]{12}4[0-9A-F]{3}[89AB][0-9A-F]{7}$/);
-  assert.deepEqual(project.allUuids(), [group]);
-  fs.writeFileSync(filename, project.writeSync());
-  const parsed = frontendRequire("xcode").project(filename).parseSync();
-  assert.deepEqual(parsed.allUuids(), [group]);
-  assert.equal(parsed.getPBXGroupByKey(group).name, "Resources");
-});
-
-test("xcode retries an existing project ID using the unchanged v4 API", () => {
-  const sourcePath = xcodeRequire.resolve("./lib/pbxProject");
-  const source = fs.readFileSync(sourcePath, "utf8");
-  const existing = "000000000000400080000000";
-  const expected = "111111111111411181111111";
-  const values = [
-    "00000000-0000-4000-8000-000000000000",
-    "11111111-1111-4111-8111-111111111111",
-  ];
-  let calls = 0;
-  const sandbox = {
-    module: { exports: {} },
-    __dirname: path.dirname(sourcePath),
-    require(name) {
-      if (name === "uuid") {
-        return {
-          v4(...args) {
-            assert.deepEqual(args, []);
-            assert.ok(calls < values.length, "collision retry must terminate");
-            return values[calls++];
-          },
-        };
-      }
-      return createRequire(sourcePath)(name);
-    },
-  };
-  vm.runInNewContext(source, sandbox, { filename: sourcePath });
-  const project = new sandbox.module.exports("unused.pbxproj");
-  project.hash = { project: { objects: { PBXGroup: { [existing]: {} } } } };
-  assert.equal(project.generateUuid(), expected);
-  assert.equal(calls, 2);
-});
-
-test("patched uuid rejects partial buffer writes before modifying output", () => {
-  const uuid = xcodeRequire("uuid");
-  for (const version of ["v3", "v5"]) {
-    for (const offset of [-1, 4]) {
-      const buffer = new Uint8Array(8).fill(0xaa);
-      assert.throws(() => uuid[version]("x", uuid[version].DNS, buffer, offset), RangeError);
-      assert.deepEqual(buffer, new Uint8Array(8).fill(0xaa));
-    }
-  }
-  const buffer = new Uint8Array(8).fill(0xbb);
-  assert.throws(() => uuid.v6({}, buffer, 4), RangeError);
-  assert.deepEqual(buffer, new Uint8Array(8).fill(0xbb));
+test("Capacitor CLI resolves an xcode release without the uuid dependency", () => {
+  const capacitorRequire = createRequire(frontendRequire.resolve("@capacitor/cli/package.json"));
+  const xcode = JSON.parse(fs.readFileSync(capacitorRequire.resolve("xcode/package.json"), "utf8"));
+  assertAtLeast(xcode.version, "4.0.0");
+  assert.equal(Object.hasOwn(xcode.dependencies ?? {}, "uuid"), false);
 });
 
 test("markdownlint resolves js-yaml 5 and loads normal YAML configuration", () => {
-  assert.equal(markdownlintRequire("js-yaml/package.json").version, "5.4.2");
+  assertAtLeast(markdownlintRequire("js-yaml/package.json").version, "5.4.2");
   const yaml = markdownlintRequire("js-yaml");
   assert.deepEqual(
     yaml.load("default: false\nMD001: true\nMD013:\n  line_length: 120\n"),
@@ -220,7 +158,7 @@ test("markdownlint and Knip TOML consumers preserve normal parsing", async () =>
     const metadata = JSON.parse(
       fs.readFileSync(path.join(path.dirname(entry), "../package.json"), "utf8"),
     );
-    assert.equal(metadata.version, "1.9.0");
+    assertAtLeast(metadata.version, "1.9.0");
     const { parse } = await import(pathToFileURL(entry).href);
     const config = parse('default = false\nMD001 = true\n[MD013]\nline_length = 120\n');
     assert.equal(Object.getPrototypeOf(config), null);
@@ -240,7 +178,7 @@ test("markdownlint and Knip TOML consumers preserve normal parsing", async () =>
 test("legacy YAML 4 consumers retain their schema and CommonJS API", () => {
   for (const consumer of ["cosmiconfig", "@redocly/openapi-core"]) {
     const consumerRequire = createRequire(frontendRequire.resolve(consumer));
-    assert.equal(consumerRequire("js-yaml/package.json").version, "4.3.2");
+    assertAtLeast(consumerRequire("js-yaml/package.json").version, "4.3.2");
     const yaml = consumerRequire("js-yaml");
     assert.ok(yaml.DEFAULT_SCHEMA);
     assert.deepEqual(yaml.load("base: &base { enabled: true }\nmerged: { <<: *base }\n"), {

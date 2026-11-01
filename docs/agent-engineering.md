@@ -322,33 +322,36 @@ compatibility entries remain.
 
 ### Tooling security overrides (#376)
 
-`frontend/package.json` scopes patched `uuid@11.1.1` to `xcode` and
-`js-yaml@5.4.2` to `markdownlint-cli`, retaining `js-yaml@4.3.2` for v4
-consumers. `xcode@3.0.1` uses only CommonJS `require("uuid").v4()` with no
-arguments; v11 retains that export and UUID string format. Markdownlint CLI uses
-only CommonJS `load(text)`; the v5.3/v5.4 AST, custom-tag, and dumper changes do
-not affect that call. The v4/v5 split preserves Redocly and Cosmiconfig's
-existing YAML schemas.
-
-The nightly audit also requires scoped `smol-toml@1.9.0` for Markdownlint CLI
-and `katex@0.18.2` for `micromark-extension-math`. The CLI retains its CommonJS
-`parse(text)` configuration API; the math extension retains `renderToString`
-with untrusted rendering by default. These patches address
-[quadratic TOML key parsing](https://github.com/advisories/GHSA-r4xh-jqrq-34v2)
-and
+`frontend/package.json` retains three scoped overrides. Markdownlint CLI 0.49.1
+receives patched `js-yaml@5.4.2` and `smol-toml@1.9.0`; it uses only CommonJS
+`load(text)` and `parse(text)`, and the v4/v5 split preserves Redocly and
+Cosmiconfig's YAML schemas. Markdownlint CLI 0.50.0 would accept both fixes
+without overrides, but its `markdownlint@0.42.0` pins `re2js@2.8.6`, which is
+affected by
+[GHSA-gg6h-894w-4m9c](https://github.com/advisories/GHSA-gg6h-894w-4m9c);
+upgrade and drop both overrides once Markdownlint accepts `re2js>=2.9.1`.
+`micromark-extension-math` receives `katex@0.18.2` because its latest release
+still requires `katex@^0.16`; it retains `renderToString` with untrusted
+rendering by default, addressing
 [inherited KaTeX trust settings](https://github.com/advisories/GHSA-238p-pmpm-9mq7).
-Compatible lockfile updates also patch Knip's TOML parser and
-[source-map-js indexed offsets](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)
-without overrides.
+Remove each override when its parent accepts the patched version and the same
+contract passes without it.
 
-`make test-npm-security-overrides` exercises consumer-relative resolution, Xcode
-project ID generation/collision retry and writer/parser round trips, UUID buffer
-bounds, YAML configuration and merge limits, TOML consumer configuration, KaTeX
-trust restrictions and math rendering, indexed source-map offset validation, and
-Markdownlint CLI success/error exits. It runs with both frontend unit and
-verified coverage suites. Remove each override when its parent dependency
-accepts the patched version and the same contracts pass without it. These are
-dependency fixes, not audit exceptions or threshold changes.
+The former `uuid` (via `xcode`) and `js-yaml` v4 overrides were retired once
+upstream released the fixes: Capacitor CLI 8.6.0 uses `xcode@4`, which no longer
+depends on `uuid`, and every remaining `js-yaml` v4 consumer accepts the patched
+4.3.2 release without an override. Compatible lockfile updates also patch Knip's
+TOML parser and
+[source-map-js indexed offsets](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+
+`make test-npm-security-overrides` asserts that the manifest keeps only the
+overrides above, that Capacitor resolves an `xcode` release without `uuid`, and
+that installed consumers stay at or above each reviewed fixed version. It
+exercises YAML configuration and merge limits, TOML consumer configuration,
+KaTeX trust restrictions and math rendering, indexed source-map offset
+validation, and Markdownlint CLI success/error exits. It runs with both frontend
+unit and verified coverage suites. These are dependency fixes, not audit
+exceptions or threshold changes.
 
 ### Braces security backport
 
