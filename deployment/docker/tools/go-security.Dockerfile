@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Go 1.27.3-alpine (immutable index digest: d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb)
-FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf
 
 # Specialized security and operations tools: vulnerability scanning, race
 # detection (CGO), database client utilities. Normal format/lint/test/build

@@ -2,7 +2,7 @@
 # Terraform 1.16.5 already includes the fixed Go dependency graph. Preserve
 # its official binary, entrypoint and CLI; refresh only the Alpine PCRE2 package
 # for CVE-2026-103111 rather than recompiling Terraform from source.
-FROM hashicorp/terraform:1.16.5@sha256:c7926feace05d0f7e73542842bf3945924e955a1f782cf000ccbb8d18fa42d77
+FROM hashicorp/terraform:1.17.2@sha256:6e9c1e647c31a960dc9b59e13272f9111d90010c10b717f77ffb324767660475
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN apk add --no-cache --upgrade 'pcre2=10.49-r0' \
     && apk info -v | grep -Fxq 'pcre2-10.49-r0'
